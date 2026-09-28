@@ -320,7 +320,7 @@ export class Catalog {
    * (`05-10`, or several days for a week), or on exact dates. Each comes
    * with how many recordings it has, so a list can show which can be heard.
    */
-  async events(options: { within?: string; day?: string | string[]; dates?: string[]; limit?: number }): Promise<Array<EntityView & { recordings: number }>> {
+  async events(options: { within?: string; day?: string | string[]; dates?: string[]; missing?: 'recordings' | 'texts'; limit?: number }): Promise<Array<EntityView & { recordings: number }>> {
     const params: unknown[] = [];
     const where = ["e.type = 'event'", 'NOT e.deleted'];
     if (options.within !== undefined) {
@@ -341,6 +341,10 @@ export class Catalog {
       params.push(options.dates);
       where.push(`r.data->>'date' = ANY($${params.length}::text[])`);
     }
+    // What people can help add: events with no recording, or no text (hanacha) linked.
+    if (options.missing === 'recordings')
+      where.push("NOT EXISTS (SELECT 1 FROM entity_ref x JOIN entity f ON f.id = x.from_id AND f.type = 'recording' AND NOT f.deleted WHERE x.to_id = e.id AND x.field = 'event')");
+    if (options.missing === 'texts') where.push("coalesce(jsonb_array_length(r.data->'links'), 0) = 0");
     const { rows } = await this.db.query<RevisionRow & { recordings: number }>(
       `SELECT r.*, (SELECT count(*)::int FROM entity_ref x JOIN entity f ON f.id = x.from_id AND NOT f.deleted
                     WHERE x.to_id = e.id AND x.field = 'event' AND f.type = 'recording') AS recordings
@@ -394,6 +398,53 @@ export class Catalog {
       [work, part],
     );
     return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }));
+  }
+
+  /**
+   * The community's page in numbers: the latest merges (who suggested,
+   * who approved, how much changed), how many reports wait, how many
+   * people have suggested anything, and what the catalog still lacks that
+   * anyone could help with. Counts only: reports themselves stay private.
+   */
+  async community(limit = 8): Promise<{
+    recent: Array<{ seq: number; at: string; message: string; author: string; authorName: string; authorIsBot: boolean; mergedBy: string; mergedByName: string | null; changes: number }>;
+    openReports: number;
+    people: number;
+    gaps: { events: number; eventsWithoutRecordings: number; eventsWithoutTexts: number };
+  }> {
+    const [recent, reports, people, gaps] = await Promise.all([
+      this.db.query<{ seq: string; at: Date | string; message: string; author: string; author_name: string; author_is_bot: boolean; merged_by: string; merged_by_name: string | null; changes: number }>(
+        `SELECT c.seq, c.at, c.message, cs.author, a.display_name AS author_name, a.is_bot AS author_is_bot, c.merged_by, m.display_name AS merged_by_name,
+                (SELECT count(*)::int FROM commit_change cc WHERE cc.commit_seq = c.seq) AS changes
+         FROM commit c JOIN changeset cs ON cs.id = c.changeset_id JOIN account a ON a.id = cs.author LEFT JOIN account m ON m.id = c.merged_by
+         WHERE cs.author <> 'system' ORDER BY c.seq DESC LIMIT ${Math.min(Math.max(limit, 1), 50)}`,
+      ),
+      one<{ n: number }>(this.db, "SELECT count(*)::int AS n FROM report WHERE status = 'open'"),
+      one<{ n: number }>(this.db, "SELECT count(DISTINCT cs.author)::int AS n FROM changeset cs JOIN account a ON a.id = cs.author WHERE NOT a.is_bot AND cs.author <> 'system'"),
+      one<{ events: number; without_recordings: number; without_texts: number }>(
+        this.db,
+        `SELECT count(*)::int AS events,
+                count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM entity_ref x JOIN entity f ON f.id = x.from_id AND f.type = 'recording' AND NOT f.deleted WHERE x.to_id = e.id AND x.field = 'event'))::int AS without_recordings,
+                count(*) FILTER (WHERE coalesce(jsonb_array_length(r.data->'links'), 0) = 0)::int AS without_texts
+         FROM entity e JOIN revision r ON r.id = e.main_rev WHERE e.type = 'event' AND NOT e.deleted`,
+      ),
+    ]);
+    return {
+      recent: recent.rows.map((r) => ({
+        seq: Number(r.seq),
+        at: new Date(r.at).toISOString(),
+        message: r.message,
+        author: r.author,
+        authorName: r.author_name,
+        authorIsBot: r.author_is_bot,
+        mergedBy: r.merged_by,
+        mergedByName: r.merged_by_name,
+        changes: r.changes,
+      })),
+      openReports: reports?.n ?? 0,
+      people: people?.n ?? 0,
+      gaps: { events: gaps?.events ?? 0, eventsWithoutRecordings: gaps?.without_recordings ?? 0, eventsWithoutTexts: gaps?.without_texts ?? 0 },
+    };
   }
 
   /** How many items of each type main holds. */

@@ -178,9 +178,11 @@ export function createApp(options: ApiOptions): Hono {
     const within = c.req.query('within');
     const day = c.req.query('day');
     const dates = c.req.query('dates');
-    if (!within && !day && !dates) throw new HttpError(400, 'give within (5742 or 5742-05), day (05-10, or several: 05-10,05-11) or dates (5742-05-10,5743-05-10)');
+    if (!within && !day && !dates && !c.req.query('missing')) throw new HttpError(400, 'give within (5742 or 5742-05), day (05-10, or several: 05-10,05-11) or dates (5742-05-10,5743-05-10)');
     const list = (value: string | undefined) => (value === undefined ? undefined : value.split(',').filter(Boolean));
-    return c.json({ items: await catalog.events({ within, day: list(day), dates: list(dates), limit: intParam(c.req.query('limit'), 'limit') }) });
+    const missing = c.req.query('missing');
+    if (missing !== undefined && missing !== 'recordings' && missing !== 'texts') throw new HttpError(400, 'missing is recordings or texts');
+    return c.json({ items: await catalog.events({ within, day: list(day), dates: list(dates), missing, limit: intParam(c.req.query('limit'), 'limit') }) });
   });
 
   // How many items point at each item through a field: `?field=work&type=unit` counts each work's units.
@@ -194,6 +196,9 @@ export function createApp(options: ApiOptions): Hono {
   // A work's volumes (its top-level parts) with how many units each holds, and one volume's units.
   app.get('/v1/works/:id/outline', async (c) => c.json({ parts: await catalog.workOutline(entityId(c.req.param('id'))) }));
   app.get('/v1/works/:id/parts/:part', async (c) => c.json({ items: await catalog.workPart(entityId(c.req.param('id')), c.req.param('part'), intParam(c.req.query('limit'), 'limit')) }));
+
+  // The community page in numbers: the latest merges, reports waiting (a count), people, and what the catalog lacks.
+  app.get('/v1/community', async (c) => c.json(await catalog.community(intParam(c.req.query('limit'), 'limit'))));
 
   app.get('/v1/stats', async (c) => c.json({ head: await catalog.head(), counts: await catalog.counts() }));
 

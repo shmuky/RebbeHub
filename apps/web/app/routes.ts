@@ -6,6 +6,7 @@ export default [
   route('sets', 'routes/sets.tsx'),
   route('calendar/:year?/:month?', 'routes/calendar.tsx'),
   route('about', 'routes/about.tsx'),
+  route('help', 'routes/help.tsx'),
   route('history/:id', 'routes/history.tsx'),
   // A farbrengen's recordings as the player's queue, for play buttons on lists. `_` is never in an item's path.
   route('_/tracks/:id', 'routes/tracks.ts'),

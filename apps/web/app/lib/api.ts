@@ -114,6 +114,16 @@ export class RebbeHubApi {
     return this.get<{ items: Entity[]; next: string | null }>(`/v1/entities/${encodeURIComponent(id)}/children`, { field, type, ...options });
   }
 
+  /** The community page in numbers: the latest merges, reports waiting, people, and what the catalog lacks. */
+  community(limit?: number) {
+    return this.get<{
+      recent: Array<{ seq: number; at: string; message: string; author: string; authorName: string; authorIsBot: boolean; mergedBy: string; mergedByName: string | null; changes: number }>;
+      openReports: number;
+      people: number;
+      gaps: { events: number; eventsWithoutRecordings: number; eventsWithoutTexts: number };
+    }>('/v1/community', { limit });
+  }
+
   /** How many items point at each item through a field (`work` + `unit`: each work's units). */
   async refCounts(field: string, type?: string): Promise<Record<string, number>> {
     return (await this.get<{ counts: Record<string, number> }>('/v1/refcounts', { field, type })).counts;
@@ -146,9 +156,9 @@ export class RebbeHubApi {
   }
 
   /** Events by date, each with how many recordings it has: within a year or month, on days of any year (`05-10`), or on exact dates. */
-  async events(options: { within?: string; day?: string | readonly string[]; dates?: readonly string[]; limit?: number }) {
+  async events(options: { within?: string; day?: string | readonly string[]; dates?: readonly string[]; missing?: 'recordings' | 'texts'; limit?: number }) {
     const list = (v: string | readonly string[] | undefined) => (v === undefined ? undefined : typeof v === 'string' ? v : v.join(','));
-    return (await this.get<{ items: Array<Entity & { recordings: number }> }>('/v1/events', { within: options.within, day: list(options.day), dates: list(options.dates), limit: options.limit })).items;
+    return (await this.get<{ items: Array<Entity & { recordings: number }> }>('/v1/events', { within: options.within, day: list(options.day), dates: list(options.dates), missing: options.missing, limit: options.limit })).items;
   }
 
   file(sha256: string) {
