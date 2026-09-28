@@ -16,7 +16,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['packages/*/tests/**/*.test.ts', 'services/*/tests/**/*.test.ts'],
+    include: ['packages/*/tests/**/*.test.ts', 'services/*/tests/**/*.test.ts', 'apps/*/tests/**/*.test.ts'],
     testTimeout: 30_000,
     // Starting PGlite (Postgres in WebAssembly) takes seconds, more when test files start it side by side.
     hookTimeout: 60_000,

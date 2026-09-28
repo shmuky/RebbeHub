@@ -24,6 +24,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run build:web
       - run: npm test
       - run: npm run catalog:check
 
@@ -52,5 +53,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run build:web
       # One file at a time: the files share the test database.
       - run: npx vitest run --no-file-parallelism

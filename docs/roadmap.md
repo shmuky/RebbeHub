@@ -23,12 +23,16 @@ stands. ✅ built and tested · 🟡 partly · ⬜ not yet.
 | Plan item | Status | Where |
 | --- | --- | --- |
 | Public read API (REST + OpenAPI) | ✅ | `services/api` |
-| Search (built-in Postgres full text over normalised names, text and dates; Hebrew and English date queries) | 🟡 | `core` search; Meilisearch comes with the site |
+| Search (built-in Postgres full text over normalised names, text and dates; Hebrew and English date queries) | 🟡 | `core` search, the site's `/search`; Meilisearch when the catalog outgrows it |
 | Permanent links (ids, paths, redirects) | ✅ | `core`, `api /v1/resolve` |
 | Git mirror (JSON per item, texts as Markdown, sync as WebVTT; one git commit per merge) | ✅ | `packages/mirror`, `rebbehub mirror` |
 | First dump (signed SQLite + JSON Lines; Sichos-Kodesh release) | ✅ | `rebbehub edition`, `rebbehub dump` |
 | Parquet dump | ⬜ | with the first public edition |
-| Public site: sets, events calendar, item and publication pages, audio player, scan viewer, SEO | ⬜ | `apps/web` (React Router 7 SSR on Workers) - the next build |
+| Public site: sets, events calendar, item and publication pages, search, permanent links | ✅ | `apps/web` (React Router 7, server-rendered; Node or Workers) |
+| Audio player (recordings by part, video links at the moment) | ✅ | `apps/web/app/components/AudioPlayer.tsx`; words highlighted as spoken come with sync (phase 5) |
+| Scan viewer (served scans in the browser's PDF viewer by page; link-only scans at their source) | 🟡 | `ScanViewer.tsx`; IIIF and page images come with uploads (phase 3) |
+| SEO: canonical and hreflang links, schema.org data, sitemaps, robots.txt | ✅ | `apps/web/app/lib/seo.ts`, `/sitemap.xml` |
+| Report a problem on every page (no account, works without JavaScript) | ✅ | `ReportForm.tsx` |
 
 ## Phase 2 - Contribute
 

@@ -44,6 +44,8 @@ packages/
   core/        the catalog engine: suggestions, review, merge, history, projects, reports
   mirror/      the open exports: git mirror, signed dumps, the Sichos-Kodesh release
   importers/   bot contributors that seed and sync the catalog
+apps/
+  web/         the public site (React Router 7, server-rendered, Hebrew first)
 services/
   api/         the public API (Hono; Cloudflare Workers or Node)
   jobs/        the `rebbehub` command line and, later, the queue workers
@@ -63,6 +65,7 @@ npm run rebbehub -- migrate        # creates .data/pglite
 npm run rebbehub -- account --id me --name "Me" --steward
 npm run rebbehub -- import sichos-kodesh-works --from ../Sichos-Kodesh --approve-as me
 npm run dev:api                    # http://127.0.0.1:8787/v1
+npm run dev:web                    # http://localhost:5173 (reads the API above)
 ```
 
 Set `DATABASE_URL=postgres://…` to use a Postgres server instead. See

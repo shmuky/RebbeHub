@@ -1,0 +1,15 @@
+import { index, route, type RouteConfig } from '@react-router/dev/routes';
+
+export default [
+  index('routes/home.tsx'),
+  route('search', 'routes/search.tsx'),
+  route('sets', 'routes/sets.tsx'),
+  route('calendar/:year?/:month?', 'routes/calendar.tsx'),
+  route('about', 'routes/about.tsx'),
+  route('history/:id', 'routes/history.tsx'),
+  route('robots.txt', 'routes/robots.ts'),
+  route('sitemap.xml', 'routes/sitemap-index.ts'),
+  route('sitemaps/:type.xml', 'routes/sitemap.ts'),
+  // Every item has a readable path (`/likkutei-sichos/12/3`) and a permanent one (`/rh-7k2m9q4d`).
+  route('*', 'routes/item.tsx'),
+] satisfies RouteConfig;
