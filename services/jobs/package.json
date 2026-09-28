@@ -16,6 +16,7 @@
     "@rebbehub/db": "^0.1.0",
     "@rebbehub/importers": "^0.1.0",
     "@rebbehub/mirror": "^0.1.0",
-    "@rebbehub/model": "^0.1.0"
+    "@rebbehub/model": "^0.1.0",
+    "@rebbehub/pdf-fix": "^0.1.0"
   }
 }

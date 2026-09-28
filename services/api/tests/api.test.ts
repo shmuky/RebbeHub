@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Hono } from 'hono';
 import type { EntityId } from '@rebbehub/model';
-import { registerFile, setRights } from '@rebbehub/core';
+import { recordDerivation, registerFile, setRights } from '@rebbehub/core';
 import { createApp, parseRange } from '../src/app.js';
 import { add, freshCatalog, yudShvat } from '../../../packages/core/tests/helpers.js';
 
@@ -95,9 +95,32 @@ describe('the media proxy', () => {
     expect((await proxy.request(`http://api.test/objects/${sha256}`, { headers: { Range: 'bytes=20-' } })).status).toBe(416);
     expect(await (await proxy.request(`http://api.test/v1/files/${sha256}`)).json()).toMatchObject({ url: `http://api.test/objects/${sha256}` });
 
+    // A copy made from it (a scan's reading copy) is listed with it, and served under the same rights.
+    const copy = 'd'.repeat(64);
+    await recordDerivation(catalog.db, { src: sha256, profile: 'reading-copy', sha256: copy, bytes: 8, mime: 'audio/mpeg', encoder: 'test@1' });
+    expect(await (await proxy.request(`http://api.test/v1/files/${sha256}`)).json()).toMatchObject({
+      derivations: [{ profile: 'reading-copy', sha256: copy, bytes: 8, encoder: 'test@1', url: `http://api.test/objects/${copy}` }],
+    });
+
     await setRights(catalog.db, 'shmuly', sha256, 'preserved', 'takedown');
     expect((await proxy.request(`http://api.test/objects/${sha256}`)).status).toBe(404);
+    expect((await proxy.request(`http://api.test/objects/${copy}`)).status).toBe(404);
     expect(await (await proxy.request(`http://api.test/v1/files/${sha256}`)).json()).toMatchObject({ url: null });
+  });
+
+  it('serves the published manifests, and nothing else from the bucket', async () => {
+    const manifest = JSON.stringify({ format: 'rebbehub-reading-copies', files: [] });
+    const files = {
+      async get(key: string) {
+        return key === 'manifests/reading-copies/sichos-kodesh.json' ? { body: new Blob([manifest]).stream(), size: manifest.length } : null;
+      },
+    };
+    const proxy = createApp({ catalog, files });
+    const found = await proxy.request('http://api.test/manifests/reading-copies/sichos-kodesh.json');
+    expect(found.status).toBe(200);
+    expect(await found.json()).toEqual({ format: 'rebbehub-reading-copies', files: [] });
+    expect((await proxy.request('http://api.test/manifests/reading-copies/other.json')).status).toBe(404);
+    expect((await proxy.request('http://api.test/manifests/..%2Fobjects/x.json')).status).toBe(404);
   });
 
   it('reads Range headers', () => {

@@ -5,7 +5,7 @@ import { openPGlite } from '@rebbehub/db/pglite';
 describe('migrations', () => {
   it('create the catalog schema once, and are idempotent', async () => {
     const db = await openPGlite();
-    expect(await migrate(db)).toEqual([1]);
+    expect(await migrate(db)).toEqual([1, 2]);
     expect(await migrate(db)).toEqual([]);
     const { rows } = await db.query<{ table_name: string }>(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name NOT LIKE 'revision_%' ORDER BY table_name",

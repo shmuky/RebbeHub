@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, getFile, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, getDerivations, getFile, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { OPENAPI } from './openapi.js';
@@ -192,7 +192,18 @@ export function createApp(options: ApiOptions): Hono {
     if (!file) throw new CatalogError('not-found', 'no such file');
     const base = options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
     const served = mayServe(file.rights_state) && file.storage_tier === 'public' && base;
-    return c.json({ sha256, bytes: file.bytes, mime: file.mime, rights: file.rights_state, credit: file.credit, url: served ? `${base}/objects/${sha256}` : null });
+    // What was made from it (a scan's reading copy), served under the same rights.
+    const derivations = (await getDerivations(catalog.db, sha256)).map((d) => ({ profile: d.profile, sha256: d.sha256, bytes: d.bytes, encoder: d.encoder, url: served ? `${base}/objects/${d.sha256}` : null }));
+    return c.json({ sha256, bytes: file.bytes, mime: file.mime, rights: file.rights_state, credit: file.credit, url: served ? `${base}/objects/${sha256}` : null, derivations });
+  });
+
+  // Published manifests (the Sichos Kodesh scans' reading copies…): facts about files - hashes, sizes, page
+  // measurements - open like the rest of the catalog. Every import reads them back into the catalog.
+  app.get('/manifests/:name{[a-z0-9-]+/[a-z0-9-]+\\.json}', async (c) => {
+    if (!options.files) throw new CatalogError('not-found', 'no such manifest');
+    const object = await options.files.get(`manifests/${c.req.param('name')}`);
+    if (!object) throw new CatalogError('not-found', 'no such manifest');
+    return c.body(object.body, 200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
   });
 
   // The media proxy: a file's bytes, only while its rights allow serving it (a takedown stops this at once).

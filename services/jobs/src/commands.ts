@@ -8,6 +8,7 @@ import { readSichosKodeshOccasions, readSichosKodeshWorks, runImport, sichosKode
 import { clearMirror, directorySink, exportCommits, exportSnapshot, generateKeyPair, writeDump, type KeyPair } from '@rebbehub/mirror';
 import { BUILTIN_SCHEMAS, SchemaRegistry } from '@rebbehub/model';
 import { commitAll, git } from './git.js';
+import { ARCHIVE_OBJECTS_URL, archivePdfs, collectManifest, loadManifest, makeReadingCopies, MANIFEST_KEY, MANIFEST_URL, R2Store, registerReadingCopies, sichosKodeshScans } from './readingCopies.js';
 
 export interface Context {
   log: (line: string) => void;
@@ -60,11 +61,14 @@ export async function migrateCommand(ctx: Context): Promise<void> {
 /**
  * What people have made in the catalog: a suggestion from anyone but an
  * importer bot (merged, open or draft), a report, a comment, a follow, a
- * file. SQL, so the import can check it again inside the transaction that
- * replaces the catalog.
+ * file someone uploaded, a steward's rights decision on a file. Files the
+ * import registers itself (the Sichos Kodesh scans and their reading
+ * copies) are rebuilt with it. SQL, so the import can check it again
+ * inside the transaction that replaces the catalog.
  */
 export const PEOPLE_MADE_SQL = `SELECT EXISTS (SELECT 1 FROM changeset c JOIN account a ON a.id = c.author WHERE c.author <> 'system' AND NOT a.is_bot)
-  OR EXISTS (SELECT 1 FROM report) OR EXISTS (SELECT 1 FROM comment) OR EXISTS (SELECT 1 FROM follow) OR EXISTS (SELECT 1 FROM file)`;
+  OR EXISTS (SELECT 1 FROM report) OR EXISTS (SELECT 1 FROM comment) OR EXISTS (SELECT 1 FROM follow)
+  OR EXISTS (SELECT 1 FROM file_source WHERE uploaded_by IS NOT NULL) OR EXISTS (SELECT 1 FROM audit_log WHERE action = 'file.rights')`;
 
 /**
  * Whether everything in the catalog came from importers, so it can be
@@ -180,4 +184,58 @@ export async function keygenCommand(ctx: Context, input: { out: string }): Promi
   const key = generateKeyPair();
   await writeFile(input.out, `${JSON.stringify(key, null, 2)}\n`, { mode: 0o600 });
   ctx.log(`key ${key.keyId} written to ${input.out} (keep it secret). Public key: ${key.publicKey}`);
+}
+
+function r2(bucket: string): R2Store {
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const token = process.env.CLOUDFLARE_API_TOKEN;
+  if (!accountId || !token) throw new Error('set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (a token with R2 edit rights)');
+  return new R2Store(accountId, bucket, token);
+}
+
+/** Makes the Sichos Kodesh scans' reading copies from Sichos-Kodesh's archive into the public bucket (docs/operations.md). */
+export async function readingCopiesMakeCommand(
+  ctx: Context,
+  input: { from: string; work: string; shard?: string; limit?: number; archive?: string; sourceBucket?: string; bucket?: string },
+): Promise<void> {
+  const scans = await sichosKodeshScans(input.from);
+  const shard = input.shard?.split('/').map(Number) as [number, number] | undefined;
+  if (shard && !(shard.length === 2 && shard[0]! >= 0 && shard[0]! < shard[1]!)) throw new Error('--shard is i/n, as 0/4');
+  ctx.log(`${scans.length} Sichos Kodesh scans in the catalog${shard ? `; this is part ${shard[0]} of ${shard[1]}` : ''}`);
+  const result = await makeReadingCopies({
+    scans,
+    archive: await archivePdfs(input.archive ?? ARCHIVE_OBJECTS_URL),
+    source: r2(input.sourceBucket ?? 'sichos-kodesh-archive'),
+    target: r2(input.bucket ?? 'rebbehub-public'),
+    work: input.work,
+    ...(shard ? { shard } : {}),
+    ...(input.limit !== undefined ? { limit: input.limit } : {}),
+    log: ctx.log,
+  });
+  ctx.log(JSON.stringify(result));
+}
+
+/** Puts the parts together into the manifest, and publishes it next to the files. */
+export async function readingCopiesPublishCommand(ctx: Context, input: { from: string; work: string; bucket?: string }): Promise<void> {
+  const manifest = await collectManifest(input.work, await sichosKodeshScans(input.from));
+  const text = JSON.stringify(manifest);
+  await writeFile(join(input.work, 'manifest.json'), text);
+  await r2(input.bucket ?? 'rebbehub-public').put(MANIFEST_KEY, new TextEncoder().encode(text), 'application/json');
+  const copies = manifest.files.filter((entry) => entry.readingCopy).length;
+  ctx.log(`published ${MANIFEST_KEY}: ${manifest.files.length} scans, ${copies} reading copies, ${manifest.files.length - copies} left as they are`);
+}
+
+/** Records the published manifest in the catalog (every import runs this). */
+export async function readingCopiesRegisterCommand(ctx: Context, input: { manifest?: string }): Promise<void> {
+  const manifest = await loadManifest(input.manifest ?? MANIFEST_URL);
+  if (!manifest) {
+    ctx.log('no reading copies published yet: nothing to register');
+    return;
+  }
+  const db = await openDatabase(ctx.database);
+  try {
+    await registerReadingCopies(db, manifest, ctx.log);
+  } finally {
+    await db.close();
+  }
 }

@@ -1,0 +1,24 @@
+{
+  "name": "@rebbehub/pdf-fix",
+  "version": "0.1.0",
+  "description": "A scan's reading copy: every page turned level, its text centred with even margins and cut free of the scanner's edges, the scan itself untouched; each page's measurements kept for OCR.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^1.0.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.3.289"
+  }
+}

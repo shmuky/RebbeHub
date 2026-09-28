@@ -81,6 +81,62 @@ export async function getFile(db: Db, sha256: string): Promise<FileRow | null> {
   return one<FileRow>(db, 'SELECT * FROM file WHERE sha256 = $1', [sha256]);
 }
 
+/** A file made from another (a scan's reading copy, a web audio profile), regenerable from it. */
+export interface DerivationRow {
+  src_sha256: string;
+  profile: string;
+  sha256: string;
+  bytes: number;
+  encoder: string;
+  params: unknown;
+  created_at: string;
+}
+
+export interface NewDerivation {
+  src: string;
+  /** What it is for: `reading-copy`. One per source file and profile. */
+  profile: string;
+  sha256: string;
+  bytes: number;
+  mime: string;
+  /** The tool and its version: `pdf-fix@1`. */
+  encoder: string;
+  /** What the tool measured or chose, kept so the work need not be done again. */
+  params?: unknown;
+}
+
+/**
+ * Records a derivation, and its bytes as a file with its source's rights:
+ * a copy made from a file may be served exactly when the file may. Made
+ * again (a new version of the tool), it replaces the old one.
+ */
+export async function recordDerivation(db: Db, input: NewDerivation): Promise<DerivationRow> {
+  if (!/^[0-9a-f]{64}$/.test(input.sha256) || !/^[0-9a-f]{64}$/.test(input.src)) throw invalid('sha256 must be 64 lower-case hex characters');
+  if (!ALLOWED_MIME.test(input.mime)) throw invalid(`files of type ${input.mime} are not accepted`);
+  return db.transaction(async (tx) => {
+    const source = await one<FileRow>(tx, 'SELECT * FROM file WHERE sha256 = $1', [input.src]);
+    if (!source) throw notFound(`file ${input.src}`);
+    await tx.query(
+      `INSERT INTO file (sha256, bytes, mime, rights_state, credit, storage_tier) VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (sha256) DO NOTHING`,
+      [input.sha256, input.bytes, input.mime, source.rights_state, source.credit, source.storage_tier],
+    );
+    return (await one<DerivationRow>(
+      tx,
+      `INSERT INTO derivation (src_sha256, profile, sha256, bytes, encoder, params) VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (src_sha256, profile) DO UPDATE SET sha256 = EXCLUDED.sha256, bytes = EXCLUDED.bytes, encoder = EXCLUDED.encoder, params = EXCLUDED.params, created_at = now()
+       RETURNING *`,
+      [input.src, input.profile, input.sha256, input.bytes, input.encoder, input.params === undefined ? null : JSON.stringify(input.params)],
+    ))!;
+  });
+}
+
+/** What was made from a file, by profile. */
+export async function getDerivations(db: Db, src: string): Promise<DerivationRow[]> {
+  const { rows } = await db.query<DerivationRow>('SELECT * FROM derivation WHERE src_sha256 = $1 ORDER BY profile', [src]);
+  return rows;
+}
+
 /**
  * Changes a file's rights: stewards only, logged. A takedown is
  * `setRights(…, 'preserved')`: the file stops being served at once and
@@ -97,6 +153,12 @@ export async function setRights(db: Db, by: string, sha256: string, state: Right
       tx,
       'UPDATE file SET rights_state = $2, storage_tier = $3, rights_changed_at = now(), rights_changed_by = $4 WHERE sha256 = $1 RETURNING *',
       [sha256, state, storageTierFor(state, held), by],
+    );
+    // What was made from it follows it: a takedown takes its reading copy down too.
+    await tx.query(
+      `UPDATE file SET rights_state = $2, storage_tier = CASE WHEN storage_tier = 'none' THEN 'none' ELSE $3 END, rights_changed_at = now(), rights_changed_by = $4
+       WHERE sha256 IN (SELECT sha256 FROM derivation WHERE src_sha256 = $1)`,
+      [sha256, state, storageTierFor(state, true), by],
     );
     await tx.query("INSERT INTO audit_log (actor, action, target_kind, target_id, detail) VALUES ($1, 'file.rights', 'file', $2, $3)", [
       by,

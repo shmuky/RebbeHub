@@ -7,6 +7,7 @@
     { "path": "packages/core" },
     { "path": "packages/mirror" },
     { "path": "packages/importers" },
+    { "path": "packages/pdf-fix" },
     { "path": "services/api" },
     { "path": "services/jobs" }
   ]

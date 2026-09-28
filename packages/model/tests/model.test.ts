@@ -117,6 +117,8 @@ describe('rights', () => {
     expect(defaultRightsState({ source: 'sefaria', licence: 'cc-by-nc' })).toBe('credit');
     expect(defaultRightsState({ source: 'contribution', licence: 'unknown', fileClass: 'teshura-scan' })).toBe('credit');
     expect(defaultRightsState({ source: 'contribution', licence: 'unknown', fileClass: 'hanacha' })).toBe('link');
+    expect(defaultRightsState({ source: 'mafteiach', licence: 'unknown', fileClass: 'sichos-kodesh-hanacha' })).toBe('open');
+    expect(defaultRightsState({ source: 'mafteiach', licence: 'unknown', fileClass: 'sichos-kodesh-hanacha', setPolicy: 'locked' })).toBe('preserved');
     expect(defaultRightsState({ source: 'contribution', licence: 'cc0', fileClass: 'publisher-scan' })).toBe('link');
     expect(defaultRightsState({ source: 'contribution', licence: 'cc0', setPolicy: 'locked' })).toBe('preserved');
     expect(defaultRightsState({ source: 'igros-app', licence: 'commercial' })).toBe('preserved');

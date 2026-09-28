@@ -1,5 +1,6 @@
 import type { Db } from './db.js';
 import * as catalog from './migrations/0001_catalog.js';
+import * as derivationParams from './migrations/0002_derivation_params.js';
 
 export interface Migration {
   version: number;
@@ -8,7 +9,10 @@ export interface Migration {
 }
 
 /** Every migration, in order. A migration is never edited once released; a change is a new one. */
-export const MIGRATIONS: readonly Migration[] = [{ version: 1, name: 'catalog', up: catalog.up }];
+export const MIGRATIONS: readonly Migration[] = [
+  { version: 1, name: 'catalog', up: catalog.up },
+  { version: 2, name: 'derivation params', up: derivationParams.up },
+];
 
 /** Applies the migrations `db` has not had yet, each in its own transaction. Returns the versions applied. */
 export async function migrate(db: Db): Promise<number[]> {

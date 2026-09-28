@@ -50,6 +50,40 @@ rebbehub dump --tag 2026.40 --out dumps/2026.40 --key release-key.json
 The dump folder holds the SQLite database, the JSON Lines file, the
 Sichos-Kodesh release and a signed `manifest.json`; upload it to R2.
 
+## The Sichos Kodesh scans and their reading copies
+
+Sichos-Kodesh's archive holds every hanacha scan its catalog links to, in
+its own R2 bucket (`sichos-kodesh-archive`, by sha256). The old
+typewritten Sichos Kodesh hanachos are open ([rights](rights.md)), so
+RebbeHub keeps and serves them, each with a **reading copy** made by
+`@rebbehub/pdf-fix`: every page turned level, its text centred with even
+margins and the same enlargement on every page, cut free of the
+scanner's black edges. The scan itself is untouched - only where it sits
+on the page changes - so the copy is lossless and the same size. Each
+copy is read back and measured again, and a file whose pages do not all
+come out level (two-column typeset pages, whose tilt cannot be read
+reliably) keeps no copy.
+
+```sh
+export CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=…   # R2 edit rights on both buckets
+rebbehub reading-copies make --from ../Sichos-Kodesh --work .data/reading-copies --shard 0/4   # and 1/4, 2/4, 3/4 side by side
+rebbehub reading-copies publish --from ../Sichos-Kodesh --work .data/reading-copies
+```
+
+`make` copies each scan from the archive into `rebbehub-public`
+(`objects/<sha256>`) and puts its reading copy next to it; a run that
+stops goes on where it left off. `publish` writes the manifest -
+`manifests/reading-copies/sichos-kodesh.json`, served at
+`https://api.rebbehub.org/manifests/reading-copies/sichos-kodesh.json` -
+listing every scan, its copy and each page's tilt, text box and transform
+(original page → copy, in PDF points), so OCR can reuse the measurements
+and show its lines on the copy. Every import then runs `rebbehub
+reading-copies register`, which records the scans as files (class
+`sichos-kodesh-hanacha`, open) and the copies as their `reading-copy`
+derivations; `GET /v1/files/<sha256>` lists them. A takedown of a scan
+takes its copy down with it. When pdf-fix improves, its encoder version
+goes up and `make` does every file again.
+
 ## The API
 
 - Local: `npm run dev:api` (PGlite, or `DATABASE_URL`). `DEV_ACCOUNT=me`

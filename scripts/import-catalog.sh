@@ -27,6 +27,8 @@ import_into() {
   for importer in sichos-kodesh-works sichos-kodesh-occasions; do
     DATABASE_URL=$1 rebbehub import "$importer" --from "$from" --approve-as "$steward"
   done
+  # The Sichos Kodesh scans and their reading copies (docs/operations.md), from the published manifest.
+  DATABASE_URL=$1 rebbehub reading-copies register
 }
 
 DATABASE_URL=$live rebbehub migrate

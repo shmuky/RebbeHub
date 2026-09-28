@@ -25,6 +25,9 @@
       "@rebbehub/importers": [
         "./packages/importers/src/index.ts"
       ],
+      "@rebbehub/pdf-fix": [
+        "./packages/pdf-fix/src/index.ts"
+      ],
       "@rebbehub/db/pglite": [
         "./packages/db/src/pglite.ts"
       ]

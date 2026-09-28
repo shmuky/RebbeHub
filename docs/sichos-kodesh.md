@@ -60,3 +60,12 @@ of its hand-kept registry and importer output. The release's
 
 When that switch is made, Sichos-Kodesh stops curating its own catalog,
 and fixes flow the other way: through RebbeHub suggestions.
+
+## 4. Scans and their reading copies
+
+The Sichos Kodesh hanachos Sichos-Kodesh's archive holds are RebbeHub
+files, each with a reading copy ([operations](operations.md)). The
+published manifest (`/manifests/reading-copies/sichos-kodesh.json`) keys
+them by the catalog's `driveFileId`, so Sichos-Kodesh's apps can open a
+PDF's reading copy from `https://api.rebbehub.org/objects/<sha256>` and
+keep the original one tap away.
