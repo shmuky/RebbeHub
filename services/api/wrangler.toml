@@ -15,11 +15,26 @@ enabled = true
 binding = "HYPERDRIVE"
 id = "a06ec525cf9442f484f60ce9d38f0d39"
 
-# File bytes that may be served. The preservation bucket has no binding here on purpose:
-# nothing in it is ever served.
+# File bytes that may be served.
 [[r2_buckets]]
 binding = "FILES_PUBLIC"
 bucket_name = "rebbehub-public"
+
+# Uploaded bytes whose rights do not let them be served (docs/rights.md). The API only
+# writes here (src/uploads.ts); no route reads from it, so nothing in it is ever served.
+[[r2_buckets]]
+binding = "FILES_PRESERVATION"
+bucket_name = "rebbehub-preservation"
+
+# Sichos-Kodesh's published archive, read only: each sefer text is copied from it once,
+# checked against its hash, and kept in rebbehub-public (GET /v1/texts/<sha256>).
+[[r2_buckets]]
+binding = "SK_ARCHIVE"
+bucket_name = "sichos-kodesh-archive"
+
+# Webhooks are delivered every five minutes (src/worker.ts, scheduled).
+[triggers]
+crons = ["*/5 * * * *"]
 
 [vars]
 # The site people sign in on: passkeys are bound to its domain, and changes are taken only from its pages.

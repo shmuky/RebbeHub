@@ -1,4 +1,5 @@
 import type { DateKey } from '@rebbehub/hebrew';
+import type { RightsState } from './rights.js';
 import type { EntityId } from './ids.js';
 import type { EditionKind, Genre, Licence, SourceId } from './works.js';
 
@@ -112,6 +113,31 @@ export interface CommonFields {
   sources?: SourceRef[];
   topics?: EntityId[];
   note?: string;
+  /**
+   * The page itself, as wikitext: a letter's words, a chapter's text, a
+   * farbrengen's outline. Everything in the catalog is a page people read
+   * and edit, as on a wiki; the other fields are its infobox.
+   */
+  body?: string;
+  /** Where the body came from, when an importer brought it: the source, how, its licence and credit. */
+  bodySource?: BodySource;
+}
+
+/** The record of where a page's words were imported from (`mafteiach`, the Igros app, Sefaria). */
+export interface BodySource {
+  source: CatalogSourceId;
+  /** The index or tool it came through: `mafteiach-index`, `igros-index`, `sefaria-index`. */
+  via?: string;
+  sourceId?: string;
+  url?: string;
+  /** RebbeHub's own copy of the text as the source gave it (`/v1/texts/<sha256>`), kept on RebbeHub's storage. */
+  copy?: string;
+  licence?: string;
+  credit?: string;
+  /** What may be done with the words (docs/rights.md): shown and exported when `open` or `credit`, withheld otherwise. */
+  rights?: RightsState;
+  /** ISO time it was imported. */
+  importedAt?: string;
 }
 
 // ---------------------------------------------------------------- glue
@@ -269,16 +295,18 @@ export interface EventData extends CommonFields {
 }
 
 /** What an event's document is: the edited text, the unedited hanacha, a maamar, the Rebbe's glosses, additions. */
-export type EventLinkKind = 'mugah' | 'bilti-mugah' | 'maamar' | 'hagahos' | 'hosofos' | 'other';
+export type EventLinkKind = 'mugah' | 'bilti-mugah' | 'maamar' | 'hagahos' | 'hosofos' | 'english' | 'audio' | 'video' | 'other';
 
-export const EVENT_LINK_KINDS: readonly EventLinkKind[] = ['mugah', 'bilti-mugah', 'maamar', 'hagahos', 'hosofos', 'other'];
+export const EVENT_LINK_KINDS: readonly EventLinkKind[] = ['mugah', 'bilti-mugah', 'maamar', 'hagahos', 'hosofos', 'english', 'audio', 'video', 'other'];
 
-/** One document of an event, where it is read (a PDF of a hanacha, through a proxy). */
+/** One document or recording of an event, where it is: a PDF of a hanacha (through a proxy), a book on HebrewBooks, a video on YouTube or JEM. */
 export interface EventLink {
   kind: EventLinkKind;
   label: LocalName;
   url: string;
   source?: CatalogSourceId;
+  /** The exact file at its source (a Google Drive file), when `url` reads it through a proxy. */
+  origin?: string;
 }
 
 // ---------------------------------------------------------------- print

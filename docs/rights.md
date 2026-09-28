@@ -33,6 +33,24 @@ decisions map one to one (`ship`→`open`, `ship-with-credit`→`credit`,
   path for families to ask for a takedown;
 - anything in a *locked* set → `preserved`.
 
+## Uploads
+
+"Add a recording" (farbrengen pages) and "Add a scan" (sefer pages) take
+a file with a rights statement, which sets its licence:
+
+| The uploader says | Licence | Starts as |
+| --- | --- | --- |
+| I made this copy and give it freely | CC0 | `open` |
+| Printed or recorded for free distribution | (teshura class) | `credit` |
+| It is in the public domain | public domain | `open` |
+| I am not sure | unknown | `link`, kept privately |
+
+The bytes go to the public bucket only when the state may be served, and
+otherwise to the preservation bucket, which the API writes and never
+reads (`services/api/src/uploads.ts`). A file already known is not taken
+twice: the uploader is shown where it is. The file joins the catalog
+through a suggestion, reviewed like any other.
+
 ## Changing it
 
 Only stewards change a file's state (`setRights`), and every change is in

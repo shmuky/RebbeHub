@@ -227,3 +227,141 @@ describe('suggestions', () => {
     expect(settled.status).toBe(200);
   });
 });
+
+/**
+ * "Suggest a fix" as the site's form sends it (one call), and the
+ * reviewer's view of it: names instead of ids, and whether this person
+ * may approve (so the site knows whether to show the buttons).
+ */
+describe('suggesting a fix in one step', () => {
+  it('sends a fixed date for review, which the keeper, and not its author, may approve', async () => {
+    const fixed = { ...yudShvat(set), date: '5742-05-11' };
+    expect((await call('POST', '/v1/suggestions/quick', { body: { entityId: event, data: fixed } })).status).toBe(401);
+    const sent = await call('POST', '/v1/suggestions/quick', { as: 'chaim', body: { entityId: event, data: fixed, title: 'Wrong date', note: 'The recording says 11 Shvat' } });
+    expect(sent.status).toBe(201);
+    expect(sent.body).toMatchObject({ status: 'open', title: 'Wrong date', author: 'chaim', description: 'The recording says 11 Shvat' });
+
+    const asAuthor = (await call('GET', `/v1/suggestions/${sent.body.id}`, { as: 'chaim' })).body;
+    expect(asAuthor).toMatchObject({ mine: true, mayApprove: false, names: { chaim: 'Chaim' } });
+    expect(asAuthor.entries[0].changes).toEqual([{ path: '/date', before: '5742-05-10', after: '5742-05-11' }]);
+    expect((await call('GET', `/v1/suggestions/${sent.body.id}`, { as: 'keeper' })).body).toMatchObject({ mine: false, mayApprove: true });
+    expect((await call('GET', `/v1/suggestions/${sent.body.id}`)).body).toMatchObject({ mayApprove: false, mayApproveReason: 'sign in to review' });
+
+    await call('POST', `/v1/suggestions/${sent.body.id}/approve`, { as: 'keeper' });
+    expect((await call('GET', `/v1/entities/${event}`)).body.data.date).toBe('5742-05-11');
+
+    // History names who changed it and who approved, and says what changed, in fields.
+    const [latest, first] = (await call('GET', `/v1/entities/${event}/history`)).body.history;
+    expect(latest).toMatchObject({ message: 'Wrong date', authorName: 'Chaim', mergedByName: 'Set keeper', created: false, changes: [{ path: '/date', before: '5742-05-10', after: '5742-05-11' }] });
+    expect(first).toMatchObject({ created: true, changes: [] });
+  });
+
+  it('refuses an item that is not there', async () => {
+    expect((await call('POST', '/v1/suggestions/quick', { as: 'chaim', body: { entityId: 'rh-zzzzzzzz', data: {} } })).status).toBe(404);
+  });
+});
+
+describe('following', () => {
+  it('lists what a person follows, and the changes to it since they followed', async () => {
+    expect((await call('GET', '/v1/follows')).status).toBe(401);
+    await call('POST', '/v1/follows', { as: 'chaim', body: { kind: 'entity', id: event } });
+    const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'חיבור' }, slug: 'w', authors: [], genre: 'sichos', levels: ['sicha'], sets: [set] });
+    await call('POST', '/v1/follows', { as: 'chaim', body: { kind: 'entity', id: work } });
+
+    const fixed = await call('POST', '/v1/suggestions/quick', { as: 'mendy', body: { entityId: event, data: { ...yudShvat(set), date: '5742-05-11' }, title: 'Wrong date' } });
+    await call('POST', `/v1/suggestions/${fixed.body.id}/approve`, { as: 'keeper' });
+    // A sicha added to the followed sefer shows too.
+    await add(catalog, 'mendy', 'keeper', 'unit', { work, position: [{ level: 'sicha', value: '1' }], order: 'V', label: { he: 'א' } });
+
+    const mine = (await call('GET', '/v1/follows', { as: 'chaim' })).body;
+    expect(mine.follows.map((f: { id: string }) => f.id).sort()).toEqual([event, work].sort());
+    expect(mine.items).toHaveLength(2);
+    expect(mine.feed.map((f: { message: string }) => f.message)).toEqual(['Add unit', 'Wrong date']);
+    expect(mine.feed[1]).toMatchObject({ entityId: event, authorName: 'Mendy', changes: 1 });
+
+    await call('POST', '/v1/follows', { as: 'chaim', body: { kind: 'entity', id: event, on: false } });
+    expect((await call('GET', '/v1/follows', { as: 'chaim' })).body.follows).toHaveLength(1);
+  });
+});
+
+describe('the Missing board and projects', () => {
+  it('lists what is missing, and a project works through it with its progress', async () => {
+    const other = await add(catalog, 'mendy', 'keeper', 'event', { kind: 'farbrengen', title: { he: 'ט״ו שבט' }, date: '5742-05-15', sets: [set] }, '/events/5742-05-15');
+    const missing = (await call('GET', '/v1/missing?kind=recordings&within=5742')).body;
+    expect(missing.total).toBe(2);
+    expect((await call('GET', '/v1/missing?kind=scans')).body.total).toBe(0);
+    expect((await call('GET', '/v1/missing?kind=spaceships')).status).toBe(400);
+
+    // A contributor opens no projects; the set's keeper does.
+    const input = { slug: 'recordings-5742', name: 'הקלטות תשמ״ב', goal: 'Every farbrengen of 5742 with its recording', set, missing: 'recordings', within: '5742' };
+    expect((await call('POST', '/v1/projects', { as: 'chaim', body: input })).status).toBe(403);
+    expect((await call('POST', '/v1/projects', { as: 'keeper', body: input })).status).toBe(201);
+
+    let project = (await call('GET', '/v1/projects/recordings-5742')).body;
+    expect(project.project).toMatchObject({ name: 'הקלטות תשמ״ב', total: 2, done: 0, status: 'open' });
+    expect(project.next).toHaveLength(2);
+
+    await add(catalog, 'mendy', 'keeper', 'recording', { event: other, title: { he: 'שיחה א׳' }, url: 'https://example.org/a.mp3', sets: [set] });
+    project = (await call('GET', '/v1/projects/recordings-5742')).body;
+    expect(project.project).toMatchObject({ total: 2, done: 1 });
+    expect(project.next.map((e: { id: string }) => e.id)).toEqual([event]);
+
+    expect((await call('GET', '/v1/projects')).body.projects).toHaveLength(1);
+    await call('POST', '/v1/projects/recordings-5742/close', { as: 'keeper' });
+    expect((await call('GET', '/v1/projects/recordings-5742')).body).toMatchObject({ project: { status: 'closed' }, next: [] });
+  });
+});
+
+describe('the wiki model', () => {
+  it('keeps its own copy of each text: copied once from Sichos-Kodesh, checked by hash, then served from RebbeHub', async () => {
+    const { createHash } = await import('node:crypto');
+    const article = '<article><h1>א</h1><p>טקסט</p></article>';
+    const sha = createHash('sha256').update(article).digest('hex');
+    const store = (objects: Map<string, Uint8Array>) => ({
+      async get(key: string) {
+        const bytes = objects.get(key);
+        return bytes ? { body: new Response(bytes as BodyInit).body!, size: bytes.length } : null;
+      },
+    });
+    const archive = new Map([[`objects/${sha}`, new TextEncoder().encode(article)], [`objects/${'b'.repeat(64)}`, new TextEncoder().encode(article)]]);
+    const own = new Map<string, Uint8Array>();
+    const withTexts = createApp({ catalog, texts: { store: store(own), writer: { put: async (key, bytes) => void own.set(key, new Uint8Array(bytes)) }, from: store(archive) } });
+    const first = await withTexts.request(`/v1/texts/${sha}`);
+    expect(first.status).toBe(200);
+    expect(first.headers.get('content-security-policy')).toBe('sandbox');
+    expect(await first.text()).toBe(article);
+    expect(own.has(`texts/${sha}`)).toBe(true);
+    archive.clear();
+    expect(await (await withTexts.request(`/v1/texts/${sha}`)).text()).toBe(article); // RebbeHub's own copy now
+    expect((await withTexts.request(`/v1/texts/${'b'.repeat(64)}`)).status).toBe(404); // bytes that are not their name
+    expect((await withTexts.request('/v1/texts/nope')).status).toBe(404);
+    expect((await app.request(`/v1/texts/${sha}`)).status).toBe(404);
+  });
+
+  it('keeps a page body in wikitext with where it came from, and edits it through a suggestion', async () => {
+    const withBody = { ...yudShvat(set), body: "== תוכן ==\n'''שיחה א'''", bodySource: { source: 'other', via: 'mafteiach-index', url: 'https://www.mafteiach.app/', licence: 'facts-and-links' } };
+    const sent = await call('POST', '/v1/suggestions/quick', { as: 'chaim', body: { entityId: event, data: withBody, title: 'Add the outline' } });
+    expect(sent.status).toBe(201);
+    await call('POST', `/v1/suggestions/${sent.body.id}/approve`, { as: 'keeper' });
+    expect((await call('GET', `/v1/entities/${event}`)).body.data).toMatchObject({ body: "== תוכן ==\n'''שיחה א'''", bodySource: { via: 'mafteiach-index' } });
+    // What is not in the schema is still refused.
+    const bad = await call('POST', '/v1/suggestions/quick', { as: 'chaim', body: { entityId: event, data: { ...withBody, bodySource: { via: 'x' } } } });
+    expect(bad.body.status === 'open' ? bad.body.checks.some((c: { status: string }) => c.status === 'fail') : bad.status >= 400).toBe(true);
+  });
+
+  it('has a talk page for every page: read by all, written when signed in, answered in threads, hidden by its author', async () => {
+    expect((await call('POST', `/v1/entities/${event}/talk`, { body: { body: 'שאלה' } })).status).toBe(401);
+    const first = await call('POST', `/v1/entities/${event}/talk`, { as: 'chaim', body: { body: 'האם התאריך נכון?' } });
+    expect(first.status).toBe(201);
+    await call('POST', `/v1/entities/${event}/talk`, { as: 'mendy', body: { body: 'כן, לפי ההקלטה', parent: first.body.id } });
+    expect((await call('POST', `/v1/entities/${event}/talk`, { as: 'mendy', body: { body: 'x', parent: 99999 } })).status).toBe(400);
+    const talk = (await call('GET', `/v1/entities/${event}/talk`)).body.talk;
+    expect(talk).toMatchObject([
+      { authorName: 'Chaim', body: 'האם התאריך נכון?', parent: null },
+      { authorName: 'Mendy', parent: first.body.id },
+    ]);
+    expect((await call('POST', `/v1/comments/${first.body.id}/hide`, { as: 'mendy' })).status).toBe(403);
+    await call('POST', `/v1/comments/${first.body.id}/hide`, { as: 'chaim' });
+    expect((await call('GET', `/v1/entities/${event}/talk`)).body.talk[0]).toMatchObject({ hidden: true, body: null });
+  });
+});

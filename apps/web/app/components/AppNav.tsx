@@ -21,9 +21,9 @@ function tabOf(pathname: string): string {
   if (pathname === '/') return '/';
   if (pathname.startsWith('/calendar') || pathname.startsWith('/events')) return '/calendar';
   if (pathname.startsWith('/search')) return '/search';
-  if (pathname.startsWith('/help')) return '/help';
+  if (['/help', '/review', '/missing', '/projects'].some((p) => pathname.startsWith(p))) return '/help';
   // A person's own pages belong to no tab.
-  if (pathname.startsWith('/signin') || pathname.startsWith('/account')) return '';
+  if (pathname.startsWith('/signin') || pathname.startsWith('/account') || pathname.startsWith('/admin') || ['/history', '/read', '/talk', '/edit'].some((p) => pathname.startsWith(p))) return '';
   return '/sets';
 }
 

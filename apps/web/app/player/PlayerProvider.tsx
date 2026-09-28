@@ -32,8 +32,8 @@ interface PlayerState {
 
 interface PlayerApi extends PlayerState {
   current: Track | null;
-  /** Plays a queue from one of its parts (the first by default). */
-  play: (queue: Track[], index?: number) => void;
+  /** Plays a queue from one of its parts (the first by default), from `startAt` seconds into it (a transcript's line). */
+  play: (queue: Track[], index?: number, startAt?: number) => void;
   toggle: () => void;
   next: () => void;
   prev: () => void;
@@ -92,11 +92,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const play = useCallback(
-    (queue: Track[], index = 0) => {
+    (queue: Track[], index = 0, startAt?: number) => {
       autoplay.current = true;
-      pendingSeek.current = null;
-      setState((s) => ({ ...s, queue, index, time: 0, duration: 0, playing: false, loading: true, error: false }));
-      persist(queue, index, 0);
+      pendingSeek.current = startAt ?? null;
+      setState((s) => ({ ...s, queue, index, time: startAt ?? 0, duration: 0, playing: false, loading: true, error: false }));
+      persist(queue, index, startAt ?? 0);
     },
     [persist],
   );

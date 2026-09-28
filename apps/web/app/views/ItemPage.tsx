@@ -4,6 +4,8 @@ import { AudioPlayer } from '../components/AudioPlayer.js';
 import { EventPage } from './EventPage.js';
 import { AuthorPage, SetPage, WorkPage } from './LibraryPages.js';
 import { ItemLink, ItemList } from '../components/ItemLink.js';
+import { PageBody } from '../components/PageBody.js';
+import { PageTabs } from '../components/PageTabs.js';
 import { ScanViewer } from '../components/ScanViewer.js';
 import { TextView } from '../components/TextView.js';
 import type { Entity } from '../lib/api.js';
@@ -13,6 +15,8 @@ import type { ItemView } from '../lib/itemData.server.js';
 import { labelOf } from '../lib/labels.js';
 import { href, itemPath, SOURCE_NAMES, sourceUrl } from '../lib/links.js';
 import { useLang } from '../lib/useLang.js';
+import { readHref } from '../routes/read.js';
+import { readable } from './EventPage.js';
 
 type D = Record<string, any>;
 
@@ -126,10 +130,23 @@ function UnitPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang
           <TextView segments={view.segments[text.id] ?? []} language={(text.data as D).language} withheld={(view.segments[text.id] ?? []).some((s) => s.withheld) ? 'withheld' : undefined} />
         </section>
       ))}
+      {/* The chapter's own words come first; where they and other copies are from, after. */}
+      <PageBody entity={entity} lang={lang} />
+      {(d.editions ?? [])
+        .filter((e: { kind: string; url?: string }) => (e.kind === 'pdf' || e.kind === 'scan') && e.url && readable(e.url))
+        .slice(0, 1)
+        .map((e: { url: string }) => (
+          // A PDF the site's own reader opens; its exact file at the source is listed under the copies below.
+          <p key={e.url}>
+            <Link className="button" to={readHref({ url: e.url, title: nameOf(d.label, lang), sub: work ? labelOf(work, lang) : undefined }, lang)}>
+              {t(lang, 'readScan')}
+            </Link>
+          </p>
+        ))}
       {d.editions?.length ? (
         <section>
           <h2>{t(lang, 'editions')}</h2>
-          <Copies copies={d.editions} lang={lang} />
+          <Copies copies={d.editions.filter((e: { url?: string }) => !(e.url && readable(e.url)))} lang={lang} />
         </section>
       ) : null}
       {view.lists.printedIn?.length ? (
@@ -229,13 +246,20 @@ function PublicationPage({ entity, view, lang }: { entity: Entity; view: ItemVie
         <section>
           <h2>{t(lang, 'scans')}</h2>
           {scans.map((scan) => (
-            <ScanViewer
-              key={scan.id}
-              file={view.files[scan.id] ?? null}
-              title={nameOf(d.title, lang)}
-              sourceLink={d.identifiers?.hebrewbooks ? sourceUrl({ source: 'hebrewbooks', sourceId: d.identifiers.hebrewbooks }) : null}
-              pageLabels={(scan.data as D).pageLabels}
-            />
+            <div key={scan.id}>
+              <ScanViewer
+                file={view.files[scan.id] ?? null}
+                title={nameOf(d.title, lang)}
+                sourceLink={d.identifiers?.hebrewbooks ? sourceUrl({ source: 'hebrewbooks', sourceId: d.identifiers.hebrewbooks }) : null}
+                pageLabels={(scan.data as D).pageLabels}
+              />
+              {/* Its text, page by page, where the machine has read it; a scan whose file is not served has none shown. */}
+              {view.files[scan.id]?.url ? (
+                <p>
+                  <Link to={href(`/text/${scan.id}`, lang)}>{t(lang, 'readTheText')}</Link>
+                </p>
+              ) : null}
+            </div>
           ))}
         </section>
       ) : d.identifiers?.hebrewbooks ? (
@@ -334,12 +358,13 @@ export function ItemPage({ entity, view }: { entity: Entity; view: ItemView }) {
   const pointing = view.backlinks.length;
   return (
     <article>
+      <PageTabs entity={entity} lang={lang} current="page" />
       <Page entity={entity} view={view} lang={lang} />
+      {entity.type === 'unit' ? null : <PageBody entity={entity} lang={lang} />}
       <div className="item-footer">
         <span>
           {t(lang, 'permanentLink')}: <Link to={href(`/${entity.id}`, lang)}><code>{entity.id}</code></Link>
         </span>
-        <Link to={href(`/history/${entity.id}`, lang)}>{t(lang, 'history')}</Link>
         {pointing > 0 ? (
           <span>
             {t(lang, 'pointsHere')}: {pointing}

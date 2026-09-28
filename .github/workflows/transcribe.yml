@@ -1,0 +1,78 @@
+name: Machine transcription (manual)
+
+# Transcribes recordings that have no transcript yet with Whisper on
+# Cloudflare Workers AI, and syncs each paragraph to where it is heard
+# (services/jobs/src/transcribe.ts). The transcripts are marked as machine
+# output on the site until people check them. Workers AI is paid by the
+# minute of audio, so this runs only when started, for as many as asked.
+#
+# Needs repository secrets: DATABASE_URL (as the import), and
+# CLOUDFLARE_ACCOUNT_ID with CLOUDFLARE_AI_TOKEN (a token allowed only
+# Workers AI). See docs/deploy.md.
+on:
+  workflow_dispatch:
+    inputs:
+      steward:
+        description: The steward who approves the machine's transcripts
+        default: shmuly
+        required: true
+      limit:
+        description: How many recordings to transcribe this run
+        default: "3"
+        required: true
+      linked:
+        description: Also recordings heard at another site (not only files RebbeHub serves)
+        type: boolean
+        default: false
+      recording:
+        description: One recording's id (rh-…), instead
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: transcribe-production
+  cancel-in-progress: false
+
+jobs:
+  transcribe:
+    name: Transcribe recordings
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 240
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_AI_TOKEN: ${{ secrets.CLOUDFLARE_AI_TOKEN }}
+    steps:
+      - name: Check it is configured
+        run: |
+          missing=""
+          for name in DATABASE_URL CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_AI_TOKEN; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then echo "::error::Add the repository secrets$missing (see docs/deploy.md)."; exit 1; fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install ffmpeg
+        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Transcribe
+        env:
+          STEWARD: ${{ inputs.steward }}
+          LIMIT: ${{ inputs.limit }}
+          LINKED: ${{ inputs.linked }}
+          RECORDING: ${{ inputs.recording }}
+        run: |
+          npm run rebbehub -- migrate
+          args=(--approve-as "$STEWARD" --limit "$LIMIT")
+          if [ "$LINKED" = "true" ]; then args+=(--linked); fi
+          if [ -n "$RECORDING" ]; then args+=(--recording "$RECORDING"); fi
+          npm run rebbehub -- transcribe "${args[@]}"

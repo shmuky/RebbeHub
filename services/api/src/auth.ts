@@ -17,8 +17,12 @@ import {
   endSession,
   findPasskey,
   getPerson,
+  googleAccountsOf,
+  googleSignedIn,
+  linkGoogle,
   passkeyUsed,
   passkeysOf,
+  renamePerson,
   saveChallenge,
   sessionPerson,
   startSession,
@@ -42,6 +46,8 @@ export interface AuthOptions {
   rpName: string;
   /** The site's own addresses (`https://rebbehub.org`), where ceremonies may happen and changes may come from. */
   origins: string[];
+  /** Signing in with Google, once the site has a Google sign-in client (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET); without it, only passkeys. */
+  google?: GoogleOptions;
   /** Replaces the WebAuthn verification, for tests; everything else runs as in production. */
   verify?: {
     registration: (input: { response: RegistrationResponseJSON; challenge: string }) => Promise<{ credentialId: string; publicKey: string; counter: number; transports: string[]; deviceType?: string; backedUp?: boolean } | null>;
@@ -49,19 +55,87 @@ export interface AuthOptions {
   };
 }
 
+export interface GoogleOptions {
+  clientId: string;
+  clientSecret: string;
+  /** Reaches Google's token endpoint; replaced in tests. */
+  fetch?: typeof fetch;
+}
+
 export const SESSION_COOKIE = '__Host-rh_session';
+/** Holds a Google sign-in's state between leaving for Google and coming back, so only the browser that left can come back signed in. */
+export const GOOGLE_COOKIE = '__Host-rh_google';
+
+const GOOGLE_AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
+const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
 
 /** Sign-in for a site at `siteUrl`: its host is the passkeys' domain, its origin the only place sign-in happens. */
-export function authFor(siteUrl: string): AuthOptions {
+export function authFor(siteUrl: string, google?: { clientId?: string; clientSecret?: string }): AuthOptions {
   const url = new URL(siteUrl);
-  return { rpId: url.hostname, rpName: 'RebbeHub', origins: [url.origin] };
+  const withGoogle = google?.clientId && google.clientSecret ? { google: { clientId: google.clientId, clientSecret: google.clientSecret } } : {};
+  return { rpId: url.hostname, rpName: 'RebbeHub', origins: [url.origin], ...withGoogle };
 }
 
 /** Plain `http://localhost` cannot keep a `__Host-` (Secure) cookie in every browser; local development uses a plain name. */
-const cookieName = (c: Context) => (new URL(c.req.url).protocol === 'https:' || c.req.header('X-Forwarded-Proto') === 'https' ? SESSION_COOKIE : 'rh_session');
+const secure = (c: Context) => new URL(c.req.url).protocol === 'https:' || c.req.header('X-Forwarded-Proto') === 'https';
+const cookieName = (c: Context) => (secure(c) ? SESSION_COOKIE : 'rh_session');
+const googleCookieName = (c: Context) => (secure(c) ? GOOGLE_COOKIE : 'rh_google');
 
 function readSession(c: Context): string | undefined {
   return getCookie(c, SESSION_COOKIE) ?? getCookie(c, 'rh_session');
+}
+
+/** Only an address on the site may be returned to after signing in. */
+function safeReturn(value: string | undefined): string {
+  return value && value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/\\') ? value : '/account';
+}
+
+function randomText(bytes: number): string {
+  const b = new Uint8Array(bytes);
+  crypto.getRandomValues(b);
+  return isoBase64URL.fromBuffer(b);
+}
+
+async function sha256(text: string): Promise<string> {
+  return isoBase64URL.fromBuffer(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))));
+}
+
+/** What Google says about the person, from the ID token its token endpoint gave us. */
+interface GoogleClaims {
+  sub: string;
+  email?: string;
+  email_verified?: boolean;
+  name?: string;
+}
+
+/**
+ * Trades the code Google sent back for the person's ID token. The token
+ * comes straight from Google over TLS, in answer to our own secret, so its
+ * signature need not be checked again (OpenID Connect Core, 3.1.3.7); its
+ * audience, issuer, expiry and nonce still are.
+ */
+async function googleClaims(google: GoogleOptions, input: { code: string; verifier: string; nonce: string; redirectUri: string }): Promise<GoogleClaims | null> {
+  const response = await (google.fetch ?? fetch)(GOOGLE_TOKEN, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', accept: 'application/json' },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: input.code,
+      code_verifier: input.verifier,
+      client_id: google.clientId,
+      client_secret: google.clientSecret,
+      redirect_uri: input.redirectUri,
+    }),
+  });
+  if (!response.ok) return null;
+  const { id_token } = (await response.json().catch(() => ({}))) as { id_token?: string };
+  const payload = id_token?.split('.')[1];
+  if (!payload) return null;
+  const claims = JSON.parse(new TextDecoder().decode(isoBase64URL.toBuffer(payload))) as GoogleClaims & { aud?: string; iss?: string; exp?: number; nonce?: string };
+  const fresh = typeof claims.exp === 'number' && claims.exp * 1000 > Date.now();
+  const fromGoogle = claims.iss === 'https://accounts.google.com' || claims.iss === 'accounts.google.com';
+  if (!fresh || !fromGoogle || claims.aud !== google.clientId || claims.nonce !== input.nonce || !claims.sub) return null;
+  return claims;
 }
 
 /** A change may come only from the site's own pages; a request without an Origin (not a browser's) carries no cookie of the site's. */
@@ -83,6 +157,8 @@ export function sessionAuthenticator(catalog: Catalog, auth: AuthOptions) {
     const person = await sessionPerson(catalog.db, token);
     if (!person) return null;
     await catalog.createAccount({ id: person.id, displayName: person.displayName });
+    // The person's steward mark is the one that counts; their catalog account follows it.
+    await catalog.db.query('UPDATE account SET is_steward = $2 WHERE id = $1 AND is_steward <> $2', [person.id, Boolean(person.steward)]);
     return person.id;
   };
 }
@@ -135,12 +211,16 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
   app.get('/v1/auth/me', async (c) => {
     const token = readSession(c);
     const person = token ? await sessionPerson(db, token) : null;
-    if (!person) return c.json({ person: null });
-    return c.json({ person, passkeys: await passkeysOf(db, person.id) });
+    const google = Boolean(auth.google);
+    if (!person) return c.json({ person: null, google });
+    return c.json({ person, passkeys: await passkeysOf(db, person.id), googleAccounts: await googleAccountsOf(db, person.id), google });
   });
 
   // A new account: the name they go by, and a passkey made on their device for this site.
   app.post('/v1/auth/passkey/register/options', async (c) => {
+    // Signed in already, a new passkey goes on this account (passkey/add), never on a second one.
+    const token = readSession(c);
+    if (token && (await sessionPerson(db, token))) return refuse(c, 400, 'you are signed in; add a passkey from your account page');
     const { name } = (await c.req.json().catch(() => ({}))) as { name?: unknown };
     const displayName = cleanDisplayName(name);
     if (!displayName) return refuse(c, 400, 'a name of 1 to 60 characters');
@@ -171,6 +251,56 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
     return c.json({ person }, 201);
   });
 
+  // A signed-in person adds a passkey (say, after coming in with Google, or for another device).
+  const signedIn = async (c: Context) => {
+    const token = readSession(c);
+    return token ? sessionPerson(db, token) : null;
+  };
+
+  app.post('/v1/auth/passkey/add/options', async (c) => {
+    const person = await signedIn(c);
+    if (!person) return refuse(c, 401, 'sign in first');
+    const existing = await passkeysOf(db, person.id);
+    const options = await generateRegistrationOptions({
+      rpName: auth.rpName,
+      rpID: auth.rpId,
+      userName: person.displayName,
+      userDisplayName: person.displayName,
+      userID: new TextEncoder().encode(person.id),
+      attestationType: 'none',
+      excludeCredentials: existing.map((p) => ({ id: p.credentialId })),
+      authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' },
+    });
+    const challengeId = await saveChallenge(db, options.challenge, 'register');
+    return c.json({ challengeId, options });
+  });
+
+  app.post('/v1/auth/passkey/add/verify', async (c) => {
+    const person = await signedIn(c);
+    if (!person) return refuse(c, 401, 'sign in first');
+    const input = (await c.req.json().catch(() => ({}))) as { challengeId?: string; response?: RegistrationResponseJSON };
+    if (!input.challengeId || !input.response) return refuse(c, 400, 'give challengeId and response');
+    const challenge = await takeChallenge(db, input.challengeId, 'register');
+    if (!challenge) return refuse(c, 400, 'that request has expired; try again');
+    const credential = await verify.registration({ response: input.response, challenge }).catch(() => null);
+    if (!credential) return refuse(c, 400, 'the passkey could not be verified');
+    if (await findPasskey(db, credential.credentialId)) return refuse(c, 400, 'this passkey already belongs to an account');
+    await addPasskey(db, { ...credential, personId: person.id });
+    return c.json({ passkeys: await passkeysOf(db, person.id) }, 201);
+  });
+
+  // The name a person goes by, next to their suggestions and fixes.
+  app.post('/v1/auth/name', async (c) => {
+    const person = await signedIn(c);
+    if (!person) return refuse(c, 401, 'sign in first');
+    const { name } = (await c.req.json().catch(() => ({}))) as { name?: unknown };
+    const displayName = cleanDisplayName(name);
+    if (!displayName) return refuse(c, 400, 'a name of 1 to 60 characters');
+    await renamePerson(db, person.id, displayName);
+    await catalog.createAccount({ id: person.id, displayName });
+    return c.json({ person: { id: person.id, displayName } });
+  });
+
   // Signing in: the browser offers the passkeys it holds for this site, and the person picks one.
   app.post('/v1/auth/passkey/sign-in/options', async (c) => {
     const options = await generateAuthenticationOptions({ rpID: auth.rpId, userVerification: 'preferred' });
@@ -190,6 +320,61 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
     await passkeyUsed(db, passkey.credentialId, result.counter);
     await signIn(c, passkey.personId);
     return c.json({ person: await getPerson(db, passkey.personId) });
+  });
+
+  // Google: the browser goes to Google and comes back to the site's /_/auth/google/callback with a code.
+  const redirectUri = `${auth.origins[0]}/_/auth/google/callback`;
+  const googleSignIn = auth.google;
+  const backToSignIn = (c: Context, error: string) => c.redirect(`/signin?error=${error}`, 302);
+
+  app.get('/v1/auth/google/start', async (c) => {
+    if (!googleSignIn) return backToSignIn(c, 'google-off');
+    const verifier = randomText(32);
+    const nonce = randomText(16);
+    const state = await saveChallenge(db, JSON.stringify({ verifier, nonce, returnTo: safeReturn(c.req.query('return')) }), 'google');
+    setCookie(c, googleCookieName(c), state, { httpOnly: true, secure: secure(c), sameSite: 'Lax', path: '/', maxAge: 600 });
+    const url = new URL(GOOGLE_AUTHORIZE);
+    url.search = new URLSearchParams({
+      client_id: googleSignIn.clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: 'openid email profile',
+      state,
+      nonce,
+      code_challenge: await sha256(verifier),
+      code_challenge_method: 'S256',
+      prompt: 'select_account',
+    }).toString();
+    return c.redirect(url.toString(), 302);
+  });
+
+  app.get('/v1/auth/google/callback', async (c) => {
+    if (!googleSignIn) return backToSignIn(c, 'google-off');
+    const state = c.req.query('state');
+    const code = c.req.query('code');
+    const cookieState = getCookie(c, GOOGLE_COOKIE) ?? getCookie(c, 'rh_google');
+    deleteCookie(c, googleCookieName(c), { path: '/', secure: secure(c) });
+    // A person who says no at Google, or a browser that did not start here, is sent back to try again.
+    if (!state || !code || state !== cookieState) return backToSignIn(c, 'google-cancelled');
+    const saved = await takeChallenge(db, state, 'google');
+    if (!saved) return backToSignIn(c, 'google-expired');
+    const { verifier, nonce, returnTo } = JSON.parse(saved) as { verifier: string; nonce: string; returnTo: string };
+    const claims = await googleClaims(googleSignIn, { code, verifier, nonce, redirectUri }).catch(() => null);
+    if (!claims) return backToSignIn(c, 'google-failed');
+    const email = claims.email && claims.email_verified !== false ? claims.email : null;
+
+    // Known: sign in as its person. New, while signed in: add it to this account. New otherwise: a new account, named as on Google.
+    const token = readSession(c);
+    const current = token ? await sessionPerson(db, token) : null;
+    let person = await googleSignedIn(db, claims.sub, email);
+    // Linking a Google account that is already another account's never switches accounts behind the person's back.
+    if (person && current && person.id !== current.id) return c.redirect('/account?error=google-taken', 302);
+    if (!person) {
+      person = current ?? (await createPerson(db, cleanDisplayName(claims.name) ?? cleanDisplayName(email?.split('@')[0]) ?? 'Reader'));
+      await linkGoogle(db, claims.sub, person.id, email);
+    }
+    await signIn(c, person.id);
+    return c.redirect(returnTo, 302);
   });
 
   app.post('/v1/auth/sign-out', async (c) => {

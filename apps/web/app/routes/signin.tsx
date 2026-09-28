@@ -5,15 +5,19 @@ import type { Route } from './+types/signin';
 import { langFrom, t } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
-import { refreshAccount, useAccount } from '../lib/useAccount.js';
+import { refreshAccount, useAccount, useGoogleSignIn } from '../lib/useAccount.js';
 import { useLang } from '../lib/useLang.js';
 
 /**
  * Signing in, with a passkey: no password to choose or forget. The passkey
  * lives on the person's phone or computer, opened with their fingerprint,
  * face or screen lock, and works only on RebbeHub. New here: a name to be
- * known by, and the device makes the passkey.
+ * known by, and the device makes the passkey. Or with Google, once the
+ * site has its Google sign-in keys: the browser goes to Google and back.
  */
+
+/** Why a Google sign-in came back here (the API's `?error=`). */
+const GOOGLE_ERRORS = { 'google-failed': 'googleFailed', 'google-cancelled': 'signInCancelled', 'google-expired': 'googleExpired', 'google-off': 'googleOff' } as const;
 export function loader({ request }: Route.LoaderArgs) {
   return { lang: langFrom(request), siteUrl: new URL(request.url).origin };
 }
@@ -41,7 +45,9 @@ export default function SignIn() {
   const [params] = useSearchParams();
   const [name, setName] = useState('');
   const [busy, setBusy] = useState<'in' | 'new' | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const google = useGoogleSignIn();
+  const cameBack = GOOGLE_ERRORS[params.get('error') as keyof typeof GOOGLE_ERRORS];
+  const [error, setError] = useState<string | null>(cameBack ? t(lang, cameBack) : null);
   const done = () => {
     refreshAccount();
     window.location.assign(safeReturn(params.get('return')));
@@ -87,38 +93,56 @@ export default function SignIn() {
       <p className="subtitle">{t(lang, 'signInIntro')}</p>
 
       {account ? (
-        <p className="note">
-          {t(lang, 'alreadySignedIn')} <b>{account.person.displayName}</b>. <Link to={href('/account', lang)}>{t(lang, 'yourAccount')}</Link>
-        </p>
+        <>
+          <p className="note">
+            {t(lang, 'alreadySignedIn')} <strong>{account.person.displayName}</strong>.
+          </p>
+          {/* Signed in, a new passkey belongs on this account, never on a new one. */}
+          <p>
+            <Link className="button" to={href('/account', lang)}>
+              {t(lang, 'addPasskeyHere')}
+            </Link>
+          </p>
+        </>
       ) : null}
 
       {!supported ? <p className="note">{t(lang, 'noPasskeys')}</p> : null}
 
-      <section>
-        <h2 className="section-header">{t(lang, 'haveAccount')}</h2>
-        <p>{t(lang, 'haveAccountText')}</p>
-        <button type="button" onClick={signIn} disabled={busy !== null || !supported}>
-          {busy === 'in' ? t(lang, 'waiting') : t(lang, 'signInWithPasskey')}
-        </button>
-      </section>
+      {account ? null : (
+        <>
+          <section>
+            <h2 className="section-header">{t(lang, 'haveAccount')}</h2>
+            <p>{t(lang, 'haveAccountText')}</p>
+            <button type="button" onClick={signIn} disabled={busy !== null || !supported}>
+              {busy === 'in' ? t(lang, 'waiting') : t(lang, 'signInWithPasskey')}
+            </button>
+          </section>
 
-      <section>
-        <h2 className="section-header">{t(lang, 'newAccount')}</h2>
-        <form onSubmit={create} className="signin-form">
-          <label htmlFor="name">{t(lang, 'nameToShow')}</label>
-          <input id="name" name="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required autoComplete="name" dir="auto" />
-          <p className="row-sub">{t(lang, 'nameToShowHint')}</p>
-          <button type="submit" disabled={busy !== null || !supported || !name.trim()}>
-            {busy === 'new' ? t(lang, 'waiting') : t(lang, 'createAccount')}
-          </button>
-        </form>
-      </section>
+          <section>
+            <h2 className="section-header">{t(lang, 'newAccount')}</h2>
+            <form onSubmit={create} className="signin-form">
+              <label htmlFor="name">{t(lang, 'nameToShow')}</label>
+              <input id="name" name="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required autoComplete="name" dir="auto" />
+              <p className="row-sub">{t(lang, 'nameToShowHint')}</p>
+              <p className="row-sub">{t(lang, 'newAccountHint')}</p>
+              <button type="submit" disabled={busy !== null || !supported || !name.trim()}>
+                {busy === 'new' ? t(lang, 'waiting') : t(lang, 'createAccount')}
+              </button>
+            </form>
+          </section>
 
-      {error ? (
-        <p className="note" role="alert">
-          {error}
-        </p>
-      ) : null}
+          {google ? (
+            <section>
+              <h2 className="section-header">{t(lang, 'orGoogle')}</h2>
+              <p>{t(lang, 'orGoogleText')}</p>
+              {/* A whole-page visit: the browser goes to Google and comes back. */}
+              <a className="button secondary" href={`/_/auth/google/start?return=${encodeURIComponent(safeReturn(params.get('return')))}`}>
+                {t(lang, 'signInWithGoogle')}
+              </a>
+            </section>
+          ) : null}
+        </>
+      )}
 
       <section className="note">
         <b>{t(lang, 'whatIsPasskey')}</b>

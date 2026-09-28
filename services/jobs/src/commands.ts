@@ -1,10 +1,10 @@
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Catalog } from '@rebbehub/core';
 import { connectPostgres, one, type Db } from '@rebbehub/db';
 import { openPGlite } from '@rebbehub/db/pglite';
-import { readSichosKodeshOccasions, readSichosKodeshWorks, runImport, sichosKodeshOccasionsImporter, sichosKodeshWorksImporter, type Importer } from '@rebbehub/importers';
+import { OTZROS_FOLDER, chabadLibraryImporter, driveLibraryImporter, listDriveFolder, crawlChabadLibrary, libraryWorks, readChabadLibrary, readMafteiachCrawl, readSichosKodeshOccasions, readSichosKodeshWorks, runImport, sichosKodeshOccasionsImporter, sichosKodeshWorksImporter, type Importer } from '@rebbehub/importers';
 import { clearMirror, directorySink, exportCommits, exportSnapshot, generateKeyPair, writeDump, type KeyPair } from '@rebbehub/mirror';
 import { BUILTIN_SCHEMAS, SchemaRegistry } from '@rebbehub/model';
 import { commitAll, git } from './git.js';
@@ -23,7 +23,7 @@ export async function openDatabase(database?: string): Promise<Db> {
   return /^postgres(ql)?:\/\//.test(target) ? connectPostgres(target) : openPGlite(target);
 }
 
-async function withCatalog<T>(ctx: Context, fn: (catalog: Catalog) => Promise<T>): Promise<T> {
+export async function withCatalog<T>(ctx: Context, fn: (catalog: Catalog) => Promise<T>): Promise<T> {
   const db = await openDatabase(ctx.database);
   try {
     const catalog = new Catalog(db);
@@ -61,14 +61,16 @@ export async function migrateCommand(ctx: Context): Promise<void> {
 /**
  * What people have made in the catalog: a suggestion from anyone but an
  * importer bot (merged, open or draft), a report, a comment, a follow, a
- * file someone uploaded, a steward's rights decision on a file. Files the
+ * file someone uploaded, a steward's rights decision on a file, a project,
+ * a webhook. Files the
  * import registers itself (the Sichos Kodesh scans and their reading
  * copies) are rebuilt with it. SQL, so the import can check it again
  * inside the transaction that replaces the catalog.
  */
 export const PEOPLE_MADE_SQL = `SELECT EXISTS (SELECT 1 FROM changeset c JOIN account a ON a.id = c.author WHERE c.author <> 'system' AND NOT a.is_bot)
   OR EXISTS (SELECT 1 FROM report) OR EXISTS (SELECT 1 FROM comment) OR EXISTS (SELECT 1 FROM follow)
-  OR EXISTS (SELECT 1 FROM file_source WHERE uploaded_by IS NOT NULL) OR EXISTS (SELECT 1 FROM audit_log WHERE action = 'file.rights')`;
+  OR EXISTS (SELECT 1 FROM file_source WHERE uploaded_by IS NOT NULL) OR EXISTS (SELECT 1 FROM audit_log WHERE action = 'file.rights')
+  OR EXISTS (SELECT 1 FROM project) OR EXISTS (SELECT 1 FROM webhook)`;
 
 /**
  * Whether everything in the catalog came from importers, so it can be
@@ -87,7 +89,7 @@ export async function catalogIsRebuildable(db: Db): Promise<boolean> {
  * whole-catalog copy runs it first, so it can never replace anything
  * people have made.
  */
-export const REBUILD_GUARD_SQL = `LOCK TABLE changeset, report, comment, follow, file IN ACCESS EXCLUSIVE MODE;
+export const REBUILD_GUARD_SQL = `LOCK TABLE changeset, report, comment, follow, file, project, webhook IN ACCESS EXCLUSIVE MODE;
 DO $$ BEGIN IF (${PEOPLE_MADE_SQL}) THEN RAISE EXCEPTION 'people have added to the catalog; not replacing it'; END IF; END $$;`;
 
 /** Prints `rebuildable` or `not-rebuildable`, for scripts; with `guard`, prints REBUILD_GUARD_SQL instead. */
@@ -113,9 +115,38 @@ export async function accountCommand(ctx: Context, input: { id: string; name: st
 
 /** The importers `rebbehub import` runs, each reading a Sichos-Kodesh checkout. */
 export const IMPORTERS: Record<string, (from: string) => Importer> = {
-  'sichos-kodesh-works': (from) => sichosKodeshWorksImporter(() => readSichosKodeshWorks(from)),
-  'sichos-kodesh-occasions': (from) => sichosKodeshOccasionsImporter(() => readSichosKodeshOccasions(from)),
+  // With the words of every unit whose rights let it ship, from Sichos-Kodesh's published archive through
+  // RebbeHub's API (REBBEHUB_API_URL, default the live one; REBBEHUB_NO_TEXTS=1 leaves them out).
+  'sichos-kodesh-works': (from) =>
+    sichosKodeshWorksImporter(() => readSichosKodeshWorks(from, { texts: !process.env.REBBEHUB_NO_TEXTS, api: process.env.REBBEHUB_API_URL, log: (line) => console.log(line) })),
+  // With MAFTEIACH_DATA (a crawl of mafteiach.app by Sichos-Kodesh's packages/mafteiach-index), every link and content outline the index has.
+  // Otzros HaRebbe's Drive library of seforim, listed from Drive at run time (`--from` is not used).
+  otzros: () => driveLibraryImporter(() => listDriveFolder(OTZROS_FOLDER, { log: (line) => console.log(line) })),
+  // With CHABADLIBRARY_TREE (the contents `rebbehub crawl-library` gathered), a page for every chapter in the library.
+  chabadlibrary: (from) => {
+    if (!process.env.CHABADLIBRARY_TREE) throw new Error('CHABADLIBRARY_TREE is not set: run rebbehub crawl-library first');
+    return chabadLibraryImporter(() => readChabadLibrary(from, process.env.CHABADLIBRARY_TREE!));
+  },
+  'sichos-kodesh-occasions': (from) =>
+    sichosKodeshOccasionsImporter(() => readSichosKodeshOccasions(from), { mafteiach: process.env.MAFTEIACH_DATA && existsSync(process.env.MAFTEIACH_DATA) ? () => readMafteiachCrawl(process.env.MAFTEIACH_DATA!) : undefined }),
 };
+
+/**
+ * Crawls chabadlibrary.org's contents for every work of Sichos-Kodesh's
+ * registry in the library, into `out`, continuing an earlier crawl there,
+ * for `minutes` at most (the importer takes what is known so far).
+ */
+export async function crawlLibraryCommand(ctx: Context, input: { from: string; out: string; minutes?: number }): Promise<void> {
+  const dir = input.from.endsWith('works') ? input.from : join(input.from, 'apps/mobile/src/catalog/data/works');
+  const index = JSON.parse(await readFile(join(dir, 'works.json'), 'utf8'));
+  // A work Sichos-Kodesh has chapters for keeps those; its contents in the library are not needed.
+  const withContents = new Set((await readdir(join(dir, 'contents'))).filter((n) => n.endsWith('.json')).map((n) => n.slice(0, -5)));
+  const roots = libraryWorks(index, withContents).map((w) => w.root);
+  const tree = existsSync(input.out) ? JSON.parse(await readFile(input.out, 'utf8')) : { nodes: {} };
+  const save = async (t: unknown) => writeFile(input.out, JSON.stringify(t));
+  const deadline = input.minutes ? Date.now() + input.minutes * 60_000 : undefined;
+  await crawlChabadLibrary(roots, tree, { deadline, log: ctx.log, save });
+}
 
 export async function importCommand(ctx: Context, input: { source: string; from: string; approveAs?: string; dryRun?: boolean; chunkSize?: number }): Promise<void> {
   const make = IMPORTERS[input.source];

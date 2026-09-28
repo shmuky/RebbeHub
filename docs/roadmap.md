@@ -40,20 +40,43 @@ stands. ✅ built and tested · 🟡 partly · ⬜ not yet.
 
 The engine behind it is built and tested (suggestions, review queue,
 history, revert, trust levels, follows, anonymous reports with captcha
-and rate limits, all over the API). Signing in with a passkey is built
-([accounts](accounts.md)). Still to come: signing in with Google and by
-email link, the site's *Suggest a fix* / *Approve* screens,
-notifications for follows, the reviewer's AI summary.
+and rate limits, all over the API). Signing in with a passkey or with
+Google is built ([accounts](accounts.md); Google shows once its keys are
+set). *Suggest a fix* is on farbrengen pages (name and date), and
+`/review` lists what waits for review, before and after in words, with
+*Approve* and *Send back* for the set's keepers; every kind of page has
+it now. *Follow* is on every sefer, sicha, farbrengen, set and person,
+and the account page lists what someone follows and what changed in it
+(a sefer's sichos included). Still to come: signing in by email link,
+notifications by email, the reviewer's AI summary.
 
 ## Phases 3-6
 
-The Sichos Kodesh scans are in (2,710 of them, open; 2,573 with a
-lossless **reading copy** - pages straightened, centred, cut free of the
-scanner's edges), and every page's measurements kept for OCR
-(`@rebbehub/pdf-fix`, `rebbehub reading-copies`; see
-[operations](operations.md)). Uploads and dedup (the `file` tables, rights tiers and takedowns are in
-place), IIIF, OCR and community text, sync, and the network - as the plan
-describes.
+- **The Sichos Kodesh scans** ✅: 2,710 old typewritten hanachos, open,
+  2,573 with a lossless **reading copy** (pages straightened, centred, cut
+  free of the scanner's edges), and every page's measurements kept
+  (`@rebbehub/pdf-fix`, `rebbehub reading-copies`; see
+  [operations](operations.md)).
+- **Uploads** ✅: "Add a recording" on farbrengen pages, "Add a scan" on
+  sefer pages; hashed and kept once, stored by their rights, added through
+  a suggestion (docs/rights.md, Uploads).
+- **Missing board and projects** ✅: `/missing` (farbrengens without a
+  recording or a text, sefarim without a scan) and `/projects` (a gap
+  worked through, with progress and what is next).
+- **Machine OCR and Fix this line** ✅: `rebbehub ocr` and the nightly
+  *Machine OCR* workflow read served scans with Tesseract (Hebrew) into a
+  machine layer; `/text/<scan>` shows it page by page, marked as machine
+  reading, and a signed-in reader fixes a line into the community layer,
+  reviewed like any suggestion.
+- **Transcription and sync** ✅: `rebbehub transcribe` and the *Machine
+  transcription (manual)* workflow (Whisper on Workers AI) turn a
+  recording into a transcript of paragraphs, each synced to where it is
+  heard; farbrengen pages follow the player, play from a tapped
+  paragraph, and take fixes.
+- **Webhooks and embeds** ✅: every merge posted, signed, to registered
+  addresses; `/embed/<id>` for other sites ([api](api.md)).
+- Still to come: IIIF page images, uploaded OCR, comparing printings,
+  word-level sync, semantic search, translations, mirrors.
 
 ## Importers still to write
 

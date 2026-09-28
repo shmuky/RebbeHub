@@ -22,10 +22,15 @@ export interface HistoryEntry {
   at: string;
   message: string;
   mergedBy: string;
+  mergedByName: string | null;
   changeset: number;
   author: string;
+  authorName: string | null;
+  authorIsBot: boolean;
   rev: number;
   deleted: boolean;
+  created: boolean;
+  changes: Array<{ path: string; before?: unknown; after?: unknown }>;
 }
 
 export interface Backlink {
@@ -42,6 +47,42 @@ export interface FileInfo {
   rights: 'open' | 'credit' | 'link' | 'preserved';
   credit: string | null;
   url: string | null;
+}
+
+/** One comment on a talk page. */
+export interface TalkComment {
+  id: number;
+  parent: number | null;
+  author: string;
+  authorName: string;
+  body: string | null;
+  at: string;
+  hidden: boolean;
+}
+
+/** One page of a scan's text, as GET /v1/scans/:id/text gives it. */
+export interface ScanText {
+  scan: string;
+  page: number;
+  pages: number;
+  machine: boolean;
+  engine: { name: string; version: string } | null;
+  lines: Array<{ id: string; text: string; checked: boolean }>;
+}
+
+/** A project working through a gap, with its progress. */
+export interface Project {
+  id: number;
+  slug: string;
+  name: string;
+  goal: string | null;
+  set: string | null;
+  status: 'open' | 'merged' | 'closed';
+  focus: { missing: 'recordings' | 'texts'; within?: string };
+  creatorName: string | null;
+  createdAt: string;
+  total: number;
+  done: number;
 }
 
 export class ApiError extends Error {
@@ -87,7 +128,19 @@ export class RebbeHubApi {
     }
     if (!headers.has('x-forwarded-proto')) headers.set('x-forwarded-proto', new URL(request.url).protocol.replace(':', ''));
     const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.text();
-    return this.fetcher(`${this.baseUrl}${path}`, { method: request.method, headers, body });
+    // A redirect (to Google and back) is the browser's to follow, not ours.
+    return this.fetcher(`${this.baseUrl}${path}${new URL(request.url).search}`, { method: request.method, headers, body, redirect: 'manual' });
+  }
+
+  /** Like `forward`, for a file: the body streams through as bytes, never read as text. */
+  async forwardUpload(path: string, request: Request): Promise<Response> {
+    const headers = new Headers({ accept: 'application/json' });
+    for (const name of ['content-type', 'content-length', 'cookie', 'origin', 'user-agent', 'x-forwarded-proto']) {
+      const value = request.headers.get(name);
+      if (value) headers.set(name, value);
+    }
+    if (!headers.has('x-forwarded-proto')) headers.set('x-forwarded-proto', new URL(request.url).protocol.replace(':', ''));
+    return this.fetcher(`${this.baseUrl}${path}${new URL(request.url).search}`, { method: 'POST', headers, body: request.body, duplex: 'half' } as RequestInit);
   }
 
   /** Null when there is nothing there. */
@@ -131,10 +184,24 @@ export class RebbeHubApi {
   }
 
   /** The community page in numbers: the latest merges, reports waiting, people, and what the catalog lacks. */
+  /** The Missing board: farbrengens without recordings or texts (of a year), or sefarim without a scan. */
+  missing(kind: 'recordings' | 'texts' | 'scans', options: { within?: string; limit?: number } = {}) {
+    return this.get<{ kind: string; total: number; items: Entity[] }>('/v1/missing', { kind, within: options.within, limit: options.limit });
+  }
+
+  projects() {
+    return this.get<{ projects: Project[] }>('/v1/projects');
+  }
+
+  project(slug: string) {
+    return this.maybe(this.get<{ project: Project; next: Entity[] }>(`/v1/projects/${encodeURIComponent(slug)}`));
+  }
+
   community(limit?: number) {
     return this.get<{
       recent: Array<{ seq: number; at: string; message: string; author: string; authorName: string; authorIsBot: boolean; mergedBy: string; mergedByName: string | null; changes: number }>;
       openReports: number;
+      openSuggestions: number;
       people: number;
       gaps: { events: number; eventsWithoutRecordings: number; eventsWithoutTexts: number };
     }>('/v1/community', { limit });
@@ -175,6 +242,16 @@ export class RebbeHubApi {
   async events(options: { within?: string; day?: string | readonly string[]; dates?: readonly string[]; missing?: 'recordings' | 'texts'; limit?: number }) {
     const list = (v: string | readonly string[] | undefined) => (v === undefined ? undefined : typeof v === 'string' ? v : v.join(','));
     return (await this.get<{ items: Array<Entity & { recordings: number }> }>('/v1/events', { within: options.within, day: list(options.day), dates: list(options.dates), missing: options.missing, limit: options.limit })).items;
+  }
+
+  /** One page of a scan's text; null when the scan has not been read, or its text is withheld. */
+  scanText(scan: string, page: number) {
+    return this.maybe(this.get<ScanText>(`/v1/scans/${encodeURIComponent(scan)}/text`, { page }));
+  }
+
+  /** A page's talk page: the conversation about it. */
+  talk(id: string) {
+    return this.get<{ talk: TalkComment[] }>(`/v1/entities/${encodeURIComponent(id)}/talk`);
   }
 
   file(sha256: string) {

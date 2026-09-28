@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { isValidDateKey } from '@rebbehub/hebrew';
 import type { EventLink, EventLinkKind, LocalName } from '@rebbehub/model';
 import { ref, type ImportRecord, type Importer } from './importer.js';
+import { mafteiachBody, mafteiachLinks, type MafteiachRecord } from './mafteiachIndex.js';
 
 /**
  * Every farbrengen Sichos-Kodesh knows, with its recordings and its
@@ -52,8 +53,8 @@ const LINK_KINDS: Record<CatalogPdf['section'], EventLinkKind> = {
   hosofos: 'hosofos',
 };
 
-/** Hanachos first, as the app shows them, then the rest in Sichos-Kodesh's order. */
-const LINK_ORDER: EventLinkKind[] = ['bilti-mugah', 'mugah', 'maamar', 'hagahos', 'hosofos', 'other'];
+/** Hanachos first, as the app shows them, then the rest in Sichos-Kodesh's order, then what only the index has. */
+const LINK_ORDER: EventLinkKind[] = ['bilti-mugah', 'mugah', 'maamar', 'hagahos', 'hosofos', 'english', 'video', 'audio', 'other'];
 
 const DATE = /^(\d{4})-(0[1-9]|1[0-2]|06A|06B)-(\d{2})([a-z]?)$/;
 
@@ -68,6 +69,10 @@ export function occasionDate(hebrewDate: string): { date: string; order: number;
   const order = letter ? letter.charCodeAt(0) - 'a'.charCodeAt(0) : 0;
   return { date, order, path: `/events/${hebrewDate.toLowerCase()}` };
 }
+
+/** The exact file on Google Drive, as mafteiach links it. */
+export const driveOrigin = (pdf: Pick<CatalogPdf, 'driveFileId' | 'resourceKey'>) =>
+  `https://drive.google.com/file/d/${encodeURIComponent(pdf.driveFileId)}/view${pdf.resourceKey ? `?resourcekey=${encodeURIComponent(pdf.resourceKey)}` : ''}`;
 
 export const audioUrl = (file: string, proxy = SICHOS_KODESH_MEDIA_PROXY) => `${proxy}/jem-audio/${encodeURIComponent(file)}`;
 
@@ -89,21 +94,39 @@ export async function readSichosKodeshOccasions(root: string): Promise<CatalogEn
   return entries;
 }
 
-export function sichosKodeshOccasionsImporter(input: CatalogEntry[] | (() => Promise<CatalogEntry[]>), options: { proxy?: string } = {}): Importer {
+/**
+ * With `mafteiach` (a crawl of the index, mafteiachIndex.ts), every farbrengen
+ * also gets the index's links the catalog left out, and its content outline
+ * as the page's words; a farbrengen only the index knows gets a page too.
+ */
+export function sichosKodeshOccasionsImporter(
+  input: CatalogEntry[] | (() => Promise<CatalogEntry[]>),
+  options: { proxy?: string; mafteiach?: MafteiachRecord[] | (() => Promise<MafteiachRecord[]>) } = {},
+): Importer {
   const proxy = options.proxy ?? SICHOS_KODESH_MEDIA_PROXY;
   return {
     id: 'sichos-kodesh-occasions',
     bot: { id: 'bot:sichos-kodesh-occasions', displayName: 'Sichos-Kodesh farbrengens importer' },
     async *records(): AsyncIterable<ImportRecord> {
       const entries = typeof input === 'function' ? await input() : input;
+      const index = new Map((typeof options.mafteiach === 'function' ? await options.mafteiach() : (options.mafteiach ?? [])).map((r) => [r.id, r]));
+      // A farbrengen only the index knows is still a farbrengen: it comes in with nothing but what the index has.
+      const known = new Set(entries.map((e) => e.occasionId));
+      for (const r of index.values()) {
+        if (!known.has(r.id)) entries.push({ occasionId: r.id, hebrewYear: r.hebrewYear, hebrewDate: r.hebrewDate, occasionLabel: r.occasionLabel, audio: [], pdfs: [] });
+      }
       yield { key: FARBRENGENS_SET.key, type: 'set', path: FARBRENGENS_SET.path, data: { name: FARBRENGENS_SET.name, slug: 'farbrengens', policy: 'moderated', keepers: [] } };
       for (const entry of entries) {
         const when = occasionDate(entry.hebrewDate);
         if (!when) continue; // a date mafteiach itself could not place
         const key = `mafteiach-occasion:${entry.occasionId}`;
-        const links: EventLink[] = entry.pdfs
-          .map((pdf) => ({ kind: LINK_KINDS[pdf.section] ?? 'other', label: localName(pdf.label), url: pdfUrl(pdf, proxy), source: 'mafteiach' as const }))
-          .sort((a, b) => LINK_ORDER.indexOf(a.kind) - LINK_ORDER.indexOf(b.kind));
+        const record = index.get(entry.occasionId);
+        const drive = (driveFileId: string, url: string) => pdfUrl({ driveFileId, resourceKey: new URL(url).searchParams.get('resourcekey') ?? undefined }, proxy);
+        const links: EventLink[] = [
+          ...entry.pdfs.map((pdf) => ({ kind: LINK_KINDS[pdf.section] ?? 'other', label: localName(pdf.label), url: pdfUrl(pdf, proxy), source: 'mafteiach' as const, origin: driveOrigin(pdf) })),
+          ...(record ? mafteiachLinks(record, new Set(entry.pdfs.map((p) => p.driveFileId)), drive) : []),
+        ].sort((a, b) => LINK_ORDER.indexOf(a.kind) - LINK_ORDER.indexOf(b.kind));
+        const body = record ? mafteiachBody(record) : null;
         yield {
           key,
           type: 'event',
@@ -114,6 +137,7 @@ export function sichosKodeshOccasionsImporter(input: CatalogEntry[] | (() => Pro
             date: when.date,
             ...(when.order ? { order: when.order } : {}),
             ...(links.length ? { links } : {}),
+            ...(body ?? {}),
             sets: [ref(FARBRENGENS_SET.key)],
             externalIds: { mafteiach: String(entry.occasionId) },
             sources: [{ source: 'mafteiach', sourceId: String(entry.occasionId) }],

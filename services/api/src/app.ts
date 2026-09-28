@@ -1,8 +1,10 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, getDerivations, getFile, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, createWebhook, deleteWebhook, fixLine, fixParagraph, getDerivations, getFile, listWebhooks, recordingTranscript, scanText, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
+import { adminRoutes } from './admin.js';
+import { uploadRoutes, type UploadOptions } from './uploads.js';
 import { OPENAPI } from './openapi.js';
 
 /**
@@ -26,8 +28,12 @@ export interface ApiOptions {
   reportsPerHour?: number;
   /** Where servable files are fetched from: `<filesBaseUrl>/objects/<sha256>`. Unset, this API's own address. */
   filesBaseUrl?: string;
+  /** Where uploaded bytes are written: the public bucket for files that may be served, the preservation bucket for the rest. Unset, uploads are refused. */
+  uploads?: UploadOptions;
   /** The public bucket's bytes (R2 on Workers). With it, this API serves `/objects/<sha256>` itself, for files whose rights allow. */
   files?: FileStore;
+  /** Where the texts of seforim are kept (`texts/<sha256>` in the public bucket), and where they are first copied from: Sichos-Kodesh's published archive. */
+  texts?: { store: FileStore; writer: { put(key: string, bytes: ArrayBuffer, mime: string): Promise<void> }; from?: FileStore };
   version?: string;
 }
 
@@ -67,7 +73,7 @@ const STATUS_BY_CODE: Record<CatalogError['code'], 400 | 401 | 403 | 404 | 409 |
   conflict: 409,
 };
 
-class HttpError extends Error {
+export class HttpError extends Error {
   constructor(
     readonly status: 400 | 401 | 403 | 404 | 409 | 422 | 429,
     message: string,
@@ -128,6 +134,8 @@ export function createApp(options: ApiOptions): Hono {
   });
 
   if (options.auth) authRoutes(app, catalog, options.auth);
+  adminRoutes(app, catalog, signedIn);
+  uploadRoutes(app, catalog, signedIn, options.uploads);
 
   app.get('/', (c) => c.redirect('/v1'));
   app.get('/openapi.json', (c) => c.json(OPENAPI));
@@ -205,6 +213,95 @@ export function createApp(options: ApiOptions): Hono {
   // The community page in numbers: the latest merges, reports waiting (a count), people, and what the catalog lacks.
   app.get('/v1/community', async (c) => c.json(await catalog.community(intParam(c.req.query('limit'), 'limit'))));
 
+  // The Missing board (the plan, section 7): farbrengens without recordings or texts (of a year), sefarim without a scan.
+  app.get('/v1/missing', async (c) => {
+    const kind = c.req.query('kind');
+    const within = c.req.query('within') || undefined;
+    const limit = Math.min(intParam(c.req.query('limit'), 'limit') ?? 50, 500);
+    if (kind === 'scans') {
+      const { total, items } = await catalog.worksWithoutScans(limit);
+      return c.json({ kind, total, items: await redact(items) });
+    }
+    if (kind !== 'recordings' && kind !== 'texts') throw new HttpError(400, 'kind is recordings, texts or scans');
+    if (within && !/^\d{4}(-(0[1-9]|1[0-2]|06A|06B))?$/.test(within)) throw new HttpError(400, 'within is a year (5745) or a month (5745-05)');
+    const all = await catalog.events({ within, missing: kind, limit: 2000 });
+    return c.json({ kind, within: within ?? null, total: all.length, items: await redact(all.slice(0, limit)) });
+  });
+
+  // Projects that work through a gap, with their progress and what is next to do.
+  app.get('/v1/projects', async (c) => c.json({ projects: await catalog.projects({ status: (c.req.query('status') as 'open' | undefined) ?? undefined }) }));
+
+  app.get('/v1/projects/:slug', async (c) => {
+    const [project] = await catalog.projects({ slug: c.req.param('slug') });
+    if (!project) throw new CatalogError('not-found', 'no such project');
+    const next = project.status === 'open' ? await catalog.events({ within: project.focus.within, missing: project.focus.missing, limit: 30 }) : [];
+    return c.json({ project, next: await redact(next) });
+  });
+
+  app.post('/v1/projects', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ slug?: string; name?: string; goal?: string; set?: string; missing?: 'recordings' | 'texts'; within?: string }>(c);
+    if (!input.slug || !input.name?.trim()) throw new HttpError(400, 'a project needs a slug and a name');
+    const id = await catalog.openFocusProject(by, {
+      slug: input.slug,
+      name: input.name.trim().slice(0, 200),
+      goal: input.goal?.trim().slice(0, 2000) || undefined,
+      set: input.set ? entityId(input.set) : undefined,
+      focus: { missing: input.missing as 'recordings', ...(input.within ? { within: input.within } : {}) },
+    });
+    return c.json({ id, slug: input.slug }, 201);
+  });
+
+  app.post('/v1/projects/:slug/close', async (c) => {
+    const by = await signedIn(c);
+    const [project] = await catalog.projects({ slug: c.req.param('slug') });
+    if (!project) throw new CatalogError('not-found', 'no such project');
+    await catalog.closeProject(project.id, by);
+    return c.json({ ok: true });
+  });
+
+  // A scan's text, page by page: the community's where people fixed it, else the machine's, each line marked checked or not.
+  // Its words follow its scan's file: withheld when the file may not be served.
+  const scanTextAllowed = async (scan: EntityId) => {
+    const entity = await catalog.get(scan);
+    if (!entity || entity.type !== 'scan') throw new CatalogError('not-found', 'no such scan');
+    const file = await getFile(catalog.db, String((entity.data as { file?: string }).file ?? ''));
+    if (!file || !mayServe(file.rights_state)) throw new CatalogError('not-found', "this scan's text is withheld for its rights");
+  };
+
+  app.get('/v1/scans/:id/text', async (c) => {
+    const scan = entityId(c.req.param('id'));
+    await scanTextAllowed(scan);
+    const text = await scanText(catalog, scan, intParam(c.req.query('page'), 'page') ?? 1);
+    if (!text) throw new CatalogError('not-found', 'this scan has not been read yet');
+    return c.json(text);
+  });
+
+  app.post('/v1/scans/:id/text/fix', async (c) => {
+    const by = await signedIn(c);
+    const scan = entityId(c.req.param('id'));
+    await scanTextAllowed(scan);
+    const input = await body<{ page?: number; line?: string; text?: string }>(c);
+    if (typeof input.page !== 'number' || !input.line || typeof input.text !== 'string') throw new HttpError(400, 'give page, line and text');
+    return c.json(await fixLine(catalog, by, { scan, page: input.page, line: input.line, text: input.text }), 201);
+  });
+
+  // A recording's transcript, paragraph by paragraph with where each is heard; machine paragraphs are marked until checked.
+  app.get('/v1/recordings/:id/transcript', async (c) => {
+    const transcript = await recordingTranscript(catalog, entityId(c.req.param('id')));
+    if (!transcript) throw new CatalogError('not-found', 'this recording has no transcript yet');
+    return c.json(transcript);
+  });
+
+  app.post('/v1/recordings/:id/transcript/fix', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ segment?: string; content?: string }>(c);
+    if (!input.segment || typeof input.content !== 'string') throw new HttpError(400, 'give segment and content');
+    const transcript = await recordingTranscript(catalog, entityId(c.req.param('id')));
+    if (!transcript?.paragraphs.some((p) => p.id === input.segment)) throw new CatalogError('not-found', 'no such paragraph in this transcript');
+    return c.json(await fixParagraph(catalog, by, { segment: input.segment as EntityId, content: input.content }), 201);
+  });
+
   app.get('/v1/stats', async (c) => c.json({ head: await catalog.head(), counts: await catalog.counts() }));
 
   app.get('/v1/files/:sha256', async (c) => {
@@ -258,6 +355,40 @@ export function createApp(options: ApiOptions): Hono {
     return c.body(object.body, 200, headers);
   });
 
+  // A text of a sefer as its source gave it (one chapter or letter, an HTML <article>), kept on RebbeHub's own storage
+  // (`texts/<sha256>` in the public bucket). The first time it is asked for, it is copied from Sichos-Kodesh's published
+  // archive, checked against its hash, and kept; after that RebbeHub serves its own copy. Pages link to it, and the
+  // works importer reads it for their words (packages/importers/src/sichosKodeshTexts.ts).
+  app.get('/v1/texts/:sha256', async (c) => {
+    const sha256 = c.req.param('sha256');
+    const kept = options.texts;
+    if (!kept || !/^[0-9a-f]{64}$/.test(sha256)) throw new CatalogError('not-found', 'no such text');
+    const key = `texts/${sha256}`;
+    let text: string | null = null;
+    const own = await kept.store.get(key);
+    if (own) text = await new Response(own.body).text();
+    else if (kept.from) {
+      const object = await kept.from.get(`objects/${sha256}`);
+      if (object && object.size <= 4_000_000) {
+        const bytes = await new Response(object.body).arrayBuffer();
+        const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
+        const candidate = new TextDecoder().decode(bytes);
+        if (digest === sha256 && /^\s*<article[\s>]/i.test(candidate)) {
+          await kept.writer.put(key, bytes, 'text/html; charset=utf-8');
+          text = candidate;
+        }
+      }
+    }
+    if (text === null) throw new CatalogError('not-found', 'no such text');
+    return c.body(text, 200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      // Someone else's HTML: shown as a document, never run on this origin.
+      'Content-Security-Policy': 'sandbox',
+      'X-Content-Type-Options': 'nosniff',
+    });
+  });
+
   app.get('/v1/entities/:id', async (c) => {
     const id = entityId(c.req.param('id'));
     const at = intParam(c.req.query('at'), 'at');
@@ -266,7 +397,37 @@ export function createApp(options: ApiOptions): Hono {
     return c.json((await redact([entity]))[0]);
   });
 
-  app.get('/v1/entities/:id/history', async (c) => c.json({ history: await catalog.history(entityId(c.req.param('id'))) }));
+  app.get('/v1/entities/:id/history', async (c) => {
+    const id = entityId(c.req.param('id'));
+    const history = await catalog.history(id);
+    // What changed, field by field, is shown only where the item's words may be shown at all.
+    const current = await catalog.get(id);
+    const withheld = current ? Boolean(((await redact([current]))[0] as { withheld?: string }).withheld) : false;
+    return c.json({ history: withheld ? history.map((h) => ({ ...h, changes: [] })) : history });
+  });
+
+  // The page's talk page: the conversation about it, open to read; writing needs a signed-in account.
+  app.get('/v1/entities/:id/talk', async (c) => c.json({ talk: await catalog.talk({ kind: 'entity', id: entityId(c.req.param('id')) }) }));
+
+  app.post('/v1/entities/:id/talk', async (c) => {
+    const by = await signedIn(c);
+    const id = entityId(c.req.param('id'));
+    if (!(await catalog.get(id))) throw new CatalogError('not-found', `${id} not found`);
+    const input = await body<{ body?: string; parent?: number }>(c);
+    const text = (input.body ?? '').trim();
+    if (!text || text.length > 10_000) throw new HttpError(400, 'a comment of 1 to 10,000 characters');
+    if (input.parent !== undefined) {
+      const thread = await catalog.talk({ kind: 'entity', id });
+      if (!thread.some((t) => t.id === input.parent)) throw new HttpError(400, 'that comment is not on this page');
+    }
+    return c.json({ id: await catalog.comment(by, { kind: 'entity', id }, text, input.parent) }, 201);
+  });
+
+  app.post('/v1/comments/:id/hide', async (c) => {
+    const by = await signedIn(c);
+    await catalog.hideComment(intParam(c.req.param('id'), 'id')!, by);
+    return c.json({ ok: true });
+  });
 
   app.get('/v1/entities/:id/backlinks', async (c) => {
     const type = c.req.query('type');
@@ -342,12 +503,19 @@ export function createApp(options: ApiOptions): Hono {
     return c.json({ id }, 201);
   });
 
+  // Reports are private: stewards read them all, a set's keepers read their set's.
   app.get('/v1/reports', async (c) => {
-    await signedIn(c);
+    const by = await signedIn(c);
     const set = c.req.query('set');
     const status = c.req.query('status');
     if (status && !['open', 'resolved', 'dismissed'].includes(status)) throw new HttpError(400, 'status is open, resolved or dismissed');
-    return c.json({ reports: await catalog.reports({ set: set ? entityId(set) : undefined, status: status as 'open' | undefined }) });
+    const account = await catalog.account(by);
+    const keeps = set ? ((((await catalog.get(entityId(set)))?.data ?? {}) as { keepers?: string[] }).keepers ?? []).includes(by) : false;
+    if (!account?.is_steward && !keeps) throw new HttpError(403, "reports are read by stewards and the set's keepers");
+    const reports = (await catalog.reports({ set: set ? entityId(set) : undefined, status: status as 'open' | undefined })) as Array<{ entity_id: string | null; reporter_hash?: unknown }>;
+    // With the item each is about, for its name; never who (or which address) sent it.
+    const items = await redact((await Promise.all([...new Set(reports.map((r) => r.entity_id).filter((id): id is string => Boolean(id)))].map((id) => catalog.get(id as EntityId)))).filter((i): i is EntityView => i !== null));
+    return c.json({ reports: reports.map(({ reporter_hash: _hidden, ...r }) => r), items });
   });
 
   app.post('/v1/reports/:id/close', async (c) => {
@@ -381,7 +549,44 @@ export function createApp(options: ApiOptions): Hono {
       const withheld = (await hide(entry.type, entry.entityId, entry.after)) ?? (await hide(entry.type, entry.entityId, entry.before));
       if (withheld) Object.assign(entry, { before: null, after: null, changes: [], conflicts: [], withheld });
     }
-    return c.json(view);
+    // Names instead of ids, and whether the person asking may approve it (to show the buttons or not).
+    const names = async (ids: string[]) => Object.fromEntries(await Promise.all([...new Set(ids)].map(async (id) => [id, (await catalog.account(id))?.display_name ?? id])));
+    const viewer = (await authenticate?.(c)) ?? null;
+    const mayApprove = viewer && view.changeset.status === 'open' ? await catalog.mayApprove(view.changeset.id, viewer) : { ok: false as const, reason: viewer ? `this suggestion is ${view.changeset.status}` : 'sign in to review' };
+    // The files it adds, where each may be heard or read (null while its rights keep it private), so the reviewer checks it first.
+    const base = options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
+    const files: Record<string, { url: string | null; mime: string; bytes: number; rights: string }> = {};
+    for (const entry of view.entries) {
+      const sha = (entry.after as { file?: unknown } | null)?.file;
+      if (typeof sha !== 'string' || files[sha]) continue;
+      const file = await getFile(catalog.db, sha);
+      if (file) files[sha] = { url: base && mayServe(file.rights_state) && file.storage_tier === 'public' ? `${base}/objects/${sha}` : null, mime: file.mime, bytes: file.bytes, rights: file.rights_state };
+    }
+    return c.json({
+      ...view,
+      files,
+      names: await names([view.changeset.author, ...(view.reviews as Array<{ reviewer: string }>).map((r) => r.reviewer)]),
+      mayApprove: mayApprove.ok,
+      mayApproveReason: mayApprove.ok ? null : mayApprove.reason,
+      mine: viewer === view.changeset.author,
+    });
+  });
+
+  /**
+   * "Suggest a fix" in one step: a new version of one item, with a few
+   * words on why, sent for review. What the site's fix form sends.
+   */
+  app.post('/v1/suggestions/quick', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ entityId?: string; data?: Json; title?: string; note?: string }>(c);
+    if (!input.entityId || !isEntityId(input.entityId)) throw new HttpError(400, 'say which item this fixes (entityId)');
+    if (!input.data || typeof input.data !== 'object') throw new HttpError(400, "give the item's new data");
+    const entity = await catalog.get(input.entityId as EntityId);
+    if (!entity || entity.data === null) throw new HttpError(404, `no item ${input.entityId}`);
+    const title = (input.title ?? '').trim().slice(0, 200) || 'A fix';
+    const suggestion = await catalog.createChangeset(by, { title, description: input.note?.trim().slice(0, 2000) || undefined });
+    await catalog.putRevision(suggestion.id, by, { id: entity.id, type: entity.type, data: input.data });
+    return c.json(await catalog.submit(suggestion.id, by), 201);
   });
 
   app.post('/v1/suggestions', async (c) => {
@@ -436,6 +641,30 @@ export function createApp(options: ApiOptions): Hono {
     const input = await body<{ rev?: number }>(c);
     if (typeof input.rev !== 'number') throw new HttpError(400, 'say which version (rev) to restore');
     return c.json({ suggestion: await catalog.restore(entityId(c.req.param('id')), input.rev, by) }, 201);
+  });
+
+  // What the person asking follows, the items themselves (for their names), and what changed in them lately.
+  app.get('/v1/follows', async (c) => {
+    const by = await signedIn(c);
+    const follows = await catalog.follows(by);
+    const items = await Promise.all(follows.filter((f) => f.kind === 'entity' || f.kind === 'set').map((f) => catalog.get(f.id as EntityId)));
+    return c.json({ follows, items: await redact(items.filter((i): i is EntityView => i !== null)), feed: await catalog.followFeed(by, intParam(c.req.query('limit'), 'limit') ?? 20) });
+  });
+
+  // Webhooks: every merge posted to an address a person registered (packages/core/src/webhooks.ts).
+  app.get('/v1/webhooks', async (c) => c.json({ webhooks: await listWebhooks(catalog, await signedIn(c)) }));
+
+  app.post('/v1/webhooks', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ url?: string }>(c);
+    if (!input.url) throw new HttpError(400, 'give the address (url) to post to');
+    return c.json(await createWebhook(catalog, by, input.url), 201);
+  });
+
+  app.delete('/v1/webhooks/:id', async (c) => {
+    const by = await signedIn(c);
+    await deleteWebhook(catalog, by, intParam(c.req.param('id'), 'id')!);
+    return c.json({ ok: true });
   });
 
   app.post('/v1/follows', async (c) => {

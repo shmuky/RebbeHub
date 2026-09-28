@@ -85,6 +85,24 @@ const COMMON: Record<string, JsonSchema> = {
   sources: arrayOf(ref('sourceRef')),
   topics: arrayOf(ref('entityId'), { uniqueItems: true }),
   note: str({ maxLength: 5000 }),
+  // The page as wikitext (entities.ts, CommonFields.body), and where an importer brought it from.
+  body: str({ maxLength: 2_000_000 }),
+  bodySource: {
+    type: 'object',
+    properties: {
+      source: ref('catalogSourceId'),
+      via: str({ maxLength: 100 }),
+      sourceId: str({ maxLength: 500 }),
+      url: ref('url'),
+      copy: ref('url'),
+      licence: str({ maxLength: 100 }),
+      credit: str({ maxLength: 500 }),
+      rights: { enum: ['open', 'credit', 'link', 'preserved'] },
+      importedAt: str({ format: 'date-time' }),
+    },
+    required: ['source'],
+    additionalProperties: false,
+  },
 };
 
 function entitySchema(type: EntityType, title: string, properties: Record<string, JsonSchema>, required: string[], options: { common?: boolean } = {}): JsonSchema {
@@ -146,6 +164,14 @@ const vocabulary = (type: EntityType, title: string, extra: Record<string, JsonS
   entitySchema(type, title, { name: ref('localName'), aliases: arrayOf(str({ minLength: 1 })), ...extra }, ['name']);
 
 const fractionalOrder = str({ pattern: '^[0-9A-Za-z]+$', maxLength: 64 });
+
+/**
+ * The built-in schemas' own version. A catalog whose schema items are
+ * older takes the new ones at start-up (Catalog.init), as one system
+ * change in the history. 2: every page's `body` (wikitext) and `bodySource`.
+ * 3: an event's English, audio and video links. 4: each link's exact file at its source (`origin`).
+ */
+export const BUILTIN_SCHEMA_VERSION = 4;
 
 export const BUILTIN_SCHEMAS: Record<EntityType, JsonSchema> = {
   set: entitySchema(
@@ -216,7 +242,7 @@ export const BUILTIN_SCHEMAS: Record<EntityType, JsonSchema> = {
       order: int({ minimum: 0 }),
       links: arrayOf({
         type: 'object',
-        properties: { kind: enumOf(EVENT_LINK_KINDS), label: ref('localName'), url: ref('url'), source: ref('catalogSourceId') },
+        properties: { kind: enumOf(EVENT_LINK_KINDS), label: ref('localName'), url: ref('url'), source: ref('catalogSourceId'), origin: ref('url') },
         required: ['kind', 'label', 'url'],
         additionalProperties: false,
       }),

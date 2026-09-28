@@ -2,7 +2,9 @@ import { serve } from '@hono/node-server';
 import { Catalog } from '@rebbehub/core';
 import { connectPostgres } from '@rebbehub/db';
 import { openPGlite } from '@rebbehub/db/pglite';
-import { createApp } from './app.js';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { createApp, type FileStore } from './app.js';
 import { authFor } from './auth.js';
 
 /**
@@ -10,6 +12,7 @@ import { authFor } from './auth.js';
  *
  *   DATABASE_URL   a Postgres server; without it, a PGlite database in .data/pglite
  *   PORT           default 8787
+ *   FILES_DIR      a folder standing in for the two buckets, to try uploads
  *   SITE_URL       the site signing in happens on (default http://localhost:5173)
  *   DEV_ACCOUNT    sign every request in as this account - local testing only,
  *                  refused unless the server listens on localhost
@@ -26,7 +29,34 @@ if (devAccount && hostname !== '127.0.0.1' && hostname !== 'localhost') {
 }
 if (devAccount) await catalog.createAccount({ id: devAccount, displayName: devAccount });
 
-const app = createApp({ catalog, authenticate: devAccount ? () => devAccount : undefined, auth: authFor(process.env.SITE_URL ?? 'http://localhost:5173'), filesBaseUrl: process.env.FILES_BASE_URL });
+// FILES_DIR: the two buckets as folders on this machine (public/ and preservation/), for trying uploads without R2.
+const filesDir = process.env.FILES_DIR;
+const folder = (name: string) => ({
+  async put(key: string, bytes: ArrayBuffer) {
+    const path = join(filesDir!, name, key);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, new Uint8Array(bytes));
+  },
+});
+const publicFolder: FileStore | undefined = filesDir
+  ? {
+      async get(key, range) {
+        const bytes = await readFile(join(filesDir, 'public', key)).catch(() => null);
+        if (!bytes) return null;
+        const part = range ? bytes.subarray(range.offset, range.length === undefined ? undefined : range.offset + range.length) : bytes;
+        return { body: new Blob([part]).stream(), size: bytes.byteLength };
+      },
+    }
+  : undefined;
+
+const app = createApp({
+  catalog,
+  authenticate: devAccount ? () => devAccount : undefined,
+  auth: authFor(process.env.SITE_URL ?? 'http://localhost:5173', { clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET }),
+  filesBaseUrl: process.env.FILES_BASE_URL,
+  files: publicFolder,
+  uploads: filesDir ? { public: folder('public'), preservation: folder('preservation') } : undefined,
+});
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port, hostname });
 console.log(`RebbeHub API on http://${hostname}:${port}/v1 (${url ? 'Postgres' : 'PGlite'}${devAccount ? `, signed in as ${devAccount}` : ''})`);

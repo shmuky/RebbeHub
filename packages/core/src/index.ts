@@ -1,4 +1,4 @@
-export { Catalog, isoWeekTag, type ChangeEntry, type ChangesetKind, type ChangesetRow, type ChangesetStatus, type Check, type EntityView, type HistoryEntry, type NewRevision, type Proposal, type ReportReason, type RevisionRow } from './catalog.js';
+export { Catalog, isoWeekTag, type ChangeEntry, type ChangesetKind, type ChangesetRow, type ChangesetStatus, type Check, type EntityView, type HistoryEntry, type NewRevision, type ProjectFocus, type ProjectView, type Proposal, type ReportReason, type RevisionRow } from './catalog.js';
 export { CatalogError, type CatalogErrorCode } from './errors.js';
 export { ExportGate } from './gate.js';
 export { getDerivations, getFile, recordDerivation, registerFile, setRights, storageTierFor, type DerivationRow, type FileRow, type NewDerivation, type NewFile } from './files.js';
@@ -15,14 +15,23 @@ export {
   endSession,
   findPasskey,
   getPerson,
+  googleAccountsOf,
+  googleSignedIn,
+  linkGoogle,
+  listPeople,
   hashToken,
   newPersonId,
   passkeyUsed,
   passkeysOf,
+  renamePerson,
+  setPersonRole,
   saveChallenge,
   sessionPerson,
   startSession,
   takeChallenge,
+  type ChallengePurpose,
   type Person,
   type StoredPasskey,
 } from './auth.js';
+export { fixLine, fixParagraph, recordingTranscript, scanText, type ScanTextPage, type TranscriptView } from './text.js';
+export { MAX_HOOKS_PER_ACCOUNT, createWebhook, deleteWebhook, deliverWebhooks, listWebhooks, type WebhookRow } from './webhooks.js';
