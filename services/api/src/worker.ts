@@ -1,4 +1,4 @@
-import { Catalog } from '@rebbehub/core';
+import { Catalog, deliverWebhooks } from '@rebbehub/core';
 import { connectPostgres } from '@rebbehub/db';
 import { createApp, turnstileVerifier, type FileStore } from './app.js';
 import { authFor } from './auth.js';
@@ -50,6 +50,16 @@ function r2Store(bucket: R2Bucket): FileStore {
 }
 
 export default {
+  /** Every few minutes (wrangler.toml, [triggers]): webhooks get the merges they have not had yet. */
+  async scheduled(_event: unknown, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): Promise<void> {
+    const db = connectPostgres(env.HYPERDRIVE.connectionString, { max: 1 });
+    ctx.waitUntil(
+      deliverWebhooks(new Catalog(db))
+        .catch((error) => console.error('webhooks', error))
+        .finally(() => db.close()),
+    );
+  },
+
   async fetch(request: Request, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): Promise<Response> {
     const db = connectPostgres(env.HYPERDRIVE.connectionString, { max: 1 });
     const app = createApp({

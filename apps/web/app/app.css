@@ -2755,3 +2755,30 @@ a.volume:hover {
   color: inherit;
   font: inherit;
 }
+
+/* An embed: the item alone, in another site's frame. */
+body.embedded {
+  padding: 12px 16px;
+}
+
+.embed-card h1 {
+  font-size: 1.5rem;
+  margin: 4px 0;
+}
+
+.embed-tracks {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.embed-tracks li {
+  display: grid;
+  gap: 4px;
+}
+
+.embed-tracks audio,
+.embed-code textarea {
+  width: 100%;
+}

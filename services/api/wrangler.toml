@@ -26,6 +26,10 @@ bucket_name = "rebbehub-public"
 binding = "FILES_PRESERVATION"
 bucket_name = "rebbehub-preservation"
 
+# Webhooks are delivered every five minutes (src/worker.ts, scheduled).
+[triggers]
+crons = ["*/5 * * * *"]
+
 [vars]
 # The site people sign in on: passkeys are bound to its domain, and changes are taken only from its pages.
 SITE_URL = "https://rebbehub.org"

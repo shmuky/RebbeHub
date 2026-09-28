@@ -1,5 +1,6 @@
 import { data, redirect } from 'react-router';
 import type { Route } from './+types/item';
+import { EmbedCode } from '../components/EmbedCode.js';
 import { FollowButton } from '../components/FollowButton.js';
 import { ReportForm, type ReportResult } from '../components/ReportForm.js';
 import { SuggestFix, canSuggestFix } from '../components/SuggestFix.js';
@@ -117,6 +118,7 @@ export default function Item({ loaderData }: Route.ComponentProps) {
       {canSuggestFix(loaderData.entity) ? <SuggestFix entity={loaderData.entity} lang={loaderData.lang} /> : null}
       {loaderData.entity.type === 'event' || loaderData.entity.type === 'work' ? <UploadForm entity={loaderData.entity} lang={loaderData.lang} /> : null}
       <ReportForm entityId={loaderData.entity.id} />
+      {FOLLOWABLE.has(loaderData.entity.type) ? <EmbedCode entity={loaderData.entity} lang={loaderData.lang} siteUrl={loaderData.siteUrl} /> : null}
     </>
   );
 }

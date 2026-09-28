@@ -24,7 +24,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 export function headers() {
   // Pages change when the catalog does; let caches keep them briefly and serve stale while refreshing.
-  return { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=600' };
+  // No other site may frame them (sign-in and review among them); /embed says otherwise for itself.
+  return { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=600', 'Content-Security-Policy': "frame-ancestors 'self'", 'X-Frame-Options': 'SAMEORIGIN' };
 }
 
 function LanguageSwitch({ lang }: { lang: Lang }) {
@@ -74,6 +75,8 @@ function Footer({ lang }: { lang: Lang }) {
 export function Layout({ children }: { children: React.ReactNode }) {
   const data = useRouteLoaderData('root') as { lang?: Lang } | undefined;
   const lang = data?.lang ?? 'he';
+  // An embed is the item alone, in another site's frame: no menus, no player bar.
+  const embedded = useLocation().pathname.startsWith('/embed/');
   return (
     <html lang={lang} dir={dir(lang)}>
       <head>
@@ -83,7 +86,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Meta />
         <Links />
       </head>
-      <body>
+      <body className={embedded ? 'embedded' : undefined}>
+        {embedded ? (
+          <main id="main">{children}</main>
+        ) : (
+          <>
         <a className="skip-link" href="#main">
           {lang === 'he' ? 'דלג לתוכן' : 'Skip to content'}
         </a>
@@ -102,6 +109,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <PlayerBar />
           </div>
         </PlayerProvider>
+          </>
+        )}
         <ScrollRestoration />
         <Scripts />
       </body>

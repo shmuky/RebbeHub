@@ -9,6 +9,7 @@ import { labelOf } from '../lib/labels.js';
 import { itemPath } from '../lib/links.js';
 import { refreshAccount, useAccount, useGoogleSignIn } from '../lib/useAccount.js';
 import { setFollow, useFollows } from '../lib/useFollows.js';
+import { Webhooks } from '../components/Webhooks.js';
 import { useLang } from '../lib/useLang.js';
 
 /** A person's own page: their name (which they can change), their passkeys (and adding one), their Google account, and signing out. Filled in by the browser; the page itself is the same for everyone. */
@@ -224,6 +225,8 @@ export default function Account() {
           </>
         ) : null}
       </p>
+
+      <Webhooks lang={lang} />
 
       <section className="note">
         <b>{t(lang, 'comingForAccounts')}</b>

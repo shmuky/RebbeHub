@@ -20,6 +20,8 @@ export default [
   route('admin', 'routes/admin.tsx'),
   route('review', 'routes/review.tsx'),
   route('missing', 'routes/missing.tsx'),
+  // What other sites embed: the only page they may frame.
+  route('embed/:id', 'routes/embed.tsx'),
   route('text/:scan', 'routes/text.tsx'),
   route('projects', 'routes/projects.tsx'),
   route('projects/:slug', 'routes/project.tsx'),

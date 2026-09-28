@@ -63,8 +63,15 @@ notifications by email, the reviewer's AI summary.
   machine layer; `/text/<scan>` shows it page by page, marked as machine
   reading, and a signed-in reader fixes a line into the community layer,
   reviewed like any suggestion.
+- **Transcription and sync** ✅: `rebbehub transcribe` and the *Machine
+  transcription (manual)* workflow (Whisper on Workers AI) turn a
+  recording into a transcript of paragraphs, each synced to where it is
+  heard; farbrengen pages follow the player, play from a tapped
+  paragraph, and take fixes.
+- **Webhooks and embeds** ✅: every merge posted, signed, to registered
+  addresses; `/embed/<id>` for other sites ([api](api.md)).
 - Still to come: IIIF page images, uploaded OCR, comparing printings,
-  transcription and sync of recordings, webhooks and embeds.
+  word-level sync, semantic search, translations, mirrors.
 
 ## Importers still to write
 

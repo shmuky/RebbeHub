@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, fixLine, fixParagraph, getFile, recordingTranscript, scanText, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, createWebhook, deleteWebhook, fixLine, fixParagraph, getFile, listWebhooks, recordingTranscript, scanText, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
@@ -579,6 +579,22 @@ export function createApp(options: ApiOptions): Hono {
     const follows = await catalog.follows(by);
     const items = await Promise.all(follows.filter((f) => f.kind === 'entity' || f.kind === 'set').map((f) => catalog.get(f.id as EntityId)));
     return c.json({ follows, items: await redact(items.filter((i): i is EntityView => i !== null)), feed: await catalog.followFeed(by, intParam(c.req.query('limit'), 'limit') ?? 20) });
+  });
+
+  // Webhooks: every merge posted to an address a person registered (packages/core/src/webhooks.ts).
+  app.get('/v1/webhooks', async (c) => c.json({ webhooks: await listWebhooks(catalog, await signedIn(c)) }));
+
+  app.post('/v1/webhooks', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ url?: string }>(c);
+    if (!input.url) throw new HttpError(400, 'give the address (url) to post to');
+    return c.json(await createWebhook(catalog, by, input.url), 201);
+  });
+
+  app.delete('/v1/webhooks/:id', async (c) => {
+    const by = await signedIn(c);
+    await deleteWebhook(catalog, by, intParam(c.req.param('id'), 'id')!);
+    return c.json({ ok: true });
   });
 
   app.post('/v1/follows', async (c) => {

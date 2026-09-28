@@ -35,6 +35,7 @@ describe('migrations', () => {
       'review',
       'revision',
       'schema_migration',
+      'webhook',
     ]);
     await db.close();
   });
