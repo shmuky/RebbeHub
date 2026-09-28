@@ -47,6 +47,15 @@ export interface FileInfo {
   rights: 'open' | 'credit' | 'link' | 'preserved';
   credit: string | null;
   url: string | null;
+  /** How many of a served PDF's pages have page images (the jobs' `page-images`). */
+  pageImages?: number;
+}
+
+/** A served scan's page images, and its IIIF manifest (GET /v1/scans/:id/pages). */
+export interface ScanPages {
+  scan: string;
+  manifest: string | null;
+  pages: Array<{ page: number; width: number; height: number; image: string; thumbnail: string | null }>;
 }
 
 /**
@@ -270,6 +279,21 @@ export class RebbeHubApi {
 
   file(sha256: string) {
     return this.maybe(this.get<FileInfo>(`/v1/files/${sha256}`));
+  }
+
+  /** A served scan's page images; null when it has none or is not served. */
+  scanPages(scan: string) {
+    return this.maybe(this.get<ScanPages>(`/v1/scans/${encodeURIComponent(scan)}/pages`));
+  }
+
+  /** A family's request that a teshura not be shown (no account needed, like a report). */
+  async familyRequest(teshura: string, input: { relation?: string; note?: string; contact?: string }, forwardedFor?: string): Promise<{ report: number; paused: number }> {
+    const headers: Record<string, string> = { 'content-type': 'application/json', accept: 'application/json' };
+    if (forwardedFor) headers['x-forwarded-for'] = forwardedFor;
+    const response = await this.fetcher(`${this.baseUrl}/v1/teshuros/${encodeURIComponent(teshura)}/family-request`, { method: 'POST', headers, body: JSON.stringify(input) });
+    const body = (await response.json().catch(() => ({}))) as { report?: number; paused?: number; message?: string };
+    if (!response.ok) throw new ApiError(response.status, body.message ?? response.statusText);
+    return { report: body.report!, paused: body.paused ?? 0 };
   }
 
   /** What a PDF on Google Drive needs to read straight, by its Drive id; null when nothing is known of it. */

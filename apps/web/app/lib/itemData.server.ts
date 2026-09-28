@@ -1,4 +1,4 @@
-import type { Backlink, Entity, FileInfo, RebbeHubApi } from './api.js';
+import type { Backlink, Entity, FileInfo, RebbeHubApi, ScanPages } from './api.js';
 
 /**
  * What an item's page needs beyond the item itself, by type: a work's
@@ -22,6 +22,10 @@ export interface ItemView {
   outline?: Array<{ value: string; label: { he: string; en?: string } | null; units: number }>;
   /** How many units each work holds, for covers on a shelf or a Rebbe's page. */
   counts?: Record<string, number>;
+  /** A served scan's page images, by scan id, where the jobs have made them. */
+  pages: Record<string, ScanPages>;
+  /** How many scans each printing has, for a sefer's list of printings. */
+  scanCounts?: Record<string, number>;
 }
 
 const ids = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : typeof value === 'string' ? [value] : []);
@@ -31,9 +35,28 @@ async function entitiesOf(api: RebbeHubApi, links: Backlink[]): Promise<Entity[]
   return links.map((l) => found.get(l.from)).filter((e): e is Entity => e !== undefined);
 }
 
+/** A year to sort a printing by: its Hebrew year, else its civil year made Hebrew; undated ones last. */
+const yearOf = (p: Entity): number => {
+  const d = p.data as { date?: string; gregorianYear?: number };
+  return d.date ? Number(d.date.slice(0, 4)) : d.gregorianYear ? d.gregorianYear + 3760 : 99999;
+};
+
+/** Printings in the order they came out (then by printing number). */
+export function sortPrintings(publications: Entity[]): Entity[] {
+  return [...publications].sort((a, b) => yearOf(a) - yearOf(b) || ((a.data as { printing?: number }).printing ?? 0) - ((b.data as { printing?: number }).printing ?? 0));
+}
+
 export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): Promise<ItemView> {
   const d = entity.data as Record<string, unknown>;
-  const view: ItemView = { refs: {}, lists: {}, files: {}, segments: {}, next: null, backlinks: [] };
+  const view: ItemView = { refs: {}, lists: {}, files: {}, segments: {}, next: null, backlinks: [], pages: {} };
+  /** The page images of the first few served scans that have them. */
+  const loadPages = async (scans: Entity[]) => {
+    for (const scan of scans.slice(0, 3)) {
+      if (!view.files[scan.id]?.pageImages) continue;
+      const pages = await api.scanPages(scan.id);
+      if (pages?.pages.length) view.pages[scan.id] = pages;
+    }
+  };
   const wanted = new Set<string>([...ids(d.sets), ...ids(d.topics)]);
 
   switch (entity.type) {
@@ -48,7 +71,9 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
       // Its volumes first; one volume's units when one is opened (?part=), else the units of a work of one level.
       const [outline, publications] = await Promise.all([api.workOutline(entity.id), entitiesOf(api, await api.backlinks(entity.id, { field: 'work', type: 'publication' }))]);
       view.outline = outline;
-      view.lists.publications = publications;
+      // Its printings in the order they came out, each with how many scans it has.
+      view.lists.publications = sortPrintings(publications);
+      if (publications.length) view.scanCounts = await api.refCounts('publication', 'scan');
       const part = url.searchParams.get('part');
       if (part) view.lists.units = await api.workPart(entity.id, part);
       else if (outline.length && outline.every((p) => p.units === 1)) {
@@ -93,6 +118,9 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
       scans.sort((a, b) => Number(Boolean((b.data as { preferred?: boolean }).preferred)) - Number(Boolean((a.data as { preferred?: boolean }).preferred)));
       view.lists.scans = scans;
       for (const s of scans) view.files[s.id] = await api.file((s.data as { file: string }).file);
+      await loadPages(scans);
+      // The sefer's other printings, and what this one reprints.
+      if (typeof d.work === 'string') view.lists.otherPrintings = sortPrintings((await entitiesOf(api, await api.backlinks(d.work, { field: 'work', type: 'publication' }))).filter((p) => p.id !== entity.id));
       const maps = await entitiesOf(api, await api.backlinks(entity.id, { field: 'publication', type: 'contents-map' }));
       maps.sort((a, b) => (a.data as { pages: { from: number } }).pages.from - (b.data as { pages: { from: number } }).pages.from);
       view.lists.contents = maps;
@@ -102,6 +130,7 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
     case 'scan': {
       ids(d.publication).forEach((id) => wanted.add(id));
       view.files[entity.id] = await api.file(d.file as string);
+      await loadPages([entity]);
       break;
     }
     case 'recording': {

@@ -19,6 +19,8 @@ export default [
   route('_/suggestions/*', 'routes/suggestions.ts'),
   route('_/follows', 'routes/follows.ts'),
   route('_/uploads', 'routes/uploads.ts'),
+  route('_/uploads/check', 'routes/uploads-check.ts'),
+  route('_/lookup', 'routes/lookup.ts'),
   route('_/steward/*', 'routes/admin-pass.ts'),
   route('admin', 'routes/admin.tsx'),
   route('review', 'routes/review.tsx'),

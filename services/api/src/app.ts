@@ -1,10 +1,11 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, getDerivations, getFile, getPageFix, listWebhooks, recordingTranscript, scanText, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, createWebhook, deleteWebhook, fileFromDrive, itemsUsingFile, pageImageCount, similarFiles, fixLine, fixParagraph, getDerivations, getFile, getPageFix, listWebhooks, recordingTranscript, scanText, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
 import { adminRoutes } from './admin.js';
 import { uploadRoutes, type UploadOptions } from './uploads.js';
+import { scanRoutes } from './scans.js';
 import { OPENAPI } from './openapi.js';
 
 /**
@@ -34,6 +35,8 @@ export interface ApiOptions {
   files?: FileStore;
   /** Where the texts of seforim are kept (`texts/<sha256>` in the public bucket), and where they are first copied from: Sichos-Kodesh's published archive. */
   texts?: { store: FileStore; writer: { put(key: string, bytes: ArrayBuffer, mime: string): Promise<void> }; from?: FileStore };
+  /** The site's address (`https://rebbehub.org`), for links home from IIIF manifests. Unset, the passkeys' site, else rebbehub.org. */
+  siteUrl?: string;
   version?: string;
 }
 
@@ -136,6 +139,15 @@ export function createApp(options: ApiOptions): Hono {
   if (options.auth) authRoutes(app, catalog, options.auth);
   adminRoutes(app, catalog, signedIn);
   uploadRoutes(app, catalog, signedIn, options.uploads);
+  scanRoutes(app, catalog, {
+    filesBase: (c) => options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null),
+    siteUrl: options.siteUrl ?? options.auth?.origins[0] ?? 'https://rebbehub.org',
+    signedIn,
+    authenticate,
+    reportSalt: options.reportSalt,
+    verifyCaptcha: options.verifyCaptcha,
+    reportsPerHour: options.reportsPerHour,
+  });
 
   app.get('/', (c) => c.redirect('/v1'));
   app.get('/openapi.json', (c) => c.json(OPENAPI));
@@ -311,9 +323,11 @@ export function createApp(options: ApiOptions): Hono {
     if (!file) throw new CatalogError('not-found', 'no such file');
     const base = options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
     const served = mayServe(file.rights_state) && file.storage_tier === 'public' && base;
-    // What was made from it (a scan's reading copy), served under the same rights.
-    const derivations = (await getDerivations(catalog.db, sha256)).map((d) => ({ profile: d.profile, sha256: d.sha256, bytes: d.bytes, encoder: d.encoder, url: served ? `${base}/objects/${d.sha256}` : null }));
-    return c.json({ sha256, bytes: file.bytes, mime: file.mime, rights: file.rights_state, credit: file.credit, url: served ? `${base}/objects/${sha256}` : null, derivations, pageFix: await pageFixOf(sha256) });
+    // What was made from it (a scan's reading copy), served under the same rights; its page images are counted, and listed by its scan's pages.
+    const derivations = (await getDerivations(catalog.db, sha256))
+      .filter((d) => !/^(page-image|thumbnail)\//.test(d.profile))
+      .map((d) => ({ profile: d.profile, sha256: d.sha256, bytes: d.bytes, encoder: d.encoder, url: served ? `${base}/objects/${d.sha256}` : null }));
+    return c.json({ sha256, bytes: file.bytes, mime: file.mime, rights: file.rights_state, credit: file.credit, url: served ? `${base}/objects/${sha256}` : null, derivations, pageFix: await pageFixOf(sha256), pageImages: served ? await pageImageCount(catalog.db, sha256) : 0 });
   });
 
   /** A file's page fix (docs/operations.md): measurements, open whatever the file's rights. */
@@ -574,12 +588,14 @@ export function createApp(options: ApiOptions): Hono {
     const mayApprove = viewer && view.changeset.status === 'open' ? await catalog.mayApprove(view.changeset.id, viewer) : { ok: false as const, reason: viewer ? `this suggestion is ${view.changeset.status}` : 'sign in to review' };
     // The files it adds, where each may be heard or read (null while its rights keep it private), so the reviewer checks it first.
     const base = options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
-    const files: Record<string, { url: string | null; mime: string; bytes: number; rights: string }> = {};
+    const files: Record<string, { url: string | null; mime: string; bytes: number; rights: string; similar: Array<{ kind: string; matched?: number; of?: number; items: Array<{ id: string; type: string; path: string | null }> }> }> = {};
     for (const entry of view.entries) {
       const sha = (entry.after as { file?: unknown } | null)?.file;
       if (typeof sha !== 'string' || files[sha]) continue;
       const file = await getFile(catalog.db, sha);
-      if (file) files[sha] = { url: base && mayServe(file.rights_state) && file.storage_tier === 'public' ? `${base}/objects/${sha}` : null, mime: file.mime, bytes: file.bytes, rights: file.rights_state };
+      // And what the jobs found it looks like: the same scan or recording already held (a machine's guess, shown as one).
+      const similar = await Promise.all((await similarFiles(catalog.db, sha)).map(async (s) => ({ kind: s.kind, matched: s.matched, of: s.of, items: (await itemsUsingFile(catalog.db, s.sha256)).map((i) => ({ id: i.id, type: i.type, path: i.path })) })));
+      if (file) files[sha] = { url: base && mayServe(file.rights_state) && file.storage_tier === 'public' ? `${base}/objects/${sha}` : null, mime: file.mime, bytes: file.bytes, rights: file.rights_state, similar };
     }
     return c.json({
       ...view,

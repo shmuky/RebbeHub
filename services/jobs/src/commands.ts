@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { Catalog } from '@rebbehub/core';
 import { connectPostgres, one, type Db } from '@rebbehub/db';
 import { openPGlite } from '@rebbehub/db/pglite';
-import { OTZROS_FOLDER, chabadLibraryImporter, driveLibraryImporter, listDriveFolder, crawlChabadLibrary, libraryWorks, readChabadLibrary, readMafteiachCrawl, readSichosKodeshOccasions, readSichosKodeshWorks, runImport, sichosKodeshOccasionsImporter, sichosKodeshWorksImporter, type DriveFolder, type Importer } from '@rebbehub/importers';
+import { OTZROS_FOLDER, chabadLibraryImporter, driveLibraryImporter, listDriveFolder, crawlChabadLibrary, libraryWorks, readChabadLibrary, readMafteiachCrawl, readSichosKodeshOccasions, readSichosKodeshWorks, runImport, sichosKodeshOccasionsImporter, sichosKodeshWorksImporter, rebbehubSetsImporter, type DriveFolder, type Importer } from '@rebbehub/importers';
 import { clearMirror, directorySink, exportCommits, exportSnapshot, generateKeyPair, writeDump, type KeyPair } from '@rebbehub/mirror';
 import { BUILTIN_SCHEMAS, SchemaRegistry } from '@rebbehub/model';
 import { commitAll, git } from './git.js';
@@ -121,6 +121,8 @@ export const IMPORTERS: Record<string, (from: string) => Importer> = {
   'sichos-kodesh-works': (from) =>
     sichosKodeshWorksImporter(() => readSichosKodeshWorks(from, { texts: !process.env.REBBEHUB_NO_TEXTS, api: process.env.REBBEHUB_API_URL, log: (line) => console.log(line) })),
   // With MAFTEIACH_DATA (a crawl of mafteiach.app by Sichos-Kodesh's packages/mafteiach-index), every link and content outline the index has.
+  // The sets RebbeHub keeps itself (the Teshuros set); `--from` is not used.
+  'rebbehub-sets': () => rebbehubSetsImporter(),
   // Otzros HaRebbe's Drive library of seforim, listed from Drive at run time (`--from` is not used).
   otzros: () => driveLibraryImporter(() => listDriveFolder(OTZROS_FOLDER, { log: (line) => console.log(line) })),
   // With CHABADLIBRARY_TREE (the contents `rebbehub crawl-library` gathered), a page for every chapter in the library.

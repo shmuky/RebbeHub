@@ -32,7 +32,7 @@ stands. ✅ built and tested · 🟡 partly · ⬜ not yet.
 | Public site: sets, events calendar, item and publication pages, search, permanent links | ✅ | `apps/web` (React Router 7, server-rendered; Node or Workers) |
 | The site as Sichos-Kodesh's app works: this week first (today's parsha, the kvius year, every year), farbrengen pages, one player across pages, smart search by parsha, chag, date and year | ✅ | `apps/web/app/routes/home.tsx`, `views/EventPage.tsx`, `player/`, `lib/smartSearch.ts` |
 | Audio player (recordings by part, video links at the moment) | ✅ | `apps/web/app/components/AudioPlayer.tsx`; words highlighted as spoken come with sync (phase 5) |
-| Scan viewer (served scans in the browser's PDF viewer by page; link-only scans at their source) | 🟡 | `ScanViewer.tsx`; IIIF and page images come with uploads (phase 3) |
+| Scan viewer (served scans page by page from page images, with a strip of pages and a IIIF manifest; link-only scans at their source) | ✅ | `ScanViewer.tsx`, `rebbehub page-images`, `/manifests/iiif/<scan>.json` |
 | SEO: canonical and hreflang links, schema.org data, sitemaps, robots.txt | ✅ | `apps/web/app/lib/seo.ts`, `/sitemap.xml` |
 | Report a problem on every page (no account, works without JavaScript) | ✅ | `ReportForm.tsx` |
 
@@ -79,7 +79,16 @@ notifications by email, the reviewer's AI summary.
   paragraph, and take fixes.
 - **Webhooks and embeds** ✅: every merge posted, signed, to registered
   addresses; `/embed/<id>` for other sites ([api](api.md)).
-- Still to come: IIIF page images, uploaded OCR, comparing printings,
+- **Page images, IIIF, printings and teshuros** ✅: `rebbehub page-images`
+  renders every served scan's pages and thumbnails as derivations, and
+  every served scan has a IIIF Presentation 3 manifest. An upload is
+  measured first (page hashes in the browser, `rebbehub fingerprints` for
+  recordings) and told "we already have this, here", or offered as
+  another scan of a printing, a new printing, or a new teshura. A sefer
+  lists its printings; *Map pages* marks what a teshura's pages hold,
+  through a suggestion; the Teshuros set defaults to credit, and a family
+  can ask for a teshura to stop being shown ([rights](rights.md)).
+- Still to come: uploaded OCR, comparing printings,
   word-level sync, semantic search, translations, mirrors.
 
 ## Importers still to write

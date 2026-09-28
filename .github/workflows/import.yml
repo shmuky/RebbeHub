@@ -132,7 +132,7 @@ jobs:
         run: |
           if [ "$DRY_RUN" = "true" ]; then
             npm run rebbehub -- migrate
-            for importer in sichos-kodesh-works sichos-kodesh-occasions otzros chabadlibrary; do
+            for importer in rebbehub-sets sichos-kodesh-works sichos-kodesh-occasions otzros chabadlibrary; do
               npm run rebbehub -- import "$importer" --from .sichos-kodesh --dry-run
             done
           else

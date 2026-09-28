@@ -25,6 +25,27 @@ needs a signed-in session, from the site's own pages.
 - `/objects/<sha256>`: a file's bytes, while its rights let it be served.
 - `/manifests/<name>/<name>.json`: the published manifests of reading
   copies and page fixes.
+- `/manifests/iiif/<scan>.json`: a served scan as a IIIF Presentation 3
+  manifest (right to left, page images, the PDF as its rendering, the
+  credit as its required statement), for any IIIF viewer.
+- `GET /v1/scans/<id>/pages`: a scan's pages, with their page images and
+  thumbnails.
+- `GET /v1/files/<sha256>/similar`: other files that look like this one
+  (the same pages, or the same recording), a machine guess.
+
+## Adding
+
+With a signed-in session:
+
+- `POST /v1/uploads/check` (`{ sha256, pageHashes?, work?, publication? }`):
+  before an upload, whether RebbeHub has the file or one like it, and
+  whether it looks like another scan of a printing, a new printing or a
+  new teshura.
+- `POST /v1/suggestions/contents-map`: *Map pages*, what pages of a
+  publication hold, as a suggestion.
+- `POST /v1/teshuros/<id>/family-request` (no account, captcha as for
+  reports): a family asks that a teshura stop being shown
+  ([rights](rights.md)).
 
 ## Webhooks
 

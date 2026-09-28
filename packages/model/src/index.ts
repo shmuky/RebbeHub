@@ -23,3 +23,23 @@ export {
 export { BUILTIN_SCHEMAS, BUILTIN_SCHEMA_VERSION, CATALOG_SOURCE_IDS, ENTITY_LABELS, LANGUAGES } from './schemas/builtin.js';
 export { SchemaRegistry, type ValidationIssue, type ValidationResult } from './schemas/validate.js';
 export { REFERENCE_FIELDS, referencesOf, type Reference } from './refs.js';
+export {
+  AUDIO_FINGERPRINT_ENCODER,
+  AUDIO_FRAMES_PER_SECOND,
+  AUDIO_RATE,
+  PAGE_HASH_ENCODER,
+  PAGE_HASH_NEAR,
+  audioFingerprint,
+  compareAudio,
+  comparePages,
+  hashBands,
+  hashDistance,
+  pageHash,
+  resample,
+  looksSameScan,
+  sharesPages,
+  sameRecording,
+  samplePages,
+  type AudioMatch,
+  type GreyImage,
+} from './fingerprints.js';

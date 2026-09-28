@@ -2,6 +2,7 @@
 import { parseArgs } from 'node:util';
 import { ocrCommand } from '../ocrCommand.js';
 import { transcribeCommand } from '../transcribeCommand.js';
+import { fingerprintsCommand, pageImagesCommand } from '../scanPagesCommand.js';
 import {
   accountCommand,
   crawlLibraryCommand,
@@ -44,6 +45,14 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 machine transcripts, with sync, of recordings that have
                                                 none (Whisper on Workers AI: CLOUDFLARE_ACCOUNT_ID and
                                                 CLOUDFLARE_AI_TOKEN); --linked also those heard elsewhere
+  rebbehub page-images [--scan <id>] [--limit <n>] [--files <url>] [--bucket rebbehub-public]
+                                                page images and thumbnails of served scans that have
+                                                none (the IIIF manifests and the site's viewer show them),
+                                                into R2 (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
+  rebbehub fingerprints [--limit <n>] [--files <url>] [--preservation-bucket rebbehub-preservation]
+                                                page hashes and audio fingerprints of held files not
+                                                measured yet (recordings need ffmpeg), so the same scan
+                                                or recording uploaded again is found
   rebbehub reading-copies make --from <Sichos-Kodesh checkout> --work <folder> [--shard 0/4] [--limit <n>]
                   [--archive <objects.json>] [--source-bucket sichos-kodesh-archive] [--bucket rebbehub-public]
   rebbehub reading-copies publish --from <Sichos-Kodesh checkout> --work <folder> [--bucket rebbehub-public]
@@ -96,6 +105,7 @@ const { values, positionals } = parseArgs({
     linked: { type: 'boolean' },
     files: { type: 'string' },
     minutes: { type: 'string' },
+    'preservation-bucket': { type: 'string' },
     help: { type: 'boolean', short: 'h' },
   },
 });
@@ -134,6 +144,12 @@ try {
       break;
     case 'transcribe':
       await transcribeCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files });
+      break;
+    case 'page-images':
+      await pageImagesCommand(ctx, { scan: values.scan, limit: number(values.limit), files: values.files, bucket: values.bucket });
+      break;
+    case 'fingerprints':
+      await fingerprintsCommand(ctx, { limit: number(values.limit), files: values.files, preservationBucket: values['preservation-bucket'] });
       break;
     case 'mirror':
       await mirrorCommand(ctx, { dir: need(values.dir, 'dir'), git: values.git, full: values.full, limit: number(values.limit) });

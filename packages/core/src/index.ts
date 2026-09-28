@@ -35,3 +35,33 @@ export {
 } from './auth.js';
 export { fixLine, fixParagraph, recordingTranscript, scanText, type ScanTextPage, type TranscriptView } from './text.js';
 export { MAX_HOOKS_PER_ACCOUNT, createWebhook, deleteWebhook, deliverWebhooks, listWebhooks, type WebhookRow } from './webhooks.js';
+export {
+  filePages,
+  getFingerprint,
+  itemsUsingFile,
+  pageImageCount,
+  recordAudioFingerprint,
+  recordPdfPages,
+  similarFiles,
+  similarRecordings,
+  similarScans,
+  type FilePageRow,
+  type FingerprintRow,
+  type PageRecord,
+  type SimilarFile,
+} from './scans.js';
+export {
+  TESHURA_RIGHTS,
+  TESHUROS_SET,
+  familyRequest,
+  familyRequests,
+  proposeUpload,
+  suggestContents,
+  teshuraCredit,
+  teshurosSetId,
+  yearsInText,
+  type ContentsInput,
+  type FamilyRequestInput,
+  type ProposalInput,
+  type UploadProposal,
+} from './print.js';
