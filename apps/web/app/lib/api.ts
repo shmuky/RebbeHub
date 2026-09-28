@@ -87,7 +87,8 @@ export class RebbeHubApi {
     }
     if (!headers.has('x-forwarded-proto')) headers.set('x-forwarded-proto', new URL(request.url).protocol.replace(':', ''));
     const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.text();
-    return this.fetcher(`${this.baseUrl}${path}`, { method: request.method, headers, body });
+    // A redirect (to Google and back) is the browser's to follow, not ours.
+    return this.fetcher(`${this.baseUrl}${path}${new URL(request.url).search}`, { method: request.method, headers, body, redirect: 'manual' });
   }
 
   /** Null when there is nothing there. */

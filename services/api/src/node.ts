@@ -26,7 +26,7 @@ if (devAccount && hostname !== '127.0.0.1' && hostname !== 'localhost') {
 }
 if (devAccount) await catalog.createAccount({ id: devAccount, displayName: devAccount });
 
-const app = createApp({ catalog, authenticate: devAccount ? () => devAccount : undefined, auth: authFor(process.env.SITE_URL ?? 'http://localhost:5173'), filesBaseUrl: process.env.FILES_BASE_URL });
+const app = createApp({ catalog, authenticate: devAccount ? () => devAccount : undefined, auth: authFor(process.env.SITE_URL ?? 'http://localhost:5173', { clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET }), filesBaseUrl: process.env.FILES_BASE_URL });
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port, hostname });
 console.log(`RebbeHub API on http://${hostname}:${port}/v1 (${url ? 'Postgres' : 'PGlite'}${devAccount ? `, signed in as ${devAccount}` : ''})`);

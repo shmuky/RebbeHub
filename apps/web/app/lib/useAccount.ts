@@ -10,16 +10,26 @@ import { useEffect, useState } from 'react';
 export interface SignedIn {
   person: { id: string; displayName: string };
   passkeys: Array<{ credentialId: string; deviceType: string | null; backedUp: boolean; createdAt: string; lastUsedAt: string | null }>;
+  googleAccounts: Array<{ email: string | null; createdAt: string }>;
 }
 
-let asked: Promise<SignedIn | null> | null = null;
-const listeners = new Set<(value: SignedIn | null) => void>();
+interface Answer {
+  account: SignedIn | null;
+  /** Whether the site can sign in with Google yet. */
+  google: boolean;
+}
 
-function ask(): Promise<SignedIn | null> {
+let asked: Promise<Answer> | null = null;
+const listeners = new Set<(value: Answer) => void>();
+
+function ask(): Promise<Answer> {
   asked ??= fetch('/_/auth/me', { credentials: 'same-origin', headers: { accept: 'application/json' } })
-    .then((r) => (r.ok ? (r.json() as Promise<{ person: SignedIn['person'] | null; passkeys?: SignedIn['passkeys'] }>) : { person: null }))
-    .then((body) => (body.person ? { person: body.person, passkeys: body.passkeys ?? [] } : null))
-    .catch(() => null);
+    .then((r) => (r.ok ? (r.json() as Promise<{ person: SignedIn['person'] | null; passkeys?: SignedIn['passkeys']; googleAccounts?: SignedIn['googleAccounts']; google?: boolean }>) : { person: null }))
+    .then((body) => ({
+      account: body.person ? { person: body.person, passkeys: body.passkeys ?? [], googleAccounts: body.googleAccounts ?? [] } : null,
+      google: body.google ?? false,
+    }))
+    .catch(() => ({ account: null, google: false }));
   return asked;
 }
 
@@ -29,11 +39,11 @@ export function refreshAccount(): void {
   void ask().then((value) => listeners.forEach((l) => l(value)));
 }
 
-export function useAccount(): SignedIn | null | undefined {
-  const [account, setAccount] = useState<SignedIn | null | undefined>(undefined);
+function useAnswer(): Answer | undefined {
+  const [answer, setAnswer] = useState<Answer | undefined>(undefined);
   useEffect(() => {
     let live = true;
-    const listen = (value: SignedIn | null) => live && setAccount(value);
+    const listen = (value: Answer) => live && setAnswer(value);
     listeners.add(listen);
     void ask().then(listen);
     return () => {
@@ -41,5 +51,15 @@ export function useAccount(): SignedIn | null | undefined {
       listeners.delete(listen);
     };
   }, []);
-  return account;
+  return answer;
+}
+
+export function useAccount(): SignedIn | null | undefined {
+  const answer = useAnswer();
+  return answer === undefined ? undefined : answer.account;
+}
+
+/** Whether Google sign-in is switched on; false until it is known. */
+export function useGoogleSignIn(): boolean {
+  return useAnswer()?.google ?? false;
 }

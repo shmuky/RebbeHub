@@ -6,8 +6,9 @@ import { authFor } from './auth.js';
 /**
  * The API on Cloudflare Workers: Postgres (Neon) through Hyperdrive, file
  * bytes from the public R2 bucket. Each request gets its own connection,
- * which Hyperdrive pools. Configured in wrangler.toml; secrets REPORT_SALT
- * and, for captchas on reports, TURNSTILE_SECRET.
+ * which Hyperdrive pools. Configured in wrangler.toml; secrets REPORT_SALT,
+ * for captchas on reports TURNSTILE_SECRET, and for Google sign-in
+ * GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.
  */
 interface R2ObjectBody {
   body: ReadableStream;
@@ -27,6 +28,9 @@ interface Env {
   FILES_BASE_URL?: string;
   /** The site's address (`https://rebbehub.org`): passkeys are bound to its domain, and sign-in happens on its pages. */
   SITE_URL?: string;
+  /** Google sign-in's client (secrets); without both, sign-in is by passkey alone. */
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
 }
 
 function r2Store(bucket: R2Bucket): FileStore {
@@ -47,7 +51,7 @@ export default {
       verifyCaptcha: env.TURNSTILE_SECRET ? turnstileVerifier(env.TURNSTILE_SECRET) : undefined,
       filesBaseUrl: env.FILES_BASE_URL,
       files: env.FILES_PUBLIC ? r2Store(env.FILES_PUBLIC) : undefined,
-      auth: env.SITE_URL ? authFor(env.SITE_URL) : undefined,
+      auth: env.SITE_URL ? authFor(env.SITE_URL, { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }) : undefined,
     });
     try {
       return await app.fetch(request);

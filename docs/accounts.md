@@ -3,7 +3,7 @@
 People read, listen and report problems without an account. To suggest a
 fix, follow a sefer or join a project, they sign in (the plan, section 7:
 a Contributor signs in with a passkey, an email link or Google). Passkeys
-are built; Google and email links come next.
+and Google are built; email links come next.
 
 ## Passkeys
 
@@ -21,6 +21,38 @@ The ceremonies are WebAuthn, verified with SimpleWebAuthn
 from `SITE_URL` in `services/api/wrangler.toml` (`rebbehub.org`); a
 passkey made there works only there.
 
+## Google
+
+Shown on `/signin` once the API has its Google sign-in keys; until then
+sign-in is by passkey alone.
+
+- **The first time**, a new account is made with the person's name on
+  Google. **After that**, the same Google account signs the same person in.
+- **Signed in already** (`/account`, "Link a Google account"): the Google
+  account is added to theirs, so either way in reaches the same account.
+- The browser goes to Google from `/_/auth/google/start` and comes back to
+  `/_/auth/google/callback`. The round trip carries a one-time state, tied
+  to the browser that left by a ten-minute cookie (`__Host-rh_google`),
+  with a nonce and PKCE. The ID token comes straight from Google's token
+  endpoint; its audience, issuer, expiry and nonce are checked.
+- Kept: Google's id for the account (`sub`) and its email, shown only to
+  the person (`auth.google_account`, migration 0004).
+
+**Switching it on** (once):
+
+1. In Google Cloud Console, APIs & Services, Credentials: create an OAuth
+   client ID of type "Web application". Authorised JavaScript origin
+   `https://rebbehub.org`; authorised redirect URI
+   `https://rebbehub.org/_/auth/google/callback`. On the consent screen,
+   the app name RebbeHub and the scopes `openid`, `email`, `profile`.
+2. In Cloudflare, Workers, `rebbehub-api`, Settings, Variables and
+   Secrets: add the secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
+   from that client. The button appears on the next request.
+
+For local development, set the same two in the environment of
+`services/api/src/node.ts`, with `http://localhost:5173/_/auth/google/callback`
+as a redirect URI on the client.
+
 ## Sessions
 
 - The site passes `/_/auth/*` through to the API's `/v1/auth/*`, so the
@@ -35,8 +67,8 @@ passkey made there works only there.
 
 ## Where it is kept
 
-People, passkeys, sessions and challenges live in the `auth` schema
-(migration 0003), apart from the catalog in `public`. The import may
+People, passkeys, Google accounts, sessions and challenges live in the
+`auth` schema (migrations 0003 and 0004), apart from the catalog in `public`. The import may
 rebuild the catalog and replace every table in `public`
 (`scripts/import-catalog.sh`, which leaves `auth` out of the copy);
 signing in is not adding to the catalog, and a person's catalog account

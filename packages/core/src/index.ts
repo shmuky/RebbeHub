@@ -15,6 +15,9 @@ export {
   endSession,
   findPasskey,
   getPerson,
+  googleAccountsOf,
+  googleSignedIn,
+  linkGoogle,
   hashToken,
   newPersonId,
   passkeyUsed,
@@ -23,6 +26,7 @@ export {
   sessionPerson,
   startSession,
   takeChallenge,
+  type ChallengePurpose,
   type Person,
   type StoredPasskey,
 } from './auth.js';

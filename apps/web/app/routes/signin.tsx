@@ -5,15 +5,19 @@ import type { Route } from './+types/signin';
 import { langFrom, t } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
-import { refreshAccount, useAccount } from '../lib/useAccount.js';
+import { refreshAccount, useAccount, useGoogleSignIn } from '../lib/useAccount.js';
 import { useLang } from '../lib/useLang.js';
 
 /**
  * Signing in, with a passkey: no password to choose or forget. The passkey
  * lives on the person's phone or computer, opened with their fingerprint,
  * face or screen lock, and works only on RebbeHub. New here: a name to be
- * known by, and the device makes the passkey.
+ * known by, and the device makes the passkey. Or with Google, once the
+ * site has its Google sign-in keys: the browser goes to Google and back.
  */
+
+/** Why a Google sign-in came back here (the API's `?error=`). */
+const GOOGLE_ERRORS = { 'google-failed': 'googleFailed', 'google-cancelled': 'signInCancelled', 'google-expired': 'googleExpired', 'google-off': 'googleOff' } as const;
 export function loader({ request }: Route.LoaderArgs) {
   return { lang: langFrom(request), siteUrl: new URL(request.url).origin };
 }
@@ -41,7 +45,9 @@ export default function SignIn() {
   const [params] = useSearchParams();
   const [name, setName] = useState('');
   const [busy, setBusy] = useState<'in' | 'new' | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const google = useGoogleSignIn();
+  const cameBack = GOOGLE_ERRORS[params.get('error') as keyof typeof GOOGLE_ERRORS];
+  const [error, setError] = useState<string | null>(cameBack ? t(lang, cameBack) : null);
   const done = () => {
     refreshAccount();
     window.location.assign(safeReturn(params.get('return')));
@@ -92,6 +98,12 @@ export default function SignIn() {
         </p>
       ) : null}
 
+      {error ? (
+        <p className="note" role="alert">
+          {error}
+        </p>
+      ) : null}
+
       {!supported ? <p className="note">{t(lang, 'noPasskeys')}</p> : null}
 
       <section>
@@ -114,10 +126,15 @@ export default function SignIn() {
         </form>
       </section>
 
-      {error ? (
-        <p className="note" role="alert">
-          {error}
-        </p>
+      {google ? (
+        <section>
+          <h2 className="section-header">{t(lang, 'orGoogle')}</h2>
+          <p>{t(lang, 'orGoogleText')}</p>
+          {/* A whole-page visit: the browser goes to Google and comes back. */}
+          <a className="button secondary" href={`/_/auth/google/start?return=${encodeURIComponent(safeReturn(params.get('return')))}`}>
+            {t(lang, 'signInWithGoogle')}
+          </a>
+        </section>
       ) : null}
 
       <section className="note">
