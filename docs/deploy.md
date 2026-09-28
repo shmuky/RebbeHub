@@ -46,11 +46,11 @@ Create `rebbehub-api` first: the site binds to it. For each, pick
 
 ### 4. The site's address
 
-When both are live, the site is at
-`https://rebbehub-web.<your-subdomain>.workers.dev` and the API at
-`https://rebbehub-api.<your-subdomain>.workers.dev/v1`. Put the site's
-address in `SITE_URL` in `apps/web/wrangler.toml` (it makes canonical
-links and sitemaps), and merge.
+The site is at **https://rebbehub.org** and the API at
+**https://api.rebbehub.org/v1** (custom domains on the two Workers).
+`SITE_URL` in `apps/web/wrangler.toml` is the site's address, which
+canonical links and sitemaps are made from; change it there if the
+domain ever changes.
 
 ### 5. Optional secrets for the API
 
