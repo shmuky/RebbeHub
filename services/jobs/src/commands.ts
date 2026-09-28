@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { Catalog } from '@rebbehub/core';
 import { connectPostgres, one, type Db } from '@rebbehub/db';
 import { openPGlite } from '@rebbehub/db/pglite';
-import { readSichosKodeshOccasions, readSichosKodeshWorks, runImport, sichosKodeshOccasionsImporter, sichosKodeshWorksImporter, type Importer } from '@rebbehub/importers';
+import { readMafteiachCrawl, readSichosKodeshOccasions, readSichosKodeshWorks, runImport, sichosKodeshOccasionsImporter, sichosKodeshWorksImporter, type Importer } from '@rebbehub/importers';
 import { clearMirror, directorySink, exportCommits, exportSnapshot, generateKeyPair, writeDump, type KeyPair } from '@rebbehub/mirror';
 import { BUILTIN_SCHEMAS, SchemaRegistry } from '@rebbehub/model';
 import { commitAll, git } from './git.js';
@@ -114,7 +114,9 @@ export const IMPORTERS: Record<string, (from: string) => Importer> = {
   // RebbeHub's API (REBBEHUB_API_URL, default the live one; REBBEHUB_NO_TEXTS=1 leaves them out).
   'sichos-kodesh-works': (from) =>
     sichosKodeshWorksImporter(() => readSichosKodeshWorks(from, { texts: !process.env.REBBEHUB_NO_TEXTS, api: process.env.REBBEHUB_API_URL, log: (line) => console.log(line) })),
-  'sichos-kodesh-occasions': (from) => sichosKodeshOccasionsImporter(() => readSichosKodeshOccasions(from)),
+  // With MAFTEIACH_DATA (a crawl of mafteiach.app by Sichos-Kodesh's packages/mafteiach-index), every link and content outline the index has.
+  'sichos-kodesh-occasions': (from) =>
+    sichosKodeshOccasionsImporter(() => readSichosKodeshOccasions(from), { mafteiach: process.env.MAFTEIACH_DATA ? () => readMafteiachCrawl(process.env.MAFTEIACH_DATA!) : undefined }),
 };
 
 export async function importCommand(ctx: Context, input: { source: string; from: string; approveAs?: string; dryRun?: boolean; chunkSize?: number }): Promise<void> {

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Clock, FileText, Music, Pause, PenLine, Play, Video } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, ExternalLink, FileText, Music, Pause, PenLine, Play, Video } from 'lucide-react';
 import { Link } from 'react-router';
 import { dateKeyToHDate } from '@rebbehub/hebrew';
 import type { LocalName } from '@rebbehub/model';
@@ -44,8 +44,73 @@ const KIND_KEYS = {
   maamar: 'kind_maamar',
   hagahos: 'kind_hagahos',
   hosofos: 'kind_hosofos',
+  english: 'kind_english',
+  audio: 'kind_audio',
+  video: 'kind_video',
   other: 'kind_other',
 } as const;
+
+/** PDFs the site's own reader opens (read.tsx lets only these hosts in). */
+const readable = (url: string) => /^https:\/\/(sichos-kodesh-media-proxy\.shmuky\.workers\.dev|api\.rebbehub\.org|files\.rebbehub\.org)\//.test(url);
+
+/** A YouTube video's id, when the link is one. */
+function youtubeId(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (u.hostname === 'youtu.be') return u.pathname.slice(1) || null;
+    if (/(^|\.)youtube\.com$/.test(u.hostname)) return u.searchParams.get('v') ?? /\/embed\/([\w-]+)/.exec(u.pathname)?.[1] ?? null;
+  } catch {
+    // not a link
+  }
+  return null;
+}
+
+const host = (url: string) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+};
+
+/** YouTube videos of the farbrengen, played on the page (without YouTube's cookies). */
+function Videos({ links, lang }: { links: EventLink[]; lang: Lang }) {
+  const ids = [...new Set(links.map((l) => youtubeId(l.url)).filter((id): id is string => Boolean(id && /^[\w-]{6,20}$/.test(id))))];
+  if (!ids.length) return null;
+  return (
+    <section>
+      <h2 className="section-header">{t(lang, 'videos')}</h2>
+      {ids.map((id) => (
+        <div key={id} className="video-embed">
+          <iframe src={`https://www.youtube-nocookie.com/embed/${id}`} title="YouTube" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" referrerPolicy="strict-origin-when-cross-origin" />
+        </div>
+      ))}
+    </section>
+  );
+}
+
+/** Everything else the index points to, where it is: HebrewBooks, chabad.org, JEM, sie.org, the English translations. */
+function Elsewhere({ links, lang }: { links: EventLink[]; lang: Lang }) {
+  if (!links.length) return null;
+  return (
+    <section>
+      <h2 className="section-header">{t(lang, 'elsewhere')}</h2>
+      <ul className="elsewhere">
+        {links.map((l) => (
+          <li key={l.url}>
+            <a href={l.url} target="_blank" rel="noopener nofollow">
+              {l.kind === 'video' ? <Video size={15} aria-hidden="true" /> : l.kind === 'audio' ? <Music size={15} aria-hidden="true" /> : <ExternalLink size={15} aria-hidden="true" />}
+              <b>{nameOf(l.label, lang)}</b>
+              <small>
+                {t(lang, KIND_KEYS[l.kind as keyof typeof KIND_KEYS] ?? 'kind_other')} · {host(l.url)}
+              </small>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 /** Opens in the site's own reader (/read); the player keeps playing. */
 function Texts({ links, lang, subtitle }: { links: EventLink[]; lang: Lang; subtitle: string }) {
@@ -215,7 +280,9 @@ export function EventPage({ entity, view, lang }: { entity: Entity; view: ItemVi
 
       <Recordings entity={entity} recordings={recordings} sources={sources} lang={lang} />
       <Transcripts tracks={tracksOf(entity, recordings, lang, sources)} lang={lang} />
-      {links.length ? <Texts links={links} lang={lang} subtitle={[nameOf(d.title, lang), d.date ? dateLabel(d.date, lang, { civil: false }) : ''].filter(Boolean).join(' · ')} /> : null}
+      {links.some((l) => readable(l.url)) ? <Texts links={links.filter((l) => readable(l.url))} lang={lang} subtitle={[nameOf(d.title, lang), d.date ? dateLabel(d.date, lang, { civil: false }) : ''].filter(Boolean).join(' · ')} /> : null}
+      <Videos links={links.filter((l) => youtubeId(l.url))} lang={lang} />
+      <Elsewhere links={links.filter((l) => !readable(l.url) && !youtubeId(l.url))} lang={lang} />
 
       {view.lists.units?.length ? (
         <section>

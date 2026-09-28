@@ -1,6 +1,6 @@
 name: Import the catalog (manual)
 
-# Fills the live catalog from Sichos-Kodesh (about five minutes), and
+# Fills the live catalog from Sichos-Kodesh and the mafteiach index, and
 # brings it up to date when run again: the importer changes only what the source changed and never
 # overwrites what people have fixed. RebbeHub keeps no copy of
 # Sichos-Kodesh's content, so this reads a fresh checkout of it each run.
@@ -84,12 +84,30 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Every link and content outline mafteiach.app's index has, beyond what Sichos-Kodesh's app keeps
+      # (packages/importers/src/mafteiachIndex.ts): crawled with Sichos-Kodesh's own polite crawler, which
+      # caches every page, so a run in the same month reads the cache (about 45 minutes the first time).
+      - name: Month
+        id: month
+        run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: .mafteiach/.cache
+          key: mafteiach-${{ steps.month.outputs.month }}
+      - name: Crawl the mafteiach index
+        run: |
+          cp -r .sichos-kodesh/packages/mafteiach-index .mafteiach-crawler
+          cd .mafteiach-crawler
+          npm install --no-save --no-package-lock --no-audit --no-fund cheerio@^1.2.0 tsx@^4
+          npx tsx bin/crawl.ts --out ../.mafteiach/data --cache ../.mafteiach/.cache --delay-ms 700
+
       - name: Import
         env:
           STEWARD: ${{ inputs.steward }}
           STEWARD_NAME: ${{ inputs.steward_name }}
           DRY_RUN: ${{ inputs.dry_run }}
           BUILD_DATABASE_URL: postgres://rebbehub:rebbehub@localhost:5432/build
+          MAFTEIACH_DATA: .mafteiach/data
         run: |
           if [ "$DRY_RUN" = "true" ]; then
             npm run rebbehub -- migrate

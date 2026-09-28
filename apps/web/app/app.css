@@ -2947,3 +2947,42 @@ body.embedded {
 .editor-tabs {
   margin: 0;
 }
+
+/* A farbrengen's videos and the links that lead elsewhere (EventPage). */
+.video-embed {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  margin-block-end: 12px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+}
+.video-embed iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.elsewhere {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.elsewhere a {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 10px;
+  align-items: center;
+  padding: 10px 0;
+  border-block-end: 1px solid var(--border);
+  color: inherit;
+  text-decoration: none;
+}
+.elsewhere a:hover b {
+  text-decoration: underline;
+}
+.elsewhere small {
+  grid-column: 2;
+  opacity: 0.7;
+}
