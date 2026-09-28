@@ -77,8 +77,17 @@ export async function catalogIsEmpty(db: Db): Promise<boolean> {
   return !row!.not_empty;
 }
 
-/** Prints `empty` or `not-empty`, for scripts. */
-export async function isEmptyCommand(ctx: Context): Promise<void> {
+/**
+ * SQL that stops a transaction unless the catalog is empty, locking out
+ * new reports and comments until it ends. The whole-catalog copy runs it
+ * first, so it can never replace anything people have added.
+ */
+export const EMPTY_GUARD_SQL = `LOCK TABLE entity, report, comment, follow, file IN ACCESS EXCLUSIVE MODE;
+DO $$ BEGIN IF (${NOT_EMPTY_SQL}) THEN RAISE EXCEPTION 'the catalog is not empty; not replacing it'; END IF; END $$;`;
+
+/** Prints `empty` or `not-empty`, for scripts; with `guard`, prints EMPTY_GUARD_SQL instead. */
+export async function isEmptyCommand(ctx: Context, input: { guard?: boolean } = {}): Promise<void> {
+  if (input.guard) return ctx.log(EMPTY_GUARD_SQL);
   await withCatalog(ctx, async (catalog) => ctx.log((await catalogIsEmpty(catalog.db)) ? 'empty' : 'not-empty'));
 }
 

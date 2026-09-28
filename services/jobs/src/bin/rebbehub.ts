@@ -6,7 +6,8 @@ const HELP = `rebbehub - RebbeHub's command line
 
   rebbehub migrate                              create or update the database
   rebbehub schema-check                         check the built-in schemas
-  rebbehub is-empty                             prints empty or not-empty (the catalog)
+  rebbehub is-empty [--guard]                   prints empty or not-empty; --guard prints
+                                                SQL that fails unless the catalog is empty
   rebbehub account --id <id> --name <name> [--steward] [--bot]
   rebbehub import sichos-kodesh-works --from <Sichos-Kodesh checkout>
                   [--approve-as <steward>] [--dry-run] [--chunk <n>]
@@ -40,6 +41,7 @@ const { values, positionals } = parseArgs({
     notes: { type: 'string' },
     out: { type: 'string' },
     key: { type: 'string' },
+    guard: { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
   },
 });
@@ -59,7 +61,7 @@ try {
       await migrateCommand(ctx);
       break;
     case 'is-empty':
-      await isEmptyCommand(ctx);
+      await isEmptyCommand(ctx, { guard: values.guard });
       break;
     case 'schema-check':
       await schemaCheckCommand(ctx);
