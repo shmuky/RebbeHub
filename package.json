@@ -23,9 +23,9 @@
     "rebbehub": "tsx services/jobs/src/bin/rebbehub.ts"
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
+    "@types/node": "^26.6.2",
     "tsx": "^4.19.2",
-    "typescript": "~6.0.2",
-    "vitest": "^3.2.0"
+    "typescript": "~7.0.2",
+    "vitest": "^5.0.1"
   }
 }
