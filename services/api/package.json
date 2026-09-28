@@ -1,0 +1,22 @@
+{
+  "name": "@rebbehub/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RebbeHub's API (Hono, OpenAPI): the public read API over the catalog, anonymous reports, and suggestions and review for signed-in people. Runs on Cloudflare Workers (Hyperdrive to Postgres) or Node.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsx src/node.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.0",
+    "@rebbehub/core": "^0.1.0",
+    "@rebbehub/db": "^0.1.0",
+    "@rebbehub/hebrew": "^0.1.0",
+    "@rebbehub/model": "^0.1.0",
+    "hono": "^4.9.0"
+  }
+}

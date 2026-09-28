@@ -1,0 +1,10 @@
+# The API on Cloudflare Workers. Fill in the Hyperdrive id (it points at
+# Neon) before deploying; secrets are set with `wrangler secret put`.
+name = "rebbehub-api"
+main = "src/worker.ts"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "<hyperdrive-id>"
