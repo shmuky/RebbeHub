@@ -1,14 +1,17 @@
-import { Catalog, deliverWebhooks } from '@rebbehub/core';
+import { Catalog, adviseSuggestions, deliverWebhooks, sendNotifications } from '@rebbehub/core';
 import { connectPostgres } from '@rebbehub/db';
 import { createApp, turnstileVerifier, type FileStore } from './app.js';
 import { authFor } from './auth.js';
+import { resendMailer, workersAiAdvisor } from './mail.js';
 
 /**
  * The API on Cloudflare Workers: Postgres (Neon) through Hyperdrive, file
  * bytes from the public R2 bucket. Each request gets its own connection,
  * which Hyperdrive pools. Configured in wrangler.toml; secrets REPORT_SALT,
- * for captchas on reports TURNSTILE_SECRET, and for Google sign-in
- * GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.
+ * for captchas on reports TURNSTILE_SECRET, for Google sign-in
+ * GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, for email (sign-in links,
+ * notifications) RESEND_API_KEY, and for the reviewer's advice
+ * CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_AI_TOKEN. Each is off until set.
  */
 interface R2ObjectBody {
   body: ReadableStream;
@@ -36,7 +39,16 @@ interface Env {
   /** Google sign-in's client (secrets); without both, sign-in is by passkey alone. */
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  /** Resend's API key (a secret): email sign-in, notifications and takedown receipts; without it, none of them. */
+  RESEND_API_KEY?: string;
+  /** Who email comes from, on a domain verified with Resend (default `RebbeHub <no-reply@rebbehub.org>`). */
+  EMAIL_FROM?: string;
+  /** Workers AI (secrets), for the reviewer's advice on suggestions; without them, no advice. */
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_AI_TOKEN?: string;
 }
+
+const mailerOf = (env: Env) => (env.RESEND_API_KEY ? resendMailer({ apiKey: env.RESEND_API_KEY, from: env.EMAIL_FROM }) : undefined);
 
 function r2Writer(bucket: R2Bucket) {
   return { put: async (key: string, bytes: ArrayBuffer, mime: string) => void (await bucket.put(key, bytes, { httpMetadata: { contentType: mime } })) };
@@ -52,14 +64,22 @@ function r2Store(bucket: R2Bucket): FileStore {
 }
 
 export default {
-  /** Every few minutes (wrangler.toml, [triggers]): webhooks get the merges they have not had yet. */
+  /**
+   * Every few minutes (wrangler.toml, [triggers]): webhooks get the merges they have not had yet; people who
+   * asked are emailed what changed in what they follow; suggestions waiting for review get the reviewer's advice.
+   */
   async scheduled(_event: unknown, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): Promise<void> {
     const db = connectPostgres(env.HYPERDRIVE.connectionString, { max: 1 });
-    ctx.waitUntil(
-      deliverWebhooks(new Catalog(db))
-        .catch((error) => console.error('webhooks', error))
-        .finally(() => db.close()),
-    );
+    const catalog = new Catalog(db);
+    const mailer = mailerOf(env);
+    const run = async () => {
+      await deliverWebhooks(catalog).catch((error) => console.error('webhooks', error));
+      if (mailer && env.SITE_URL) await sendNotifications(catalog, mailer, { siteUrl: new URL(env.SITE_URL).origin }).catch((error) => console.error('notifications', error));
+      if (env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_AI_TOKEN) {
+        await adviseSuggestions(catalog, workersAiAdvisor({ accountId: env.CLOUDFLARE_ACCOUNT_ID, token: env.CLOUDFLARE_AI_TOKEN })).catch((error) => console.error('advice', error));
+      }
+    };
+    ctx.waitUntil(run().finally(() => db.close()));
   },
 
   async fetch(request: Request, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): Promise<Response> {
@@ -73,6 +93,7 @@ export default {
       texts: env.FILES_PUBLIC ? { store: r2Store(env.FILES_PUBLIC), writer: r2Writer(env.FILES_PUBLIC), from: env.SK_ARCHIVE ? r2Store(env.SK_ARCHIVE) : undefined } : undefined,
       uploads: env.FILES_PUBLIC && env.FILES_PRESERVATION ? { public: r2Writer(env.FILES_PUBLIC), preservation: r2Writer(env.FILES_PRESERVATION) } : undefined,
       auth: env.SITE_URL ? authFor(env.SITE_URL, { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }) : undefined,
+      mailer: mailerOf(env),
     });
     try {
       return await app.fetch(request);

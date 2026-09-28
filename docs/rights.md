@@ -55,7 +55,9 @@ through a suggestion, reviewed like any other.
 
 Only stewards change a file's state (`setRights`), and every change is in
 the audit log. A takedown moves a file to `preserved`: it stops being
-served at once and is never deleted.
+served at once and is never deleted. Anyone asks for one at `/takedown`,
+with no account; a steward answers within 3 days and takes each file the
+request points at down in one click from `/admin` ([accounts](accounts.md#stewards-and-platform-admins)).
 
 ## Exports
 

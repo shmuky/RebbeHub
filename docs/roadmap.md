@@ -47,8 +47,15 @@ set). *Suggest a fix* is on farbrengen pages (name and date), and
 *Approve* and *Send back* for the set's keepers; every kind of page has
 it now. *Follow* is on every sefer, sicha, farbrengen, set and person,
 and the account page lists what someone follows and what changed in it
-(a sefer's sichos included). Still to come: signing in by email link,
-notifications by email, the reviewer's AI summary.
+(a sefer's sichos included). Signing in by email link (Resend; one
+account per person, matched with Google by address), email updates of
+what someone follows (off, daily or at once, sent by the API's cron),
+the reviewer's AI summary on `/review` (Workers AI, marked as
+machine-written, advice only), live line fixes by Trusted people kept or
+undone on `/review`, new-account holds and daily limits on uploads, and
+the public takedown form with a steward's one-click takedown are built
+([accounts](accounts.md)); email and the summary show once their secrets
+are set.
 
 ## Phases 3-6
 

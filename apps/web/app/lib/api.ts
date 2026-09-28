@@ -285,4 +285,14 @@ export class RebbeHubApi {
     if (!response.ok) throw new ApiError(response.status, body.message ?? response.statusText);
     return { id: body.id! };
   }
+
+  /** A takedown request from the public form (no account), with the asker's address for rate limits. */
+  async takedown(input: { target: string; name: string; email: string; relation: string; statement: string }, forwardedFor?: string): Promise<{ id: number }> {
+    const headers: Record<string, string> = { 'content-type': 'application/json', accept: 'application/json' };
+    if (forwardedFor) headers['x-forwarded-for'] = forwardedFor;
+    const response = await this.fetcher(`${this.baseUrl}/v1/takedowns`, { method: 'POST', headers, body: JSON.stringify(input) });
+    const body = (await response.json().catch(() => ({}))) as { id?: number; message?: string };
+    if (!response.ok) throw new ApiError(response.status, body.message ?? response.statusText);
+    return { id: body.id! };
+  }
 }

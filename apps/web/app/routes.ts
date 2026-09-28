@@ -6,6 +6,8 @@ export default [
   route('sets', 'routes/sets.tsx'),
   route('calendar/:year?/:month?', 'routes/calendar.tsx'),
   route('about', 'routes/about.tsx'),
+  // Asking for a file to stop being served (rights holders, families): no account needed.
+  route('takedown', 'routes/takedown.tsx'),
   route('help', 'routes/help.tsx'),
   route('history/:id', 'routes/history.tsx'),
   // Every page's talk page and its editing, beside its history (the wiki model).

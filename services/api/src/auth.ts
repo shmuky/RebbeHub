@@ -11,8 +11,21 @@ import {
 import { isoBase64URL } from '@simplewebauthn/server/helpers';
 import {
   SESSION_DAYS,
+  addEmail,
   addPasskey,
   cleanDisplayName,
+  cleanEmail,
+  emailsOf,
+  notificationSetting,
+  peekEmailLink,
+  personByEmail,
+  setNotifications,
+  signInMessage,
+  startEmailLink,
+  takeEmailLink,
+  unsubscribe,
+  type Mailer,
+  type NotificationMode,
   createPerson,
   endSession,
   findPasskey,
@@ -48,6 +61,8 @@ export interface AuthOptions {
   origins: string[];
   /** Signing in with Google, once the site has a Google sign-in client (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET); without it, only passkeys. */
   google?: GoogleOptions;
+  /** Sends sign-in links by email, once the site can send email (RESEND_API_KEY); without it, no email sign-in and no notifications. */
+  mailer?: Mailer;
   /** Replaces the WebAuthn verification, for tests; everything else runs as in production. */
   verify?: {
     registration: (input: { response: RegistrationResponseJSON; challenge: string }) => Promise<{ credentialId: string; publicKey: string; counter: number; transports: string[]; deviceType?: string; backedUp?: boolean } | null>;
@@ -70,10 +85,10 @@ const GOOGLE_AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
 
 /** Sign-in for a site at `siteUrl`: its host is the passkeys' domain, its origin the only place sign-in happens. */
-export function authFor(siteUrl: string, google?: { clientId?: string; clientSecret?: string }): AuthOptions {
+export function authFor(siteUrl: string, google?: { clientId?: string; clientSecret?: string }, mailer?: Mailer): AuthOptions {
   const url = new URL(siteUrl);
   const withGoogle = google?.clientId && google.clientSecret ? { google: { clientId: google.clientId, clientSecret: google.clientSecret } } : {};
-  return { rpId: url.hostname, rpName: 'RebbeHub', origins: [url.origin], ...withGoogle };
+  return { rpId: url.hostname, rpName: 'RebbeHub', origins: [url.origin], ...withGoogle, ...(mailer ? { mailer } : {}) };
 }
 
 /** Plain `http://localhost` cannot keep a `__Host-` (Secure) cookie in every browser; local development uses a plain name. */
@@ -212,8 +227,20 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
     const token = readSession(c);
     const person = token ? await sessionPerson(db, token) : null;
     const google = Boolean(auth.google);
-    if (!person) return c.json({ person: null, google });
-    return c.json({ person, passkeys: await passkeysOf(db, person.id), googleAccounts: await googleAccountsOf(db, person.id), google });
+    const email = Boolean(auth.mailer);
+    if (!person) return c.json({ person: null, google, email });
+    // Trust is the catalog's (earned by approved suggestions); a person who has not yet done anything there is a contributor.
+    const account = await catalog.account(person.id);
+    return c.json({
+      person,
+      trust: account?.trust ?? 'contributor',
+      passkeys: await passkeysOf(db, person.id),
+      googleAccounts: await googleAccountsOf(db, person.id),
+      emails: await emailsOf(db, person.id),
+      notifications: await notificationSetting(db, person.id),
+      google,
+      email,
+    });
   });
 
   // A new account: the name they go by, and a passkey made on their device for this site.
@@ -370,11 +397,94 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
     // Linking a Google account that is already another account's never switches accounts behind the person's back.
     if (person && current && person.id !== current.id) return c.redirect('/account?error=google-taken', 302);
     if (!person) {
-      person = current ?? (await createPerson(db, cleanDisplayName(claims.name) ?? cleanDisplayName(email?.split('@')[0]) ?? 'Reader'));
+      // One person, one account: a Google account whose (verified) email already signs someone in joins their account.
+      const byEmail = email ? await personByEmail(db, email.toLowerCase()) : null;
+      if (byEmail && current && byEmail.id !== current.id) return c.redirect('/account?error=google-taken', 302);
+      person = current ?? byEmail ?? (await createPerson(db, cleanDisplayName(claims.name) ?? cleanDisplayName(email?.split('@')[0]) ?? 'Reader'));
       await linkGoogle(db, claims.sub, person.id, email);
     }
     await signIn(c, person.id);
     return c.redirect(returnTo, 302);
+  });
+
+  // Email: a link sent to the address signs its person in, or (asked for while signed in) adds the address to the account.
+  const mailer = auth.mailer;
+  const emailOff = (c: Context) => refuse(c, 400, 'signing in by email is not switched on here');
+  const langOf = (value: unknown): 'he' | 'en' => (value === 'en' ? 'en' : 'he');
+
+  app.post('/v1/auth/email/start', async (c) => {
+    if (!mailer) return emailOff(c);
+    const input = (await c.req.json().catch(() => ({}))) as { email?: unknown; return?: string; lang?: unknown };
+    const email = cleanEmail(input.email);
+    if (!email) return refuse(c, 400, 'an email address, like name@example.com');
+    const current = await signedIn(c);
+    const started = await startEmailLink(db, { email, personId: current?.id });
+    if ('refused' in started) {
+      if (started.refused === 'taken') return refuse(c, 400, 'that address already signs into another account');
+      return c.json({ error: 'too-many', message: 'too many links for this address in the last hour; please try again later' }, 429);
+    }
+    await mailer.send(signInMessage({ to: email, siteUrl: auth.origins[0]!, token: started.token, lang: langOf(input.lang), adding: Boolean(current), returnTo: safeReturn(input.return) }));
+    // The same answer whether or not the address has an account here: nobody learns who does.
+    return c.json({ sent: true });
+  });
+
+  // What a link is for, without using it: the page shows it, and asks a new person their name.
+  app.post('/v1/auth/email/check', async (c) => {
+    if (!mailer) return emailOff(c);
+    const { token } = (await c.req.json().catch(() => ({}))) as { token?: unknown };
+    const link = typeof token === 'string' ? await peekEmailLink(db, token) : null;
+    if (!link) return refuse(c, 400, 'this link has been used or has expired; ask for a new one');
+    const adding = link.personId ? await getPerson(db, link.personId) : null;
+    return c.json({ email: link.email, known: Boolean(link.known), adding: adding ? { displayName: adding.displayName } : null, suggestedName: cleanDisplayName(link.email.split('@')[0]) });
+  });
+
+  app.post('/v1/auth/email/verify', async (c) => {
+    if (!mailer) return emailOff(c);
+    const input = (await c.req.json().catch(() => ({}))) as { token?: unknown; name?: unknown };
+    if (typeof input.token !== 'string') return refuse(c, 400, 'give the token from the link');
+    const peeked = await peekEmailLink(db, input.token);
+    if (!peeked) return refuse(c, 400, 'this link has been used or has expired; ask for a new one');
+    const current = await signedIn(c);
+    const name = cleanDisplayName(input.name);
+    // A new person is asked their name before the link is used up.
+    if (!peeked.personId && !peeked.known && !current && !name) return refuse(c, 400, 'a name of 1 to 60 characters');
+    const link = await takeEmailLink(db, input.token);
+    if (!link) return refuse(c, 400, 'this link has been used or has expired; ask for a new one');
+
+    // Adding an address to the account that asked for it: never switches who this browser is signed in as.
+    if (link.personId) {
+      if (link.known && link.known.id !== link.personId) return refuse(c, 400, 'that address already signs into another account');
+      if (current && current.id !== link.personId) return refuse(c, 400, 'this link adds the address to another account; sign out first');
+      await addEmail(db, link.personId, link.email);
+      return c.json({ added: link.email, person: await getPerson(db, link.personId) });
+    }
+    // Signing in: the address's own account; signed in already, the address joins that account; else a new one.
+    if (link.known && current && link.known.id !== current.id) return refuse(c, 400, 'that address signs into another account; sign out first');
+    const person = link.known ?? current ?? (await createPerson(db, name!));
+    await addEmail(db, person.id, link.email);
+    await signIn(c, person.id);
+    return c.json({ person: await getPerson(db, person.id), created: !link.known && !current }, !link.known && !current ? 201 : 200);
+  });
+
+  // Notifications by email of what the person follows: off, a daily digest, or at once.
+  app.post('/v1/auth/notifications', async (c) => {
+    const person = await signedIn(c);
+    if (!person) return refuse(c, 401, 'sign in first');
+    if (!mailer) return emailOff(c);
+    const input = (await c.req.json().catch(() => ({}))) as { mode?: NotificationMode; email?: unknown; lang?: unknown };
+    try {
+      const setting = await setNotifications(catalog, person.id, { mode: input.mode as NotificationMode, email: cleanEmail(input.email), lang: langOf(input.lang) });
+      return c.json({ notifications: setting });
+    } catch (error) {
+      return refuse(c, 400, error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  // The link in every notification: stops them, with no sign-in (and mail programs' one-click unsubscribe).
+  app.post('/v1/auth/email/unsubscribe', async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { token?: unknown };
+    const token = typeof body.token === 'string' ? body.token : (c.req.query('token') ?? '');
+    return c.json({ stopped: await unsubscribe(db, token) });
   });
 
   app.post('/v1/auth/sign-out', async (c) => {

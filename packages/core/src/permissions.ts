@@ -68,6 +68,34 @@ export function canApprove(reviewer: Account, change: { author: string; types: R
   return { ok: true };
 }
 
+/**
+ * Uploads' new-account hold and rate limits (the plan, section 11: "rate
+ * limits and new-account holds on uploads"). A person who signed up less
+ * than a day ago waits before adding files, unless a suggestion of theirs
+ * has already been approved; after that, contributors add so many files a
+ * day, trusted people more, stewards without limit.
+ */
+export const UPLOAD_HOLD_HOURS = 24;
+export const UPLOAD_LIMITS = {
+  contributor: { files: 20, bytes: 1024 * 1024 * 1024 },
+  trusted: { files: 200, bytes: 10 * 1024 * 1024 * 1024 },
+} as const;
+
+export function uploadAllowance(
+  account: Account,
+  seen: { accountAgeHours: number | null; filesToday: number; bytesToday: number; adding: number },
+): { ok: true } | { ok: false; reason: 'hold' | 'files' | 'bytes' | 'suspended'; message: string } {
+  if (account.suspended_at !== null) return { ok: false, reason: 'suspended', message: 'this account is suspended' };
+  if (account.is_steward || account.is_bot) return { ok: true };
+  if (seen.accountAgeHours !== null && seen.accountAgeHours < UPLOAD_HOLD_HOURS && account.approved_count === 0) {
+    return { ok: false, reason: 'hold', message: `new accounts add files ${UPLOAD_HOLD_HOURS} hours after signing up (or once a suggestion of theirs is approved); suggesting fixes works now` };
+  }
+  const limit = UPLOAD_LIMITS[account.trust];
+  if (seen.filesToday >= limit.files) return { ok: false, reason: 'files', message: `at most ${limit.files} files a day; please try again tomorrow` };
+  if (seen.bytesToday + seen.adding > limit.bytes) return { ok: false, reason: 'bytes', message: `at most ${Math.round(limit.bytes / 1024 / 1024)} MB a day; please try again tomorrow` };
+  return { ok: true };
+}
+
 /** Whether a change may go live before review: a trusted person's line fixes, in sets that are all open. */
 export function mayGoLive(author: Account, change: { types: ReadonlySet<string>; sets: SetInfo[] }): boolean {
   if (author.is_bot || author.suspended_at !== null) return false;

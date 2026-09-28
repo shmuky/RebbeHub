@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, getDerivations, getFile, getPageFix, listWebhooks, recordingTranscript, scanText, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, UnresolvedConflictError, adviceFor, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, getDerivations, getFile, getPageFix, listWebhooks, recordingTranscript, requestTakedown, scanText, type ChangesetStatus, type Mailer, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
@@ -35,6 +35,8 @@ export interface ApiOptions {
   /** Where the texts of seforim are kept (`texts/<sha256>` in the public bucket), and where they are first copied from: Sichos-Kodesh's published archive. */
   texts?: { store: FileStore; writer: { put(key: string, bytes: ArrayBuffer, mime: string): Promise<void> }; from?: FileStore };
   version?: string;
+  /** Sends email (Resend): sign-in links, and a receipt to whoever asks for a takedown. Unset, no email is sent. */
+  mailer?: Mailer;
 }
 
 /** A byte range asked for with `Range: bytes=…`. */
@@ -133,7 +135,7 @@ export function createApp(options: ApiOptions): Hono {
     c.header('X-Content-Type-Options', 'nosniff');
   });
 
-  if (options.auth) authRoutes(app, catalog, options.auth);
+  if (options.auth) authRoutes(app, catalog, options.mailer && !options.auth.mailer ? { ...options.auth, mailer: options.mailer } : options.auth);
   adminRoutes(app, catalog, signedIn);
   uploadRoutes(app, catalog, signedIn, options.uploads);
 
@@ -522,6 +524,34 @@ export function createApp(options: ApiOptions): Hono {
     return c.json({ id }, 201);
   });
 
+  // A takedown request (no account needed): a Report in the set's inbox, with who asked kept for stewards alone.
+  app.post('/v1/takedowns', async (c) => {
+    const input = await body<{ target?: string; name?: string; email?: string; relation?: string; statement?: string; captcha?: string }>(c);
+    const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim();
+    if (options.verifyCaptcha && !(await options.verifyCaptcha(input.captcha, ip))) throw new HttpError(403, 'the captcha was not solved');
+    const reporterHash = ip ? await sha256Hex(`${options.reportSalt ?? 'rebbehub'}\u0000${ip}`) : undefined;
+    if (reporterHash) {
+      const { rows } = await catalog.db.query<{ n: number }>("SELECT count(*)::int AS n FROM report WHERE reporter_hash = $1 AND created_at > now() - interval '1 hour'", [reporterHash]);
+      if ((rows[0]?.n ?? 0) >= (options.reportsPerHour ?? 10)) throw new HttpError(429, 'too many requests from here in the last hour; please try again later');
+    }
+    const id = await requestTakedown(catalog, {
+      target: input.target ?? '',
+      name: input.name ?? '',
+      email: input.email ?? '',
+      relation: input.relation as TakedownRelation,
+      statement: input.statement ?? '',
+      reporterHash,
+    });
+    // A receipt, so they know it arrived and when to expect an answer (best effort: the request is kept either way).
+    if (options.mailer && input.email) {
+      const text = `We received your takedown request (number ${id}) for: ${input.target}\n\nA steward will answer within ${TAKEDOWN_RESPONSE_DAYS} days. Until then nothing is deleted; if it is taken down, it stops being shown at once.\n\nRebbeHub`;
+      await options.mailer
+        .send({ to: input.email.trim(), subject: `RebbeHub: takedown request ${id} received`, text, html: `<p>${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>` })
+        .catch((error) => console.error('takedown receipt', error));
+    }
+    return c.json({ id, answerWithinDays: TAKEDOWN_RESPONSE_DAYS }, 201);
+  });
+
   // Reports are private: stewards read them all, a set's keepers read their set's.
   app.get('/v1/reports', async (c) => {
     const by = await signedIn(c);
@@ -571,7 +601,9 @@ export function createApp(options: ApiOptions): Hono {
     // Names instead of ids, and whether the person asking may approve it (to show the buttons or not).
     const names = async (ids: string[]) => Object.fromEntries(await Promise.all([...new Set(ids)].map(async (id) => [id, (await catalog.account(id))?.display_name ?? id])));
     const viewer = (await authenticate?.(c)) ?? null;
-    const mayApprove = viewer && view.changeset.status === 'open' ? await catalog.mayApprove(view.changeset.id, viewer) : { ok: false as const, reason: viewer ? `this suggestion is ${view.changeset.status}` : 'sign in to review' };
+    // Open, or live and waiting to be reviewed after: then someone may decide it.
+    const decidable = view.changeset.status === 'open' || view.changeset.post_review === 'pending';
+    const mayApprove = viewer && decidable ? await catalog.mayApprove(view.changeset.id, viewer) : { ok: false as const, reason: viewer ? `this suggestion is ${view.changeset.status}` : 'sign in to review' };
     // The files it adds, where each may be heard or read (null while its rights keep it private), so the reviewer checks it first.
     const base = options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
     const files: Record<string, { url: string | null; mime: string; bytes: number; rights: string }> = {};
@@ -588,6 +620,8 @@ export function createApp(options: ApiOptions): Hono {
       mayApprove: mayApprove.ok,
       mayApproveReason: mayApprove.ok ? null : mayApprove.reason,
       mine: viewer === view.changeset.author,
+      // The reviewer's assist: a machine's summary, advice only, marked as such wherever it is shown.
+      advice: await adviceFor(catalog.db, view.changeset.id).then((a) => (a ? { ...a, machine: true } : null)),
     });
   });
 
@@ -641,6 +675,14 @@ export function createApp(options: ApiOptions): Hono {
     const input = await body<{ note?: string }>(c);
     await catalog.sendBack(intParam(c.req.param('id'), 'id')!, by, input.note ?? '');
     return c.json({ ok: true });
+  });
+
+  // A live change (a trusted person's line fix in an open set), reviewed after it went live: kept, or undone.
+  app.post('/v1/suggestions/:id/review-live', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ verdict?: 'approve' | 'revert'; note?: string }>(c);
+    if (input.verdict !== 'approve' && input.verdict !== 'revert') throw new HttpError(400, 'verdict is approve (keep it) or revert (undo it)');
+    return c.json(await catalog.reviewLive(intParam(c.req.param('id'), 'id')!, by, input.verdict, input.note?.trim().slice(0, 2000) || undefined));
   });
 
   app.post('/v1/suggestions/:id/withdraw', async (c) => {

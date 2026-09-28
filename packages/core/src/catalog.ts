@@ -1279,9 +1279,14 @@ export class Catalog {
    * What changed lately in what a person follows: the item itself, and what
    * belongs to it (a sefer's sichos, a farbrengen's recordings, a set's
    * items). One line per merge, with how many of the followed things it
-   * changed; changes from before they followed are left out.
+   * changed; changes from before they followed are left out. For email
+   * notifications: only merges after `afterSeq`, and none of the person's own.
    */
-  async followFeed(accountId: string, limit = 20): Promise<Array<{ seq: number; at: string; message: string; authorName: string; authorIsBot: boolean; entityId: string; changes: number }>> {
+  async followFeed(
+    accountId: string,
+    limit = 20,
+    options: { afterSeq?: number; notOwn?: boolean } = {},
+  ): Promise<Array<{ seq: number; at: string; message: string; authorName: string; authorIsBot: boolean; entityId: string; changes: number }>> {
     const { rows } = await this.db.query<{ seq: string; at: Date | string; message: string; author_name: string; author_is_bot: boolean; entity_id: string; changes: number }>(
       `WITH targets AS (SELECT target_id, created_at FROM follow WHERE account_id = $1 AND target_kind IN ('entity', 'set')),
             touched AS (
@@ -1293,10 +1298,10 @@ export class Catalog {
             )
        SELECT c.seq, c.at, c.message, a.display_name AS author_name, a.is_bot AS author_is_bot, min(x.entity_id) AS entity_id, count(*)::int AS changes
        FROM touched x JOIN commit c ON c.seq = x.commit_seq JOIN changeset cs ON cs.id = c.changeset_id JOIN account a ON a.id = cs.author
-       WHERE c.at >= x.created_at
+       WHERE c.at >= x.created_at AND c.seq > $2 AND NOT ($3 AND cs.author = $1)
        GROUP BY c.seq, c.at, c.message, a.display_name, a.is_bot
        ORDER BY c.seq DESC LIMIT ${Math.min(Math.max(limit, 1), 100)}`,
-      [accountId],
+      [accountId, options.afterSeq ?? 0, options.notOwn ?? false],
     );
     return rows.map((r) => ({ seq: Number(r.seq), at: new Date(r.at).toISOString(), message: r.message, authorName: r.author_name, authorIsBot: r.author_is_bot, entityId: r.entity_id, changes: r.changes }));
   }

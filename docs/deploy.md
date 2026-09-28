@@ -77,7 +77,15 @@ In **rebbehub-api → Settings → Variables and Secrets**:
 - `REPORT_SALT` - any long random string (`openssl rand -hex 32`); hashes
   reporters' addresses for rate limits;
 - `TURNSTILE_SECRET` - a [Turnstile](https://developers.cloudflare.com/turnstile/)
-  secret, for a captcha on anonymous reports.
+  secret, for a captcha on anonymous reports;
+- `RESEND_API_KEY` - a [Resend](https://resend.com) API key, for signing in
+  by email link, email updates and takedown receipts (and optionally the
+  variable `EMAIL_FROM`); see [accounts](accounts.md#email-updates);
+- `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_TOKEN` - Workers AI, for the
+  reviewer's advice on suggestions; see
+  [accounts](accounts.md#the-reviewers-advice).
+
+Each is off until its secret is set; nothing on the site shows it before.
 
 ### 6. Fill the catalog
 

@@ -71,7 +71,34 @@ export const OPENAPI = {
       get: { summary: 'Suggestions, by status or author', parameters: [q('status', 'draft, open, merged, sent_back, withdrawn'), q('author', 'An account id'), q('postReview', 'true: live changes awaiting review')], responses: ok('Suggestions') },
       post: { summary: 'Start a suggestion', security: signedIn, requestBody: json({ type: 'object', required: ['title'], properties: { title: { type: 'string' }, description: { type: 'string' }, project: { type: 'integer' } } }), responses: { '201': { description: 'The draft' } } },
     },
-    '/v1/suggestions/{id}': { get: { summary: 'The review view: each item before and after, and clashes with main', parameters: [numParam('id')], responses: ok('The suggestion') } },
+    '/v1/suggestions/{id}': { get: { summary: "The review view: each item before and after, clashes with main, and the reviewer's advice (machine-written, `machine: true`)", parameters: [numParam('id')], responses: ok('The suggestion') } },
+    '/v1/suggestions/{id}/review-live': {
+      post: {
+        summary: 'Review a live change after it went live: keep it (approve) or undo it (revert)',
+        security: signedIn,
+        parameters: [numParam('id')],
+        requestBody: json({ type: 'object', required: ['verdict'], properties: { verdict: { enum: ['approve', 'revert'] }, note: { type: 'string' } } }),
+        responses: ok('Kept, or the suggestion that undoes it'),
+      },
+    },
+    '/v1/takedowns': {
+      post: {
+        summary: 'Ask for a file to stop being served (no account needed); stewards answer within 3 days',
+        requestBody: json({
+          type: 'object',
+          required: ['target', 'name', 'email', 'relation', 'statement'],
+          properties: {
+            target: { type: 'string', description: 'The address of its page on the site, an id, or the file address' },
+            name: { type: 'string' },
+            email: { type: 'string' },
+            relation: { enum: ['rights-holder', 'family', 'representative', 'other'] },
+            statement: { type: 'string', minLength: 10, maxLength: 4000 },
+            captcha: { type: 'string' },
+          },
+        }),
+        responses: { '201': { description: 'The request id' }, '429': { description: 'Too many requests from one address' } },
+      },
+    },
     '/v1/suggestions/{id}/items': {
       put: {
         summary: 'Add or change one item in a draft suggestion',

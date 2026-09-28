@@ -2392,6 +2392,66 @@ a.volume:hover {
   justify-self: start;
 }
 
+/* Choices within the account form (email updates): a plain line each, not a heavy label. */
+.signin-form label.choice {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 400;
+}
+
+.signin-form label.choice input {
+  min-height: 0;
+  padding: 0;
+}
+
+.signin-form select,
+.takedown-form input,
+.takedown-form select,
+.takedown-form textarea {
+  min-height: 40px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
+}
+
+/* The public takedown form. */
+.takedown-form {
+  display: grid;
+  gap: 12px;
+  max-width: 560px;
+}
+
+.takedown-form label {
+  display: grid;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.takedown-form button {
+  justify-self: start;
+}
+
+/* The reviewer's advice on a suggestion: set apart, marked as a machine's. */
+.advice b {
+  display: block;
+  font-family: var(--font-display);
+}
+
+.advice p {
+  margin: 4px 0 0;
+}
+
+.advice small {
+  display: block;
+  margin-block-start: 6px;
+  color: var(--muted);
+}
+
 /* A small action inside a heading ("change name"), set as a link, not a button. */
 .link-button {
   background: none;

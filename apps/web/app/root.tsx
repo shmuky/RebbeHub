@@ -65,7 +65,7 @@ function Footer({ lang }: { lang: Lang }) {
         <p>{t(lang, 'footerOpen')}</p>
         <p>
           <a href="https://github.com/shmuky/RebbeHub">{t(lang, 'code')}</a> · <a href="https://github.com/shmuky/RebbeHub/blob/main/CONTRIBUTING.md">{t(lang, 'help')}</a> ·{' '}
-          <Link to={href('/about', lang)}>{t(lang, 'about')}</Link>
+          <Link to={href('/about', lang)}>{t(lang, 'about')}</Link> · <Link to={href('/takedown', lang)}>{t(lang, 'takedownTitle')}</Link>
         </p>
       </div>
     </footer>

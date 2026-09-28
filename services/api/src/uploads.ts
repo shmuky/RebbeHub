@@ -1,5 +1,6 @@
 import type { Context, Hono } from 'hono';
-import { getFile, registerFile, type Catalog, type Json } from '@rebbehub/core';
+import { getFile, registerFile, uploadAllowance, type Catalog, type Json } from '@rebbehub/core';
+import { one } from '@rebbehub/db';
 import type { EntityId, FileClass, Licence } from '@rebbehub/model';
 import { isEntityId, mayServe } from '@rebbehub/model';
 import { HttpError } from './app.js';
@@ -72,6 +73,19 @@ export function uploadRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context)
     if (what === 'scan' && mime !== 'application/pdf') throw new HttpError(400, 'a scan is a PDF');
     const declared = Number(c.req.header('Content-Length') ?? 0);
     if (declared > maxBytes) throw new HttpError(422, `files up to ${Math.round(maxBytes / 1024 / 1024)} MB for now`);
+
+    // New accounts wait a day before adding files, and everyone adds so many a day (core, permissions.ts).
+    const account = await catalog.account(by);
+    if (!account) throw new HttpError(403, 'sign in to do this');
+    const seen = await one<{ age_hours: number | null; files: number; bytes: string | number }>(
+      catalog.db,
+      `SELECT (SELECT extract(epoch FROM now() - p.created_at) / 3600 FROM auth.person p WHERE p.id = $1)::float8 AS age_hours,
+              count(s.*)::int AS files, coalesce(sum(f.bytes), 0)::bigint AS bytes
+       FROM file_source s JOIN file f ON f.sha256 = s.sha256 WHERE s.uploaded_by = $1 AND s.created_at > now() - interval '1 day'`,
+      [by],
+    );
+    const allowed = uploadAllowance(account, { accountAgeHours: seen?.age_hours ?? null, filesToday: seen?.files ?? 0, bytesToday: Number(seen?.bytes ?? 0), adding: declared });
+    if (!allowed.ok) throw new HttpError(allowed.reason === 'hold' || allowed.reason === 'suspended' ? 403 : 429, allowed.message);
 
     const item = await catalog.get(target as EntityId);
     if (!item) throw new HttpError(404, `no item ${target}`);
