@@ -14,7 +14,18 @@ the repository through its GitHub app.
 | `rebbehub-web` | `npm run build && npm run build:web` | `npx wrangler deploy -c apps/web/wrangler.toml` |
 
 The API's build migrates the database before its deploy, so the schema is
-always ahead of the code that uses it.
+always ahead of the code that uses it - for builds of `main` only. Cloudflare
+also builds every other branch as a preview; those skip the migration, so
+unmerged code never changes the live database.
+
+Previews need their own deploy command (**Settings → Build → Non-production
+branch deploy command**), since Cloudflare's default runs at the repository
+root, where there is no Wrangler config:
+
+| Worker | Non-production branch deploy command |
+| --- | --- |
+| `rebbehub-api` | `npx wrangler preview -c services/api/wrangler.toml` |
+| `rebbehub-web` | `npx wrangler preview -c apps/web/wrangler.toml` |
 
 ## One-time setup
 
