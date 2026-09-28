@@ -1,19 +1,38 @@
 import { Catalog } from '@rebbehub/core';
 import { connectPostgres } from '@rebbehub/db';
-import { createApp, turnstileVerifier } from './app.js';
+import { createApp, turnstileVerifier, type FileStore } from './app.js';
 
 /**
- * The API on Cloudflare Workers, reaching Postgres (Neon) through
- * Hyperdrive. Each request gets its own connection, which Hyperdrive pools.
- * Set in wrangler.toml: the HYPERDRIVE binding; secrets REPORT_SALT and,
- * for captchas on reports, TURNSTILE_SECRET.
+ * The API on Cloudflare Workers: Postgres (Neon) through Hyperdrive, file
+ * bytes from the public R2 bucket. Each request gets its own connection,
+ * which Hyperdrive pools. Configured in wrangler.toml; secrets REPORT_SALT
+ * and, for captchas on reports, TURNSTILE_SECRET.
  */
+interface R2ObjectBody {
+  body: ReadableStream;
+  size: number;
+}
+
+interface R2Bucket {
+  get(key: string, options?: { range?: { offset: number; length?: number } }): Promise<R2ObjectBody | null>;
+}
+
 interface Env {
   HYPERDRIVE: { connectionString: string };
+  FILES_PUBLIC?: R2Bucket;
   REPORT_SALT?: string;
   TURNSTILE_SECRET?: string;
-  /** The media proxy in front of the public R2 bucket. */
+  /** Where files are served from, when not this Worker (a separate media domain). */
   FILES_BASE_URL?: string;
+}
+
+function r2Store(bucket: R2Bucket): FileStore {
+  return {
+    async get(key, range) {
+      const object = await bucket.get(key, range ? { range } : undefined);
+      return object ? { body: object.body, size: object.size } : null;
+    },
+  };
 }
 
 export default {
@@ -22,8 +41,9 @@ export default {
     const app = createApp({
       catalog: new Catalog(db),
       reportSalt: env.REPORT_SALT,
-      filesBaseUrl: env.FILES_BASE_URL,
       verifyCaptcha: env.TURNSTILE_SECRET ? turnstileVerifier(env.TURNSTILE_SECRET) : undefined,
+      filesBaseUrl: env.FILES_BASE_URL,
+      files: env.FILES_PUBLIC ? r2Store(env.FILES_PUBLIC) : undefined,
     });
     try {
       return await app.fetch(request);

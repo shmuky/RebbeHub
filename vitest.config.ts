@@ -6,14 +6,10 @@ const src = (dir: string) => fileURLToPath(new URL(`./${dir}/src/index.ts`, impo
 // Tests run against each package's source, so nothing has to be built first.
 export default defineConfig({
   resolve: {
-    alias: {
-      '@rebbehub/hebrew': src('packages/hebrew'),
-      '@rebbehub/model': src('packages/model'),
-      '@rebbehub/db': src('packages/db'),
-      '@rebbehub/core': src('packages/core'),
-      '@rebbehub/mirror': src('packages/mirror'),
-      '@rebbehub/importers': src('packages/importers'),
-    },
+    alias: [
+      { find: /^@rebbehub\/db\/pglite$/, replacement: fileURLToPath(new URL('./packages/db/src/pglite.ts', import.meta.url)) },
+      ...['hebrew', 'model', 'db', 'core', 'mirror', 'importers'].map((name) => ({ find: new RegExp(`^@rebbehub/${name}$`), replacement: src(`packages/${name}`) })),
+    ],
   },
   test: {
     include: ['packages/*/tests/**/*.test.ts', 'services/*/tests/**/*.test.ts', 'apps/*/tests/**/*.test.ts'],

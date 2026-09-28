@@ -22,9 +22,36 @@ export interface ApiOptions {
   verifyCaptcha?: (token: string | undefined, ip: string | undefined) => Promise<boolean>;
   /** Reports one address may send per hour. */
   reportsPerHour?: number;
-  /** Where servable files are fetched from: `<filesBaseUrl>/objects/<sha256>` (the media proxy in front of R2). */
+  /** Where servable files are fetched from: `<filesBaseUrl>/objects/<sha256>`. Unset, this API's own address. */
   filesBaseUrl?: string;
+  /** The public bucket's bytes (R2 on Workers). With it, this API serves `/objects/<sha256>` itself, for files whose rights allow. */
+  files?: FileStore;
   version?: string;
+}
+
+/** A byte range asked for with `Range: bytes=…`. */
+export interface ByteRange {
+  offset: number;
+  length?: number;
+}
+
+/** Where file bytes are kept, by key (`objects/<sha256>`): R2 on Workers, anything else in tests. */
+export interface FileStore {
+  get(key: string, range?: ByteRange): Promise<{ body: ReadableStream; size: number } | null>;
+}
+
+/** `bytes=100-199` → { offset: 100, length: 100 }; `bytes=100-` → { offset: 100 }. Null when absent or not one simple range. */
+export function parseRange(header: string | null | undefined, size?: number): ByteRange | null {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header ?? '');
+  if (!match || (match[1] === '' && match[2] === '')) return null;
+  if (match[1] === '') {
+    // The last N bytes.
+    if (size === undefined) return null;
+    const n = Math.min(Number(match[2]), size);
+    return { offset: size - n, length: n };
+  }
+  const offset = Number(match[1]);
+  return match[2] === '' ? { offset } : { offset, length: Number(match[2]) - offset + 1 };
 }
 
 const REPORT_REASONS: readonly ReportReason[] = ['wrong-fact', 'missing-page', 'bad-scan', 'audio-problem', 'wrong-text', 'duplicate', 'rights', 'offensive', 'other'];
@@ -161,8 +188,39 @@ export function createApp(options: ApiOptions): Hono {
     if (!/^[0-9a-f]{64}$/.test(sha256)) throw new HttpError(400, 'a file is named by its sha256');
     const file = await getFile(catalog.db, sha256);
     if (!file) throw new CatalogError('not-found', 'no such file');
-    const served = mayServe(file.rights_state) && file.storage_tier === 'public' && options.filesBaseUrl;
-    return c.json({ sha256, bytes: file.bytes, mime: file.mime, rights: file.rights_state, credit: file.credit, url: served ? `${options.filesBaseUrl}/objects/${sha256}` : null });
+    const base = options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
+    const served = mayServe(file.rights_state) && file.storage_tier === 'public' && base;
+    return c.json({ sha256, bytes: file.bytes, mime: file.mime, rights: file.rights_state, credit: file.credit, url: served ? `${base}/objects/${sha256}` : null });
+  });
+
+  // The media proxy: a file's bytes, only while its rights allow serving it (a takedown stops this at once).
+  app.get('/objects/:sha256', async (c) => {
+    const sha256 = c.req.param('sha256');
+    if (!options.files || !/^[0-9a-f]{64}$/.test(sha256)) throw new CatalogError('not-found', 'no such file');
+    const file = await getFile(catalog.db, sha256);
+    if (!file || !mayServe(file.rights_state) || file.storage_tier !== 'public') throw new CatalogError('not-found', 'this file is not served here');
+    const range = parseRange(c.req.header('range'), file.bytes);
+    if (range && (range.offset >= file.bytes || (range.length !== undefined && (range.length <= 0 || range.offset + range.length > file.bytes)))) {
+      return c.body(null, 416, { 'Content-Range': `bytes */${file.bytes}` });
+    }
+    const object = await options.files.get(`objects/${sha256}`, range ?? undefined);
+    if (!object) throw new CatalogError('not-found', 'the file is listed but its bytes are missing');
+    const headers: Record<string, string> = {
+      'Content-Type': file.mime,
+      'Accept-Ranges': 'bytes',
+      // Named by content, so it never changes; takedowns are enforced here, before the cache is filled again.
+      'Cache-Control': 'public, max-age=86400',
+      ETag: `"${sha256}"`,
+    };
+    if (file.credit) headers['X-Credit'] = encodeURIComponent(file.credit);
+    if (range) {
+      const end = range.length === undefined ? file.bytes - 1 : range.offset + range.length - 1;
+      headers['Content-Range'] = `bytes ${range.offset}-${end}/${file.bytes}`;
+      headers['Content-Length'] = String(end - range.offset + 1);
+      return c.body(object.body, 206, headers);
+    }
+    headers['Content-Length'] = String(file.bytes);
+    return c.body(object.body, 200, headers);
   });
 
   app.get('/v1/entities/:id', async (c) => {

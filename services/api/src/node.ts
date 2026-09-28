@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
 import { Catalog } from '@rebbehub/core';
-import { connectPostgres, openPGlite } from '@rebbehub/db';
+import { connectPostgres } from '@rebbehub/db';
+import { openPGlite } from '@rebbehub/db/pglite';
 import { createApp } from './app.js';
 
 /**

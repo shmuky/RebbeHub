@@ -1,0 +1,91 @@
+name: Deploy
+
+# Every merge to main goes live on Cloudflare: the database is migrated,
+# then the API Worker and the site Worker are deployed. The secrets and
+# variables this needs are in docs/deploy.md; until they are set, the
+# workflow says so and deploys nothing.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time, in order: a newer merge waits rather than cancelling one half done.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Cloudflare
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - name: Check the deploy is configured
+        id: configured
+        run: |
+          missing=""
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DATABASE_URL; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::warning::Not deploying: add the repository secrets$missing (see docs/deploy.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.configured.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.configured.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        if: steps.configured.outputs.ready == 'true'
+        run: npm ci
+      - name: Build
+        if: steps.configured.outputs.ready == 'true'
+        run: |
+          npm run build
+          npm run build:web
+
+      - name: Migrate the database
+        if: steps.configured.outputs.ready == 'true'
+        run: npm run rebbehub -- migrate
+
+      - name: Make sure the R2 buckets and Hyperdrive exist
+        if: steps.configured.outputs.ready == 'true'
+        run: scripts/cloudflare-setup.sh
+
+      - name: Deploy the API
+        if: steps.configured.outputs.ready == 'true'
+        working-directory: services/api
+        env:
+          REPORT_SALT: ${{ secrets.REPORT_SALT }}
+          TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET }}
+        run: |
+          sed -i "s/HYPERDRIVE_ID/${HYPERDRIVE_ID}/" wrangler.toml
+          npx wrangler deploy
+          # Worker secrets, when set in the repository (putting one again is harmless).
+          if [ -n "$REPORT_SALT" ]; then printf '%s' "$REPORT_SALT" | npx wrangler secret put REPORT_SALT; fi
+          if [ -n "$TURNSTILE_SECRET" ]; then printf '%s' "$TURNSTILE_SECRET" | npx wrangler secret put TURNSTILE_SECRET; fi
+
+      - name: Deploy the site
+        if: steps.configured.outputs.ready == 'true'
+        working-directory: apps/web
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: |
+          if [ -n "$SITE_URL" ]; then
+            npx wrangler deploy --var "SITE_URL:${SITE_URL}"
+          else
+            npx wrangler deploy
+          fi
