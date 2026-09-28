@@ -70,6 +70,44 @@ describe('browsing', () => {
     expect((await call('GET', `/v1/entities/batch?ids=${later},rh-zzzzzzzz,${event}`)).body.items.map((i: { id: string }) => i.id)).toEqual([later, event]);
     expect((await call('GET', '/v1/stats')).body.counts).toMatchObject({ event: 3, unit: 2, work: 1, set: 1 });
   });
+
+  it('finds events on several days, on exact dates, and those missing a recording or a text', async () => {
+    const later = await add(catalog, 'mendy', 'keeper', 'event', { ...yudShvat(set), date: '5742-05-12', title: { he: 'י״ב שבט' }, links: [{ kind: 'bilti-mugah', label: { he: 'הנחה' }, url: 'https://example.test/h.pdf' }] });
+    await add(catalog, 'mendy', 'keeper', 'recording', { event, title: { he: 'חלק א' }, url: 'https://example.test/a.mp3', part: 1 });
+    const ids = (body: { items: Array<{ id: string }> }) => body.items.map((i) => i.id);
+    expect(ids((await call('GET', '/v1/events?day=05-10,05-12')).body)).toEqual([event, later]);
+    expect(ids((await call('GET', '/v1/events?dates=5742-05-12')).body)).toEqual([later]);
+    const listed = (await call('GET', '/v1/events?within=5742')).body.items;
+    expect(listed.map((e: { recordings: number }) => e.recordings)).toEqual([1, 0]); // each says how many recordings it has
+    expect(ids((await call('GET', '/v1/events?missing=recordings')).body)).toEqual([later]);
+    expect(ids((await call('GET', '/v1/events?missing=texts')).body)).toEqual([event]);
+    expect(await call('GET', '/v1/events?dates=5742-05')).toMatchObject({ status: 422 });
+    expect(await call('GET', '/v1/events?missing=everything')).toMatchObject({ status: 400 });
+  });
+
+  it("gives a work's volumes, one volume's units, and how many units each work has", async () => {
+    const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'אגרות' }, slug: 'letters', authors: [], genre: 'igros', levels: ['volume', 'letter'], sets: [set] });
+    const volume = (n: string) => ({ level: 'volume', value: n, label: { he: `חלק ${n}` } });
+    await add(catalog, 'mendy', 'keeper', 'unit', { work, position: [volume('1'), { level: 'letter', value: '1' }], order: 'V', label: { he: 'א' } });
+    await add(catalog, 'mendy', 'keeper', 'unit', { work, position: [volume('1'), { level: 'letter', value: '2' }], order: 'k', label: { he: 'ב' } });
+    const inTwo = await add(catalog, 'mendy', 'keeper', 'unit', { work, position: [volume('2'), { level: 'letter', value: '3' }], order: 'r', label: { he: 'ג' } });
+    expect((await call('GET', `/v1/works/${work}/outline`)).body.parts).toEqual([
+      { value: '1', label: { he: 'חלק 1' }, units: 2 },
+      { value: '2', label: { he: 'חלק 2' }, units: 1 },
+    ]);
+    expect((await call('GET', `/v1/works/${work}/parts/2`)).body.items.map((i: { id: string }) => i.id)).toEqual([inTwo]);
+    expect((await call('GET', '/v1/refcounts?field=work&type=unit')).body.counts).toEqual({ [work]: 3 });
+    expect(await call('GET', '/v1/refcounts?field=1;drop')).toMatchObject({ status: 400 });
+  });
+
+  it('sums up the community: who added what, reports waiting, people, and what is missing', async () => {
+    await call('POST', '/v1/reports', { body: { entityId: event, reason: 'wrong-fact' }, ip: '192.0.2.1' });
+    const community = (await call('GET', '/v1/community')).body;
+    expect(community.recent[0]).toMatchObject({ authorName: 'Mendy', mergedBy: 'keeper', mergedByName: 'Set keeper', changes: 1, authorIsBot: false });
+    expect(community.openReports).toBe(1);
+    expect(community.people).toBeGreaterThanOrEqual(2); // mendy, and shmuly who set up the set
+    expect(community.gaps).toEqual({ events: 1, eventsWithoutRecordings: 1, eventsWithoutTexts: 1 });
+  });
 });
 
 describe('the media proxy', () => {

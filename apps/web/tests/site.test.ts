@@ -69,13 +69,14 @@ const get = async (path: string) => {
 };
 
 describe('the public site', () => {
-  it('renders the home page in Hebrew, right to left, with the week, the tabs and the library', async () => {
+  it('renders the home page in Hebrew, right to left, with the week, the tabs and the community', async () => {
     const page = await get('/');
     expect(page.status).toBe(200);
     expect(page.html).toContain('<html lang="he" dir="rtl">');
     expect(page.html).toContain('class="home-parsha"');
     expect(page.html).toContain('התוועדויות'); // the farbrengens tab
-    expect(page.html).toContain(`href="/farbrengens"`); // the sets, in the library
+    expect(page.html).toContain('class="needs"'); // what the community can help with
+    expect(page.html).toContain('href="/help"');
   });
 
   it('renders the same pages in English at ?lang=en, with both languages linked for search engines', async () => {

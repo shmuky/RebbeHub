@@ -1,8 +1,8 @@
-import { ChevronLeft, ChevronRight, Clock, FileText, Pause, PenLine, Play, Video } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, FileText, Music, Pause, PenLine, Play, Video } from 'lucide-react';
 import { Link } from 'react-router';
 import { dateKeyToHDate } from '@rebbehub/hebrew';
 import type { LocalName } from '@rebbehub/model';
-import { EventRows, eventData, type EventItem } from '../components/EventRow.js';
+import { eventData, type EventItem } from '../components/EventRow.js';
 import { ItemList } from '../components/ItemLink.js';
 import type { Entity } from '../lib/api.js';
 import { dateLabel, yearLabel } from '../lib/dates.js';
@@ -29,15 +29,11 @@ interface EventLink {
   url: string;
 }
 
-function whenLine(date: string | undefined, lang: Lang): string {
-  if (!date) return '';
-  const parts: string[] = [];
-  const h = dateKeyToHDate(date);
-  if (h) parts.push(lang === 'he' ? `יום ${WEEKDAYS_HE[h.getDay()]}` : WEEKDAYS_EN[h.getDay()]!);
-  parts.push(dateLabel(date, lang));
-  const parsha = h ? parshaOf(date, lang) : null;
-  if (parsha) parts.push(`${t(lang, 'parshas')} ${parsha}`);
-  return parts.join(' · ');
+/** `התוועדות · יום חמישי` */
+function kicker(date: string | undefined, lang: Lang): string {
+  const h = date ? dateKeyToHDate(date) : null;
+  const day = h ? (lang === 'he' ? `יום ${WEEKDAYS_HE[h.getDay()]}` : WEEKDAYS_EN[h.getDay()]!) : '';
+  return [t(lang, 'farbrengen'), day].filter(Boolean).join(' · ');
 }
 
 const KIND_KEYS = {
@@ -50,43 +46,56 @@ const KIND_KEYS = {
 } as const;
 
 function Texts({ links, lang }: { links: EventLink[]; lang: Lang }) {
-  const groups = new Map<string, EventLink[]>();
-  for (const l of links) groups.set(l.kind, [...(groups.get(l.kind) ?? []), l]);
   return (
     <section>
       <h2 className="section-header">{t(lang, 'texts')}</h2>
-      {[...groups.entries()].map(([kind, list]) => (
-        <div key={kind} className="contents-group">
-          <h3>{t(lang, KIND_KEYS[kind as keyof typeof KIND_KEYS] ?? 'kind_other')}</h3>
-          <ul className="card-list rows">
-            {list.map((l) => (
-              <li key={l.url}>
-                <a className="row" href={l.url} target="_blank" rel="noopener">
-                  <span className="row-icon" aria-hidden="true">
-                    <FileText size={18} />
-                  </span>
-                  <span className="row-main">
-                    <span className="row-title">{nameOf(l.label, lang)}</span>
-                    <span className="row-sub">{t(lang, 'openPdf')}</span>
-                  </span>
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+      <ul className="docs">
+        {links.map((l) => (
+          <li key={l.url}>
+            <a className="doc" href={l.url} target="_blank" rel="noopener">
+              <span className="doc-page" aria-hidden="true">
+                <FileText size={22} />
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+              </span>
+              <b>{nameOf(l.label, lang)}</b>
+              <small>{t(lang, KIND_KEYS[l.kind as keyof typeof KIND_KEYS] ?? 'kind_other')}</small>
+            </a>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
+
+/** Parts shown before "all parts". */
+const SHOWN = 6;
 
 function Recordings({ entity, recordings, sources, lang }: { entity: Entity; recordings: Entity[]; sources: Record<string, string | null>; lang: Lang }) {
   const player = usePlayer();
   const tracks = tracksOf(entity, recordings, lang, sources);
   if (!tracks.length) return null;
   const mine = player.current !== null && tracks.some((tr) => tr.id === player.current!.id);
+  // One part of the playlist; the first few show, the rest open with "all parts".
+  const part = (track: (typeof tracks)[number], i: number) => {
+    const active = player.current?.id === track.id;
+    return (
+      <li key={track.id}>
+        <button type="button" className={active ? 'part active' : 'part'} onClick={() => (active ? player.toggle() : player.play(tracks, i))} aria-current={active ? 'true' : undefined}>
+          <span className="part-no">{active && player.playing ? <Pause size={14} /> : i + 1}</span>
+          <span className="part-title">{track.title}</span>
+          {track.durationMs ? <span className="part-time">{clock(track.durationMs / 1000)}</span> : null}
+        </button>
+      </li>
+    );
+  };
   const videos = recordings.flatMap((r) => (r.data as unknown as { videos?: Array<{ url: string; startMs?: number }> }).videos ?? []);
   return (
-    <section id="listen">
+    <section id="listen" className="listen-card">
       <div className="playlist-header">
         <button type="button" className="play-button" onClick={() => (mine ? player.toggle() : player.play(tracks))} aria-label={mine && player.playing ? t(lang, 'pause') : t(lang, 'playAll')}>
           {mine && player.playing ? <Pause size={22} /> : <Play size={22} />}
@@ -99,20 +108,17 @@ function Recordings({ entity, recordings, sources, lang }: { entity: Entity; rec
           </span>
         </div>
       </div>
-      <ol className="part-list">
-        {tracks.map((track, i) => {
-          const active = player.current?.id === track.id;
-          return (
-            <li key={track.id}>
-              <button type="button" className={active ? 'part active' : 'part'} onClick={() => (active ? player.toggle() : player.play(tracks, i))} aria-current={active ? 'true' : undefined}>
-                <span className="part-no">{active && player.playing ? <Pause size={14} /> : i + 1}</span>
-                <span className="part-title">{track.title}</span>
-                {track.durationMs ? <span className="part-time">{clock(track.durationMs / 1000)}</span> : null}
-              </button>
-            </li>
-          );
-        })}
-      </ol>
+      <ol className="part-list">{tracks.slice(0, SHOWN).map(part)}</ol>
+      {tracks.length > SHOWN ? (
+        <details className="more">
+          <summary className="more-link">
+            {t(lang, 'allParts')} ({tracks.length})
+          </summary>
+          <ol className="part-list" start={SHOWN + 1}>
+            {tracks.slice(SHOWN).map((track, i) => part(track, i + SHOWN))}
+          </ol>
+        </details>
+      ) : null}
       {videos.length ? (
         <ul className="pills" style={{ marginTop: 12 }}>
           {videos.map((v, i) => (
@@ -161,6 +167,7 @@ export function EventPage({ entity, view, lang }: { entity: Entity; view: ItemVi
   const length = totalLength(recordings, lang);
   const hasHanacha = links.some((l) => l.kind === 'bilti-mugah');
   const hasMugah = links.some((l) => l.kind === 'mugah');
+  const parsha = d.date ? parshaOf(d.date, lang) : null;
   const previous = view.lists.previous?.[0] as EventItem | undefined;
   const following = view.lists.following?.[0] as EventItem | undefined;
   return (
@@ -175,30 +182,33 @@ export function EventPage({ entity, view, lang }: { entity: Entity; view: ItemVi
           </li>
         ) : null}
       </ol>
-      <h1>{nameOf(d.title, lang)}</h1>
-      <p className="event-date">{whenLine(d.date, lang)}</p>
-      {length || hasHanacha || hasMugah ? (
-        <ul className="pills">
+      <header className="event-hero">
+        <p className="event-hero-kicker">{kicker(d.date, lang)}</p>
+        <h1>{nameOf(d.title, lang)}</h1>
+        {d.date ? <p className="event-hero-date">{dateLabel(d.date, lang)}</p> : null}
+        <ul className="event-hero-chips">
+          {parsha ? (
+            <li>
+              {t(lang, 'parshas')} {parsha}
+            </li>
+          ) : null}
           {length ? (
-            <li className="pill">
-              <Clock size={14} aria-hidden="true" />
-              {length}
+            <li>
+              <Clock size={13} aria-hidden="true" /> {length}
             </li>
           ) : null}
           {hasHanacha ? (
-            <li className="pill">
-              <FileText size={14} aria-hidden="true" />
-              {t(lang, 'hanacha')}
+            <li>
+              <FileText size={13} aria-hidden="true" /> {t(lang, 'hanacha')}
             </li>
           ) : null}
           {hasMugah ? (
-            <li className="pill">
-              <PenLine size={14} aria-hidden="true" />
-              {t(lang, 'kind_mugah')}
+            <li>
+              <PenLine size={13} aria-hidden="true" /> {t(lang, 'kind_mugah')}
             </li>
           ) : null}
         </ul>
-      ) : null}
+      </header>
 
       <Recordings entity={entity} recordings={recordings} sources={sources} lang={lang} />
       {links.length ? <Texts links={links} lang={lang} /> : null}
@@ -213,15 +223,16 @@ export function EventPage({ entity, view, lang }: { entity: Entity; view: ItemVi
       {view.lists.otherYears?.length ? (
         <section>
           <h2 className="section-header">{t(lang, 'sameDateOtherYears')}</h2>
-          <EventRows events={(view.lists.otherYears as EventItem[]).slice(0, 10)} sub={(e) => yearLabel(Number(String(eventData(e).date).slice(0, 4)), lang)} />
-          {view.lists.otherYears.length > 10 ? (
-            <details className="more">
-              <summary className="more-link">
-                {t(lang, 'moreResults')} ({view.lists.otherYears.length - 10})
-              </summary>
-              <EventRows events={(view.lists.otherYears as EventItem[]).slice(10)} sub={(e) => yearLabel(Number(String(eventData(e).date).slice(0, 4)), lang)} />
-            </details>
-          ) : null}
+          <ul className="pills year-pills">
+            {(view.lists.otherYears as EventItem[]).map((e) => (
+              <li key={e.id}>
+                <Link className="pill" to={href(itemPath(e), lang)} title={nameOf(eventData(e).title, lang)}>
+                  {yearLabel(Number(String(eventData(e).date).slice(0, 4)), lang)}
+                  {e.recordings ? <Music size={12} aria-hidden="true" /> : null}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
 

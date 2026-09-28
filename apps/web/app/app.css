@@ -1364,3 +1364,979 @@ details.report summary {
 .unchecked {
   color: var(--machine);
 }
+
+/* ------------------------------------------------------------------ library */
+
+.library-search {
+  margin: 4px 0 8px;
+}
+
+.rebbeim {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  list-style: none;
+  margin: 0 -20px;
+  padding: 2px 20px 6px;
+}
+
+.rebbeim::-webkit-scrollbar,
+.books:not(.grid)::-webkit-scrollbar {
+  display: none;
+}
+
+.rebbe {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 72px;
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.25;
+}
+
+.portrait {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 700;
+  flex: none;
+}
+
+.shelves {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.shelf {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 96px;
+  height: 100%;
+  padding: 14px;
+  border-radius: 16px;
+  color: var(--fg);
+  text-decoration: none;
+  background: color-mix(in srgb, var(--shelf) 13%, var(--bg));
+  border-inline-start: 4px solid var(--shelf);
+}
+
+.shelf:hover {
+  background: color-mix(in srgb, var(--shelf) 20%, var(--bg));
+}
+
+.shelf b {
+  font-size: 1.0625rem;
+}
+
+.shelf small {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.books {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  list-style: none;
+  margin: 0 -20px;
+  padding: 2px 20px 8px;
+}
+
+.books.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 16px 12px;
+  overflow: visible;
+  margin: 0;
+  padding: 0;
+}
+
+.book {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100px;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.books.grid .book {
+  width: auto;
+}
+
+.cover {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  aspect-ratio: 5 / 7;
+  padding: 10px 10px 12px;
+  border-radius: 4px 10px 10px 4px;
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  line-height: 1.2;
+  box-shadow:
+    inset 7px 0 0 rgb(0 0 0 / 0.16),
+    0 2px 6px rgb(0 0 0 / 0.12);
+  overflow: hidden;
+}
+
+html[dir='rtl'] .cover {
+  border-radius: 10px 4px 4px 10px;
+  box-shadow:
+    inset -7px 0 0 rgb(0 0 0 / 0.16),
+    0 2px 6px rgb(0 0 0 / 0.12);
+}
+
+.cover::after {
+  content: '';
+  position: absolute;
+  inset-inline: 10px;
+  top: 12px;
+  height: 2px;
+  background: rgb(255 255 255 / 0.35);
+  border-radius: 2px;
+}
+
+.cover-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.book:hover .cover {
+  filter: brightness(1.08);
+}
+
+.book-meta {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.book.large {
+  width: 116px;
+  flex: none;
+}
+
+/* A sefer's or a shelf's header: its cover beside its name. */
+.item-hero {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin: 8px 0 12px;
+}
+
+.item-hero .cover {
+  width: 104px;
+  flex: none;
+  font-size: 1rem;
+}
+
+.item-hero h1 {
+  margin-bottom: 4px;
+}
+
+.item-hero .portrait {
+  width: 84px;
+  height: 84px;
+  font-size: 30px;
+}
+
+/* Tabs within a page, GitHub-style: contents, printings, history. */
+.page-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  list-style: none;
+  margin: 14px -20px 8px;
+  padding: 0 20px 4px;
+}
+
+.page-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.page-tabs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--fg);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.page-tabs a[aria-current='page'] {
+  background: var(--fg);
+  color: var(--bg);
+}
+
+.page-tabs .count {
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.volumes {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.volume {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+a.volume:hover {
+  background: var(--card-hover);
+}
+
+.volume small {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.8125rem;
+}
+
+.callout {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px;
+  margin: 14px 0;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--tone, #9a6b00) 13%, var(--bg));
+}
+
+.callout b {
+  display: block;
+}
+
+.callout p {
+  margin: 2px 0 8px;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.callout .button {
+  min-height: 34px;
+  padding: 4px 14px;
+  font-size: 0.8125rem;
+  background: var(--tone, #9a6b00);
+  color: #fff;
+}
+
+.callout-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  color: var(--tone, #9a6b00);
+}
+
+/* ------------------------------------------------------------------ community */
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.section-header a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.tasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.task {
+  margin: 0 0 10px;
+}
+
+.task > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.progress {
+  display: block;
+  height: 6px;
+  margin: 8px 0 4px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.08);
+  overflow: hidden;
+}
+
+.progress i {
+  display: block;
+  height: 100%;
+  background: var(--tone, var(--accent));
+  border-radius: inherit;
+}
+
+.feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.feed li {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+
+.feed li + li {
+  border-top: 1px solid var(--border);
+}
+
+.feed small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.who {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.who.bot {
+  background: color-mix(in srgb, #23466e 14%, var(--bg));
+  color: #23466e;
+}
+
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.stat-tiles a {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.stat-tiles a:hover {
+  background: var(--card-hover);
+}
+
+.stat-tiles b {
+  font-size: 1.25rem;
+}
+
+.stat-tiles span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+/* ------------------------------------------------------------------ farbrengen page */
+
+.event-hero {
+  margin: 8px 0 14px;
+  padding: 18px 18px 16px;
+  border-radius: 22px;
+  background: linear-gradient(160deg, #16744a, #0f5236);
+  color: #fff;
+}
+
+.event-hero h1 {
+  font-size: 2rem;
+  margin: 2px 0 4px;
+}
+
+.event-hero-kicker {
+  margin: 0;
+  font-size: 0.8125rem;
+  opacity: 0.8;
+}
+
+.event-hero-date {
+  margin: 0;
+  opacity: 0.92;
+}
+
+.event-hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.event-hero-chips li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.16);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.listen-card {
+  padding: 4px 16px 8px;
+  border-radius: 18px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.listen-card .playlist-header {
+  margin-top: 12px;
+}
+
+.listen-card .part {
+  margin-inline: -8px;
+  width: calc(100% + 16px);
+}
+
+.docs {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  list-style: none;
+  margin: 0 -20px;
+  padding: 2px 20px 8px;
+}
+
+.docs::-webkit-scrollbar {
+  display: none;
+}
+
+.doc {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 132px;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.doc-page {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  height: 168px;
+  padding: 14px 12px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.06);
+}
+
+.doc-page i {
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  background: #dcd8cf;
+}
+
+.doc-page i:nth-child(3n) {
+  width: 68%;
+}
+
+.doc:hover .doc-page {
+  border-color: var(--accent);
+}
+
+.doc b {
+  font-size: 0.875rem;
+  line-height: 1.3;
+}
+
+.doc small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.year-pills .pill svg {
+  color: var(--accent);
+}
+
+/* ==================================================================
+ * The print look: a sefer and a library rather than an app. Serif
+ * headings on thin rules, ink on paper, seforim in dark cloth with gold
+ * lettering, lists instead of tinted boxes, and colour kept for what
+ * can be pressed. These rules come last and set the tone for all above.
+ * ================================================================== */
+
+:root {
+  --bg: #fbf9f4;
+  --bg-elevated: #fffefb;
+  --fg: #1c1b18;
+  --muted: #6b675f;
+  --border: #e3ded3;
+  --card: #f4f0e7;
+  --card-hover: #eee8dc;
+  --accent: #1d5c3f;
+  --accent-soft: #e7efe9;
+  --gold: #b08a3e;
+  --radius: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #12110f;
+    --bg-elevated: #191816;
+    --fg: #ece8df;
+    --muted: #a39e93;
+    --border: #2c2a26;
+    --card: #1e1c19;
+    --card-hover: #26241f;
+    --accent: #6fbf92;
+    --accent-soft: #1d2a22;
+    --gold: #d2b06a;
+  }
+}
+
+h1,
+.home-parsha,
+.event-hero h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* Section headings: a serif title on a thin rule, its link small beside it. */
+.section-header,
+html[lang='he'] .section-header {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--fg);
+  margin: 36px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-header a {
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* Fewer shapes: squarer corners, lines instead of fills. */
+.search-box input {
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.search-box button,
+button,
+.button {
+  border-radius: var(--radius);
+}
+
+.play-button,
+.round-play {
+  border-radius: 50%;
+}
+
+.pill {
+  border-radius: var(--radius);
+  background: transparent;
+  border: 1px solid var(--border);
+  font-weight: 500;
+}
+
+a.pill:hover {
+  background: var(--card);
+}
+
+.pill.on {
+  background: var(--fg);
+  border-color: var(--fg);
+  color: var(--bg);
+}
+
+.lang-switch {
+  border-radius: var(--radius);
+}
+
+.brand-mark {
+  border-radius: 4px;
+  background: var(--fg);
+  color: var(--bg);
+}
+
+/* Tabs: the active one in ink, marked by a short rule, no capsule. */
+.tab-icon {
+  border-radius: 0;
+  width: auto;
+}
+
+.tab.active .tab-icon {
+  background: transparent;
+  color: var(--accent);
+}
+
+.tab.active {
+  color: var(--accent);
+}
+
+/* The week: a list under its heading, not tinted cards. */
+.week-cards {
+  gap: 0;
+}
+
+.week-card {
+  border-radius: 0;
+  background: transparent;
+  padding: 12px 0;
+}
+
+.week-card + .week-card {
+  border-top: 1px solid var(--border);
+}
+
+.week-card-title {
+  font-family: var(--font-display);
+  font-size: 1.1875rem;
+}
+
+.week-card .pill {
+  background: transparent;
+}
+
+.year-chip {
+  border-radius: var(--radius);
+  background: transparent;
+  border: 1px solid var(--border);
+  font-family: var(--font-display);
+  min-width: 64px;
+  padding: 8px 10px;
+}
+
+.year-chip.on {
+  background: var(--fg);
+  border-color: var(--fg);
+  color: var(--bg);
+}
+
+/* What needs help: sentences with a link, no boxes or bars. */
+.needs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.needs li {
+  padding: 12px 0;
+  line-height: 1.5;
+}
+
+.needs li + li {
+  border-top: 1px solid var(--border);
+}
+
+.needs b {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+}
+
+.needs a {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.in-catalog {
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.in-catalog a {
+  color: var(--fg);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.in-catalog a:hover {
+  text-decoration: underline;
+}
+
+.feed .who,
+.feed .who.bot {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--font-display);
+}
+
+/* A plain note: a lead in bold and a line of text, set off by rules. */
+.note {
+  margin: 28px 0;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.note b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+}
+
+.note p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+/* The library: seforim as dark cloth with gold lettering and a gold frame. */
+.cover,
+html[dir='rtl'] .cover {
+  border-radius: 2px 4px 4px 2px;
+  color: #e9d7a6;
+  font-size: 0.875rem;
+  padding: 14px 12px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-shadow:
+    inset 0 0 0 1px rgb(0 0 0 / 0.2),
+    0 1px 2px rgb(0 0 0 / 0.25);
+}
+
+html[dir='rtl'] .cover {
+  border-radius: 4px 2px 2px 4px;
+}
+
+/* The gold rule tooled a little in from the edge. */
+.cover::after {
+  display: block;
+  inset: 6px;
+  height: auto;
+  background: none;
+  border: 1px solid rgb(233 215 166 / 0.6);
+  border-radius: 1px;
+}
+
+.item-hero .cover {
+  font-size: 1rem;
+}
+
+.portrait {
+  background: #f1ead9 !important;
+  color: #3b2f1c;
+  box-shadow: inset 0 0 0 1px var(--gold);
+}
+
+.rebbe {
+  font-weight: 500;
+}
+
+.shelves {
+  gap: 0 20px;
+}
+
+.shelf {
+  min-height: 0;
+  padding: 12px 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  gap: 2px;
+}
+
+.shelf:hover {
+  background: transparent;
+}
+
+.shelf:hover b {
+  color: var(--accent);
+}
+
+.shelf b {
+  font-family: var(--font-display);
+  font-size: 1.1875rem;
+}
+
+.page-tabs {
+  gap: 18px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+
+.page-tabs a {
+  border-radius: 0;
+  background: transparent;
+  padding: 8px 0;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+}
+
+.page-tabs a[aria-current='page'] {
+  background: transparent;
+  color: var(--fg);
+  border-bottom-color: var(--fg);
+}
+
+.volume {
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 12px 0;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+}
+
+a.volume:hover {
+  background: transparent;
+  color: var(--accent);
+}
+
+/* A farbrengen: a printed heading, not a banner. */
+.event-hero {
+  margin: 4px 0 18px;
+  padding: 0 0 14px;
+  border-radius: 0;
+  background: none;
+  color: var(--fg);
+  border-bottom: 1px solid var(--border);
+}
+
+.event-hero h1 {
+  font-size: 2.25rem;
+  margin: 2px 0 2px;
+}
+
+.event-hero-kicker {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.event-hero-date {
+  opacity: 1;
+  font-size: 1.0625rem;
+}
+
+.event-hero-chips {
+  gap: 0;
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.event-hero-chips li {
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  font-weight: 400;
+  font-size: 0.875rem;
+}
+
+.event-hero-chips li + li::before {
+  content: '·';
+  margin-inline: 8px;
+}
+
+.event-hero-chips svg {
+  display: none;
+}
+
+.listen-card {
+  border-radius: var(--radius);
+  padding: 2px 16px 8px;
+}
+
+.doc-page {
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+}
+
+.neighbors a {
+  border-radius: var(--radius);
+  background: transparent;
+  border: 1px solid var(--border);
+}
+
+.card-list {
+  border-radius: var(--radius);
+}
+
+.row-icon {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.player-bar {
+  border-radius: 10px;
+}

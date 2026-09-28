@@ -18,6 +18,10 @@ export interface ItemView {
   /** The cursor for the next page of a long list (a work's units). */
   next: string | null;
   backlinks: Backlink[];
+  /** A work's volumes, with how many units each holds. */
+  outline?: Array<{ value: string; label: { he: string; en?: string } | null; units: number }>;
+  /** How many units each work holds, for covers on a shelf or a Rebbe's page. */
+  counts?: Record<string, number>;
 }
 
 const ids = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : typeof value === 'string' ? [value] : []);
@@ -34,16 +38,24 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
 
   switch (entity.type) {
     case 'set': {
-      const members = await api.list({ set: entity.id, limit: 500 });
+      const [members, units] = await Promise.all([api.list({ set: entity.id, limit: 500 }), api.refCounts('work', 'unit')]);
       view.lists.members = members.items;
+      view.counts = units;
       break;
     }
     case 'work': {
       ids(d.authors).forEach((id) => wanted.add(id));
-      const page = await api.children(entity.id, 'work', 'unit', { after: url.searchParams.get('after') ?? undefined, limit: 200 });
-      view.lists.units = page.items;
-      view.next = page.items.length === 200 ? page.next : null;
-      view.lists.publications = await entitiesOf(api, await api.backlinks(entity.id, { field: 'work', type: 'publication' }));
+      // Its volumes first; one volume's units when one is opened (?part=), else the units of a work of one level.
+      const [outline, publications] = await Promise.all([api.workOutline(entity.id), entitiesOf(api, await api.backlinks(entity.id, { field: 'work', type: 'publication' }))]);
+      view.outline = outline;
+      view.lists.publications = publications;
+      const part = url.searchParams.get('part');
+      if (part) view.lists.units = await api.workPart(entity.id, part);
+      else if (outline.length && outline.every((p) => p.units === 1)) {
+        const page = await api.children(entity.id, 'work', 'unit', { after: url.searchParams.get('after') ?? undefined, limit: 200 });
+        view.lists.units = page.items;
+        view.next = page.items.length === 200 ? page.next : null;
+      }
       break;
     }
     case 'unit': {
@@ -98,7 +110,9 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
       break;
     }
     case 'author': {
-      view.lists.works = await entitiesOf(api, await api.backlinks(entity.id, { field: 'authors', type: 'work' }));
+      const [works, units] = await Promise.all([entitiesOf(api, await api.backlinks(entity.id, { field: 'authors', type: 'work' })), api.refCounts('work', 'unit')]);
+      view.lists.works = works;
+      view.counts = units;
       break;
     }
     case 'text': {
