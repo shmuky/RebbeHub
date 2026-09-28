@@ -72,6 +72,11 @@ const app = createApp({
   uploads: filesDir ? { public: folder('public'), preservation: folder('preservation') } : undefined,
   embedder: embedderFromEnv(process.env),
   oai: process.env.OAI_ADMIN_EMAIL ? { adminEmail: process.env.OAI_ADMIN_EMAIL, siteUrl: process.env.SITE_URL } : undefined,
+  mirrors: {
+    gitUrls: (process.env.CATALOG_GIT_URL ?? '').split(',').filter(Boolean),
+    publicKeys: (process.env.RELEASE_PUBLIC_KEYS ?? '').split(',').filter(Boolean),
+    dumpsBaseUrl: process.env.DUMPS_BASE_URL || undefined,
+  },
 });
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port, hostname });

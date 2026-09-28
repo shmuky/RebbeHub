@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>RebbeHub · אין חיבור</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  :root { --bg: #faf8f4; --fg: #161816; --muted: #5d6660; --border: #e4e1da; --accent: #16744a; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0e1110; --fg: #eef1ee; --muted: #9aa39d; --border: #262b28; --accent: #3ccf7a; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: 'Noto Sans Hebrew', 'Noto Sans', -apple-system, Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; }
+  main { max-width: 36rem; margin: 0 auto; padding: 48px 16px; }
+  h1 { font-family: 'Frank Ruhl Libre', 'FrankRuehlCLM', serif; font-size: 1.8rem; margin: 0 0 8px; }
+  p { margin: 0 0 12px; }
+  .en { direction: ltr; text-align: left; color: var(--muted); border-top: 1px solid var(--border); padding-top: 16px; margin-top: 24px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>אין חיבור לאינטרנט</h1>
+  <p>הדף הזה לא נשמר במכשיר. דפים שכבר פתחתם נשמרים ונפתחים גם בלי חיבור, וכל השאר ייפתח כשהחיבור יחזור.</p>
+  <p><a href="/">לדף הבית</a> · <a href="" onclick="location.reload(); return false;">לנסות שוב</a></p>
+  <div class="en" lang="en">
+    <p><b>You are offline.</b> This page is not saved on this device. Pages you have opened before are kept and open without a connection; everything else opens when you are back online.</p>
+    <p><a href="/?lang=en">Home</a> · <a href="" onclick="location.reload(); return false;">Try again</a></p>
+  </div>
+</main>
+</body>
+</html>

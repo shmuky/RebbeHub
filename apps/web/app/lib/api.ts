@@ -364,4 +364,22 @@ export class RebbeHubApi {
     if (!response.ok) throw new ApiError(response.status, body.message ?? response.statusText);
     return { id: body.id! };
   }
+  /** What a mirror needs: the git mirror, the release keys, every edition's dumps (services/api/src/mirrors.ts). */
+  async mirrors() {
+    return this.get<MirrorsInfo>('/v1/mirrors');
+  }
+}
+
+export interface MirrorsInfo {
+  git: string[];
+  dumps: string;
+  keys: Array<{ alg: string; keyId: string; publicKey: string }>;
+  others: Array<{ name: string; url: string }>;
+  editions: Array<{
+    tag: string;
+    commit_seq: number;
+    created_at: string;
+    notes: string | null;
+    dumps: { files: Array<{ name: string; bytes: number; sha256: string; url: string }>; manifest: string; sha256sums: string; signature: { alg: string; keyId: string } | null } | null;
+  }>;
 }

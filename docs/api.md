@@ -54,6 +54,29 @@ are `oai:rebbehub.org:rh-…`. Records are CC0.
 /oai?verb=ListRecords&metadataPrefix=oai_dc&from=2026-09-01
 /oai?verb=GetRecord&metadataPrefix=oai_dc&identifier=oai:rebbehub.org:rh-…
 ```
+- `GET /v1/mirrors`, `/v1/editions`, `/v1/editions/<tag>/manifest.json`,
+  `/v1/editions/<tag>/SHA256SUMS`, `/dumps/<tag>/<name>`: the git mirror,
+  every catalog edition's dumps with their sha256, and the keys they are
+  signed with ([mirrors](mirrors.md)).
+
+## Translations
+
+A unit's translation is a text of its own (`kind: translation`) with its
+`language`, `credit` and `licence` (none: the translator's own, CC BY-SA).
+`POST /v1/units/<id>/translations` with `{ language, credit, licence?,
+translationOf?, content, machine? }` sends one for review, a blank line
+between paragraphs; `machine` names the tool when a machine made it, and
+its paragraphs are marked so until a person checks each.
+`POST /v1/translations/fix` with `{ segment, content }` suggests a fix to
+one paragraph. Only licences that let RebbeHub keep a copy are taken
+(public domain, CC0, CC BY, CC BY-NC); see [rights](rights.md).
+
+## Where you stopped
+
+`GET /v1/places`, `PUT /v1/places`, `DELETE /v1/places?kind=&key=`: where
+the signed-in person stopped reading (a PDF's page) and listening (a
+farbrengen's part and moment), the latest 60, so every device reopens
+there. Personal: never cached, never exported.
 
 ## Webhooks
 

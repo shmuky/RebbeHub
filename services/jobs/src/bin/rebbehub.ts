@@ -12,6 +12,7 @@ import {
   keygenCommand,
   migrateCommand,
   mirrorCommand,
+  mirrorPullCommand,
   pageFixesMakeCommand,
   pageFixesPublishCommand,
   pageFixesRegisterCommand,
@@ -36,8 +37,14 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 chabadlibrary.org's contents, continuing an earlier crawl
   rebbehub mirror --dir <folder> [--git] [--full] [--limit <n>]
   rebbehub edition --by <steward> [--tag 2026.40] [--notes <text>]
-  rebbehub dump --tag <tag> --out <folder> [--key <key.json>]
-                                                SQLite, JSON Lines and Parquet, signed
+  rebbehub dump --tag <tag> --out <folder> [--key <key.json>] [--upload] [--bucket rebbehub-public]
+                                                SQLite, JSON Lines and Parquet, signed;
+                                                --upload puts them in R2 at dumps/<tag>/, served at /dumps
+                                                (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
+  rebbehub mirror-pull --out <folder> [--api https://api.rebbehub.org] [--key <public key>]...
+                  [--tag <tag>|latest] [--allow-unsigned]
+                                                a mirror's copy of every edition's dumps, each signature
+                                                and sha256 checked (docs/mirrors.md)
   rebbehub keygen --out <key.json>
   rebbehub ocr --approve-as <steward> [--scan <id>] [--limit <n>] [--files <url>]
                                                 machine OCR of served scans that have none yet;
@@ -91,7 +98,10 @@ const { values, positionals } = parseArgs({
     tag: { type: 'string' },
     notes: { type: 'string' },
     out: { type: 'string' },
-    key: { type: 'string' },
+    key: { type: 'string', multiple: true },
+    upload: { type: 'boolean' },
+    api: { type: 'string' },
+    'allow-unsigned': { type: 'boolean' },
     guard: { type: 'boolean' },
     work: { type: 'string' },
     shard: { type: 'string' },
@@ -159,7 +169,10 @@ try {
       await editionCommand(ctx, { by: need(values.by, 'by'), tag: values.tag, notes: values.notes });
       break;
     case 'dump':
-      await dumpCommand(ctx, { tag: need(values.tag, 'tag'), out: need(values.out, 'out'), keyFile: values.key });
+      await dumpCommand(ctx, { tag: need(values.tag, 'tag'), out: need(values.out, 'out'), keyFile: values.key?.[0], upload: values.upload, bucket: values.bucket });
+      break;
+    case 'mirror-pull':
+      await mirrorPullCommand(ctx, { api: values.api, out: need(values.out, 'out'), keys: values.key, tag: values.tag, allowUnsigned: values['allow-unsigned'] });
       break;
     case 'keygen':
       await keygenCommand(ctx, { out: need(values.out, 'out') });

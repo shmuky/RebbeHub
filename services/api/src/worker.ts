@@ -52,6 +52,15 @@ interface Env {
 }
 
 const mailerOf = (env: Env) => (env.RESEND_API_KEY ? resendMailer({ apiKey: env.RESEND_API_KEY, from: env.EMAIL_FROM }) : undefined);
+  /** Mirrors (docs/mirrors.md), all public values in [vars]: where the git mirror is cloned from (several, comma separated), */
+  CATALOG_GIT_URL?: string;
+  /** the release keys' public halves (base64, comma separated), */
+  RELEASE_PUBLIC_KEYS?: string;
+  /** and where dumps are served when not this Worker's /dumps. */
+  DUMPS_BASE_URL?: string;
+}
+
+const list = (value: string | undefined) => (value ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 
 function r2Writer(bucket: R2Bucket) {
   return { put: async (key: string, bytes: ArrayBuffer, mime: string) => void (await bucket.put(key, bytes, { httpMetadata: { contentType: mime } })) };
@@ -97,6 +106,7 @@ export default {
       uploads: env.FILES_PUBLIC && env.FILES_PRESERVATION ? { public: r2Writer(env.FILES_PUBLIC), preservation: r2Writer(env.FILES_PRESERVATION) } : undefined,
       embedder: embedderFromEnv({ CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_AI_TOKEN: env.CLOUDFLARE_AI_TOKEN }),
       oai: env.OAI_ADMIN_EMAIL ? { adminEmail: env.OAI_ADMIN_EMAIL, siteUrl: env.SITE_URL } : undefined,
+      mirrors: { gitUrls: list(env.CATALOG_GIT_URL), publicKeys: list(env.RELEASE_PUBLIC_KEYS), dumpsBaseUrl: env.DUMPS_BASE_URL || undefined },
       auth: env.SITE_URL ? authFor(env.SITE_URL, { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }) : undefined,
       mailer: mailerOf(env),
     });

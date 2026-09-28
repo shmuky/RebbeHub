@@ -91,6 +91,11 @@ In **rebbehub-api → Settings → Variables and Secrets**:
 
 Each is off until its secret is set; nothing on the site shows it before.
 
+For mirrors, three public values (not secrets) go in `[vars]` of
+`services/api/wrangler.toml` once they exist: `CATALOG_GIT_URL`,
+`RELEASE_PUBLIC_KEYS` and, if dumps live elsewhere, `DUMPS_BASE_URL`
+([mirrors](mirrors.md)). Until then `/mirrors` says they are coming.
+
 ### 6. Fill the catalog
 
 The database starts with the built-in schemas only. The **Import the

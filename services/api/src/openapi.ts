@@ -64,7 +64,17 @@ export const OPENAPI = {
     '/v1/health': { get: { summary: 'The health of the catalog: coverage per year and set, unchecked pages, unsynced recordings, dead links, the oldest open suggestions', parameters: [numParam('limit', 'query')], responses: ok('Health') } },
     '/oai': { get: { summary: 'OAI-PMH 2.0 for libraries (oai_dc records of sefarim, sichos, farbrengens, printings, recordings), when switched on', parameters: [{ ...q('verb', 'Identify, ListMetadataFormats, ListSets, ListIdentifiers, ListRecords, GetRecord'), required: true }], responses: { '200': { description: 'OAI-PMH XML', content: { 'text/xml': {} } } } } },
     '/v1/dates/parse': { get: { summary: 'Read a Hebrew date as people write it', parameters: [{ ...q('q', 'e.g. יו"ד שבט תשכ"ב or 10 Shvat 5722'), required: true }], responses: ok('The date key') } },
-    '/v1/editions': { get: { summary: 'Catalog editions (dated snapshots) and their dumps', responses: ok('Editions') } },
+    '/v1/editions': { get: { summary: 'Catalog editions (dated snapshots) and their dumps, each with its size, sha256 and address', responses: ok('Editions') } },
+    '/v1/editions/{tag}/manifest.json': { get: { summary: "An edition's signed manifest (Ed25519), exactly as signed", parameters: [{ name: 'tag', in: 'path', required: true, schema: { type: 'string' } }], responses: ok('The manifest') } },
+    '/v1/editions/{tag}/SHA256SUMS': { get: { summary: "An edition's checksums, for sha256sum -c", parameters: [{ name: 'tag', in: 'path', required: true, schema: { type: 'string' } }], responses: ok('Checksums') } },
+    '/v1/mirrors': { get: { summary: 'Everything a mirror needs: the git mirror, the release keys, every edition and its dumps', responses: ok('Mirrors') } },
+    '/v1/places': {
+      get: { summary: 'Where you stopped reading and listening lately', security: signedIn, parameters: [q('kind', 'read or listen'), q('key', 'One thing only'), numParam('limit', 'query')], responses: ok('Places') },
+      put: { summary: 'Keep where you stopped in one thing', security: signedIn, requestBody: json({ type: 'object', required: ['kind', 'key', 'title', 'href', 'place'], properties: { kind: { enum: ['read', 'listen'] }, key: { type: 'string' }, title: { type: 'string' }, sub: { type: 'string' }, href: { type: 'string' }, place: { type: 'object' } } }), responses: ok('The place kept') },
+      delete: { summary: 'Forget one place', security: signedIn, parameters: [q('kind', 'read or listen'), q('key', 'The thing')], responses: ok('Forgotten') },
+    },
+    '/v1/units/{id}/translations': { post: { summary: 'Suggest a translation of a unit, as its own text', security: signedIn, parameters: [idParam], requestBody: json({ type: 'object', required: ['language', 'credit', 'content'], properties: { language: { type: 'string' }, credit: { type: 'string' }, licence: { enum: ['public-domain', 'cc0', 'cc-by', 'cc-by-nc'] }, translationOf: { type: 'string' }, content: { type: 'string', description: 'A blank line between paragraphs' }, machine: { type: 'string', description: 'The tool, when a machine translated it' } } }), responses: { '201': { description: 'The suggestion made' } } } },
+    '/v1/translations/fix': { post: { summary: 'Suggest a fix to one paragraph of a translation', security: signedIn, requestBody: json({ type: 'object', required: ['segment', 'content'], properties: { segment: { type: 'string' }, content: { type: 'string' } } }), responses: { '201': { description: 'The suggestion made' } } } },
     '/v1/commits': { get: { summary: 'Commits to main after a given one, with what each changed', parameters: [numParam('since', 'query'), numParam('limit', 'query')], responses: ok('Commits') } },
     '/v1/reports': {
       post: {

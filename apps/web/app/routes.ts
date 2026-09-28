@@ -21,6 +21,9 @@ export default [
   route('_/suggestions/*', 'routes/suggestions.ts'),
   route('_/follows', 'routes/follows.ts'),
   route('_/uploads', 'routes/uploads.ts'),
+  // Where you stopped reading and listening, and translations sent for review.
+  route('_/places', 'routes/places.ts'),
+  route('_/translations/*', 'routes/translations-pass.ts'),
   route('_/steward/*', 'routes/admin-pass.ts'),
   route('admin', 'routes/admin.tsx'),
   route('review', 'routes/review.tsx'),
@@ -32,6 +35,8 @@ export default [
   route('embed/:id', 'routes/embed.tsx'),
   route('text/:scan', 'routes/text.tsx'),
   route('projects', 'routes/projects.tsx'),
+  // How to keep a full copy of the catalog: the git mirror, every edition's dumps with their checksums.
+  route('mirrors', 'routes/mirrors.tsx'),
   route('projects/:slug', 'routes/project.tsx'),
   route('signin', 'routes/signin.tsx'),
   route('account', 'routes/account.tsx'),

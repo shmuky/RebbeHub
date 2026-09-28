@@ -33,6 +33,8 @@ stands. ✅ built and tested · 🟡 partly · ⬜ not yet.
 | The site as Sichos-Kodesh's app works: this week first (today's parsha, the kvius year, every year), farbrengen pages, one player across pages, smart search by parsha, chag, date and year | ✅ | `apps/web/app/routes/home.tsx`, `views/EventPage.tsx`, `player/`, `lib/smartSearch.ts` |
 | Audio player (recordings by part, video links at the moment) | ✅ | `apps/web/app/components/AudioPlayer.tsx`; words highlighted as spoken come with sync (phase 5) |
 | Scan viewer (served scans in the browser's PDF viewer by page; link-only scans at their source) | 🟡 | `ScanViewer.tsx`; IIIF and page images come with uploads (phase 3) |
+| The reader (`/read`, Sichos-Kodesh's PDF reader): dark, sepia and grey pages, stronger contrast; reopens where you stopped, per device and on your account; "Continue where you stopped" on the home page; the player plays on from where you stopped | ✅ | `routes/read.tsx`, `reader/look.ts`, `lib/places.ts`, `components/ContinueRow.tsx`, `/v1/places` |
+| Installable app (PWA): manifest, icons, a service worker that keeps the app and every page read for offline use | ✅ | `public/manifest.webmanifest`, `public/sw.js`, `lib/pwa.ts` |
 | SEO: canonical and hreflang links, schema.org data, sitemaps, robots.txt | ✅ | `apps/web/app/lib/seo.ts`, `/sitemap.xml` |
 | Report a problem on every page (no account, works without JavaScript) | ✅ | `ReportForm.tsx` |
 
@@ -102,9 +104,21 @@ are set.
 - **OAI-PMH** ✅: `/oai` on the API gives libraries Dublin Core records,
   harvested by date and set, deletions included ([api](api.md)); on once
   `OAI_ADMIN_EMAIL` is set.
+- **Translations** ✅: a unit's translation is a text of its own with its
+  language, credit and rights; unit pages switch language with plain
+  links (`?tl=en`); "Add a translation" and "Fix" per paragraph go
+  through suggestions; machine translations are marked paragraph by
+  paragraph until checked ([rights](rights.md), Translations).
+- **Mirrors** ✅: `/mirrors` and `/v1/mirrors` list the git mirror, the
+  release keys and every edition's dumps with their sha256
+  (`/v1/editions/<tag>/SHA256SUMS`, `/dumps/<tag>/<name>`);
+  `rebbehub dump --upload` publishes them and `rebbehub mirror-pull`
+  keeps a checked copy ([mirrors](mirrors.md)). Waits on the mirror's
+  public address and the release key's public half (`CATALOG_GIT_URL`,
+  `RELEASE_PUBLIC_KEYS`).
 - Still to come: IIIF page images, uploaded OCR, comparing printings,
-  word-level sync, translations, mirrors; letters reproduced in teshuros
-  found by text (cross-linking reads citations only).
+  word-level sync; letters reproduced in teshuros found by text
+  (cross-linking reads citations only).
 
 ## Importers still to write
 
