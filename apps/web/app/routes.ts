@@ -34,6 +34,7 @@ export default [
   // What other sites embed: the only page they may frame.
   route('embed/:id', 'routes/embed.tsx'),
   route('text/:scan', 'routes/text.tsx'),
+  route('compare/:unit', 'routes/compare.tsx'),
   route('projects', 'routes/projects.tsx'),
   // How to keep a full copy of the catalog: the git mirror, every edition's dumps with their checksums.
   route('mirrors', 'routes/mirrors.tsx'),

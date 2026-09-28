@@ -20,6 +20,7 @@ import { badState, CatalogError, forbidden, invalid, notFound } from './errors.j
 import { diffData, threeWayMerge, resolveConflicts, UnresolvedConflictError, type Conflict, type FieldChange, type Json, type Resolution } from './merge.js';
 import { canApprove, canSuggest, earnedTrust, mayGoLive, type Account, type SetInfo } from './permissions.js';
 import { searchTextOf, toTsQuery } from './searchText.js';
+import { focusCounts } from './projectWork.js';
 
 /**
  * The catalog: GitHub's model over the versioned Postgres schema, in the
@@ -142,10 +143,18 @@ export interface ArchiveGapRow {
   entity_id: string | null;
 }
 
-/** What a project works through: the farbrengens (of a year or month) missing recordings or texts. */
+/**
+ * What a project works through: the farbrengens (of a year or month)
+ * missing recordings or texts; the recordings (of a year) whose sync nobody
+ * has checked yet; or the pages of a scan not yet proofread to `level`.
+ */
 export interface ProjectFocus {
-  missing: 'recordings' | 'texts';
+  missing: 'recordings' | 'texts' | 'sync' | 'proofreading';
   within?: string;
+  /** For proofreading: the scan whose pages are read. */
+  scan?: EntityId;
+  /** For proofreading: done at proofread once (1, the default) or twice (2). */
+  level?: 1 | 2;
 }
 
 export interface ProjectView {
@@ -1163,7 +1172,12 @@ export class Catalog {
    * focus: which farbrengens (a year) lack what (recordings or texts).
    */
   async openFocusProject(by: string, input: { slug: string; name: string; goal?: string; set?: EntityId; focus: ProjectFocus }): Promise<number> {
-    if (input.focus.missing !== 'recordings' && input.focus.missing !== 'texts') throw invalid('a project works through farbrengens missing recordings or texts');
+    if (!['recordings', 'texts', 'sync', 'proofreading'].includes(input.focus.missing)) throw invalid('a project works through farbrengens missing recordings or texts, recordings to sync, or a scan to proofread');
+    if (input.focus.missing === 'proofreading') {
+      const scan = input.focus.scan ? await this.get(input.focus.scan) : null;
+      if (!scan || scan.type !== 'scan') throw invalid('a proofreading project names its scan');
+      if (input.focus.level !== undefined && input.focus.level !== 1 && input.focus.level !== 2) throw invalid('level is 1 (proofread once) or 2 (twice)');
+    }
     if (input.focus.within !== undefined && !/^\d{4}(-(0[1-9]|1[0-2]|06A|06B))?$/.test(input.focus.within)) throw invalid('within is a year (5745) or a month (5745-05)');
     const id = await this.createProject(by, input);
     await this.db.query('UPDATE project SET focus = $2 WHERE id = $1', [id, JSON.stringify(input.focus)]);
@@ -1182,16 +1196,7 @@ export class Catalog {
     );
     return Promise.all(
       rows.map(async (p) => {
-        const counts = await one<{ total: number; done: number }>(
-          this.db,
-          `SELECT count(*)::int AS total,
-                  count(*) FILTER (WHERE ${p.focus.missing === 'recordings'
-                    ? "EXISTS (SELECT 1 FROM entity_ref x JOIN entity f ON f.id = x.from_id AND f.type = 'recording' AND NOT f.deleted WHERE x.to_id = e.id AND x.field = 'event')"
-                    : "coalesce(jsonb_array_length(r.data->'links'), 0) > 0"})::int AS done
-           FROM entity e JOIN revision r ON r.id = e.main_rev
-           WHERE e.type = 'event' AND NOT e.deleted ${p.focus.within ? "AND r.data->>'date' LIKE $1 || '%'" : ''}`,
-          p.focus.within ? [p.focus.within] : [],
-        );
+        const counts = await focusCounts(this, p.focus);
         return {
           id: Number(p.id),
           slug: p.slug,
@@ -1204,8 +1209,8 @@ export class Catalog {
           createdBy: p.created_by,
           creatorName: p.creator,
           createdAt: new Date(p.created_at).toISOString(),
-          total: counts?.total ?? 0,
-          done: counts?.done ?? 0,
+          total: counts.total,
+          done: counts.done,
         };
       }),
     );

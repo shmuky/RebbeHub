@@ -31,7 +31,7 @@ stands. ✅ built and tested · 🟡 partly · ⬜ not yet.
 | Parquet dump | ✅ | `rebbehub dump` writes `rebbehub-<tag>.parquet` beside SQLite and JSON Lines |
 | Public site: sets, events calendar, item and publication pages, search, permanent links | ✅ | `apps/web` (React Router 7, server-rendered; Node or Workers) |
 | The site as Sichos-Kodesh's app works: this week first (today's parsha, the kvius year, every year), farbrengen pages, one player across pages, smart search by parsha, chag, date and year | ✅ | `apps/web/app/routes/home.tsx`, `views/EventPage.tsx`, `player/`, `lib/smartSearch.ts` |
-| Audio player (recordings by part, video links at the moment) | ✅ | `apps/web/app/components/AudioPlayer.tsx`; words highlighted as spoken come with sync (phase 5) |
+| Audio player (recordings by part, video links at the moment) | ✅ | `apps/web/app/components/AudioPlayer.tsx`; words highlighted as spoken in `Transcripts.tsx` |
 | Scan viewer (served scans in the browser's PDF viewer by page; link-only scans at their source) | 🟡 | `ScanViewer.tsx`; IIIF and page images come with uploads (phase 3) |
 | The reader (`/read`, Sichos-Kodesh's PDF reader): dark, sepia and grey pages, stronger contrast; reopens where you stopped, per device and on your account; "Continue where you stopped" on the home page; the player plays on from where you stopped | ✅ | `routes/read.tsx`, `reader/look.ts`, `lib/places.ts`, `components/ContinueRow.tsx`, `/v1/places` |
 | Installable app (PWA): manifest, icons, a service worker that keeps the app and every page read for offline use | ✅ | `public/manifest.webmanifest`, `public/sw.js`, `lib/pwa.ts` |
@@ -116,9 +116,25 @@ are set.
   keeps a checked copy ([mirrors](mirrors.md)). Waits on the mirror's
   public address and the release key's public half (`CATALOG_GIT_URL`,
   `RELEASE_PUBLIC_KEYS`).
-- Still to come: IIIF page images, uploaded OCR, comparing printings,
-  word-level sync; letters reproduced in teshuros found by text
-  (cross-linking reads citations only).
+- **Uploaded OCR and proofread levels** ✅: anyone uploads their own OCR
+  of a scan (hOCR, ALTO, plain text), kept as its own layer with its
+  engine and version; keepers pick which layer seeds the community text;
+  `rebbehub ocr --reread` re-reads with a newer engine and never touches a
+  checked line. Pages are proofread once, then twice by someone else, and
+  change colour on `/text/<scan>`.
+- **Compare printings** ✅: `/compare/<unit>`, two printings of a sicha
+  (texts of it, or scanned pages a contents map gives it) word by word,
+  Hebrew-aware. Waits on edition texts and contents maps in the catalog.
+- **Word-level sync** ✅: Whisper's word times kept, and `rebbehub align`
+  times existing (and corrected) transcripts by forced alignment and syncs
+  a farbrengen's hanacha paragraph by paragraph by similarity. The player
+  marks the word being said; "Said now" fixes a drifting line in one or
+  two taps (locked, what follows moved with it); "The sync is right"
+  checks it. Machine sync is labelled until then.
+- **Sync and proofreading projects** ✅: the project page hands out the
+  next recording to sync or page to proofread nobody holds, with progress.
+- Still to come: IIIF page images; letters reproduced in teshuros found
+  by text (cross-linking reads citations only).
 
 ## Importers
 

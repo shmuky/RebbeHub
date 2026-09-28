@@ -11,9 +11,10 @@ import { useAccount } from '../lib/useAccount.js';
 import { useLang } from '../lib/useLang.js';
 
 /**
- * Projects (the plan, section 7): a keeper opens "Recordings of 5745" and
- * the community works through it; each shows how far it has come. Stewards
- * open new ones here.
+ * Projects (the plan, section 7): a keeper opens "Recordings of 5745",
+ * "Sync the 5745 farbrengens" or "Proofread this volume" and the community
+ * works through it; each shows how far it has come. Stewards open new ones
+ * here.
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { api, siteUrl } = siteOf(context);
@@ -41,9 +42,11 @@ export function Progress({ project, lang }: { project: Pick<Project, 'total' | '
   );
 }
 
-/** A project's focus in words: "Farbrengens of 5745 without a recording". */
+/** A project's focus in words: "Farbrengens of 5745 without a recording", "Recordings of 5745 to check their sync", "Proofreading a scan". */
 export function focusText(p: Pick<Project, 'focus'>, lang: Lang): string {
   const year = p.focus.within ? ` ${yearLabel(Number(p.focus.within.slice(0, 4)), lang)}` : '';
+  if (p.focus.missing === 'proofreading') return `${t(lang, 'proofreadScan')} · ${t(lang, p.focus.level === 2 ? 'proofread2' : 'proofread1')}`;
+  if (p.focus.missing === 'sync') return `${t(lang, 'recordingsOf')}${year} ${t(lang, 'withoutSync')}`;
   return `${t(lang, 'farbrengensOf')}${year} ${t(lang, p.focus.missing === 'recordings' ? 'withoutRecording' : 'withoutText')}`;
 }
 
@@ -51,19 +54,22 @@ function NewProject({ lang }: { lang: Lang }) {
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [goal, setGoal] = useState('');
-  const [missing, setMissing] = useState<'recordings' | 'texts'>('recordings');
+  const [missing, setMissing] = useState<Project['focus']['missing']>('recordings');
   const [year, setYear] = useState('');
+  const [scan, setScan] = useState('');
+  const [level, setLevel] = useState('1');
   const [error, setError] = useState<string | null>(null);
 
   async function create(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
-    const slug = `${missing}${year ? `-${year}` : ''}-${Date.now().toString(36)}`;
+    const proofreading = missing === 'proofreading';
+    const slug = `${missing}${year && !proofreading ? `-${year}` : ''}-${Date.now().toString(36)}`;
     const response = await fetch('/_/steward/projects', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({ slug, name, goal, missing, within: year || undefined }),
+      body: JSON.stringify(proofreading ? { slug, name, goal, missing, scan: scan.trim(), level: Number(level) } : { slug, name, goal, missing, within: year || undefined }),
     });
     const body = (await response.json().catch(() => ({}))) as { message?: string };
     if (!response.ok) return setError(body.message ?? response.statusText);
@@ -83,12 +89,30 @@ function NewProject({ lang }: { lang: Lang }) {
           <select value={missing} onChange={(e) => setMissing(e.target.value as 'recordings')}>
             <option value="recordings">{t(lang, 'missing_recordings')}</option>
             <option value="texts">{t(lang, 'missing_texts')}</option>
+            <option value="sync">{t(lang, 'missing_sync')}</option>
+            <option value="proofreading">{t(lang, 'missing_proofreading')}</option>
           </select>
         </label>
-        <label>
-          {t(lang, 'year')}
-          <input value={year} onChange={(e) => setYear(e.target.value)} inputMode="numeric" maxLength={4} placeholder="5745" dir="ltr" />
-        </label>
+        {missing === 'proofreading' ? (
+          <>
+            <label>
+              {t(lang, 'scanId')}
+              <input value={scan} onChange={(e) => setScan(e.target.value)} required pattern="rh-[0-9a-zA-Z]+" placeholder="rh-…" dir="ltr" />
+            </label>
+            <label>
+              {t(lang, 'proofreadTo')}
+              <select value={level} onChange={(e) => setLevel(e.target.value)}>
+                <option value="1">{t(lang, 'proofread1')}</option>
+                <option value="2">{t(lang, 'proofread2')}</option>
+              </select>
+            </label>
+          </>
+        ) : (
+          <label>
+            {t(lang, 'year')}
+            <input value={year} onChange={(e) => setYear(e.target.value)} inputMode="numeric" maxLength={4} placeholder="5745" dir="ltr" />
+          </label>
+        )}
         <label>
           {t(lang, 'projectGoal')}
           <textarea value={goal} onChange={(e) => setGoal(e.target.value)} rows={2} maxLength={2000} />

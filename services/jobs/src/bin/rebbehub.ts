@@ -2,7 +2,7 @@
 import { parseArgs } from 'node:util';
 import { checkLinksCommand, citationsCommand, embedCommand } from '../networkCommands.js';
 import { ocrCommand } from '../ocrCommand.js';
-import { transcribeCommand } from '../transcribeCommand.js';
+import { alignCommand, transcribeCommand } from '../transcribeCommand.js';
 import {
   accountCommand,
   archiveGapsCommand,
@@ -54,9 +54,11 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 a mirror's copy of every edition's dumps, each signature
                                                 and sha256 checked (docs/mirrors.md)
   rebbehub keygen --out <key.json>
-  rebbehub ocr --approve-as <steward> [--scan <id>] [--limit <n>] [--files <url>]
+  rebbehub ocr --approve-as <steward> [--scan <id>] [--limit <n>] [--files <url>] [--reread]
                                                 machine OCR of served scans that have none yet;
-                                                files from <url>/objects/<sha256> (default the live API)
+                                                files from <url>/objects/<sha256> (default the live API);
+                                                --reread: scans read by an older engine, read again
+                                                (lines people checked are kept)
   rebbehub transcribe --approve-as <steward> [--recording <id>] [--limit <n>] [--linked] [--files <url>]
                                                 machine transcripts, with sync, of recordings that have
                                                 none (Whisper on Workers AI: CLOUDFLARE_ACCOUNT_ID and
@@ -67,6 +69,9 @@ const HELP = `rebbehub - RebbeHub's command line
   rebbehub citations [--approve-as <steward>] [--limit <n>]
                                                 citations found in texts, proposed as links for review
   rebbehub check-links [--limit <n>]            whether the catalog's links still answer, for /health
+  rebbehub align --approve-as <steward> [--recording <id>] [--limit <n>] [--linked] [--files <url>]
+                                                word timings for transcripts that have none, and the
+                                                farbrengen's hanacha synced paragraph by paragraph
   rebbehub reading-copies make --from <Sichos-Kodesh checkout> --work <folder> [--shard 0/4] [--limit <n>]
                   [--archive <objects.json>] [--source-bucket sichos-kodesh-archive] [--bucket rebbehub-public]
   rebbehub reading-copies publish --from <Sichos-Kodesh checkout> --work <folder> [--bucket rebbehub-public]
@@ -120,6 +125,7 @@ const { values, positionals } = parseArgs({
     scan: { type: 'string' },
     recording: { type: 'string' },
     linked: { type: 'boolean' },
+    reread: { type: 'boolean' },
     files: { type: 'string' },
     minutes: { type: 'string' },
     cache: { type: 'string' },
@@ -166,7 +172,10 @@ try {
       await archiveGapsCommand(ctx, { db: need(values.db, 'db') });
       break;
     case 'ocr':
-      await ocrCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), scan: values.scan, limit: number(values.limit), files: values.files });
+      await ocrCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), scan: values.scan, limit: number(values.limit), files: values.files, reread: values.reread });
+      break;
+    case 'align':
+      await alignCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files });
       break;
     case 'transcribe':
       await transcribeCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files });

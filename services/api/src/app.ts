@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, UnresolvedConflictError, adviceFor, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, getDerivations, getFile, getPageFix, listWebhooks, recordingTranscript, requestTakedown, scanText, type ChangesetStatus, type Embedder, type Mailer, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, getDerivations, getFile, getPageFix, hanachaSync, listWebhooks, printingsOf, projectTodo, recordingTranscript, releaseClaim, requestTakedown, scanProgress, scanText, uploadOcr, type ChangesetStatus, type Embedder, type Mailer, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
@@ -259,20 +259,41 @@ export function createApp(options: ApiOptions): Hono {
   app.get('/v1/projects/:slug', async (c) => {
     const [project] = await catalog.projects({ slug: c.req.param('slug') });
     if (!project) throw new CatalogError('not-found', 'no such project');
-    const next = project.status === 'open' ? await catalog.events({ within: project.focus.within, missing: project.focus.missing, limit: 30 }) : [];
-    return c.json({ project, next: await redact(next) });
+    const open = project.status === 'open';
+    const byEvent = project.focus.missing === 'recordings' || project.focus.missing === 'texts';
+    const next = open && byEvent ? await catalog.events({ within: project.focus.within, missing: project.focus.missing as 'recordings', limit: 30 }) : [];
+    const todo = open ? await projectTodo(catalog, project, 30) : [];
+    return c.json({ project, next: await redact(next), todo });
+  });
+
+  // "Give me the next one": the next item nobody holds, held for whoever asks for a few hours.
+  app.post('/v1/projects/:slug/next', async (c) => {
+    const by = await signedIn(c);
+    return c.json({ item: await claimNext(catalog, c.req.param('slug'), by) });
+  });
+
+  app.post('/v1/projects/:slug/release', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ item?: string }>(c);
+    if (!input.item) throw new HttpError(400, 'give the item to let go of');
+    await releaseClaim(catalog, c.req.param('slug'), by, input.item);
+    return c.json({ ok: true });
   });
 
   app.post('/v1/projects', async (c) => {
     const by = await signedIn(c);
-    const input = await body<{ slug?: string; name?: string; goal?: string; set?: string; missing?: 'recordings' | 'texts'; within?: string }>(c);
+    const input = await body<{ slug?: string; name?: string; goal?: string; set?: string; missing?: ProjectFocus['missing']; within?: string; scan?: string; level?: number }>(c);
     if (!input.slug || !input.name?.trim()) throw new HttpError(400, 'a project needs a slug and a name');
+    const focus: ProjectFocus =
+      input.missing === 'proofreading'
+        ? { missing: 'proofreading', scan: input.scan ? entityId(input.scan) : undefined, ...(input.level ? { level: input.level as 1 | 2 } : {}) }
+        : { missing: input.missing as 'recordings', ...(input.within ? { within: input.within } : {}) };
     const id = await catalog.openFocusProject(by, {
       slug: input.slug,
       name: input.name.trim().slice(0, 200),
       goal: input.goal?.trim().slice(0, 2000) || undefined,
       set: input.set ? entityId(input.set) : undefined,
-      focus: { missing: input.missing as 'recordings', ...(input.within ? { within: input.within } : {}) },
+      focus,
     });
     return c.json({ id, slug: input.slug }, 201);
   });
@@ -311,6 +332,56 @@ export function createApp(options: ApiOptions): Hono {
     return c.json(await fixLine(catalog, by, { scan, page: input.page, line: input.line, text: input.text }), 201);
   });
 
+  // How far each page of a scan is proofread (0, 1 or 2), for the page strip and proofreading projects.
+  app.get('/v1/scans/:id/progress', async (c) => {
+    const scan = entityId(c.req.param('id'));
+    await scanTextAllowed(scan);
+    const progress = await scanProgress(catalog, scan);
+    if (!progress) throw new CatalogError('not-found', 'this scan has not been read yet');
+    return c.json(progress);
+  });
+
+  // "This page is right": raises a page a proofreading level, with any lines fixed on the way.
+  app.post('/v1/scans/:id/text/confirm', async (c) => {
+    const by = await signedIn(c);
+    const scan = entityId(c.req.param('id'));
+    await scanTextAllowed(scan);
+    const input = await body<{ page?: number; fixes?: Record<string, string> }>(c);
+    if (typeof input.page !== 'number') throw new HttpError(400, 'give the page');
+    return c.json(await confirmPage(catalog, by, { scan, page: input.page, fixes: input.fixes }), 201);
+  });
+
+  // Someone's own OCR of a scan (hOCR, ALTO or plain text), as a new layer, for review.
+  app.post('/v1/scans/:id/ocr', async (c) => {
+    const by = await signedIn(c);
+    const scan = entityId(c.req.param('id'));
+    await scanTextAllowed(scan);
+    const input = await body<{ content?: string; format?: OcrFormat; engine?: { name?: string; version?: string }; firstPage?: number; language?: string }>(c);
+    if (typeof input.content !== 'string' || !input.engine?.name || !input.engine.version) throw new HttpError(400, 'give content and engine { name, version }');
+    if (input.format !== undefined && !['hocr', 'alto', 'text'].includes(input.format)) throw new HttpError(400, 'format is hocr, alto or text');
+    const made = await uploadOcr(catalog, by, { scan, content: input.content, format: input.format, engine: { name: input.engine.name, version: input.engine.version }, firstPage: input.firstPage, language: input.language });
+    return c.json(made, 201);
+  });
+
+  // Keepers pick which OCR layer seeds the community text.
+  app.post('/v1/scans/:id/text/seed', async (c) => {
+    const by = await signedIn(c);
+    const scan = entityId(c.req.param('id'));
+    const input = await body<{ layer?: string }>(c);
+    if (!input.layer) throw new HttpError(400, 'give the layer');
+    return c.json(await chooseSeed(catalog, by, { scan, layer: entityId(input.layer) }), 201);
+  });
+
+  // Compare printings: the printings of a unit whose text the catalog has, and two of them word by word.
+  app.get('/v1/units/:id/printings', async (c) => c.json({ printings: await printingsOf(catalog, entityId(c.req.param('id'))) }));
+
+  app.get('/v1/compare', async (c) => {
+    const a = c.req.query('a');
+    const b = c.req.query('b');
+    if (!a || !b) throw new HttpError(400, 'give a and b: text:<id> or scan:<id>:<from>-<to>');
+    return c.json(await comparePrintings(catalog, a, b));
+  });
+
   // A recording's transcript, paragraph by paragraph with where each is heard; machine paragraphs are marked until checked.
   app.get('/v1/recordings/:id/transcript', async (c) => {
     const transcript = await recordingTranscript(catalog, entityId(c.req.param('id')));
@@ -325,6 +396,29 @@ export function createApp(options: ApiOptions): Hono {
     const transcript = await recordingTranscript(catalog, entityId(c.req.param('id')));
     if (!transcript?.paragraphs.some((p) => p.id === input.segment)) throw new CatalogError('not-found', 'no such paragraph in this transcript');
     return c.json(await fixParagraph(catalog, by, { segment: input.segment as EntityId, content: input.content }), 201);
+  });
+
+  // "The Rebbe is saying this line now": sets a paragraph (or a word of it) at this moment, locks it, and moves what follows with it.
+  app.post('/v1/recordings/:id/sync/anchor', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ segment?: string; atMs?: number; word?: number }>(c);
+    if (!input.segment || typeof input.atMs !== 'number') throw new HttpError(400, 'give segment and atMs');
+    return c.json(await anchorSync(catalog, by, { recording: entityId(c.req.param('id')), segment: entityId(input.segment), atMs: input.atMs, word: typeof input.word === 'number' ? input.word : undefined }), 201);
+  });
+
+  // "The sync is right": every paragraph's sync of the recording marked checked.
+  app.post('/v1/recordings/:id/sync/confirm', async (c) => {
+    const by = await signedIn(c);
+    return c.json(await confirmSync(catalog, by, { recording: entityId(c.req.param('id')) }), 201);
+  });
+
+  // The farbrengen's hanacha, paragraph by paragraph with where each is heard in this recording.
+  app.get('/v1/recordings/:id/hanacha', async (c) => {
+    const found = await hanachaSync(catalog, entityId(c.req.param('id')));
+    if (!found) throw new CatalogError('not-found', 'this recording has no hanacha synced to it');
+    const gate = new ExportGate(catalog);
+    if (await gate.textWithheld(found.text)) throw new CatalogError('not-found', "this hanacha's text is withheld for its rights");
+    return c.json(found);
   });
 
   app.get('/v1/stats', async (c) => c.json({ head: await catalog.head(), counts: await catalog.counts() }));

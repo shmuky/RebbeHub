@@ -27,6 +27,10 @@ on:
       recording:
         description: One recording's id (rh-…), instead
         required: false
+      align:
+        description: Then time the words of transcripts that have no word timings, and sync hanachos (rebbehub align)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -70,9 +74,11 @@ jobs:
           LIMIT: ${{ inputs.limit }}
           LINKED: ${{ inputs.linked }}
           RECORDING: ${{ inputs.recording }}
+          ALIGN: ${{ inputs.align }}
         run: |
           npm run rebbehub -- migrate
           args=(--approve-as "$STEWARD" --limit "$LIMIT")
           if [ "$LINKED" = "true" ]; then args+=(--linked); fi
           if [ -n "$RECORDING" ]; then args+=(--recording "$RECORDING"); fi
           npm run rebbehub -- transcribe "${args[@]}"
+          if [ "$ALIGN" = "true" ]; then npm run rebbehub -- align "${args[@]}"; fi

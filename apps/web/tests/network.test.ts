@@ -79,7 +79,7 @@ describe('phase 6 on the site', () => {
   it('lights up the line a search found', async () => {
     const page = await get(`/text/${ids.scan}?page=4&line=l2`);
     expect(page.html).toContain('id="line-l2"');
-    expect(page.html).toMatch(/class="text-line unchecked found"[^>]*>.*<mark>שורה של ניגון שמח<\/mark>/s);
+    expect(page.html).toMatch(/class="text-line level-0 unchecked found"[^>]*>.*<mark>שורה של ניגון שמח<\/mark>/s);
   });
 
   it('searches by idea where it is set up, and says the machine chose', async () => {

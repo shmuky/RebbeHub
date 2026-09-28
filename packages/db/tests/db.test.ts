@@ -36,6 +36,7 @@ describe('migrations', () => {
       'page_fix',
       'path_redirect',
       'project',
+      'project_claim',
       'project_head',
       'report',
       'review',

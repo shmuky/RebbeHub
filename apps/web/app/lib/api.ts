@@ -1,4 +1,4 @@
-import type { EntityType } from '@rebbehub/model';
+import type { EntityType, LocalName } from '@rebbehub/model';
 
 /**
  * The site reads the catalog through the public API (services/api), like
@@ -81,7 +81,42 @@ export interface ScanText {
   pages: number;
   machine: boolean;
   engine: { name: string; version: string } | null;
-  lines: Array<{ id: string; text: string; checked: boolean }>;
+  /** How far the page is proofread: 0 not yet, 1 once, 2 twice. */
+  level: 0 | 1 | 2;
+  lines: Array<{ id: string; text: string; checked: boolean; level: 0 | 1 | 2 }>;
+  layers: Array<{ id: string; kind: 'machine-ocr' | 'uploaded-ocr' | 'community'; engine: { name: string; version: string } | null; uploadedBy: string | null; seeds: boolean }>;
+}
+
+/** One thing to do in a project, as GET /v1/projects/:slug lists them. */
+export interface ProjectItem {
+  item: string;
+  kind: 'event' | 'recording' | 'page';
+  id: string | null;
+  page?: number;
+  date?: string | null;
+  title?: LocalName | null;
+  event?: string | null;
+  level?: number;
+  claimedBy?: string | null;
+}
+
+/** A printing of a unit whose text can be compared. */
+export interface Printing {
+  key: string;
+  label: LocalName;
+  publication: string | null;
+  kind: 'text' | 'scan';
+  checked: boolean;
+}
+
+/** Two printings compared word by word. */
+export interface Comparison {
+  a: { key: string; checked: boolean };
+  b: { key: string; checked: boolean };
+  runs: Array<{ op: 'same' | 'removed' | 'added'; text: string }>;
+  same: number;
+  removed: number;
+  added: number;
 }
 
 /** A project working through a gap, with its progress. */
@@ -108,7 +143,7 @@ export interface Project {
   goal: string | null;
   set: string | null;
   status: 'open' | 'merged' | 'closed';
-  focus: { missing: 'recordings' | 'texts'; within?: string };
+  focus: { missing: 'recordings' | 'texts' | 'sync' | 'proofreading'; within?: string; scan?: string; level?: 1 | 2 };
   creatorName: string | null;
   createdAt: string;
   total: number;
@@ -279,7 +314,22 @@ export class RebbeHubApi {
   }
 
   project(slug: string) {
-    return this.maybe(this.get<{ project: Project; next: Entity[] }>(`/v1/projects/${encodeURIComponent(slug)}`));
+    return this.maybe(this.get<{ project: Project; next: Entity[]; todo: ProjectItem[] }>(`/v1/projects/${encodeURIComponent(slug)}`));
+  }
+
+  /** How far each page of a scan is proofread; null when it has not been read. */
+  scanProgress(scan: string) {
+    return this.maybe(this.get<{ pages: number; levels: Array<0 | 1 | 2> }>(`/v1/scans/${encodeURIComponent(scan)}/progress`));
+  }
+
+  /** The printings of a unit whose text the catalog has. */
+  async printings(unit: string) {
+    return (await this.get<{ printings: Printing[] }>(`/v1/units/${encodeURIComponent(unit)}/printings`)).printings;
+  }
+
+  /** Two printings compared word by word; null when one of them is not there (or withheld). */
+  compare(a: string, b: string) {
+    return this.maybe(this.get<Comparison>('/v1/compare', { a, b }));
   }
 
   community(limit?: number) {

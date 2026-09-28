@@ -15,7 +15,25 @@ needs a signed-in session, from the site's own pages.
 - `GET /v1/missing?kind=recordings|texts|scans`, `/v1/projects`.
 - `GET /v1/scans/<id>/text?page=<n>`, `/v1/recordings/<id>/transcript`:
   a scan's text and a recording's transcript, machine lines marked until
-  people check them.
+  people check them. A scan's page gives each line's proofread level (0,
+  1, 2) and the scan's text layers; a transcript gives each paragraph's
+  sync, word by word where it has word timings, and whether a person
+  locked or checked it.
+- `GET /v1/scans/<id>/progress`: how far each page is proofread.
+- `GET /v1/recordings/<id>/hanacha`: the farbrengen's hanacha, paragraph
+  by paragraph with where each is heard in the recording.
+- `GET /v1/units/<id>/printings`, `/v1/compare?a=…&b=…`: the printings of
+  a sicha or letter whose text the catalog has (`text:<id>`, or
+  `scan:<id>:<from>-<to>` for pages of a scan), and two of them compared
+  word by word, the Hebrew way.
+- `GET /v1/projects/<slug>`: a project, its progress and what is left;
+  signed in, `POST /v1/projects/<slug>/next` hands out the next item
+  nobody holds.
+- Signed in: `POST /v1/scans/<id>/ocr` (your own OCR: hOCR, ALTO, or
+  plain text with form feeds between pages), `/v1/scans/<id>/text/confirm`
+  ("this page is right"), `/v1/recordings/<id>/sync/anchor` ("the Rebbe is
+  saying this line now", with the moment in milliseconds) and
+  `/v1/recordings/<id>/sync/confirm`. Each is a suggestion, reviewed.
 - `GET /v1/files/<sha256>`: a file's size, rights and address, what was
   made from it (a scan's reading copy) and its page fix.
 - `GET /v1/page-fixes/drive/<Drive id>`: what a PDF on Google Drive needs

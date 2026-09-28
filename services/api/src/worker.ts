@@ -49,9 +49,6 @@ interface Env {
   CLOUDFLARE_AI_TOKEN?: string;
   /** The address OAI-PMH names for the repository's administrators; without it, /oai is not offered. */
   OAI_ADMIN_EMAIL?: string;
-}
-
-const mailerOf = (env: Env) => (env.RESEND_API_KEY ? resendMailer({ apiKey: env.RESEND_API_KEY, from: env.EMAIL_FROM }) : undefined);
   /** Mirrors (docs/mirrors.md), all public values in [vars]: where the git mirror is cloned from (several, comma separated), */
   CATALOG_GIT_URL?: string;
   /** the release keys' public halves (base64, comma separated), */
@@ -59,6 +56,8 @@ const mailerOf = (env: Env) => (env.RESEND_API_KEY ? resendMailer({ apiKey: env.
   /** and where dumps are served when not this Worker's /dumps. */
   DUMPS_BASE_URL?: string;
 }
+
+const mailerOf = (env: Env) => (env.RESEND_API_KEY ? resendMailer({ apiKey: env.RESEND_API_KEY, from: env.EMAIL_FROM }) : undefined);
 
 const list = (value: string | undefined) => (value ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 

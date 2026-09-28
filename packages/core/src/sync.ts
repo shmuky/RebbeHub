@@ -1,0 +1,500 @@
+import { one } from '@rebbehub/db';
+import type { EntityId } from '@rebbehub/model';
+import type { Catalog, ChangesetRow } from './catalog.js';
+import { invalid, notFound } from './errors.js';
+import type { Json } from './merge.js';
+import { matchWords, wordKey, words as wordsOf } from './words.js';
+
+/**
+ * Sync: where each paragraph, and each word, of a text is heard in a
+ * recording (the plan, sections 7 and 9: "transcribe, align to the
+ * transcript, then to the hanacha paragraph by paragraph"; "the player
+ * highlights the words as they are spoken; if it drifts, the user taps
+ * 'the Rebbe is saying this line now' and the alignment is fixed from
+ * there"). What a machine aligned is labelled until a person checks it;
+ * a span a person fixed is locked, and no re-run moves it.
+ */
+
+/** A word as a recogniser heard it, in milliseconds from the recording's start. */
+export interface HeardWord {
+  text: string;
+  startMs: number;
+  endMs: number;
+}
+
+/** One word of a paragraph with when it is heard: character offsets into the paragraph. */
+export interface WordTiming {
+  from: number;
+  to: number;
+  startMs: number;
+  endMs: number;
+}
+
+export interface Timed {
+  startMs: number;
+  endMs: number;
+  words: WordTiming[];
+}
+
+/**
+ * Pieces of what was heard, as recognisers give them, into words: the
+ * words' own times when the recogniser gave them, else the piece's time
+ * shared among its words by their length.
+ */
+export function heardWords(heard: ReadonlyArray<{ text: string; startMs: number; endMs: number; words?: HeardWord[] }>): HeardWord[] {
+  const out: HeardWord[] = [];
+  for (const h of heard) {
+    if (h.words?.length) {
+      for (const w of h.words) if (w.text.trim()) out.push({ text: w.text.trim(), startMs: w.startMs, endMs: Math.max(w.startMs, w.endMs) });
+      continue;
+    }
+    const ws = h.text.split(/\s+/).filter(Boolean);
+    const chars = ws.reduce((n, w) => n + w.length, 0) || 1;
+    let at = h.startMs;
+    for (const w of ws) {
+      const len = ((h.endMs - h.startMs) * w.length) / chars;
+      out.push({ text: w, startMs: Math.round(at), endMs: Math.round(at + len) });
+      at += len;
+    }
+  }
+  return out;
+}
+
+/**
+ * Forced alignment of a text to what was heard: the paragraphs' words are
+ * matched to the recognised words (the same word, compared the Hebrew way,
+ * in order), a matched word takes the time it was heard, and the words in
+ * between share the time between their neighbours by length. So a
+ * transcript people corrected still gets word timings from a fresh
+ * recognition of the audio. Null when nothing matched at all.
+ */
+export function alignWords(paragraphs: readonly string[], heard: readonly HeardWord[]): Array<Timed | null> | null {
+  const tokens = paragraphs.flatMap((content, p) => wordsOf(content).map((w) => ({ ...w, p })));
+  if (!tokens.length || !heard.length) return null;
+  const matches = matchWords(
+    tokens.map((t) => t.key),
+    heard.map((h) => wordKey(h.text)),
+  );
+  if (!matches.length) return null;
+  const start = new Array<number>(tokens.length).fill(NaN);
+  const end = new Array<number>(tokens.length).fill(NaN);
+  for (const [t, h] of matches) {
+    start[t] = heard[h]!.startMs;
+    end[t] = heard[h]!.endMs;
+  }
+  // The words between two matched ones share the time between them, by length.
+  const first = heard[0]!.startMs;
+  const last = Math.max(...heard.map((h) => h.endMs));
+  let i = 0;
+  while (i < tokens.length) {
+    if (!Number.isNaN(start[i]!)) {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < tokens.length && Number.isNaN(start[j]!)) j++;
+    const from = i > 0 ? end[i - 1]! : first;
+    const to = j < tokens.length ? start[j]! : last;
+    const span = Math.max(0, to - from);
+    const chars = tokens.slice(i, j).reduce((n, t) => n + t.text.length, 0) || 1;
+    let at = from;
+    for (let k = i; k < j; k++) {
+      const len = (span * tokens[k]!.text.length) / chars;
+      start[k] = at;
+      end[k] = at + len;
+      at += len;
+    }
+    i = j;
+  }
+  return paragraphs.map((_, p) => {
+    const ws: WordTiming[] = [];
+    tokens.forEach((t, k) => {
+      if (t.p === p) ws.push({ from: t.from, to: t.to, startMs: Math.round(start[k]!), endMs: Math.max(Math.round(start[k]!), Math.round(end[k]!)) });
+    });
+    if (!ws.length) return null;
+    return { startMs: ws[0]!.startMs, endMs: Math.max(...ws.map((w) => w.endMs)), words: ws };
+  });
+}
+
+/**
+ * Forced alignment that keeps what people fixed: the paragraphs between
+ * two locked ones are aligned only to what was heard between them, so a
+ * person's fix steers every re-run. Locked paragraphs come back null
+ * (left as they are).
+ */
+export function alignAroundLocks(paragraphs: ReadonlyArray<{ content: string; locked?: { startMs: number; endMs: number } }>, heard: readonly HeardWord[]): Array<Timed | null> {
+  const out: Array<Timed | null> = paragraphs.map(() => null);
+  let i = 0;
+  while (i < paragraphs.length) {
+    if (paragraphs[i]!.locked) {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < paragraphs.length && !paragraphs[j]!.locked) j++;
+    const from = i > 0 ? paragraphs[i - 1]!.locked!.endMs : -Infinity;
+    const to = j < paragraphs.length ? paragraphs[j]!.locked!.startMs : Infinity;
+    const window = heard.filter((h) => (h.startMs + h.endMs) / 2 >= from && (h.startMs + h.endMs) / 2 < to);
+    const timed = alignWords(
+      paragraphs.slice(i, j).map((p) => p.content),
+      window,
+    );
+    timed?.forEach((t, k) => (out[i + k] = t));
+    i = j;
+  }
+  return out;
+}
+
+/** A word's key and, for a word of four letters or more, the same without a leading ו ה ב ל מ ש כ: Yiddish and Hebrew share stems. */
+function keysOf(text: string): string[] {
+  return wordsOf(text).flatMap((w) => (w.key.length >= 4 && /^[והבלמשכ]/.test(w.key) ? [w.key, w.key.slice(1)] : w.key.length >= 2 ? [w.key] : []));
+}
+
+/**
+ * Paragraph-level alignment of a recording to its hanacha (the plan,
+ * section 9: "paragraph-level alignment to hanachos by text similarity").
+ * The hanacha is the Rebbe's words written up afterwards, in Hebrew; the
+ * recording is what he said, mostly in Yiddish; so they are not the same
+ * words, only many of the same. What was heard is cut into pieces of about
+ * 25 words, each piece is scored against each paragraph by the words they
+ * share, and the pieces are given out to the paragraphs in order (a
+ * paragraph may take no piece: not everything written was said, nor the
+ * other way round), so the paragraphs' shares score best in all. Each
+ * paragraph comes back with where it is heard, or null.
+ */
+export function alignParagraphs(paragraphs: readonly string[], heard: readonly HeardWord[], options: { piece?: number } = {}): Array<{ startMs: number; endMs: number; score: number } | null> {
+  // Pieces of about 25 words, smaller for a short recording, so each paragraph has a few to take.
+  const size = options.piece ?? Math.max(1, Math.min(25, Math.floor(heard.length / (2 * Math.max(1, paragraphs.length)))));
+  const pieces: Array<{ keys: string[]; startMs: number; endMs: number }> = [];
+  for (let i = 0; i < heard.length; i += size) {
+    const slice = heard.slice(i, i + size);
+    pieces.push({ keys: slice.flatMap((h) => keysOf(h.text)), startMs: slice[0]!.startMs, endMs: slice.at(-1)!.endMs });
+  }
+  const sets = paragraphs.map((p) => new Set(keysOf(p)));
+  const K = paragraphs.length;
+  const M = pieces.length;
+  if (!K || !M) return paragraphs.map(() => null);
+  const score = (k: number, m: number) => {
+    const keys = pieces[m]!.keys;
+    if (!keys.length) return 0;
+    let hit = 0;
+    for (const key of keys) if (sets[k]!.has(key)) hit++;
+    return hit / keys.length;
+  };
+  // best[m][k]: the best total with piece m given to paragraph k; paragraphs only move forward.
+  const SKIP = 0.02;
+  const best = Array.from({ length: M }, () => new Float64Array(K));
+  const from = Array.from({ length: M }, () => new Int32Array(K));
+  for (let k = 0; k < K; k++) best[0]![k] = score(k, 0) - SKIP * k;
+  for (let m = 1; m < M; m++) {
+    // The best earlier paragraph to come from, less a little for each paragraph skipped.
+    let runBest = -Infinity;
+    let runAt = 0;
+    for (let k = 0; k < K; k++) {
+      const stay = best[m - 1]![k]!;
+      const move = runBest;
+      if (stay >= move) {
+        best[m]![k] = stay + score(k, m);
+        from[m]![k] = k;
+      } else {
+        best[m]![k] = move + score(k, m);
+        from[m]![k] = runAt;
+      }
+      // Moving on from k to a later paragraph, with the paragraphs between skipped.
+      if (stay > runBest) {
+        runBest = stay;
+        runAt = k;
+      }
+      runBest -= SKIP;
+    }
+  }
+  let k = 0;
+  for (let c = 1; c < K; c++) if (best[M - 1]![c]! > best[M - 1]![k]!) k = c;
+  const owner = new Array<number>(M);
+  for (let m = M - 1; m >= 0; m--) {
+    owner[m] = k;
+    if (m > 0) k = from[m]![k]!;
+  }
+  return paragraphs.map((_, p) => {
+    const mine = owner.map((o, m) => (o === p ? m : -1)).filter((m) => m >= 0);
+    if (!mine.length) return null;
+    const total = mine.reduce((n, m) => n + score(p, m), 0) / mine.length;
+    return { startMs: pieces[mine[0]!]!.startMs, endMs: pieces[mine.at(-1)!]!.endMs, score: Math.round(total * 1000) / 1000 };
+  });
+}
+
+// ------------------------------------------------------------ the catalog
+
+export interface TranscriptParagraph {
+  id: EntityId;
+  content: string;
+  startMs: number | null;
+  endMs: number | null;
+  /** Word timings, when the sync is word by word. */
+  words: WordTiming[] | null;
+  /** The span this paragraph's sync is kept in. */
+  span: EntityId | null;
+  /** A person fixed where it is heard: no machine re-run moves it. */
+  locked: boolean;
+  /** Whether a person has checked its words. */
+  checked: boolean;
+  /** Whether a person has checked where it is heard. */
+  syncChecked: boolean;
+  by: string | null;
+}
+
+export interface TranscriptView {
+  recording: EntityId;
+  text: EntityId;
+  language: string;
+  alignment: EntityId | null;
+  granularity: 'word' | 'paragraph' | null;
+  /** Its paragraphs in order, each with where it is heard, and whether a person has checked it. */
+  paragraphs: TranscriptParagraph[];
+}
+
+interface SpanData {
+  alignment: EntityId;
+  segment: EntityId;
+  startMs: number;
+  endMs: number;
+  words?: WordTiming[];
+  locked?: boolean;
+  origin?: { by: string; checked?: boolean };
+}
+
+/** A recording's transcript with its sync, paragraph by paragraph; null when it has none. */
+export async function recordingTranscript(catalog: Catalog, recording: EntityId): Promise<TranscriptView | null> {
+  const text = await one<{ id: EntityId; language: string }>(
+    catalog.db,
+    `SELECT t.id, tr.data->>'language' AS language FROM entity_ref x JOIN entity t ON t.id = x.from_id AND t.type = 'text' AND NOT t.deleted
+     JOIN revision tr ON tr.id = t.main_rev WHERE x.to_id = $1 AND x.field = 'recording' AND tr.data->>'kind' = 'transcript' ORDER BY t.id LIMIT 1`,
+    [recording],
+  );
+  if (!text) return null;
+  const alignment = await one<{ id: EntityId; granularity: 'word' | 'paragraph' }>(
+    catalog.db,
+    `SELECT a.id, ar.data->>'granularity' AS granularity FROM entity_ref x JOIN entity a ON a.id = x.from_id AND a.type = 'alignment' AND NOT a.deleted
+     JOIN revision ar ON ar.id = a.main_rev WHERE x.to_id = $1 AND x.field = 'text' AND ar.data->>'recording' = $2 ORDER BY a.id LIMIT 1`,
+    [text.id, recording],
+  );
+  const { rows } = await catalog.db.query<{ id: EntityId; content: string; proofread: number; origin: { by?: string; checked?: boolean } | null; order: string; span: EntityId | null; sd: SpanData | null }>(
+    `SELECT s.id, sr.data->>'content' AS content, (sr.data->>'proofread')::int AS proofread, sr.data->'origin' AS origin, sr.data->>'order' AS "order",
+            sp.id AS span, sp.data AS sd
+     FROM entity_ref x JOIN entity s ON s.id = x.from_id AND s.type = 'segment' AND NOT s.deleted
+     JOIN revision sr ON sr.id = s.main_rev
+     LEFT JOIN LATERAL (
+       SELECT e.id, spr.data FROM entity_ref y JOIN entity e ON e.id = y.from_id AND e.type = 'alignment-span' AND NOT e.deleted
+       JOIN revision spr ON spr.id = e.main_rev
+       WHERE y.to_id = s.id AND y.field = 'segment' AND spr.data->>'alignment' = $2 ORDER BY e.id LIMIT 1
+     ) sp ON TRUE
+     WHERE x.to_id = $1 AND x.field = 'text'`,
+    [text.id, alignment?.id ?? ''],
+  );
+  rows.sort((a, b) => (a.order < b.order ? -1 : a.order > b.order ? 1 : 0));
+  return {
+    recording,
+    text: text.id,
+    language: text.language,
+    alignment: alignment?.id ?? null,
+    granularity: alignment?.granularity ?? null,
+    paragraphs: rows.map((r) => ({
+      id: r.id,
+      content: r.content,
+      startMs: r.sd ? Number(r.sd.startMs) : null,
+      endMs: r.sd ? Number(r.sd.endMs) : null,
+      // Timings for words that are no longer there (the paragraph was corrected since) are left out.
+      words: r.sd?.words?.length && r.sd.words.every((w) => w.to <= r.content.length) ? r.sd.words : null,
+      span: r.span,
+      locked: Boolean(r.sd?.locked),
+      checked: r.proofread > 0 || Boolean(r.origin?.checked),
+      syncChecked: Boolean(r.sd?.locked || r.sd?.origin?.checked || (r.sd && !r.sd.origin)),
+      by: r.origin?.by ?? null,
+    })),
+  };
+}
+
+/**
+ * Fixes a paragraph of a transcript as a suggestion: its words as the
+ * person heard them, marked checked. Its word timings no longer fit the
+ * corrected words, so they are let go (the paragraph keeps where it is
+ * heard) until the next alignment run times the new words.
+ */
+export async function fixParagraph(catalog: Catalog, by: string, input: { segment: EntityId; content: string }): Promise<ChangesetRow> {
+  const content = input.content.replace(/\s+/g, ' ').trim();
+  if (!content || content.length > 20_000) throw invalid('a paragraph of 1 to 20,000 characters');
+  const segment = await catalog.get(input.segment);
+  if (!segment || segment.type !== 'segment') throw notFound(`paragraph ${input.segment}`);
+  const data = segment.data as Record<string, unknown> & { origin?: Record<string, unknown> };
+  const suggestion = await catalog.createChangeset(by, { title: 'תיקון תמלול' });
+  await catalog.putRevision(suggestion.id, by, {
+    id: segment.id,
+    type: 'segment',
+    data: { ...data, content, proofread: 1, ...(data.origin ? { origin: { ...data.origin, checked: true } } : {}) } as Json,
+  });
+  const spans = await catalog.backlinks(segment.id, { field: 'segment', type: 'alignment-span' });
+  for (const s of spans) {
+    const span = await catalog.get(s.from);
+    const sd = span?.data as unknown as SpanData | undefined;
+    if (!span || !sd?.words) continue;
+    const { words: _dropped, ...rest } = sd;
+    await catalog.putRevision(suggestion.id, by, { id: span.id, type: 'alignment-span', data: rest as unknown as Json });
+  }
+  return catalog.submit(suggestion.id, by);
+}
+
+/** A time moved by a fix: the piece between the fixed point and the next locked one is stretched to fit. */
+export function remapper(oldAt: number, newAt: number, nextLocked: number | null): (t: number) => number {
+  const delta = newAt - oldAt;
+  return (t: number) => {
+    if (t < oldAt) return Math.max(0, Math.round(t + delta));
+    if (nextLocked === null || nextLocked <= oldAt || nextLocked <= newAt) return Math.max(0, Math.round(t + delta));
+    if (t >= nextLocked) return t;
+    return Math.round(newAt + ((t - oldAt) * (nextLocked - newAt)) / (nextLocked - oldAt));
+  };
+}
+
+/**
+ * "The Rebbe is saying this line now" (the plan, section 7): a listener
+ * taps the paragraph (or the word) they hear, at `atMs` in the recording.
+ * That paragraph's sync is set there and locked; the paragraphs after it,
+ * up to the next one a person locked, are moved with it (stretched to fit
+ * before that one), and stay machine sync; the paragraph before it ends
+ * where this one now starts. A suggestion like any fix, which goes live
+ * straight away for trusted people in open sets. Returns it and the spans
+ * as they now stand, so the player can follow the fix at once.
+ */
+export async function anchorSync(
+  catalog: Catalog,
+  by: string,
+  input: { recording: EntityId; segment: EntityId; atMs: number; word?: number },
+): Promise<ChangesetRow & { spans: Array<{ segment: EntityId; startMs: number; endMs: number; words: WordTiming[] | null; locked: boolean }> }> {
+  if (!Number.isFinite(input.atMs) || input.atMs < 0) throw invalid('atMs is a time in the recording, in milliseconds');
+  const view = await recordingTranscript(catalog, input.recording);
+  if (!view) throw notFound(`a transcript of ${input.recording}`);
+  const i = view.paragraphs.findIndex((p) => p.id === input.segment);
+  const target = view.paragraphs[i];
+  if (!target) throw notFound(`paragraph ${input.segment} in this transcript`);
+  if (!target.span || target.startMs === null || target.endMs === null) throw notFound('a sync for this paragraph');
+  const word = input.word !== undefined ? target.words?.[input.word] : undefined;
+  if (input.word !== undefined && !word) throw notFound(`word ${input.word} of this paragraph`);
+  const atMs = Math.round(input.atMs);
+  const oldAt = word ? word.startMs : target.startMs;
+  let j = i + 1;
+  while (j < view.paragraphs.length && !view.paragraphs[j]!.locked) j++;
+  const nextLocked = view.paragraphs[j]?.startMs ?? null;
+  const move = remapper(oldAt, atMs, nextLocked);
+
+  const changed = new Map<number, { startMs: number; endMs: number; words: WordTiming[] | null; locked: boolean }>();
+  for (let k = i; k < j; k++) {
+    const p = view.paragraphs[k]!;
+    if (!p.span || p.startMs === null || p.endMs === null) continue;
+    changed.set(k, {
+      startMs: k === i && !word ? atMs : move(p.startMs),
+      endMs: move(p.endMs),
+      words: p.words?.map((w) => ({ ...w, startMs: move(w.startMs), endMs: move(w.endMs) })) ?? null,
+      locked: k === i ? true : p.locked,
+    });
+  }
+  const fixed = changed.get(i)!;
+  const before = view.paragraphs[i - 1];
+  // The line before ends where this one now starts: earlier if they overlapped, later if a gap opened.
+  if (before?.span && !before.locked && before.endMs !== null && before.endMs !== fixed.startMs) {
+    changed.set(i - 1, {
+      startMs: Math.min(before.startMs ?? 0, fixed.startMs),
+      endMs: fixed.startMs,
+      words: before.words?.map((w) => ({ ...w, startMs: Math.min(w.startMs, fixed.startMs), endMs: Math.min(w.endMs, fixed.startMs) })) ?? null,
+      locked: false,
+    });
+  }
+
+  const suggestion = await catalog.createChangeset(by, { title: 'תיקון סנכרון' });
+  for (const [k, span] of changed) {
+    const p = view.paragraphs[k]!;
+    const current = (await catalog.get(p.span!))!.data as unknown as SpanData;
+    const { words: _w, ...rest } = current;
+    await catalog.putRevision(suggestion.id, by, {
+      id: p.span!,
+      type: 'alignment-span',
+      data: {
+        ...rest,
+        startMs: span.startMs,
+        endMs: Math.max(span.startMs, span.endMs),
+        ...(span.words ? { words: span.words } : {}),
+        ...(k === i ? { locked: true, ...(current.origin ? { origin: { ...current.origin, checked: true } } : {}) } : {}),
+      } as unknown as Json,
+    });
+  }
+  const submitted = await catalog.submit(suggestion.id, by);
+  return {
+    ...submitted,
+    spans: [...changed.entries()].sort((a, b) => a[0] - b[0]).map(([k, s]) => ({ segment: view.paragraphs[k]!.id, ...s, endMs: Math.max(s.startMs, s.endMs) })),
+  };
+}
+
+/**
+ * "The sync is right": a listener who has heard the recording through
+ * with its transcript marks every paragraph's sync checked. Sync projects
+ * count a recording done when all of it is.
+ */
+export async function confirmSync(catalog: Catalog, by: string, input: { recording: EntityId }): Promise<ChangesetRow> {
+  const view = await recordingTranscript(catalog, input.recording);
+  if (!view?.alignment) throw notFound(`a sync of ${input.recording}`);
+  const open = view.paragraphs.filter((p) => p.span && !p.syncChecked);
+  if (!open.length) throw invalid('every paragraph of this sync is checked already');
+  const suggestion = await catalog.createChangeset(by, { title: 'בדיקת סנכרון' });
+  for (const p of open) {
+    const current = (await catalog.get(p.span!))!.data as unknown as SpanData;
+    await catalog.putRevision(suggestion.id, by, {
+      id: p.span!,
+      type: 'alignment-span',
+      data: { ...current, origin: { ...(current.origin ?? { by }), checked: true } } as unknown as Json,
+    });
+  }
+  return catalog.submit(suggestion.id, by);
+}
+
+/** The hanacha of a recording's farbrengen, when the catalog has its text: kind `hanacha`, of the recording or of a unit of its event. */
+export async function hanachaOf(catalog: Catalog, recording: EntityId): Promise<EntityId | null> {
+  const row = await one<{ id: EntityId }>(
+    catalog.db,
+    `SELECT t.id FROM entity t JOIN revision tr ON tr.id = t.main_rev
+     WHERE t.type = 'text' AND NOT t.deleted AND tr.data->>'kind' = 'hanacha' AND (
+       tr.data->>'recording' = $1 OR EXISTS (
+         SELECT 1 FROM entity rec JOIN revision rr ON rr.id = rec.main_rev
+         JOIN entity u ON u.id = tr.data->>'unit' JOIN revision ur ON ur.id = u.main_rev
+         WHERE rec.id = $1 AND rr.data->>'event' IS NOT NULL AND ur.data->'events' ? (rr.data->>'event')))
+     ORDER BY t.id LIMIT 1`,
+    [recording],
+  );
+  return row?.id ?? null;
+}
+
+/** A hanacha's paragraphs, each with where it is heard in a recording (a paragraph-level alignment), or null when there is none. */
+export async function hanachaSync(catalog: Catalog, recording: EntityId): Promise<{ text: EntityId; alignment: EntityId; paragraphs: Array<{ id: EntityId; content: string; startMs: number | null; endMs: number | null; checked: boolean }> } | null> {
+  const text = await hanachaOf(catalog, recording);
+  if (!text) return null;
+  const alignment = await one<{ id: EntityId }>(
+    catalog.db,
+    `SELECT a.id FROM entity_ref x JOIN entity a ON a.id = x.from_id AND a.type = 'alignment' AND NOT a.deleted
+     JOIN revision ar ON ar.id = a.main_rev WHERE x.to_id = $1 AND x.field = 'text' AND ar.data->>'recording' = $2 ORDER BY a.id LIMIT 1`,
+    [text, recording],
+  );
+  if (!alignment) return null;
+  const { rows } = await catalog.db.query<{ id: EntityId; content: string; order: string; sd: SpanData | null }>(
+    `SELECT s.id, sr.data->>'content' AS content, sr.data->>'order' AS "order", sp.data AS sd
+     FROM entity_ref x JOIN entity s ON s.id = x.from_id AND s.type = 'segment' AND NOT s.deleted JOIN revision sr ON sr.id = s.main_rev
+     LEFT JOIN LATERAL (
+       SELECT spr.data FROM entity_ref y JOIN entity e ON e.id = y.from_id AND e.type = 'alignment-span' AND NOT e.deleted JOIN revision spr ON spr.id = e.main_rev
+       WHERE y.to_id = s.id AND y.field = 'segment' AND spr.data->>'alignment' = $2 LIMIT 1
+     ) sp ON TRUE
+     WHERE x.to_id = $1 AND x.field = 'text'`,
+    [text, alignment.id],
+  );
+  rows.sort((a, b) => (a.order < b.order ? -1 : a.order > b.order ? 1 : 0));
+  return {
+    text,
+    alignment: alignment.id,
+    paragraphs: rows.map((r) => ({ id: r.id, content: r.content, startMs: r.sd ? r.sd.startMs : null, endMs: r.sd ? r.sd.endMs : null, checked: Boolean(r.sd?.locked || r.sd?.origin?.checked) })),
+  };
+}
