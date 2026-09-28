@@ -22,6 +22,17 @@ import { checkFixed, fixPdf, PDF_FIX_ENCODER, type PagePlan } from '@rebbehub/pd
 
 /** The Sichos Kodesh edition's labels in the catalog (Sichos-Kodesh's `pdfEdition`). */
 export const SICHOS_KODESH_LABEL = /שיחו"?ק|שיחות קודש/;
+
+/**
+ * Labels naming another printing: the re-typed edition published since
+ * 1998 (הוצאת תשנ"ח) and its Brooklyn 5776 volumes (ברוקלין תשע"ו),
+ * booklets of other publishers (הוצאת …, הוצאות …), memoirs (זכרונות …).
+ * Those are publisher scans (docs/rights.md), not the old typewritten set.
+ */
+const OTHER_PRINTING = /הוצא|תשע"ו|זכרונות/;
+
+/** Whether a catalog label is a scan of the old typewritten Sichos Kodesh (open), not a later printing. */
+export const isOldSichosKodesh = (label: string): boolean => SICHOS_KODESH_LABEL.test(label) && !OTHER_PRINTING.test(label);
 export const READING_COPY = 'reading-copy';
 /** Where the manifest is published in the public bucket, and served by the API. */
 export const MANIFEST_KEY = 'manifests/reading-copies/sichos-kodesh.json';
@@ -36,7 +47,7 @@ export interface ScanRef {
   where: string;
 }
 
-/** Every Sichos Kodesh hanacha the farbrengens of a Sichos-Kodesh checkout link to, once per Drive file. */
+/** Every old Sichos Kodesh hanacha the farbrengens of a Sichos-Kodesh checkout link to, once per Drive file. */
 export async function sichosKodeshScans(checkout: string): Promise<ScanRef[]> {
   const dir = join(checkout, 'apps', 'web', 'src', 'catalog', 'data');
   const found = new Map<string, ScanRef>();
@@ -44,7 +55,7 @@ export async function sichosKodeshScans(checkout: string): Promise<ScanRef[]> {
     const entries = JSON.parse(await readFile(join(dir, file), 'utf8')) as Array<{ occasionId: number; pdfs?: Array<{ driveFileId: string; label: string }> }>;
     for (const entry of entries) {
       for (const pdf of entry.pdfs ?? []) {
-        if (SICHOS_KODESH_LABEL.test(pdf.label) && !found.has(pdf.driveFileId)) found.set(pdf.driveFileId, { driveFileId: pdf.driveFileId, label: pdf.label, where: `${file.slice(0, 4)}/${entry.occasionId}` });
+        if (isOldSichosKodesh(pdf.label) && !found.has(pdf.driveFileId)) found.set(pdf.driveFileId, { driveFileId: pdf.driveFileId, label: pdf.label, where: `${file.slice(0, 4)}/${entry.occasionId}` });
       }
     }
   }

@@ -46,9 +46,9 @@ screens, notifications for follows, the reviewer's AI summary.
 
 ## Phases 3-6
 
-The Sichos Kodesh scans are in (open), each with a
+The Sichos Kodesh scans are in (2,710 of them, open; 2,573 with a
 lossless **reading copy** - pages straightened, centred, cut free of the
-scanner's edges - and every page's measurements kept for OCR
+scanner's edges), and every page's measurements kept for OCR
 (`@rebbehub/pdf-fix`, `rebbehub reading-copies`; see
 [operations](operations.md)). Uploads and dedup (the `file` tables, rights tiers and takedowns are in
 place), IIIF, OCR and community text, sync, and the network - as the plan

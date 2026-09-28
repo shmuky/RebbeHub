@@ -62,7 +62,10 @@ scanner's black edges. The scan itself is untouched - only where it sits
 on the page changes - so the copy is lossless and the same size. Each
 copy is read back and measured again, and a file whose pages do not all
 come out level (two-column typeset pages, whose tilt cannot be read
-reliably) keeps no copy.
+reliably) keeps no copy. Only the old typewritten set is taken: a label
+naming a later printing (the re-typed edition of 5758 on, its Brooklyn
+5776 volumes, another publisher's booklet, a memoir) is a publisher scan
+and stays out.
 
 ```sh
 export CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=…   # R2 edit rights on both buckets

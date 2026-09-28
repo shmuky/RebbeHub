@@ -41,16 +41,20 @@ async function checkout(): Promise<string> {
     JSON.stringify([
       { occasionId: 11114312, pdfs: [{ driveFileId: 'drive-sk-1', label: 'שיחו"ק' }, { driveFileId: 'drive-tm-1', label: 'תו"מ התוועדויות' }] },
       { occasionId: 11114313, pdfs: [{ driveFileId: 'drive-sk-2', label: 'שיחות קודש' }, { driveFileId: 'drive-sk-1', label: 'שיחו"ק' }] },
+      // Later printings: publisher scans, not the old typewritten set.
+      { occasionId: 11114314, pdfs: [{ driveFileId: 'drive-new-1', label: 'הנחה מוגה/ שיחו"ק - הוצאת תשנ"ח' }, { driveFileId: 'drive-new-2', label: 'הנחה פרטית (נדפס בשיחו"ק, ברוקלין תשע"ו)' }] },
+      { occasionId: 11114315, pdfs: [{ driveFileId: 'drive-memoir', label: 'זכרונות רב"צ פרידמן - שיחות קודש קודם הנשיאות ע\' 192' }, { driveFileId: 'drive-sk-3', label: 'בהוס\' לשיחו"ק (ח"ב)' }] },
     ]),
   );
   return dir;
 }
 
 describe('the Sichos Kodesh reading copies', () => {
-  it('lists each Sichos Kodesh hanacha of the catalog once, and nothing else', async () => {
+  it('lists each old Sichos Kodesh hanacha of the catalog once, and no later printing', async () => {
     expect(await sichosKodeshScans(await checkout())).toEqual([
       { driveFileId: 'drive-sk-1', label: 'שיחו"ק', where: '5736/11114312' },
       { driveFileId: 'drive-sk-2', label: 'שיחות קודש', where: '5736/11114313' },
+      { driveFileId: 'drive-sk-3', label: 'בהוס\' לשיחו"ק (ח"ב)', where: '5736/11114315' },
     ]);
   });
 
@@ -65,12 +69,13 @@ describe('the Sichos Kodesh reading copies', () => {
     const archive = new Map([['drive-sk-1', { sha256: sha256(original), bytes: original.length }]]);
 
     const result = await makeReadingCopies({ scans, archive, source, target, work });
-    expect(result).toEqual({ done: 2, copies: 1, failed: 1, skipped: 0 });
+    expect(result).toEqual({ done: 3, copies: 1, failed: 2, skipped: 0 });
     // Run again: nothing is done twice.
-    expect(await makeReadingCopies({ scans, archive, source, target, work })).toMatchObject({ done: 0, skipped: 2 });
+    expect(await makeReadingCopies({ scans, archive, source, target, work })).toMatchObject({ done: 0, skipped: 3 });
 
     const manifest = await collectManifest(work, scans, new Date('2026-09-28T12:00:00Z'));
     const [done, missing] = manifest.files;
+    expect(manifest.files).toHaveLength(3);
     expect(missing).toMatchObject({ driveFileId: 'drive-sk-2', error: 'not in the archive' });
     expect(done).toMatchObject({ driveFileId: 'drive-sk-1', sha256: sha256(original), pages: 1, readingCopy: { encoder: 'pdf-fix@1' } });
     const copy = target.objects.get(`objects/${done!.readingCopy!.sha256}`)!;
