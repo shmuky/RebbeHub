@@ -226,6 +226,11 @@ describe('suggesting a fix in one step', () => {
 
     await call('POST', `/v1/suggestions/${sent.body.id}/approve`, { as: 'keeper' });
     expect((await call('GET', `/v1/entities/${event}`)).body.data.date).toBe('5742-05-11');
+
+    // History names who changed it and who approved, and says what changed, in fields.
+    const [latest, first] = (await call('GET', `/v1/entities/${event}/history`)).body.history;
+    expect(latest).toMatchObject({ message: 'Wrong date', authorName: 'Chaim', mergedByName: 'Set keeper', created: false, changes: [{ path: '/date', before: '5742-05-10', after: '5742-05-11' }] });
+    expect(first).toMatchObject({ created: true, changes: [] });
   });
 
   it('refuses an item that is not there', async () => {

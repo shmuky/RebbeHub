@@ -6,6 +6,7 @@ import { EventRows, PlayEventButton, eventData, hanachaOf, type EventItem } from
 import { YearStrip } from '../components/YearStrip.js';
 import { siteOf } from '../lib/context.server.js';
 import { dateLabel, yearLabel } from '../lib/dates.js';
+import { BOT_NAMES } from '../lib/people.js';
 import { langFrom, nameOf, t, type Lang } from '../lib/i18n.js';
 import { href, itemPath } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
@@ -66,11 +67,6 @@ export function meta({ loaderData }: Route.MetaArgs) {
 
 const WEEKDAYS_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 const WEEKDAYS_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Shabbos'];
-/** The importers by what they bring, in the page's language. */
-const BOT_NAMES: Record<string, { he: string; en: string }> = {
-  'bot:sichos-kodesh-works': { he: 'יבואן הספרים', en: 'The sefarim importer' },
-  'bot:sichos-kodesh-occasions': { he: 'יבואן ההתוועדויות', en: 'The farbrengens importer' },
-};
 
 const num = (n: number, lang: Lang) => n.toLocaleString(lang === 'he' ? 'he-IL' : 'en-US');
 

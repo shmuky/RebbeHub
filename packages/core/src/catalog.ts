@@ -128,10 +128,17 @@ export interface HistoryEntry {
   at: string;
   message: string;
   mergedBy: string;
+  mergedByName: string | null;
   changeset: number;
   author: string;
+  authorName: string | null;
+  authorIsBot: boolean;
   rev: number;
   deleted: boolean;
+  /** Whether this version made the item (it had none before). */
+  created: boolean;
+  /** What this version changed from the one before, field by field (none for the first). */
+  changes: FieldChange[];
 }
 
 /** Where a type's items inherit their sets from, when they carry none themselves. */
@@ -482,14 +489,17 @@ export class Catalog {
 
   /** Every merged change to an item, newest first. */
   async history(id: EntityId): Promise<HistoryEntry[]> {
-    const { rows } = await this.db.query<HistoryEntry>(
-      `SELECT c.seq AS commit, c.at, c.message, c.merged_by AS "mergedBy", c.changeset_id AS changeset,
-              r.author, cc.rev_id AS rev, (r.data IS NULL) AS deleted
+    const { rows } = await this.db.query<Omit<HistoryEntry, 'changes' | 'created'> & { data: Json | null; prev: Json | null; has_prev: boolean }>(
+      `SELECT c.seq AS commit, c.at, c.message, c.merged_by AS "mergedBy", m.display_name AS "mergedByName", c.changeset_id AS changeset,
+              r.author, a.display_name AS "authorName", coalesce(a.is_bot, FALSE) AS "authorIsBot", cc.rev_id AS rev, (r.data IS NULL) AS deleted,
+              r.data, p.data AS prev, (cc.prev_rev_id IS NOT NULL) AS has_prev
        FROM commit_change cc JOIN commit c ON c.seq = cc.commit_seq JOIN revision r ON r.id = cc.rev_id
+       LEFT JOIN revision p ON p.id = cc.prev_rev_id
+       LEFT JOIN account a ON a.id = r.author LEFT JOIN account m ON m.id = c.merged_by
        WHERE cc.entity_id = $1 ORDER BY c.seq DESC`,
       [id],
     );
-    return rows;
+    return rows.map(({ data, prev, has_prev, ...entry }) => ({ ...entry, created: !has_prev, changes: has_prev ? diffData(prev, data) : [] }));
   }
 
   /** Full text search over names, labels, text and dates on main. */

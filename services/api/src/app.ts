@@ -257,7 +257,14 @@ export function createApp(options: ApiOptions): Hono {
     return c.json((await redact([entity]))[0]);
   });
 
-  app.get('/v1/entities/:id/history', async (c) => c.json({ history: await catalog.history(entityId(c.req.param('id'))) }));
+  app.get('/v1/entities/:id/history', async (c) => {
+    const id = entityId(c.req.param('id'));
+    const history = await catalog.history(id);
+    // What changed, field by field, is shown only where the item's words may be shown at all.
+    const current = await catalog.get(id);
+    const withheld = current ? Boolean(((await redact([current]))[0] as { withheld?: string }).withheld) : false;
+    return c.json({ history: withheld ? history.map((h) => ({ ...h, changes: [] })) : history });
+  });
 
   app.get('/v1/entities/:id/backlinks', async (c) => {
     const type = c.req.query('type');

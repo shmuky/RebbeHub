@@ -2582,3 +2582,21 @@ a.volume:hover {
   border-color: #b3261e;
   color: #b3261e;
 }
+
+/* History: one version after another, newest first. */
+.history {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.history-entry {
+  border-top: 1px solid var(--border);
+  padding: 14px 0;
+  display: grid;
+  gap: 6px;
+}
+
+.history-entry p {
+  margin: 0;
+}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import type { Route } from './+types/review';
-import { dateLabel } from '../lib/dates.js';
+import { ChangeTable } from '../components/ChangeTable.js';
 import { langFrom, t, type Lang } from '../lib/i18n.js';
 import { labelOf } from '../lib/labels.js';
 import { href } from '../lib/links.js';
@@ -57,19 +57,6 @@ async function call<T>(path: string, init?: { method: 'POST'; body: unknown }): 
   return json;
 }
 
-const FIELD_KEYS: Record<string, 'date' | 'nameHe' | 'nameEn' | 'dateEnd'> = { '/date': 'date', '/dateEnd': 'dateEnd', '/title/he': 'nameHe', '/title/en': 'nameEn', '/name/he': 'nameHe', '/name/en': 'nameEn', '/label/he': 'nameHe', '/label/en': 'nameEn' };
-
-/** A field's name as people say it. */
-const fieldName = (path: string, lang: Lang) => (FIELD_KEYS[path] ? t(lang, FIELD_KEYS[path]!) : path.split('/').filter(Boolean).join(' › '));
-
-/** A value as people read it: a date in words, text as it is; anything else only as "changed". */
-function valueText(path: string, value: unknown, lang: Lang): string {
-  if (value === undefined || value === null || value === '') return '—';
-  if (typeof value === 'string' && /date/i.test(path)) return dateLabel(value, lang, { civil: false });
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
-  return t(lang, 'changedValue');
-}
-
 function SuggestionCard({ detail, lang, onDone, open }: { detail: Detail; lang: Lang; onDone: () => void; open: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,18 +96,7 @@ function SuggestionCard({ detail, lang, onDone, open }: { detail: Detail; lang: 
             {entry.withheld ? (
               <p className="row-sub">{t(lang, 'withheldChange')}</p>
             ) : (
-              <table className="changes">
-                <tbody>
-                  {entry.changes.map((c) => (
-                    <tr key={c.path}>
-                      <th scope="row">{fieldName(c.path, lang)}</th>
-                      <td className="was">{valueText(c.path, c.before, lang)}</td>
-                      <td aria-hidden="true">{lang === 'he' ? '←' : '→'}</td>
-                      <td className="now">{valueText(c.path, c.after, lang)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <ChangeTable changes={entry.changes} lang={lang} />
             )}
             {entry.conflicts.length ? <p className="row-sub">{t(lang, 'changedSince')}</p> : null}
           </div>

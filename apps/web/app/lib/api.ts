@@ -22,10 +22,15 @@ export interface HistoryEntry {
   at: string;
   message: string;
   mergedBy: string;
+  mergedByName: string | null;
   changeset: number;
   author: string;
+  authorName: string | null;
+  authorIsBot: boolean;
   rev: number;
   deleted: boolean;
+  created: boolean;
+  changes: Array<{ path: string; before?: unknown; after?: unknown }>;
 }
 
 export interface Backlink {
