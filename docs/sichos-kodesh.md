@@ -34,7 +34,10 @@ Sichos-Kodesh builds (`apps/mobile/src/catalog/data/works`, catalog schema
 3) and suggests them as RebbeHub items, keeping the phone's ids in
 `externalIds` (`sichos-kodesh-work`, `sichos-kodesh-unit`,
 `sichos-kodesh-author`, `sichos-kodesh-collection`). The other Sichos-Kodesh
-indexers become importers the same way ([roadmap](roadmap.md)).
+indexers are importers the same way: its HebrewBooks shelf, JEM's catalog
+(jem-index), the Igros letters' dates (build-igros), and its archive's
+history and lost files (services/archive) ([importers](importers.md)).
+Each reads the checkout or what its indexer wrote, and never changes it.
 
 ## 3. Sichos-Kodesh builds from RebbeHub (releases)
 

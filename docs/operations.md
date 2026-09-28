@@ -24,6 +24,9 @@ rebbehub import sichos-kodesh-works --from ../Sichos-Kodesh --approve-as shmuly
 rebbehub import sichos-kodesh-occasions --from ../Sichos-Kodesh --approve-as shmuly   # farbrengens, recordings, hanachos
 ```
 
+The other importers (HebrewBooks, JEM, Sefaria, the Igros letters' dates,
+Sichos-Kodesh's archive) and what each needs are in [importers](importers.md).
+
 Without `--approve-as`, the bot's suggestions wait in the review queue.
 Running an import again changes only what the source changed, and never
 overwrites what people have fixed.

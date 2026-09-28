@@ -15,6 +15,7 @@ describe('migrations', () => {
     );
     expect(rows.map((r) => r.table_name)).toEqual([
       'account',
+      'archive_gap',
       'audit_log',
       'catalog_edition',
       'changeset',

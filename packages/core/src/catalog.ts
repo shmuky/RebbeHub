@@ -124,6 +124,24 @@ export interface NewRevision {
 
 export type ReportReason = 'wrong-fact' | 'missing-page' | 'bad-scan' | 'audio-problem' | 'wrong-text' | 'duplicate' | 'rights' | 'offensive' | 'other';
 
+/** A file Sichos-Kodesh's archive wants and upstream would not give (migration 0009). */
+export interface ArchiveGapRow {
+  collection: string;
+  item_id: string;
+  kind: string;
+  role: string;
+  source: string;
+  url: string;
+  label: string | null;
+  hebrew_date: string | null;
+  status: 'unresolved' | 'error';
+  http_status: number | null;
+  error: string | null;
+  attempts: number;
+  checked_at: string | null;
+  entity_id: string | null;
+}
+
 /** What a project works through: the farbrengens (of a year or month) missing recordings or texts. */
 export interface ProjectFocus {
   missing: 'recordings' | 'texts';
@@ -1099,6 +1117,44 @@ export class Catalog {
        ORDER BY (SELECT count(*) FROM entity_ref u WHERE u.to_id = e.id AND u.field = 'work') DESC, e.path LIMIT ${Math.min(Math.max(limit, 1), 200)}`,
     );
     return { total: total?.n ?? 0, items: rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! })) };
+  }
+
+  /**
+   * Files Sichos-Kodesh's archive could not get from upstream (migration
+   * 0009): a Drive link that is gone, a recording the CDN no longer
+   * gives. Each with the item it belongs to, when RebbeHub has it, so
+   * someone who has the file can add it there.
+   */
+  async archiveGaps(limit = 50): Promise<{ total: number; items: Array<ArchiveGapRow & { entity: EntityView | null }> }> {
+    const total = await one<{ n: number }>(this.db, 'SELECT count(*)::int AS n FROM archive_gap');
+    const { rows } = await this.db.query<ArchiveGapRow & { rev_id: number | null; rev_type: EntityType | null; rev_path: string | null; rev_data: Json | null }>(
+      `SELECT g.collection, g.item_id, g.kind, g.role, g.source, g.url, g.label, g.hebrew_date, g.status, g.http_status, g.error, g.attempts, g.checked_at, g.entity_id,
+              r.id AS rev_id, r.entity_type AS rev_type, r.path AS rev_path, r.data AS rev_data
+       FROM archive_gap g LEFT JOIN entity e ON e.id = g.entity_id AND NOT e.deleted LEFT JOIN revision r ON r.id = e.main_rev
+       ORDER BY g.hebrew_date NULLS LAST, g.collection, g.item_id, g.role LIMIT ${Math.min(Math.max(limit, 1), 500)}`,
+    );
+    return {
+      total: total?.n ?? 0,
+      items: rows.map(({ rev_id, rev_type, rev_path, rev_data, ...gap }) => ({
+        ...gap,
+        entity: rev_id !== null && rev_type && rev_data && gap.entity_id ? { id: gap.entity_id as EntityId, type: rev_type, path: rev_path, rev: rev_id, data: rev_data } : null,
+      })),
+    };
+  }
+
+  /** Replaces the archive's list of files it could not get (`rebbehub archive-gaps`). */
+  async loadArchiveGaps(gaps: Array<ArchiveGapRow & { source_id: string }>): Promise<number> {
+    return this.db.transaction(async (tx) => {
+      await tx.query('DELETE FROM archive_gap');
+      for (const g of gaps) {
+        await tx.query(
+          `INSERT INTO archive_gap (collection, item_id, kind, source_id, role, entity_id, source, url, label, hebrew_date, status, http_status, error, attempts, checked_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) ON CONFLICT DO NOTHING`,
+          [g.collection, g.item_id, g.kind, g.source_id, g.role, g.entity_id, g.source, g.url, g.label, g.hebrew_date, g.status, g.http_status, g.error, g.attempts, g.checked_at],
+        );
+      }
+      return gaps.length;
+    });
   }
 
   /**

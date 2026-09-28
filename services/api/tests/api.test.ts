@@ -317,6 +317,16 @@ describe('the Missing board and projects', () => {
     expect((await call('GET', '/v1/missing?kind=scans')).body.total).toBe(0);
     expect((await call('GET', '/v1/missing?kind=spaceships')).status).toBe(400);
 
+    // The files Sichos-Kodesh's archive could not get, each with its item when RebbeHub has it.
+    await catalog.loadArchiveGaps([
+      { collection: 'farbrengens', item_id: '1', kind: 'pdf', source_id: 'd1', role: 'mugah', entity_id: event, source: 'drive', url: 'https://drive.google.com/file/d/d1/view', label: 'לקו"ש', hebrew_date: '5742-05-10', status: 'unresolved', http_status: 404, error: null, attempts: 2, checked_at: '2026-09-01T00:00:00Z' },
+      { collection: 'yomanim', item_id: 'y', kind: 'pdf', source_id: 'd2', role: '', entity_id: null, source: 'drive', url: 'https://drive.google.com/file/d/d2/view', label: 'יומן', hebrew_date: null, status: 'error', http_status: 500, error: 'server error', attempts: 5, checked_at: null },
+    ]);
+    const files = (await call('GET', '/v1/missing?kind=files')).body;
+    expect(files.total).toBe(2);
+    expect(files.items[0]).toMatchObject({ item_id: '1', status: 'unresolved', entity: { id: event, path: '/events/5742-05-10' } });
+    expect(files.items[1]).toMatchObject({ item_id: 'y', entity: null });
+
     // A contributor opens no projects; the set's keeper does.
     const input = { slug: 'recordings-5742', name: 'הקלטות תשמ״ב', goal: 'Every farbrengen of 5742 with its recording', set, missing: 'recordings', within: '5742' };
     expect((await call('POST', '/v1/projects', { as: 'chaim', body: input })).status).toBe(403);

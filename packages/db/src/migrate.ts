@@ -7,6 +7,7 @@ import * as steward from './migrations/0005_steward.js';
 import * as admin from './migrations/0006_admin.js';
 import * as projectFocus from './migrations/0007_project_focus.js';
 import * as webhooks from './migrations/0008_webhooks.js';
+import * as archiveGaps from './migrations/0009_archive_gaps.js';
 import * as network from './migrations/0010_network.js';
 import * as emailNotifyAdvice from './migrations/0011_email_notify_advice.js';
 import * as readingPlaces from './migrations/0014_reading_places.js';
@@ -27,6 +28,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 6, name: 'admin', up: admin.up },
   { version: 7, name: 'project-focus', up: projectFocus.up },
   { version: 8, name: 'webhooks', up: webhooks.up },
+  { version: 9, name: 'archive-gaps', up: archiveGaps.up },
   { version: 10, name: 'network', up: network.up },
   { version: 11, name: 'email-notify-advice', up: emailNotifyAdvice.up },
   { version: 14, name: 'reading-places', up: readingPlaces.up },
