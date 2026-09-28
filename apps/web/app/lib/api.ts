@@ -130,8 +130,10 @@ export class RebbeHubApi {
     return this.get<{ query: string; date: { key: string; he: string; en: string } | null; results: Entity[] }>('/v1/search', { q, ...options });
   }
 
-  async events(options: { within?: string; day?: string; limit?: number }) {
-    return (await this.get<{ items: Entity[] }>('/v1/events', options)).items;
+  /** Events by date, each with how many recordings it has: within a year or month, on days of any year (`05-10`), or on exact dates. */
+  async events(options: { within?: string; day?: string | readonly string[]; dates?: readonly string[]; limit?: number }) {
+    const list = (v: string | readonly string[] | undefined) => (v === undefined ? undefined : typeof v === 'string' ? v : v.join(','));
+    return (await this.get<{ items: Array<Entity & { recordings: number }> }>('/v1/events', { within: options.within, day: list(options.day), dates: list(options.dates), limit: options.limit })).items;
   }
 
   file(sha256: string) {

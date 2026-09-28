@@ -315,7 +315,12 @@ export class Catalog {
    * month (`within: '5742'`, `'5742-05'`), or on one day of every year
    * (`day: '05-10'`, "this day in other years").
    */
-  async events(options: { within?: string; day?: string; limit?: number }): Promise<EntityView[]> {
+  /**
+   * Events on main by date: within a year or month, on a day of any year
+   * (`05-10`, or several days for a week), or on exact dates. Each comes
+   * with how many recordings it has, so a list can show which can be heard.
+   */
+  async events(options: { within?: string; day?: string | string[]; dates?: string[]; limit?: number }): Promise<Array<EntityView & { recordings: number }>> {
     const params: unknown[] = [];
     const where = ["e.type = 'event'", 'NOT e.deleted'];
     if (options.within !== undefined) {
@@ -323,17 +328,27 @@ export class Catalog {
       params.push(options.within);
       where.push(`(r.data->>'date' = $${params.length} OR r.data->>'date' LIKE $${params.length} || '-%')`);
     }
+    const days = options.day === undefined ? [] : Array.isArray(options.day) ? options.day : [options.day];
     if (options.day !== undefined) {
-      if (!/^(0[1-9]|1[0-2]|06A|06B)-(0[1-9]|[12]\d|30)$/.test(options.day)) throw invalid('day is a month and day (05-10)');
-      params.push(`%-${options.day}`);
-      where.push(`r.data->>'date' LIKE $${params.length}`);
+      if (days.length === 0 || days.length > 31) throw invalid('give one to 31 days');
+      for (const day of days) if (!/^(0[1-9]|1[0-2]|06A|06B)-(0[1-9]|[12]\d|30)$/.test(day)) throw invalid('a day is a month and day (05-10)');
+      params.push(days);
+      where.push(`substring(r.data->>'date' from 6) = ANY($${params.length}::text[])`);
     }
-    const { rows } = await this.db.query<RevisionRow>(
-      `SELECT r.* FROM entity e JOIN revision r ON r.id = e.main_rev WHERE ${where.join(' AND ')}
+    if (options.dates !== undefined) {
+      if (options.dates.length === 0 || options.dates.length > 500) throw invalid('give one to 500 dates');
+      for (const date of options.dates) if (!/^\d{4}-(0[1-9]|1[0-2]|06A|06B)-(0[1-9]|[12]\d|30)$/.test(date)) throw invalid('a date is a full date key (5742-05-10)');
+      params.push(options.dates);
+      where.push(`r.data->>'date' = ANY($${params.length}::text[])`);
+    }
+    const { rows } = await this.db.query<RevisionRow & { recordings: number }>(
+      `SELECT r.*, (SELECT count(*)::int FROM entity_ref x JOIN entity f ON f.id = x.from_id AND NOT f.deleted
+                    WHERE x.to_id = e.id AND x.field = 'event' AND f.type = 'recording') AS recordings
+       FROM entity e JOIN revision r ON r.id = e.main_rev WHERE ${where.join(' AND ')}
        ORDER BY r.data->>'date' COLLATE "C", coalesce((r.data->>'order')::int, 0), e.id LIMIT ${Math.min(Math.max(options.limit ?? 500, 1), 2000)}`,
       params,
     );
-    return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }));
+    return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data!, recordings: r.recordings }));
   }
 
   /** How many items of each type main holds. */

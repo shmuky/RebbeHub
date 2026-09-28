@@ -177,8 +177,10 @@ export function createApp(options: ApiOptions): Hono {
   app.get('/v1/events', async (c) => {
     const within = c.req.query('within');
     const day = c.req.query('day');
-    if (!within && !day) throw new HttpError(400, 'give within (5742 or 5742-05) or day (05-10)');
-    return c.json({ items: await catalog.events({ within, day, limit: intParam(c.req.query('limit'), 'limit') }) });
+    const dates = c.req.query('dates');
+    if (!within && !day && !dates) throw new HttpError(400, 'give within (5742 or 5742-05), day (05-10, or several: 05-10,05-11) or dates (5742-05-10,5743-05-10)');
+    const list = (value: string | undefined) => (value === undefined ? undefined : value.split(',').filter(Boolean));
+    return c.json({ items: await catalog.events({ within, day: list(day), dates: list(dates), limit: intParam(c.req.query('limit'), 'limit') }) });
   });
 
   app.get('/v1/stats', async (c) => c.json({ head: await catalog.head(), counts: await catalog.counts() }));
