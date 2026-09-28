@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
-import { getDerivations, getFile, setRights } from '@rebbehub/core';
+import { getDerivations, getFile, getPageFix, setRights } from '@rebbehub/core';
 import { catalogIsRebuildable } from '../src/commands.js';
 import { collectManifest, makeReadingCopies, registerReadingCopies, sichosKodeshScans, type ObjectStore } from '../src/readingCopies.js';
 import { freshCatalog } from '../../../packages/core/tests/helpers.js';
@@ -90,7 +90,8 @@ describe('the Sichos Kodesh reading copies', () => {
     expect(await getFile(catalog.db, sha256(original))).toMatchObject({ rights_state: 'open', storage_tier: 'public', mime: 'application/pdf' });
     expect(await getFile(catalog.db, done!.readingCopy!.sha256)).toMatchObject({ rights_state: 'open', storage_tier: 'public' });
     const [derivation] = await getDerivations(catalog.db, sha256(original));
-    expect(derivation).toMatchObject({ profile: 'reading-copy', sha256: done!.readingCopy!.sha256, encoder: 'pdf-fix@1', params: { pages: [expect.objectContaining({ page: 1 })] } });
+    expect(derivation).toMatchObject({ profile: 'reading-copy', sha256: done!.readingCopy!.sha256, encoder: 'pdf-fix@1' });
+    expect(await getPageFix(catalog.db, sha256(original))).toMatchObject({ verdict: 'fixed', encoder: 'pdf-fix@1', pages: [expect.objectContaining({ page: 1, transform: expect.any(Array) })] });
     const { rows } = await catalog.db.query<{ n: number }>('SELECT count(*)::int AS n FROM file_source');
     expect(rows[0]!.n).toBe(1);
 

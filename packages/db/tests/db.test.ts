@@ -28,6 +28,7 @@ describe('migrations', () => {
       'file',
       'file_source',
       'follow',
+      'page_fix',
       'path_redirect',
       'project',
       'project_head',

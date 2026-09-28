@@ -30,6 +30,9 @@ describe('fixPdf', () => {
     ]);
     const { pdf, report } = await fixPdf(original);
     expect(report.fixed).toBe(2);
+    // Where a reader that draws the original through the transform cuts, inside the page.
+    for (const page of report.pages) expect(page.clip).toEqual([expect.any(Number), expect.any(Number), expect.any(Number), expect.any(Number)]);
+    for (const [x0, y0, x1, y1] of report.pages.map((page) => page.clip!)) expect([x0! >= 0, y0! >= 0, x1! <= 300, y1! <= 400, x0! < x1!, y0! < y1!]).toEqual([true, true, true, true, true, true]);
     expect(report.pages.map((page) => page.angle)).toEqual([expect.closeTo(1.6, 1), expect.closeTo(-1.1, 1)]);
 
     const after = await measure(pdf);

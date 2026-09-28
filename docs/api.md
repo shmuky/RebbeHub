@@ -16,7 +16,15 @@ needs a signed-in session, from the site's own pages.
 - `GET /v1/scans/<id>/text?page=<n>`, `/v1/recordings/<id>/transcript`:
   a scan's text and a recording's transcript, machine lines marked until
   people check them.
+- `GET /v1/files/<sha256>`: a file's size, rights and address, what was
+  made from it (a scan's reading copy) and its page fix.
+- `GET /v1/page-fixes/drive/<Drive id>`: what a PDF on Google Drive needs
+  to read straight - the pages to turn, each a PDF matrix (and, for a
+  reading copy's placing, the box to cut to) - or the reading copy to open
+  instead ([operations](operations.md)).
 - `/objects/<sha256>`: a file's bytes, while its rights let it be served.
+- `/manifests/<name>/<name>.json`: the published manifests of reading
+  copies and page fixes.
 
 ## Webhooks
 

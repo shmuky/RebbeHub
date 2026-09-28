@@ -32,6 +32,7 @@ import_into() {
   done
   # The Sichos Kodesh scans and their reading copies (docs/operations.md), from the published manifest.
   DATABASE_URL=$1 rebbehub reading-copies register
+  DATABASE_URL=$1 rebbehub page-fixes register
 }
 
 DATABASE_URL=$live rebbehub migrate

@@ -25,6 +25,8 @@ export interface RenderedPage {
 export interface RenderOptions {
   /** Pixels per PDF point (1.25 is 90 dpi: plenty to read a tilt to a fiftieth of a degree). */
   scale?: number;
+  /** Only these pages (1-based), for a sample of a long book; every page when left out. */
+  pages?: readonly number[];
 }
 
 /** Each page in turn (one bitmap in memory at a time). */
@@ -42,7 +44,8 @@ export async function* renderPages(data: Uint8Array, options: RenderOptions = {}
   });
   const doc = await task.promise;
   try {
-    for (let number = 1; number <= doc.numPages; number++) {
+    const numbers = options.pages ? [...new Set(options.pages)].filter((n) => n >= 1 && n <= doc.numPages).sort((a, b) => a - b) : Array.from({ length: doc.numPages }, (_, i) => i + 1);
+    for (const number of numbers) {
       const page = await doc.getPage(number);
       const viewport = page.getViewport({ scale });
       const width = Math.ceil(viewport.width);

@@ -88,7 +88,6 @@ export interface DerivationRow {
   sha256: string;
   bytes: number;
   encoder: string;
-  params: unknown;
   created_at: string;
 }
 
@@ -101,8 +100,6 @@ export interface NewDerivation {
   mime: string;
   /** The tool and its version: `pdf-fix@1`. */
   encoder: string;
-  /** What the tool measured or chose, kept so the work need not be done again. */
-  params?: unknown;
 }
 
 /**
@@ -123,10 +120,10 @@ export async function recordDerivation(db: Db, input: NewDerivation): Promise<De
     );
     return (await one<DerivationRow>(
       tx,
-      `INSERT INTO derivation (src_sha256, profile, sha256, bytes, encoder, params) VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (src_sha256, profile) DO UPDATE SET sha256 = EXCLUDED.sha256, bytes = EXCLUDED.bytes, encoder = EXCLUDED.encoder, params = EXCLUDED.params, created_at = now()
+      `INSERT INTO derivation (src_sha256, profile, sha256, bytes, encoder) VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (src_sha256, profile) DO UPDATE SET sha256 = EXCLUDED.sha256, bytes = EXCLUDED.bytes, encoder = EXCLUDED.encoder, created_at = now()
        RETURNING *`,
-      [input.src, input.profile, input.sha256, input.bytes, input.encoder, input.params === undefined ? null : JSON.stringify(input.params)],
+      [input.src, input.profile, input.sha256, input.bytes, input.encoder],
     ))!;
   });
 }
@@ -135,6 +132,58 @@ export async function recordDerivation(db: Db, input: NewDerivation): Promise<De
 export async function getDerivations(db: Db, src: string): Promise<DerivationRow[]> {
   const { rows } = await db.query<DerivationRow>('SELECT * FROM derivation WHERE src_sha256 = $1 ORDER BY profile', [src]);
   return rows;
+}
+
+/** What a scanned PDF needs to read straight (migration 0002): measured once per file, held or linked. */
+export interface PageFixRow {
+  sha256: string;
+  encoder: string;
+  verdict: PageFixVerdict;
+  reason: string | null;
+  /** Per page changed: its number, how far it leant, and the PDF matrix it is drawn through (and, for a reading copy, where it is cut). */
+  pages: unknown;
+  made_at: string;
+}
+
+/** `fixed`: pages to turn. `as-is`: nothing to do (set in type, or level already). `failed`: could not be fixed safely. */
+export type PageFixVerdict = 'fixed' | 'as-is' | 'failed';
+
+export interface NewPageFix {
+  sha256: string;
+  /** The tool and its version: `pdf-level@1`, `pdf-fix@1`. */
+  encoder: string;
+  verdict: PageFixVerdict;
+  reason?: string;
+  pages?: unknown[];
+}
+
+/** Records what a file needs; measured again (a new version of the tool), it replaces what was there. */
+export async function recordPageFix(db: Db, input: NewPageFix): Promise<PageFixRow> {
+  if (!/^[0-9a-f]{64}$/.test(input.sha256)) throw invalid('sha256 must be 64 lower-case hex characters');
+  if (!['fixed', 'as-is', 'failed'].includes(input.verdict)) throw invalid('verdict is fixed, as-is or failed');
+  if (!(await getFile(db, input.sha256))) throw notFound(`file ${input.sha256}`);
+  return (await one<PageFixRow>(
+    db,
+    `INSERT INTO page_fix (sha256, encoder, verdict, reason, pages) VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (sha256) DO UPDATE SET encoder = EXCLUDED.encoder, verdict = EXCLUDED.verdict, reason = EXCLUDED.reason, pages = EXCLUDED.pages, made_at = now()
+     RETURNING *`,
+    [input.sha256, input.encoder, input.verdict, input.reason ?? null, JSON.stringify(input.pages ?? [])],
+  ))!;
+}
+
+export async function getPageFix(db: Db, sha256: string): Promise<PageFixRow | null> {
+  return one<PageFixRow>(db, 'SELECT * FROM page_fix WHERE sha256 = $1', [sha256]);
+}
+
+/** The file registered from a Google Drive file, by the Drive file's id (its address with or without a resource key). */
+export async function fileFromDrive(db: Db, driveFileId: string): Promise<string | null> {
+  if (!/^[\w-]{10,}$/.test(driveFileId)) return null;
+  const row = await one<{ sha256: string }>(
+    db,
+    "SELECT sha256 FROM file_source WHERE split_part(url, '?', 1) = $1 ORDER BY created_at LIMIT 1",
+    [`https://drive.google.com/file/d/${driveFileId}/view`],
+  );
+  return row?.sha256 ?? null;
 }
 
 /**

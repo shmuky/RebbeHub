@@ -29,6 +29,12 @@ export interface PagePlan {
    * a line OCR found on the original is drawn on the copy through it.
    */
   transform?: number[];
+  /**
+   * What is kept of the page once placed, `[left, bottom, right, top]` in
+   * points: a reader that draws the original through `transform` cuts to
+   * it, as the copy does, which drops the scanner's edges.
+   */
+  clip?: number[];
   /** The PDF operators that go before the page's own content. */
   prefix?: string;
   marks?: number;
@@ -93,7 +99,8 @@ export function planPage(page: Measured, origin: { x: number; y: number }, scale
   const er = cx - c * cx + sn * cy;
   const fr = cy - sn * cx - c * cy;
   const transform = [c * s, sn * s, -sn * s, c * s, er * s + (tx - s * L), fr * s + (ty - s * T)].map((n) => Math.round(n * 1e4) / 1e4);
-  return { number: page.number, angle: analysis.angle, box: { left: L, bottom: B, right: R, top: T }, scale: s, transform, prefix, marks: analysis.marks, setAside: analysis.setAside };
+  const clip = [tx - s * pad, ty - s * (T - B + pad), tx + s * (R - L + pad), ty + s * pad].map((n) => Math.round(n * 100) / 100);
+  return { number: page.number, angle: analysis.angle, box: { left: L, bottom: B, right: R, top: T }, scale: s, transform, clip, prefix, marks: analysis.marks, setAside: analysis.setAside };
 }
 
 /** The most this page can be enlarged and keep its box inside the margins. */
@@ -185,7 +192,7 @@ export async function fixPdf(data: Uint8Array, options: FixOptions = {}): Promis
 }
 
 /** Puts `before` ahead of the page's own content and `after` behind it, whether the page has one content stream or several. */
-function wrapContents(doc: PDFDocument, page: PDFPage, before: string, after: string): void {
+export function wrapContents(doc: PDFDocument, page: PDFPage, before: string, after: string): void {
   const start: PDFRef = doc.context.register(doc.context.flateStream(before));
   const end: PDFRef = doc.context.register(doc.context.flateStream(after));
   const contents = page.node.Contents();

@@ -83,9 +83,51 @@ listing every scan, its copy and each page's tilt, text box and transform
 and show its lines on the copy. Every import then runs `rebbehub
 reading-copies register`, which records the scans as files (class
 `sichos-kodesh-hanacha`, open) and the copies as their `reading-copy`
-derivations; `GET /v1/files/<sha256>` lists them. A takedown of a scan
-takes its copy down with it. When pdf-fix improves, its encoder version
-goes up and `make` does every file again.
+derivations, with each page's measurements as the scan's **page fix**;
+`GET /v1/files/<sha256>` lists them. A takedown of a scan takes its copy
+down with it. When pdf-fix improves, its encoder version goes up and
+`make` does every file again.
+
+## Page fixes for linked PDFs
+
+Most PDFs RebbeHub knows it only links to - Otzros HaRebbe's library of
+Lubavitch seforim, some 5,400 files on Google Drive, first - so it makes
+no copies of them. What it keeps is each file's **page fix**: which pages
+lean, and the turn that levels each (a PDF matrix per page). The site's
+reader draws the linked file through it; "Show as scanned" shows the file
+as it is.
+
+Most files need nothing, and are told apart cheaply
+(`services/jobs/src/pageFixes.ts`, `@rebbehub/pdf-fix`'s `inspect.ts` and
+`level.ts`):
+
+- a book set in type is passed over from a glance at six pages, without
+  drawing anything (`as-is`, `born-digital`);
+- a scanned book is drawn at eight pages spread through it, and if none
+  leans 0.4° or more it is left as it is (`as-is`, `level`);
+- only then is it measured page by page, and only pages leaning 0.3° or
+  more are turned, each about its middle. Nothing else changes - no
+  centring, enlarging or cutting, since a printed book's layout is its
+  publisher's. Each turn is tried and the page measured again; a page that
+  does not come out level keeps no turn (`fixed`).
+
+```sh
+rebbehub page-fixes make --work .data/page-fixes --shard 0/4   # and 1/4, 2/4, 3/4 side by side
+export CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=…         # R2 edit rights on rebbehub-public
+rebbehub page-fixes publish --work .data/page-fixes
+```
+
+`make` lists the library from Drive as the importer does (kept in the work
+folder, so every shard and the publish use one list), reads each PDF from
+Drive, measures it and lets it go; each file is read once. A run skips
+what an earlier run finished at the current encoder (`pdf-level@1`), so
+after an import adds files the next run reads only the new ones, and a
+file Drive would not give is tried again. `publish` writes
+`manifests/page-fixes/otzros.json`. Every import runs `rebbehub
+page-fixes register`, which records each PDF as a file RebbeHub knows but
+does not hold (a publisher's scan: link only, stored nowhere) with its
+page fix. `GET /v1/page-fixes/drive/<Drive id>` answers the reader: the
+turns, or the reading copy to open instead when RebbeHub serves one.
 
 ## The API
 

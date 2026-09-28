@@ -11,6 +11,9 @@ import {
   keygenCommand,
   migrateCommand,
   mirrorCommand,
+  pageFixesMakeCommand,
+  pageFixesPublishCommand,
+  pageFixesRegisterCommand,
   readingCopiesMakeCommand,
   readingCopiesPublishCommand,
   readingCopiesRegisterCommand,
@@ -47,6 +50,13 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 the Sichos Kodesh scans' reading copies, into R2
                                                 (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
   rebbehub reading-copies register [--manifest <url or file>]
+                                                records the published ones in the catalog
+  rebbehub page-fixes make --work <folder> [--shard 0/4] [--limit <n>]
+                                                measures the Otzros library's PDFs (read from Drive, not
+                                                kept): which pages lean, and the turn that levels each
+  rebbehub page-fixes publish --work <folder> [--bucket rebbehub-public]
+                                                the manifest, into R2 (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
+  rebbehub page-fixes register [--manifest <url or file>]
                                                 records the published ones in the catalog
 
   --database <url or folder>   Postgres URL, or a PGlite folder
@@ -155,6 +165,12 @@ try {
       } else {
         throw new Error('reading-copies make|publish|register');
       }
+      break;
+    case 'page-fixes':
+      if (rest[0] === 'make') await pageFixesMakeCommand(ctx, { work: need(values.work, 'work'), shard: values.shard, limit: number(values.limit) });
+      else if (rest[0] === 'publish') await pageFixesPublishCommand(ctx, { work: need(values.work, 'work'), bucket: values.bucket });
+      else if (rest[0] === 'register') await pageFixesRegisterCommand(ctx, { manifest: values.manifest });
+      else throw new Error('page-fixes make|publish|register');
       break;
     default:
       console.log(HELP);

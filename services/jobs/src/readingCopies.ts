@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { recordDerivation, registerFile } from '@rebbehub/core';
+import { recordDerivation, recordPageFix, registerFile } from '@rebbehub/core';
 import type { Db } from '@rebbehub/db';
 import { checkFixed, fixPdf, PDF_FIX_ENCODER, type PagePlan } from '@rebbehub/pdf-fix';
 
@@ -16,8 +16,9 @@ import { checkFixed, fixPdf, PDF_FIX_ENCODER, type PagePlan } from '@rebbehub/pd
  * copy back to check every page came out level, and puts it next to the
  * original. A manifest lists what was done, with each page's measurements.
  * `register` records the manifest in the catalog - the originals as files,
- * the copies as their `reading-copy` derivations - and runs with every
- * import, so a rebuilt catalog has them too.
+ * the copies as their `reading-copy` derivations, each page's
+ * measurements as the file's page fix - and runs with every import, so a
+ * rebuilt catalog has them too.
  */
 
 /** The Sichos Kodesh edition's labels in the catalog (Sichos-Kodesh's `pdfEdition`). */
@@ -266,7 +267,8 @@ export interface RegisterResult {
 /**
  * Records a manifest in the catalog: each original a file (from mafteiach's
  * Drive link, class `sichos-kodesh-hanacha`, so open), each copy its
- * `reading-copy` derivation with the pages' measurements. Run again, it
+ * `reading-copy` derivation, and the pages' measurements as the original's
+ * page fix (`failed`, with why, for a scan that has no copy). Run again, it
  * changes nothing that is already so.
  */
 export async function registerReadingCopies(db: Db, manifest: ReadingCopiesManifest, log: (line: string) => void = () => undefined): Promise<RegisterResult> {
@@ -284,7 +286,10 @@ export async function registerReadingCopies(db: Db, manifest: ReadingCopiesManif
       held: true,
     });
     result.files += 1;
-    if (!entry.readingCopy) continue;
+    if (!entry.readingCopy) {
+      await recordPageFix(db, { sha256: entry.sha256, encoder: manifest.encoder, verdict: 'failed', reason: entry.error ?? 'no reading copy' });
+      continue;
+    }
     await recordDerivation(db, {
       src: entry.sha256,
       profile: READING_COPY,
@@ -292,8 +297,8 @@ export async function registerReadingCopies(db: Db, manifest: ReadingCopiesManif
       bytes: entry.readingCopy.bytes,
       mime: 'application/pdf',
       encoder: entry.readingCopy.encoder,
-      params: { pages: entry.readingCopy.pages },
     });
+    await recordPageFix(db, { sha256: entry.sha256, encoder: entry.readingCopy.encoder, verdict: 'fixed', pages: entry.readingCopy.pages });
     result.copies += 1;
   }
   log(`${result.files} Sichos Kodesh scans, ${result.copies} with a reading copy`);
