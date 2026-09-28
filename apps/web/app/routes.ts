@@ -12,6 +12,9 @@ export default [
   route('_/tracks/:id', 'routes/tracks.ts'),
   // Sign-in, passed through to the API's /v1/auth/* so the session cookie is the site's own.
   route('_/auth/*', 'routes/auth.ts'),
+  // Suggestions and their review, passed through the same way.
+  route('_/suggestions/*', 'routes/suggestions.ts'),
+  route('review', 'routes/review.tsx'),
   route('signin', 'routes/signin.tsx'),
   route('account', 'routes/account.tsx'),
   route('robots.txt', 'routes/robots.ts'),

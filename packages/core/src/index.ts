@@ -22,6 +22,7 @@ export {
   newPersonId,
   passkeyUsed,
   passkeysOf,
+  renamePerson,
   saveChallenge,
   sessionPerson,
   startSession,

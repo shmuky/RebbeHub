@@ -409,10 +409,11 @@ export class Catalog {
   async community(limit = 8): Promise<{
     recent: Array<{ seq: number; at: string; message: string; author: string; authorName: string; authorIsBot: boolean; mergedBy: string; mergedByName: string | null; changes: number }>;
     openReports: number;
+    openSuggestions: number;
     people: number;
     gaps: { events: number; eventsWithoutRecordings: number; eventsWithoutTexts: number };
   }> {
-    const [recent, reports, people, gaps] = await Promise.all([
+    const [recent, reports, suggestions, people, gaps] = await Promise.all([
       this.db.query<{ seq: string; at: Date | string; message: string; author: string; author_name: string; author_is_bot: boolean; merged_by: string; merged_by_name: string | null; changes: number }>(
         `SELECT c.seq, c.at, c.message, cs.author, a.display_name AS author_name, a.is_bot AS author_is_bot, c.merged_by, m.display_name AS merged_by_name,
                 (SELECT count(*)::int FROM commit_change cc WHERE cc.commit_seq = c.seq) AS changes
@@ -420,6 +421,7 @@ export class Catalog {
          WHERE cs.author <> 'system' ORDER BY c.seq DESC LIMIT ${Math.min(Math.max(limit, 1), 50)}`,
       ),
       one<{ n: number }>(this.db, "SELECT count(*)::int AS n FROM report WHERE status = 'open'"),
+      one<{ n: number }>(this.db, "SELECT count(*)::int AS n FROM changeset WHERE status = 'open'"),
       one<{ n: number }>(this.db, "SELECT count(DISTINCT cs.author)::int AS n FROM changeset cs JOIN account a ON a.id = cs.author WHERE NOT a.is_bot AND cs.author <> 'system'"),
       one<{ events: number; without_recordings: number; without_texts: number }>(
         this.db,
@@ -442,6 +444,7 @@ export class Catalog {
         changes: r.changes,
       })),
       openReports: reports?.n ?? 0,
+      openSuggestions: suggestions?.n ?? 0,
       people: people?.n ?? 0,
       gaps: { events: gaps?.events ?? 0, eventsWithoutRecordings: gaps?.without_recordings ?? 0, eventsWithoutTexts: gaps?.without_texts ?? 0 },
     };
@@ -763,6 +766,18 @@ export class Catalog {
     if (verdict === 'approve') return {};
     const revert = await this.revert(changesetId, by, note);
     return { revertChangeset: revert.changeset };
+  }
+
+  /** Whether `by` may approve or send back this suggestion, and if not, why not (for showing the buttons). */
+  async mayApprove(changesetId: number, by: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const cs = await this.changeset(changesetId);
+    try {
+      await this.assertMayApprove(this.db, cs, by);
+      return { ok: true };
+    } catch (error) {
+      if (error instanceof CatalogError) return { ok: false, reason: error.message };
+      throw error;
+    }
   }
 
   private async assertMayApprove(tx: Db, cs: ChangesetRow, by: string): Promise<void> {

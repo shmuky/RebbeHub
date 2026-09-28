@@ -136,6 +136,7 @@ export class RebbeHubApi {
     return this.get<{
       recent: Array<{ seq: number; at: string; message: string; author: string; authorName: string; authorIsBot: boolean; mergedBy: string; mergedByName: string | null; changes: number }>;
       openReports: number;
+      openSuggestions: number;
       people: number;
       gaps: { events: number; eventsWithoutRecordings: number; eventsWithoutTexts: number };
     }>('/v1/community', { limit });

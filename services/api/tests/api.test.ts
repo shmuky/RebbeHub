@@ -204,3 +204,31 @@ describe('suggestions', () => {
     expect(settled.status).toBe(200);
   });
 });
+
+/**
+ * "Suggest a fix" as the site's form sends it (one call), and the
+ * reviewer's view of it: names instead of ids, and whether this person
+ * may approve (so the site knows whether to show the buttons).
+ */
+describe('suggesting a fix in one step', () => {
+  it('sends a fixed date for review, which the keeper, and not its author, may approve', async () => {
+    const fixed = { ...yudShvat(set), date: '5742-05-11' };
+    expect((await call('POST', '/v1/suggestions/quick', { body: { entityId: event, data: fixed } })).status).toBe(401);
+    const sent = await call('POST', '/v1/suggestions/quick', { as: 'chaim', body: { entityId: event, data: fixed, title: 'Wrong date', note: 'The recording says 11 Shvat' } });
+    expect(sent.status).toBe(201);
+    expect(sent.body).toMatchObject({ status: 'open', title: 'Wrong date', author: 'chaim', description: 'The recording says 11 Shvat' });
+
+    const asAuthor = (await call('GET', `/v1/suggestions/${sent.body.id}`, { as: 'chaim' })).body;
+    expect(asAuthor).toMatchObject({ mine: true, mayApprove: false, names: { chaim: 'Chaim' } });
+    expect(asAuthor.entries[0].changes).toEqual([{ path: '/date', before: '5742-05-10', after: '5742-05-11' }]);
+    expect((await call('GET', `/v1/suggestions/${sent.body.id}`, { as: 'keeper' })).body).toMatchObject({ mine: false, mayApprove: true });
+    expect((await call('GET', `/v1/suggestions/${sent.body.id}`)).body).toMatchObject({ mayApprove: false, mayApproveReason: 'sign in to review' });
+
+    await call('POST', `/v1/suggestions/${sent.body.id}/approve`, { as: 'keeper' });
+    expect((await call('GET', `/v1/entities/${event}`)).body.data.date).toBe('5742-05-11');
+  });
+
+  it('refuses an item that is not there', async () => {
+    expect((await call('POST', '/v1/suggestions/quick', { as: 'chaim', body: { entityId: 'rh-zzzzzzzz', data: {} } })).status).toBe(404);
+  });
+});

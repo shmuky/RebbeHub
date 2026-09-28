@@ -69,6 +69,11 @@ export async function createPerson(db: Db, displayName: string): Promise<Person>
   return { id, displayName };
 }
 
+/** A person's new name; their catalog account takes it the next time they are signed in. */
+export async function renamePerson(db: Db, id: string, displayName: string): Promise<void> {
+  await db.query('UPDATE auth.person SET display_name = $2 WHERE id = $1', [id, displayName]);
+}
+
 export async function getPerson(db: Db, id: string): Promise<Person | null> {
   const row = await one<{ id: string; display_name: string }>(db, 'SELECT id, display_name FROM auth.person WHERE id = $1', [id]);
   return row ? { id: row.id, displayName: row.display_name } : null;

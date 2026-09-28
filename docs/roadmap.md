@@ -42,8 +42,11 @@ The engine behind it is built and tested (suggestions, review queue,
 history, revert, trust levels, follows, anonymous reports with captcha
 and rate limits, all over the API). Signing in with a passkey or with
 Google is built ([accounts](accounts.md); Google shows once its keys are
-set). Still to come: signing in by email link, the site's *Suggest a fix* / *Approve* screens,
-notifications for follows, the reviewer's AI summary.
+set). *Suggest a fix* is on farbrengen pages (name and date), and
+`/review` lists what waits for review, before and after in words, with
+*Approve* and *Send back* for the set's keepers. Still to come: Suggest a
+fix on the other kinds of page, signing in by email link, notifications
+for follows, the reviewer's AI summary.
 
 ## Phases 3-6
 
