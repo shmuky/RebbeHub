@@ -49,6 +49,28 @@ describe('reading', () => {
   });
 });
 
+describe('browsing', () => {
+  it('lists a parent\'s children in order, events by date, several items at once, and counts', async () => {
+    const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'חיבור' }, slug: 'w', authors: [], genre: 'sichos', levels: ['sicha'], sets: [set] });
+    const second = await add(catalog, 'mendy', 'keeper', 'unit', { work, position: [{ level: 'sicha', value: '2' }], order: 'k', label: { he: 'ב' } });
+    const first = await add(catalog, 'mendy', 'keeper', 'unit', { work, position: [{ level: 'sicha', value: '1' }], order: 'V', label: { he: 'א' } });
+    const page1 = await call('GET', `/v1/entities/${work}/children?field=work&type=unit&limit=1`);
+    expect(page1.body.items.map((i: { id: string }) => i.id)).toEqual([first]);
+    const page2 = await call('GET', `/v1/entities/${work}/children?field=work&type=unit&after=${page1.body.next}`);
+    expect(page2.body.items.map((i: { id: string }) => i.id)).toEqual([second]);
+
+    const later = await add(catalog, 'mendy', 'keeper', 'event', { ...yudShvat(set), date: '5742-05-12', title: { he: 'י״ב שבט' } });
+    const other = await add(catalog, 'mendy', 'keeper', 'event', { ...yudShvat(set), date: '5711-05-10', title: { he: 'יו״ד שבט תשי״א' } });
+    expect((await call('GET', '/v1/events?within=5742-05')).body.items.map((i: { id: string }) => i.id)).toEqual([event, later]);
+    expect((await call('GET', '/v1/events?within=5742')).body.items).toHaveLength(2);
+    expect((await call('GET', '/v1/events?day=05-10')).body.items.map((i: { id: string }) => i.id)).toEqual([other, event]);
+    expect(await call('GET', '/v1/events?within=spring')).toMatchObject({ status: 422 });
+
+    expect((await call('GET', `/v1/entities/batch?ids=${later},rh-zzzzzzzz,${event}`)).body.items.map((i: { id: string }) => i.id)).toEqual([later, event]);
+    expect((await call('GET', '/v1/stats')).body.counts).toMatchObject({ event: 3, unit: 2, work: 1, set: 1 });
+  });
+});
+
 describe('rights', () => {
   it('never serves the words of a text whose source forbids copies', async () => {
     const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'חיבור' }, slug: 'w', authors: [], genre: 'sichos', levels: ['sicha'], sets: [set] });

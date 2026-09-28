@@ -284,6 +284,64 @@ export class Catalog {
     return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }));
   }
 
+  /** Several items on main at once, in the order asked; missing and deleted ones are left out. */
+  async getMany(ids: readonly EntityId[]): Promise<EntityView[]> {
+    if (ids.length === 0) return [];
+    const { rows } = await this.db.query<RevisionRow>(
+      'SELECT r.* FROM entity e JOIN revision r ON r.id = e.main_rev WHERE e.id = ANY($1::text[]) AND NOT e.deleted AND r.data IS NOT NULL',
+      [[...new Set(ids)].slice(0, 500)],
+    );
+    const byId = new Map<string, EntityView>(rows.map((r) => [r.entity_id, { id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }]));
+    return ids.map((id) => byId.get(id)).filter((v): v is EntityView => v !== undefined);
+  }
+
+  /**
+   * An item's children on main in their own order (a work's units, a
+   * text's segments), a page at a time: `after` is the last `order` seen.
+   */
+  async children(parentId: EntityId, field: string, type: EntityType, options: { after?: string; limit?: number } = {}): Promise<EntityView[]> {
+    const { rows } = await this.db.query<RevisionRow>(
+      `SELECT r.* FROM entity_ref x JOIN entity e ON e.id = x.from_id JOIN revision r ON r.id = e.main_rev
+       WHERE x.to_id = $1 AND x.field = $2 AND e.type = $3 AND NOT e.deleted
+         AND ($4::text IS NULL OR coalesce(r.data->>'order', '') COLLATE "C" > $4::text COLLATE "C")
+       ORDER BY coalesce(r.data->>'order', '') COLLATE "C", e.id LIMIT ${Math.min(Math.max(options.limit ?? 100, 1), 1000)}`,
+      [parentId, field, type, options.after ?? null],
+    );
+    return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }));
+  }
+
+  /**
+   * Events on main by Hebrew date, in calendar order: within a year or a
+   * month (`within: '5742'`, `'5742-05'`), or on one day of every year
+   * (`day: '05-10'`, "this day in other years").
+   */
+  async events(options: { within?: string; day?: string; limit?: number }): Promise<EntityView[]> {
+    const params: unknown[] = [];
+    const where = ["e.type = 'event'", 'NOT e.deleted'];
+    if (options.within !== undefined) {
+      if (!/^\d{4}(-(0[1-9]|1[0-2]|06A|06B))?$/.test(options.within)) throw invalid('within is a year (5742) or a month (5742-05)');
+      params.push(options.within);
+      where.push(`(r.data->>'date' = $${params.length} OR r.data->>'date' LIKE $${params.length} || '-%')`);
+    }
+    if (options.day !== undefined) {
+      if (!/^(0[1-9]|1[0-2]|06A|06B)-(0[1-9]|[12]\d|30)$/.test(options.day)) throw invalid('day is a month and day (05-10)');
+      params.push(`%-${options.day}`);
+      where.push(`r.data->>'date' LIKE $${params.length}`);
+    }
+    const { rows } = await this.db.query<RevisionRow>(
+      `SELECT r.* FROM entity e JOIN revision r ON r.id = e.main_rev WHERE ${where.join(' AND ')}
+       ORDER BY r.data->>'date' COLLATE "C", coalesce((r.data->>'order')::int, 0), e.id LIMIT ${Math.min(Math.max(options.limit ?? 500, 1), 2000)}`,
+      params,
+    );
+    return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }));
+  }
+
+  /** How many items of each type main holds. */
+  async counts(): Promise<Record<string, number>> {
+    const { rows } = await this.db.query<{ type: string; n: number }>('SELECT type, count(*)::int AS n FROM entity WHERE main_rev IS NOT NULL AND NOT deleted GROUP BY type');
+    return Object.fromEntries(rows.map((r) => [r.type, r.n]));
+  }
+
   /** Items on main that point at this one: "Printed in…", "Cited by…", a work's units. */
   async backlinks(id: EntityId, options: { field?: string; type?: EntityType; limit?: number } = {}): Promise<Array<{ from: EntityId; type: EntityType; field: string; path: string | null }>> {
     const params: unknown[] = [id];

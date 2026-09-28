@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, getFile, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
-import { ENTITY_TYPES, isEntityId, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
+import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { OPENAPI } from './openapi.js';
 
 /**
@@ -22,6 +22,8 @@ export interface ApiOptions {
   verifyCaptcha?: (token: string | undefined, ip: string | undefined) => Promise<boolean>;
   /** Reports one address may send per hour. */
   reportsPerHour?: number;
+  /** Where servable files are fetched from: `<filesBaseUrl>/objects/<sha256>` (the media proxy in front of R2). */
+  filesBaseUrl?: string;
   version?: string;
 }
 
@@ -127,6 +129,40 @@ export function createApp(options: ApiOptions): Hono {
     });
     const last = items[items.length - 1];
     return c.json({ items: await redact(items), next: last ? `${last.path ?? ''}${last.id}` : null });
+  });
+
+  app.get('/v1/entities/batch', async (c) => {
+    const ids = (c.req.query('ids') ?? '').split(',').filter((x) => x.length > 0).map(entityId);
+    if (ids.length > 200) throw new HttpError(400, 'at most 200 ids at a time');
+    return c.json({ items: await redact(await catalog.getMany(ids)) });
+  });
+
+  app.get('/v1/entities/:id/children', async (c) => {
+    const field = c.req.query('field');
+    const type = c.req.query('type');
+    if (!field || !/^[a-z][a-zA-Z]*$/.test(field)) throw new HttpError(400, 'say which field points at the parent (field=work)');
+    if (!type || !(await catalog.registry()).has(type)) throw new HttpError(400, 'say which type of children (type=unit)');
+    const items = await catalog.children(entityId(c.req.param('id')), field, type as EntityType, { after: c.req.query('after'), limit: intParam(c.req.query('limit'), 'limit') });
+    const last = items[items.length - 1] as { data: { order?: string } } | undefined;
+    return c.json({ items: await redact(items), next: last?.data.order ?? null });
+  });
+
+  app.get('/v1/events', async (c) => {
+    const within = c.req.query('within');
+    const day = c.req.query('day');
+    if (!within && !day) throw new HttpError(400, 'give within (5742 or 5742-05) or day (05-10)');
+    return c.json({ items: await catalog.events({ within, day, limit: intParam(c.req.query('limit'), 'limit') }) });
+  });
+
+  app.get('/v1/stats', async (c) => c.json({ head: await catalog.head(), counts: await catalog.counts() }));
+
+  app.get('/v1/files/:sha256', async (c) => {
+    const sha256 = c.req.param('sha256');
+    if (!/^[0-9a-f]{64}$/.test(sha256)) throw new HttpError(400, 'a file is named by its sha256');
+    const file = await getFile(catalog.db, sha256);
+    if (!file) throw new CatalogError('not-found', 'no such file');
+    const served = mayServe(file.rights_state) && file.storage_tier === 'public' && options.filesBaseUrl;
+    return c.json({ sha256, bytes: file.bytes, mime: file.mime, rights: file.rights_state, credit: file.credit, url: served ? `${options.filesBaseUrl}/objects/${sha256}` : null });
   });
 
   app.get('/v1/entities/:id', async (c) => {
