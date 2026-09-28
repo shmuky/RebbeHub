@@ -25,6 +25,35 @@ needs a signed-in session, from the site's own pages.
 - `/objects/<sha256>`: a file's bytes, while its rights let it be served.
 - `/manifests/<name>/<name>.json`: the published manifests of reading
   copies and page fixes.
+- `GET /v1/search/moments?q=…`: where the words are inside the texts: a
+  line on a scan's page (open `/text/<scan>?page=<n>&line=<line>`) or a
+  paragraph of a text or transcript, with `startMs`, when it is heard.
+  `machine: true` until a person has checked it.
+- `GET /v1/search/similar?q=…&types=unit,event`: search by meaning.
+  `available: false` until it is set up; every result is the machine's
+  choice, and says so (`machine: true`), with its `score`.
+- `GET /v1/entities/<id>/relations`: an item's links both ways (cites,
+  printed in, based on, cited by), each `machine: true` while a machine
+  found it and no person has checked it.
+- `GET /v1/health`: coverage per year and set, pages nobody has checked,
+  recordings not synced, links that do not answer, the oldest open
+  suggestions.
+
+## OAI-PMH for libraries
+
+`https://api.rebbehub.org/oai` speaks OAI-PMH 2.0 (when switched on,
+[deploy](deploy.md)): sefarim, sichos, farbrengens, printings and
+recordings as Dublin Core (`oai_dc`), harvested by the commit that last
+changed them (`from`, `until`), by kind (`set=type:unit`) or by set
+(`set=set:rh-…`), a hundred at a time with a resumption token. Deleted
+items are reported as deleted (`deletedRecord: persistent`); identifiers
+are `oai:rebbehub.org:rh-…`. Records are CC0.
+
+```
+/oai?verb=Identify
+/oai?verb=ListRecords&metadataPrefix=oai_dc&from=2026-09-01
+/oai?verb=GetRecord&metadataPrefix=oai_dc&identifier=oai:rebbehub.org:rh-…
+```
 
 ## Webhooks
 

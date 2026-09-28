@@ -4,6 +4,7 @@ import { EventRows, eventData, type EventItem } from '../components/EventRow.js'
 import { siteOf } from '../lib/context.server.js';
 import { dateLabel, yearLabel } from '../lib/dates.js';
 import { langFrom, t } from '../lib/i18n.js';
+import { tn } from '../lib/i18nNetwork.js';
 import { labelOf } from '../lib/labels.js';
 import { href, itemPath } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
@@ -86,7 +87,7 @@ export default function Missing({ loaderData }: Route.ComponentProps) {
       {missing.total > missing.items.length ? <p className="row-sub">{t(lang, 'missingMore')}</p> : null}
 
       <p>
-        <Link to={href('/projects', lang)}>{t(lang, 'projectsTitle')}</Link>
+        <Link to={href('/projects', lang)}>{t(lang, 'projectsTitle')}</Link> · <Link to={href('/health', lang)}>{tn(lang, 'healthTitle')}</Link>
       </p>
     </>
   );

@@ -46,6 +46,23 @@ export const OPENAPI = {
     '/v1/revisions/{rev}': { get: { summary: 'One stored version of an item', parameters: [numParam('rev')], responses: ok('The revision') } },
     '/v1/resolve': { get: { summary: 'The item at a readable path (old paths redirect)', parameters: [{ ...q('path', 'A path such as /likkutei-sichos/12'), required: true }], responses: ok('Its id and current path') } },
     '/v1/search': { get: { summary: 'Search names, text and dates in Hebrew or English', parameters: [{ ...q('q', 'The query'), required: true }, q('type', 'Only this type'), numParam('limit', 'query')], responses: ok('Results, and the date the query names if any') } },
+    '/v1/search/moments': {
+      get: {
+        summary: 'Where the words are: lines on scans\' pages (open at the line) and paragraphs of texts and transcripts (open at the moment heard)',
+        parameters: [{ ...q('q', 'The query'), required: true }, numParam('limit', 'query')],
+        responses: ok('Moments, each saying whether a machine read it and nobody has checked it'),
+      },
+    },
+    '/v1/search/similar': {
+      get: {
+        summary: 'Search by meaning (embeddings); every result is the machine\'s guess. `available` is false until it is set up',
+        parameters: [{ ...q('q', 'A question or an idea, in Hebrew, Yiddish or English'), required: true }, q('types', 'Some of unit, event, segment, text-page, work'), numParam('limit', 'query')],
+        responses: ok('Results with their score'),
+      },
+    },
+    '/v1/entities/{id}/relations': { get: { summary: 'An item\'s links both ways: cites, printed in, based on, cited by', parameters: [idParam], responses: ok('Relations, each marked when found by machine and not yet checked') } },
+    '/v1/health': { get: { summary: 'The health of the catalog: coverage per year and set, unchecked pages, unsynced recordings, dead links, the oldest open suggestions', parameters: [numParam('limit', 'query')], responses: ok('Health') } },
+    '/oai': { get: { summary: 'OAI-PMH 2.0 for libraries (oai_dc records of sefarim, sichos, farbrengens, printings, recordings), when switched on', parameters: [{ ...q('verb', 'Identify, ListMetadataFormats, ListSets, ListIdentifiers, ListRecords, GetRecord'), required: true }], responses: { '200': { description: 'OAI-PMH XML', content: { 'text/xml': {} } } } } },
     '/v1/dates/parse': { get: { summary: 'Read a Hebrew date as people write it', parameters: [{ ...q('q', 'e.g. יו"ד שבט תשכ"ב or 10 Shvat 5722'), required: true }], responses: ok('The date key') } },
     '/v1/editions': { get: { summary: 'Catalog editions (dated snapshots) and their dumps', responses: ok('Editions') } },
     '/v1/commits': { get: { summary: 'Commits to main after a given one, with what each changed', parameters: [numParam('since', 'query'), numParam('limit', 'query')], responses: ok('Commits') } },

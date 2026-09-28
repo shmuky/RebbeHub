@@ -1,0 +1,79 @@
+name: Links, embeddings and citations
+
+# The machines behind phase 6 (services/jobs/src/networkCommands.ts):
+#
+#   check-links  asks the catalog's links whether they still answer, for
+#                the health page's dead links (nightly, and on demand);
+#   embed        reads items not yet read for search by meaning, with
+#                BGE-M3 on Workers AI (nightly, a part at a time, only once
+#                CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_AI_TOKEN are set);
+#   citations    finds citations in the texts and proposes the links as
+#                suggestions for keepers to review (on demand only).
+#
+# Needs the DATABASE_URL repository secret, as the import does; embed also
+# the Workers AI secrets the transcription uses. See docs/operations.md.
+on:
+  schedule:
+    - cron: "43 3 * * *"
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Which job to run
+        type: choice
+        options: [check-links, embed, citations]
+        default: check-links
+      limit:
+        description: How many links, items or pages to go through this run
+        default: "2000"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: network-production
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: ${{ inputs.job || 'nightly' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 120
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_AI_TOKEN: ${{ secrets.CLOUDFLARE_AI_TOKEN }}
+      JOB: ${{ inputs.job || 'nightly' }}
+      LIMIT: ${{ inputs.limit || '2000' }}
+    steps:
+      - name: Check it is configured
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "::error::Add the DATABASE_URL repository secret (see docs/deploy.md)."; exit 1; fi
+          if [ "$JOB" = "embed" ] && { [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$CLOUDFLARE_AI_TOKEN" ]; }; then
+            echo "::error::Add the CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_AI_TOKEN repository secrets (see docs/deploy.md)."; exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Run
+        run: |
+          npm run rebbehub -- migrate
+          case "$JOB" in
+            nightly)
+              npm run rebbehub -- check-links --limit "$LIMIT"
+              # Search by meaning stays off until its keys are set.
+              if [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && [ -n "$CLOUDFLARE_AI_TOKEN" ]; then
+                npm run rebbehub -- embed --limit "$LIMIT"
+              else
+                echo "Workers AI keys not set: not embedding."
+              fi
+              ;;
+            *) npm run rebbehub -- "$JOB" --limit "$LIMIT" ;;
+          esac

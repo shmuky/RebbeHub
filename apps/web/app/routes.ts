@@ -25,6 +25,7 @@ export default [
   route('admin', 'routes/admin.tsx'),
   route('review', 'routes/review.tsx'),
   route('missing', 'routes/missing.tsx'),
+  route('health', 'routes/health.tsx'),
   // Reading a PDF in the site, the player still playing.
   route('read', 'routes/read.tsx'),
   // What other sites embed: the only page they may frame.

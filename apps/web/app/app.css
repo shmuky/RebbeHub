@@ -3055,3 +3055,80 @@ body.embedded {
   text-align: center;
   opacity: 0.75;
 }
+
+/* Search that lands on the moment (routes/search.tsx, components/Moments.tsx). */
+.moments {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+}
+.moments > li {
+  padding: 10px 0;
+  border-block-end: 1px solid var(--border);
+}
+.moment-words {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  line-height: 1.8;
+}
+.moment-words a {
+  color: inherit;
+  text-decoration: none;
+}
+.moment-words a:hover {
+  text-decoration: underline;
+}
+.moment.machine .moment-words {
+  color: var(--machine);
+}
+.moments mark,
+.text-line.found mark {
+  background: var(--mark);
+  color: var(--fg);
+}
+.text-line.found,
+.transcript-para.found {
+  background: var(--mark);
+}
+
+/* An item's links (components/Relations.tsx). */
+.relations .list .meta {
+  max-width: 55%;
+  text-align: end;
+}
+
+/* The health of the catalog (routes/health.tsx): plain printed tables. */
+.table-scroll {
+  overflow-x: auto;
+}
+.health-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.health-table th,
+.health-table td {
+  padding: 6px 8px;
+  border-block-end: 1px solid var(--border);
+  text-align: start;
+  white-space: nowrap;
+}
+.health-table thead th {
+  font-weight: 600;
+  color: var(--muted);
+  border-block-end-color: var(--fg);
+}
+.health-table tbody th {
+  font-family: var(--font-display);
+  font-weight: 400;
+}
+.health-table tfoot th,
+.health-table tfoot td {
+  font-weight: 600;
+  border-block-start: 1px solid var(--fg);
+}
+.dead-links .row-title {
+  overflow-wrap: anywhere;
+  font-size: 0.9375rem;
+}

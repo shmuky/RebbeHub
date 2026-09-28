@@ -48,7 +48,46 @@ rebbehub dump --tag 2026.40 --out dumps/2026.40 --key release-key.json
 ```
 
 The dump folder holds the SQLite database, the JSON Lines file, the
+same table as Parquet (`rebbehub-<tag>.parquet`: `id`, `type`, `path`,
+`rev`, and `data` as JSON, for DuckDB, pandas or Spark), the
 Sichos-Kodesh release and a signed `manifest.json`; upload it to R2.
+
+## Links, search by meaning and citations
+
+```sh
+rebbehub check-links --limit 2000     # whether the catalog's links answer (the health page's dead links)
+rebbehub embed --limit 2000           # vectors for search by meaning (Workers AI keys needed)
+rebbehub citations                    # citations in the texts, proposed as links for review
+rebbehub citations --approve-as shmuly  # ... approved at once, as an import is
+```
+
+Each does only what earlier runs have not: `check-links` checks the
+links checked longest ago first, `embed` reads items it has not read at
+their current revision, `citations` reads items it has not read at their
+current revision and never proposes a link that was proposed before
+(merged, waiting, or sent back). The *Links, embeddings and citations*
+workflow runs `check-links` every night, and `embed` too once the
+Workers AI secrets are set; `citations` only when started.
+
+- **Search by meaning** uses BGE-M3 on Cloudflare Workers AI
+  (multilingual: Hebrew, Yiddish and English questions find the same
+  sichos). The vectors are kept in the `embedding` table as `real[]`;
+  where the database has pgvector (Neon), migration 0010 switches it on
+  and indexes them, and elsewhere (PGlite, a plain Postgres) they are
+  compared in plain SQL. Words whose rights forbid copies are never sent:
+  such an item is read by its name alone. The API offers the search once
+  its Worker has `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_TOKEN`
+  ([deploy](deploy.md)); until then the site does not show "By idea".
+  Everything it finds is marked as chosen by machine.
+- **Citations**: `לקו"ש חי"ב עמ' 123`, `אג"ק ח"ג אגרת תשסד`,
+  `תו"מ`, `סה"מ מלוקט`, and sichos by their date (`שיחת י"ט כסלו תשכ"ב`;
+  `משיחת…` says the page is based on that farbrengen; `נדפס ב…` says
+  where it was printed). Each is linked to the most precise thing the
+  catalog holds (the letter, the volume's printing, the farbrengen, else
+  the sefer) as a Relation in a suggestion by `bot:citations`, labelled as
+  found by machine until a keeper approves it (`packages/core/src/citations.ts`).
+- The whole-catalog copy (`scripts/import-catalog.sh`) replaces these
+  tables with the build's, which has none: run the jobs again after it.
 
 ## The Sichos Kodesh scans and their reading copies
 
@@ -136,6 +175,8 @@ turns, or the reading copy to open instead when RebbeHub serves one.
   the server listens on localhost.
 - Cloudflare Workers: deployed on every merge to `main`; see
   [deploy.md](deploy.md).
+- `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_TOKEN` switch on search by
+  meaning; `OAI_ADMIN_EMAIL` switches on OAI-PMH at `/oai`.
 
 ## The site
 

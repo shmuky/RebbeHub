@@ -1,11 +1,13 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, UnresolvedConflictError, adviceFor, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, getDerivations, getFile, getPageFix, listWebhooks, recordingTranscript, requestTakedown, scanText, type ChangesetStatus, type Mailer, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, UnresolvedConflictError, adviceFor, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, getDerivations, getFile, getPageFix, listWebhooks, recordingTranscript, requestTakedown, scanText, type ChangesetStatus, type Embedder, type Mailer, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
 import { adminRoutes } from './admin.js';
 import { uploadRoutes, type UploadOptions } from './uploads.js';
 import { OPENAPI } from './openapi.js';
+import { networkRoutes } from './network.js';
+import { oaiRoutes, type OaiOptions } from './oai.js';
 
 /**
  * The RebbeHub API. Reading needs nothing; reporting a problem needs no
@@ -37,6 +39,10 @@ export interface ApiOptions {
   version?: string;
   /** Sends email (Resend): sign-in links, and a receipt to whoever asks for a takedown. Unset, no email is sent. */
   mailer?: Mailer;
+  /** Turns questions into vectors for search by meaning (Workers AI); unset, that search says it is not available. */
+  embedder?: Embedder | null;
+  /** OAI-PMH for libraries, at /oai; unset (no administrators' address), it is not offered. */
+  oai?: OaiOptions;
 }
 
 /** A byte range asked for with `Range: bytes=…`. */
@@ -138,6 +144,8 @@ export function createApp(options: ApiOptions): Hono {
   if (options.auth) authRoutes(app, catalog, options.mailer && !options.auth.mailer ? { ...options.auth, mailer: options.mailer } : options.auth);
   adminRoutes(app, catalog, signedIn);
   uploadRoutes(app, catalog, signedIn, options.uploads);
+  networkRoutes(app, catalog, { embedder: options.embedder });
+  if (options.oai) oaiRoutes(app, catalog, options.oai);
 
   app.get('/', (c) => c.redirect('/v1'));
   app.get('/openapi.json', (c) => c.json(OPENAPI));

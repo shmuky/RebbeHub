@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
+import { checkLinksCommand, citationsCommand, embedCommand } from '../networkCommands.js';
 import { ocrCommand } from '../ocrCommand.js';
 import { transcribeCommand } from '../transcribeCommand.js';
 import {
@@ -36,6 +37,7 @@ const HELP = `rebbehub - RebbeHub's command line
   rebbehub mirror --dir <folder> [--git] [--full] [--limit <n>]
   rebbehub edition --by <steward> [--tag 2026.40] [--notes <text>]
   rebbehub dump --tag <tag> --out <folder> [--key <key.json>]
+                                                SQLite, JSON Lines and Parquet, signed
   rebbehub keygen --out <key.json>
   rebbehub ocr --approve-as <steward> [--scan <id>] [--limit <n>] [--files <url>]
                                                 machine OCR of served scans that have none yet;
@@ -44,6 +46,12 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 machine transcripts, with sync, of recordings that have
                                                 none (Whisper on Workers AI: CLOUDFLARE_ACCOUNT_ID and
                                                 CLOUDFLARE_AI_TOKEN); --linked also those heard elsewhere
+  rebbehub embed [--limit <n>]                  vectors for search by meaning, of items not embedded yet
+                                                (BGE-M3 on Workers AI: CLOUDFLARE_ACCOUNT_ID and
+                                                CLOUDFLARE_AI_TOKEN)
+  rebbehub citations [--approve-as <steward>] [--limit <n>]
+                                                citations found in texts, proposed as links for review
+  rebbehub check-links [--limit <n>]            whether the catalog's links still answer, for /health
   rebbehub reading-copies make --from <Sichos-Kodesh checkout> --work <folder> [--shard 0/4] [--limit <n>]
                   [--archive <objects.json>] [--source-bucket sichos-kodesh-archive] [--bucket rebbehub-public]
   rebbehub reading-copies publish --from <Sichos-Kodesh checkout> --work <folder> [--bucket rebbehub-public]
@@ -134,6 +142,15 @@ try {
       break;
     case 'transcribe':
       await transcribeCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files });
+      break;
+    case 'embed':
+      await embedCommand(ctx, { limit: number(values.limit) });
+      break;
+    case 'citations':
+      await citationsCommand(ctx, { approveAs: values['approve-as'], limit: number(values.limit) });
+      break;
+    case 'check-links':
+      await checkLinksCommand(ctx, { limit: number(values.limit) });
       break;
     case 'mirror':
       await mirrorCommand(ctx, { dir: need(values.dir, 'dir'), git: values.git, full: values.full, limit: number(values.limit) });

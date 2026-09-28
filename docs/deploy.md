@@ -81,9 +81,13 @@ In **rebbehub-api → Settings → Variables and Secrets**:
 - `RESEND_API_KEY` - a [Resend](https://resend.com) API key, for signing in
   by email link, email updates and takedown receipts (and optionally the
   variable `EMAIL_FROM`); see [accounts](accounts.md#email-updates);
-- `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_TOKEN` - Workers AI, for the
-  reviewer's advice on suggestions; see
-  [accounts](accounts.md#the-reviewers-advice).
+- `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_TOKEN` - Workers AI, the same
+  pair the transcription uses (step 7): for the reviewer's advice on
+  suggestions (see [accounts](accounts.md#the-reviewers-advice)) and for
+  search by meaning, where the API turns each question into a vector.
+  Without them the site does not offer "By idea";
+- `OAI_ADMIN_EMAIL` - the address OAI-PMH gives libraries for the
+  repository's administrators; without it, `/oai` is not offered.
 
 Each is off until its secret is set; nothing on the site shows it before.
 
@@ -136,6 +140,13 @@ npm run rebbehub -- import sichos-kodesh-occasions --from ../Sichos-Kodesh --app
 
 Both mark what the machine made as machine output on the site until
 people check it.
+
+- **Links, embeddings and citations** runs every night: it checks the
+  catalog's links for the health page (`/health`), and, once the two
+  Workers AI secrets above are set, reads items for search by meaning
+  (BGE-M3, a fraction of a cent per thousand items). **Run workflow**
+  also proposes the citations found in the texts as links, for keepers to
+  review ([operations](operations.md)).
 
 ## A domain of your own
 

@@ -1,4 +1,4 @@
-import type { Backlink, Entity, FileInfo, RebbeHubApi } from './api.js';
+import type { Backlink, Entity, FileInfo, RebbeHubApi, RelationLink } from './api.js';
 
 /**
  * What an item's page needs beyond the item itself, by type: a work's
@@ -18,6 +18,8 @@ export interface ItemView {
   /** The cursor for the next page of a long list (a work's units). */
   next: string | null;
   backlinks: Backlink[];
+  /** Its links both ways: what it cites, where it was printed, the farbrengen it is based on, what cites it. */
+  relations: RelationLink[];
   /** A work's volumes, with how many units each holds. */
   outline?: Array<{ value: string; label: { he: string; en?: string } | null; units: number }>;
   /** How many units each work holds, for covers on a shelf or a Rebbe's page. */
@@ -33,7 +35,7 @@ async function entitiesOf(api: RebbeHubApi, links: Backlink[]): Promise<Entity[]
 
 export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): Promise<ItemView> {
   const d = entity.data as Record<string, unknown>;
-  const view: ItemView = { refs: {}, lists: {}, files: {}, segments: {}, next: null, backlinks: [] };
+  const view: ItemView = { refs: {}, lists: {}, files: {}, segments: {}, next: null, backlinks: [], relations: [] };
   const wanted = new Set<string>([...ids(d.sets), ...ids(d.topics)]);
 
   switch (entity.type) {
@@ -125,6 +127,9 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
     }
   }
   view.backlinks = await api.backlinks(entity.id);
+  // An API from before links were served has none to give.
+  view.relations = await api.relations(entity.id).catch(() => []);
+  view.relations.forEach((r) => wanted.add(r.other));
   const refs = await api.entities([...wanted]);
   view.refs = Object.fromEntries(refs);
   return view;

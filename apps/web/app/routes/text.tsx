@@ -14,11 +14,15 @@ import { readHref } from './read.js';
  * What the machine read is shown as machine reading until a person checks
  * it, line by line; a signed-in reader taps a line, corrects it, and it
  * goes for review. Beside it, the scan itself at the same page.
+ *
+ * A search hit opens here at its line (`?line=`), lit up and in view.
  */
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { api, siteUrl } = siteOf(context);
   const lang = langFrom(request);
-  const page = Math.max(1, Number(new URL(request.url).searchParams.get('page')) || 1);
+  const url = new URL(request.url);
+  const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
+  const found = url.searchParams.get('line');
   const scan = await api.entity(params.scan);
   if (!scan || scan.type !== 'scan') throw data('not found', { status: 404 });
   const d = scan.data as { publication?: string; file?: string };
@@ -27,7 +31,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     d.publication ? api.entity(d.publication) : null,
     d.file ? api.file(d.file) : null,
   ]);
-  return { lang, siteUrl, scan, page, text, publication, fileUrl: file?.url ?? null };
+  return { lang, siteUrl, scan, page, text, publication, fileUrl: file?.url ?? null, found };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -37,7 +41,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
   return pageMeta({ title: `${name} · ${t(lang, 'page')} ${page}`, path: `/text/${scan.id}?page=${page}`, lang, siteUrl, noindex: true });
 }
 
-function Line({ scan, page, line, lang, canFix }: { scan: string; page: number; line: { id: string; text: string; checked: boolean }; lang: Lang; canFix: boolean }) {
+function Line({ scan, page, line, lang, canFix, found }: { scan: string; page: number; line: { id: string; text: string; checked: boolean }; lang: Lang; canFix: boolean; found: boolean }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [state, setState] = useState<'idle' | 'busy' | 'sent'>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +67,7 @@ function Line({ scan, page, line, lang, canFix }: { scan: string; page: number; 
 
   if (editing !== null)
     return (
-      <li className="text-line editing">
+      <li id={`line-${line.id}`} className="text-line editing">
         <form onSubmit={send}>
           <input value={editing} onChange={(e) => setEditing(e.target.value)} dir="rtl" autoFocus />
           <button type="submit" disabled={state === 'busy' || !editing.trim() || editing.trim() === line.text}>
@@ -77,8 +81,8 @@ function Line({ scan, page, line, lang, canFix }: { scan: string; page: number; 
       </li>
     );
   return (
-    <li className={line.checked ? 'text-line' : 'text-line unchecked'}>
-      <span dir="rtl">{line.text}</span>
+    <li id={`line-${line.id}`} className={['text-line', line.checked ? '' : 'unchecked', found ? 'found' : ''].filter(Boolean).join(' ')} aria-current={found ? 'true' : undefined}>
+      <span dir="rtl">{found ? <mark>{line.text}</mark> : line.text}</span>
       {state === 'sent' ? <span className="row-sub"> · {t(lang, 'lineSent')}</span> : null}
       {canFix && state !== 'sent' ? (
         <button type="button" className="link-button" onClick={() => setEditing(line.text)} aria-label={t(lang, 'fixLine')}>
@@ -90,7 +94,7 @@ function Line({ scan, page, line, lang, canFix }: { scan: string; page: number; 
 }
 
 export default function Text({ loaderData }: Route.ComponentProps) {
-  const { lang, scan, page, text, publication, fileUrl } = loaderData;
+  const { lang, scan, page, text, publication, fileUrl, found } = loaderData;
   const account = useAccount();
   const to = (p: number) => href(`/text/${scan.id}`, lang, { page: String(p) });
   const unchecked = text ? text.lines.filter((l) => !l.checked).length : 0;
@@ -125,7 +129,7 @@ export default function Text({ loaderData }: Route.ComponentProps) {
           </nav>
           <ol className="text-lines">
             {text.lines.map((line) => (
-              <Line key={line.id} scan={scan.id} page={page} line={line} lang={lang} canFix={Boolean(account)} />
+              <Line key={line.id} scan={scan.id} page={page} line={line} lang={lang} canFix={Boolean(account)} found={line.id === found} />
             ))}
           </ol>
           {account === null ? (

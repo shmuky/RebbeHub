@@ -99,7 +99,7 @@ describe('dumps', () => {
     const manifest = await writeDump(catalog, dir, { tag: '2026.40', at: await catalog.head(), key, now: new Date('2026-09-28T00:00:00Z') });
     expect(verifyManifest(manifest, { [key.keyId]: key.publicKey })).toEqual({ ok: true, keyId: key.keyId });
     expect(verifyManifest({ ...manifest, commit: 1 }, { [key.keyId]: key.publicKey })).toEqual({ ok: false, reason: 'bad-signature' });
-    expect(manifest.files.map((f) => f.name)).toEqual(['rebbehub-2026.40.sqlite', 'rebbehub-2026.40.jsonl.gz', 'sichos-kodesh-2026.40.json']);
+    expect(manifest.files.map((f) => f.name)).toEqual(['rebbehub-2026.40.sqlite', 'rebbehub-2026.40.jsonl.gz', 'rebbehub-2026.40.parquet', 'sichos-kodesh-2026.40.json']);
     expect(manifest.withheld).toBe(1);
 
     const lines = gunzipSync(await readFile(join(dir, 'rebbehub-2026.40.jsonl.gz'))).toString('utf8').trim().split('\n').map((l) => JSON.parse(l));
@@ -111,6 +111,18 @@ describe('dumps', () => {
     expect(db.prepare("SELECT count(*) AS n FROM entity WHERE type = 'unit'").get()).toEqual({ n: 1 });
     expect(db.prepare('SELECT reason FROM withheld WHERE id = ?').get(ids.secret!)).toBeDefined();
     db.close();
+
+    // The Parquet file holds the same rows, read back with an independent reader.
+    const { parquetMetadata, parquetReadObjects } = await import('hyparquet');
+    const bytes = await readFile(join(dir, 'rebbehub-2026.40.parquet'));
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    const rows = (await parquetReadObjects({ file: buffer })) as Array<{ id: string; type: string; path: string | null; rev: bigint; data: unknown }>;
+    expect(rows).toHaveLength(lines.length);
+    const unitRow = rows.find((r) => r.type === 'unit')!;
+    expect(unitRow).toMatchObject({ id: ids.unit, path: null });
+    expect(typeof unitRow.data === 'string' ? JSON.parse(unitRow.data) : unitRow.data).toMatchObject({ date: '5711-05-10' });
+    expect(rows.some((r) => r.id === ids.secret)).toBe(false);
+    expect(parquetMetadata(buffer).key_value_metadata).toContainEqual({ key: 'tag', value: '2026.40' });
 
     const release = JSON.parse(await readFile(join(dir, 'sichos-kodesh-2026.40.json'), 'utf8'));
     expect(release.authors).toEqual([{ id: 'the-rebbe', name: { he: 'הרבי', en: 'The Rebbe' }, rebbe: 7 }]);

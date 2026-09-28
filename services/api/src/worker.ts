@@ -1,4 +1,4 @@
-import { Catalog, adviseSuggestions, deliverWebhooks, sendNotifications } from '@rebbehub/core';
+import { Catalog, adviseSuggestions, deliverWebhooks, embedderFromEnv, sendNotifications } from '@rebbehub/core';
 import { connectPostgres } from '@rebbehub/db';
 import { createApp, turnstileVerifier, type FileStore } from './app.js';
 import { authFor } from './auth.js';
@@ -10,8 +10,9 @@ import { resendMailer, workersAiAdvisor } from './mail.js';
  * which Hyperdrive pools. Configured in wrangler.toml; secrets REPORT_SALT,
  * for captchas on reports TURNSTILE_SECRET, for Google sign-in
  * GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, for email (sign-in links,
- * notifications) RESEND_API_KEY, and for the reviewer's advice
- * CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_AI_TOKEN. Each is off until set.
+ * notifications) RESEND_API_KEY, for the reviewer's advice and search by
+ * meaning CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_AI_TOKEN, and for OAI-PMH the
+ * administrators' address OAI_ADMIN_EMAIL. Each is off until set.
  */
 interface R2ObjectBody {
   body: ReadableStream;
@@ -43,9 +44,11 @@ interface Env {
   RESEND_API_KEY?: string;
   /** Who email comes from, on a domain verified with Resend (default `RebbeHub <no-reply@rebbehub.org>`). */
   EMAIL_FROM?: string;
-  /** Workers AI (secrets), for the reviewer's advice on suggestions; without them, no advice. */
+  /** Workers AI (secrets), for the reviewer's advice on suggestions and search by meaning (a token allowed only Workers AI); without both, neither. */
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_AI_TOKEN?: string;
+  /** The address OAI-PMH names for the repository's administrators; without it, /oai is not offered. */
+  OAI_ADMIN_EMAIL?: string;
 }
 
 const mailerOf = (env: Env) => (env.RESEND_API_KEY ? resendMailer({ apiKey: env.RESEND_API_KEY, from: env.EMAIL_FROM }) : undefined);
@@ -92,6 +95,8 @@ export default {
       files: env.FILES_PUBLIC ? r2Store(env.FILES_PUBLIC) : undefined,
       texts: env.FILES_PUBLIC ? { store: r2Store(env.FILES_PUBLIC), writer: r2Writer(env.FILES_PUBLIC), from: env.SK_ARCHIVE ? r2Store(env.SK_ARCHIVE) : undefined } : undefined,
       uploads: env.FILES_PUBLIC && env.FILES_PRESERVATION ? { public: r2Writer(env.FILES_PUBLIC), preservation: r2Writer(env.FILES_PRESERVATION) } : undefined,
+      embedder: embedderFromEnv({ CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_AI_TOKEN: env.CLOUDFLARE_AI_TOKEN }),
+      oai: env.OAI_ADMIN_EMAIL ? { adminEmail: env.OAI_ADMIN_EMAIL, siteUrl: env.SITE_URL } : undefined,
       auth: env.SITE_URL ? authFor(env.SITE_URL, { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }) : undefined,
       mailer: mailerOf(env),
     });

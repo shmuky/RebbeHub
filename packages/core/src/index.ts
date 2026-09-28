@@ -39,3 +39,23 @@ export { EMAIL_LINKS_PER_HOUR, EMAIL_LINK_MINUTES, addEmail, cleanEmail, emailsO
 export { NOTIFICATION_MODES, digestMessage, notificationSetting, sendNotifications, setNotifications, unsubscribe, type EmailMessage, type Mailer, type NotificationMode, type NotificationSetting } from './notify.js';
 export { adviceFor, advicePrompt, adviseSuggestions, type Advice, type Advisor } from './advice.js';
 export { TAKEDOWN_RELATIONS, TAKEDOWN_RESPONSE_DAYS, requestTakedown, resolveTakedownTarget, takeDownFile, takedowns, type TakedownRelation, type TakedownView } from './takedown.js';
+export { bestLine, matchingWords, momentOf, queryWords, searchMoments, snippetOf, type Moment, type ParagraphMoment, type ScanLineMoment } from './moments.js';
+export {
+  EMBEDDED_TYPES,
+  EMBEDDING_DIMENSIONS,
+  EMBEDDING_MODEL,
+  embedItems,
+  embedderFromEnv,
+  embeddingCoverage,
+  embeddingInput,
+  hasPgvector,
+  itemsToEmbed,
+  nearest,
+  searchSimilar,
+  unitVector,
+  workersAiEmbedder,
+  type Embedder,
+  type SimilarItem,
+} from './semantic.js';
+export { CITATIONS_BOT, findCitations, proposeCitations, relationsOf, resolveCitation, type Citation, type CitationTarget, type RelationView } from './citations.js';
+export { catalogHealth, type CatalogHealth } from './health.js';
