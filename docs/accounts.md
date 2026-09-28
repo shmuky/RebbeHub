@@ -53,6 +53,17 @@ For local development, set the same two in the environment of
 `services/api/src/node.ts`, with `http://localhost:5173/_/auth/google/callback`
 as a redirect URI on the client.
 
+## One person, one account
+
+- Signed in, a person adds a passkey or links Google from `/account`;
+  `/signin` offers them nothing else, and the API refuses to make a
+  second account for someone already signed in.
+- `/account` shows the account number (`u-…`), so two people with the
+  same name are never confused.
+- A steward's mark is kept on the person (`auth.person.steward`,
+  migration 0005) and copied to their catalog account whenever they are
+  signed in, so a rebuild of the catalog never takes it away.
+
 ## Sessions
 
 - The site passes `/_/auth/*` through to the API's `/v1/auth/*`, so the

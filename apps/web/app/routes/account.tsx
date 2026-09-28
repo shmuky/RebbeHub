@@ -106,6 +106,10 @@ export default function Account() {
         </form>
       )}
       <p className="subtitle">{t(lang, 'accountIntro')}</p>
+      <p className="row-sub">
+        {t(lang, 'accountNumber')} <span dir="ltr">{account.person.id}</span>
+        {account.person.steward ? ` · ${t(lang, 'steward')}` : ''}
+      </p>
 
       {error ? (
         <p className="note" role="alert">

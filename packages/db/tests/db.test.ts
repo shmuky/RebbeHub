@@ -7,7 +7,7 @@ describe('migrations', () => {
     const db = await openPGlite();
     expect(await migrate(db)).toEqual(MIGRATIONS.map((m) => m.version));
     expect(await migrate(db)).toEqual([]);
-    // Sign-in is kept apart from the catalog (migrations 0003 and 0004).
+    // Sign-in is kept apart from the catalog (migrations 0003 to 0005).
     const auth = await db.query<{ table_name: string }>("SELECT table_name FROM information_schema.tables WHERE table_schema = 'auth' ORDER BY table_name");
     expect(auth.rows.map((r) => r.table_name)).toEqual(['challenge', 'google_account', 'passkey', 'person', 'session']);
     const { rows } = await db.query<{ table_name: string }>(

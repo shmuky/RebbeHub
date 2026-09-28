@@ -13,6 +13,7 @@ import { freshCatalog } from '../../../packages/core/tests/helpers.js';
 
 const SITE = 'https://rebbehub.test';
 let app: Hono;
+let catalog: Awaited<ReturnType<typeof freshCatalog>>['catalog'];
 
 const verify: NonNullable<AuthOptions['verify']> = {
   // A registration "verifies" when the response names a credential; its public key is made up.
@@ -22,7 +23,7 @@ const verify: NonNullable<AuthOptions['verify']> = {
 };
 
 beforeEach(async () => {
-  const { catalog } = await freshCatalog();
+  ({ catalog } = await freshCatalog());
   app = createApp({
     catalog,
     auth: {
@@ -126,6 +127,20 @@ describe('passkey sign-in', () => {
     const start = async () => (await call('POST', '/v1/auth/passkey/sign-in/options')).body.challengeId as string;
     const signedIn = await call('POST', '/v1/auth/passkey/sign-in/verify', { body: { challengeId: await start(), response: { id: 'cred-2', ok: true } } });
     expect(signedIn.body.person.id).toBe(body.person.id);
+  });
+
+  it('will not make a second account for someone signed in', async () => {
+    const { cookie } = await register('Mendy');
+    expect(await call('POST', '/v1/auth/passkey/register/options', { cookie, body: { name: 'Mendy' } })).toMatchObject({ status: 400, body: { message: 'you are signed in; add a passkey from your account page' } });
+  });
+
+  it('keeps a steward a steward when the catalog is rebuilt', async () => {
+    const created = await register('Mendy');
+    await catalog.db.query('UPDATE auth.person SET steward = TRUE WHERE id = $1', [created.body.person.id]);
+    await catalog.db.query('DELETE FROM account WHERE id = $1', [created.body.person.id]);
+    await call('POST', '/v1/suggestions', { body: { title: 'A fix' }, cookie: created.cookie });
+    expect((await catalog.account(created.body.person.id))?.is_steward).toBe(true);
+    expect((await call('GET', '/v1/auth/me', { cookie: created.cookie })).body.person.steward).toBe(true);
   });
 
   it('changes the name a person goes by', async () => {

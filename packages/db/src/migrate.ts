@@ -2,6 +2,7 @@ import type { Db } from './db.js';
 import * as catalog from './migrations/0001_catalog.js';
 import * as auth from './migrations/0003_auth.js';
 import * as google from './migrations/0004_google.js';
+import * as steward from './migrations/0005_steward.js';
 
 export interface Migration {
   version: number;
@@ -15,6 +16,7 @@ export const MIGRATIONS: readonly Migration[] = [
   // 2 is the reading copies' derivation params (feat/reading-copies).
   { version: 3, name: 'auth', up: auth.up },
   { version: 4, name: 'google', up: google.up },
+  { version: 5, name: 'steward', up: steward.up },
 ];
 
 /** Applies the migrations `db` has not had yet, each in its own transaction. Returns the versions applied. */

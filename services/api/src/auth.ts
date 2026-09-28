@@ -157,6 +157,7 @@ export function sessionAuthenticator(catalog: Catalog, auth: AuthOptions) {
     const person = await sessionPerson(catalog.db, token);
     if (!person) return null;
     await catalog.createAccount({ id: person.id, displayName: person.displayName });
+    if (person.steward) await catalog.db.query('UPDATE account SET is_steward = TRUE WHERE id = $1 AND NOT is_steward', [person.id]);
     return person.id;
   };
 }
@@ -216,6 +217,9 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
 
   // A new account: the name they go by, and a passkey made on their device for this site.
   app.post('/v1/auth/passkey/register/options', async (c) => {
+    // Signed in already, a new passkey goes on this account (passkey/add), never on a second one.
+    const token = readSession(c);
+    if (token && (await sessionPerson(db, token))) return refuse(c, 400, 'you are signed in; add a passkey from your account page');
     const { name } = (await c.req.json().catch(() => ({}))) as { name?: unknown };
     const displayName = cleanDisplayName(name);
     if (!displayName) return refuse(c, 400, 'a name of 1 to 60 characters');

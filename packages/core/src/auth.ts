@@ -11,6 +11,8 @@ import { one, type Db } from '@rebbehub/db';
 export interface Person {
   id: string;
   displayName: string;
+  /** Kept here as well as on the catalog account, which a rebuild of the catalog replaces (migration 0005). */
+  steward?: boolean;
 }
 
 export interface StoredPasskey {
@@ -162,14 +164,14 @@ export async function startSession(db: Db, personId: string, userAgent?: string)
 /** The person a session token signs in, while it lasts; each use extends it. */
 export async function sessionPerson(db: Db, token: string): Promise<Person | null> {
   const hash = await hashToken(token);
-  const row = await one<{ id: string; display_name: string }>(
+  const row = await one<{ id: string; display_name: string; steward: boolean }>(
     db,
     `UPDATE auth.session s SET last_seen_at = now(), expires_at = now() + interval '${SESSION_DAYS} days'
      FROM auth.person p WHERE s.token_hash = $1 AND s.expires_at > now() AND p.id = s.person_id
-     RETURNING p.id, p.display_name`,
+     RETURNING p.id, p.display_name, p.steward`,
     [hash],
   );
-  return row ? { id: row.id, displayName: row.display_name } : null;
+  return row ? { id: row.id, displayName: row.display_name, ...(row.steward ? { steward: true } : {}) } : null;
 }
 
 export async function endSession(db: Db, token: string): Promise<void> {
