@@ -1,11 +1,15 @@
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import type { Route } from './+types/account';
 import { langFrom, t } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
+import { labelOf } from '../lib/labels.js';
+import { itemPath } from '../lib/links.js';
 import { refreshAccount, useAccount, useGoogleSignIn } from '../lib/useAccount.js';
+import { setFollow, useFollows } from '../lib/useFollows.js';
+import { Webhooks } from '../components/Webhooks.js';
 import { useLang } from '../lib/useLang.js';
 
 /** A person's own page: their name (which they can change), their passkeys (and adding one), their Google account, and signing out. Filled in by the browser; the page itself is the same for everyone. */
@@ -22,10 +26,13 @@ export default function Account() {
   const lang = useLang();
   const account = useAccount();
   const google = useGoogleSignIn();
+  const follows = useFollows(Boolean(account));
   const [leaving, setLeaving] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [params] = useSearchParams();
+  // Coming back from linking a Google account that is already another account's.
+  const [error, setError] = useState<string | null>(params.get('error') === 'google-taken' ? t(lang, 'googleTaken') : null);
   const when = (iso: string) => new Intl.DateTimeFormat(lang === 'he' ? 'he-IL' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso));
 
   async function post<T>(path: string, body: unknown = {}): Promise<T> {
@@ -106,6 +113,10 @@ export default function Account() {
         </form>
       )}
       <p className="subtitle">{t(lang, 'accountIntro')}</p>
+      <p className="row-sub">
+        {t(lang, 'accountNumber')} <span dir="ltr">{account.person.id}</span>
+        {account.person.admin ? ` · ${t(lang, 'roleAdmin')}` : account.person.steward ? ` · ${t(lang, 'steward')}` : ''}
+      </p>
 
       {error ? (
         <p className="note" role="alert">
@@ -161,9 +172,61 @@ export default function Account() {
         </section>
       ) : null}
 
+      <section>
+        <h2 className="section-header">{t(lang, 'yourFollows')}</h2>
+        {follows && follows.items.length === 0 ? <p className="row-sub">{t(lang, 'followsEmpty')}</p> : null}
+        <ul className="rows">
+          {follows?.items.map((item) => (
+            <li key={item.id} className="row">
+              <span className="row-main">
+                <Link className="row-title" to={href(itemPath(item), lang)}>
+                  {labelOf(item, lang)}
+                </Link>
+              </span>
+              <button type="button" className="link-button" onClick={() => void setFollow(item, false)}>
+                {t(lang, 'unfollow')}
+              </button>
+            </li>
+          ))}
+        </ul>
+        {follows && follows.items.length > 0 ? (
+          <>
+            <h3 className="subsection">{t(lang, 'followFeed')}</h3>
+            {follows.feed.length === 0 ? <p className="row-sub">{t(lang, 'followFeedEmpty')}</p> : null}
+            <ul className="rows">
+              {follows.feed.map((f) => (
+                <li key={f.seq} className="row">
+                  <span className="row-main">
+                    <Link className="row-title" to={href(`/${f.entityId}`, lang)}>
+                      {f.message}
+                    </Link>
+                    <span className="row-sub" suppressHydrationWarning>
+                      {(() => {
+                        const item = follows.items.find((i) => i.id === f.entityId);
+                        return item ? `${labelOf(item, lang)} · ` : '';
+                      })()}
+                      {f.authorName} · {when(f.at)}
+                      {f.changes > 1 ? ` · ${f.changes.toLocaleString(lang === 'he' ? 'he-IL' : 'en-US')} ${t(lang, 'changesCount')}` : ''}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+      </section>
+
       <p>
         <Link to={href('/review', lang)}>{t(lang, 'yourSuggestions')}</Link>
+        {account.person.steward ? (
+          <>
+            {' · '}
+            <Link to={href('/admin', lang)}>{t(lang, 'adminTitle')}</Link>
+          </>
+        ) : null}
       </p>
+
+      <Webhooks lang={lang} />
 
       <section className="note">
         <b>{t(lang, 'comingForAccounts')}</b>

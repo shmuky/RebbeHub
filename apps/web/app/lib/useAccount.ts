@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
  */
 
 export interface SignedIn {
-  person: { id: string; displayName: string };
+  person: { id: string; displayName: string; steward?: boolean; admin?: boolean };
   passkeys: Array<{ credentialId: string; deviceType: string | null; backedUp: boolean; createdAt: string; lastUsedAt: string | null }>;
   googleAccounts: Array<{ email: string | null; createdAt: string }>;
 }

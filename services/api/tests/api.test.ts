@@ -226,9 +226,65 @@ describe('suggesting a fix in one step', () => {
 
     await call('POST', `/v1/suggestions/${sent.body.id}/approve`, { as: 'keeper' });
     expect((await call('GET', `/v1/entities/${event}`)).body.data.date).toBe('5742-05-11');
+
+    // History names who changed it and who approved, and says what changed, in fields.
+    const [latest, first] = (await call('GET', `/v1/entities/${event}/history`)).body.history;
+    expect(latest).toMatchObject({ message: 'Wrong date', authorName: 'Chaim', mergedByName: 'Set keeper', created: false, changes: [{ path: '/date', before: '5742-05-10', after: '5742-05-11' }] });
+    expect(first).toMatchObject({ created: true, changes: [] });
   });
 
   it('refuses an item that is not there', async () => {
     expect((await call('POST', '/v1/suggestions/quick', { as: 'chaim', body: { entityId: 'rh-zzzzzzzz', data: {} } })).status).toBe(404);
+  });
+});
+
+describe('following', () => {
+  it('lists what a person follows, and the changes to it since they followed', async () => {
+    expect((await call('GET', '/v1/follows')).status).toBe(401);
+    await call('POST', '/v1/follows', { as: 'chaim', body: { kind: 'entity', id: event } });
+    const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'חיבור' }, slug: 'w', authors: [], genre: 'sichos', levels: ['sicha'], sets: [set] });
+    await call('POST', '/v1/follows', { as: 'chaim', body: { kind: 'entity', id: work } });
+
+    const fixed = await call('POST', '/v1/suggestions/quick', { as: 'mendy', body: { entityId: event, data: { ...yudShvat(set), date: '5742-05-11' }, title: 'Wrong date' } });
+    await call('POST', `/v1/suggestions/${fixed.body.id}/approve`, { as: 'keeper' });
+    // A sicha added to the followed sefer shows too.
+    await add(catalog, 'mendy', 'keeper', 'unit', { work, position: [{ level: 'sicha', value: '1' }], order: 'V', label: { he: 'א' } });
+
+    const mine = (await call('GET', '/v1/follows', { as: 'chaim' })).body;
+    expect(mine.follows.map((f: { id: string }) => f.id).sort()).toEqual([event, work].sort());
+    expect(mine.items).toHaveLength(2);
+    expect(mine.feed.map((f: { message: string }) => f.message)).toEqual(['Add unit', 'Wrong date']);
+    expect(mine.feed[1]).toMatchObject({ entityId: event, authorName: 'Mendy', changes: 1 });
+
+    await call('POST', '/v1/follows', { as: 'chaim', body: { kind: 'entity', id: event, on: false } });
+    expect((await call('GET', '/v1/follows', { as: 'chaim' })).body.follows).toHaveLength(1);
+  });
+});
+
+describe('the Missing board and projects', () => {
+  it('lists what is missing, and a project works through it with its progress', async () => {
+    const other = await add(catalog, 'mendy', 'keeper', 'event', { kind: 'farbrengen', title: { he: 'ט״ו שבט' }, date: '5742-05-15', sets: [set] }, '/events/5742-05-15');
+    const missing = (await call('GET', '/v1/missing?kind=recordings&within=5742')).body;
+    expect(missing.total).toBe(2);
+    expect((await call('GET', '/v1/missing?kind=scans')).body.total).toBe(0);
+    expect((await call('GET', '/v1/missing?kind=spaceships')).status).toBe(400);
+
+    // A contributor opens no projects; the set's keeper does.
+    const input = { slug: 'recordings-5742', name: 'הקלטות תשמ״ב', goal: 'Every farbrengen of 5742 with its recording', set, missing: 'recordings', within: '5742' };
+    expect((await call('POST', '/v1/projects', { as: 'chaim', body: input })).status).toBe(403);
+    expect((await call('POST', '/v1/projects', { as: 'keeper', body: input })).status).toBe(201);
+
+    let project = (await call('GET', '/v1/projects/recordings-5742')).body;
+    expect(project.project).toMatchObject({ name: 'הקלטות תשמ״ב', total: 2, done: 0, status: 'open' });
+    expect(project.next).toHaveLength(2);
+
+    await add(catalog, 'mendy', 'keeper', 'recording', { event: other, title: { he: 'שיחה א׳' }, url: 'https://example.org/a.mp3', sets: [set] });
+    project = (await call('GET', '/v1/projects/recordings-5742')).body;
+    expect(project.project).toMatchObject({ total: 2, done: 1 });
+    expect(project.next.map((e: { id: string }) => e.id)).toEqual([event]);
+
+    expect((await call('GET', '/v1/projects')).body.projects).toHaveLength(1);
+    await call('POST', '/v1/projects/recordings-5742/close', { as: 'keeper' });
+    expect((await call('GET', '/v1/projects/recordings-5742')).body).toMatchObject({ project: { status: 'closed' }, next: [] });
   });
 });

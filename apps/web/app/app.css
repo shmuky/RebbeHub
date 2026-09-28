@@ -2512,3 +2512,273 @@ a.volume:hover {
   color: inherit;
   font: inherit;
 }
+
+/* Follow: a quiet button at the head of an item's page. */
+.item-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -8px;
+}
+
+.follow-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.875rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.follow-button.is-on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* The stewards' page. */
+.admin-search {
+  width: 100%;
+  padding: 10px 12px;
+  margin: 8px 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+}
+
+.admin-person,
+.admin-report {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.admin-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-block;
+  margin-inline-start: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.badge.is-warn {
+  border-color: #b3261e;
+  color: #b3261e;
+}
+
+/* History: one version after another, newest first. */
+.history {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.history-entry {
+  border-top: 1px solid var(--border);
+  padding: 14px 0;
+  display: grid;
+  gap: 6px;
+}
+
+.history-entry p {
+  margin: 0;
+}
+
+.rights-choice {
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.rights-choice legend {
+  font-size: 0.875rem;
+  margin-bottom: 4px;
+}
+
+.rights-choice label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.upload progress {
+  width: 100%;
+}
+
+.new-item {
+  display: grid;
+  gap: 6px;
+}
+
+.new-item audio {
+  width: 100%;
+}
+
+/* A project's progress. */
+.project-progress {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.progress-bar {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.progress-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.project-row .row-main {
+  width: 100%;
+}
+
+/* A scan's text, line by line; lines the machine read and nobody checked are marked. */
+.text-lines {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  line-height: 1.9;
+}
+
+.text-line {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px dotted var(--border);
+}
+
+.text-line.editing form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 0;
+}
+
+.text-line.editing input {
+  flex: 1 1 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+}
+
+.pager {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 12px 0;
+}
+
+/* A transcript synced to its recording. */
+.transcript {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.transcript-para {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.transcript-para.active {
+  background: var(--accent-soft);
+}
+
+.transcript-text {
+  flex: 1;
+  display: block;
+  min-height: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  line-height: 1.8;
+  text-align: start;
+  cursor: pointer;
+}
+
+.transcript-para.unchecked .transcript-text {
+  color: var(--machine);
+}
+
+.transcript-para.editing {
+  display: grid;
+}
+
+.transcript-para.editing textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+}
+
+/* An embed: the item alone, in another site's frame. */
+body.embedded {
+  padding: 12px 16px;
+}
+
+.embed-card h1 {
+  font-size: 1.5rem;
+  margin: 4px 0;
+}
+
+.embed-tracks {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.embed-tracks li {
+  display: grid;
+  gap: 4px;
+}
+
+.embed-tracks audio,
+.embed-code textarea {
+  width: 100%;
+}

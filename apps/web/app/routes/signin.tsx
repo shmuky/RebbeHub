@@ -93,49 +93,56 @@ export default function SignIn() {
       <p className="subtitle">{t(lang, 'signInIntro')}</p>
 
       {account ? (
-        <p className="note">
-          {t(lang, 'alreadySignedIn')} <b>{account.person.displayName}</b>. <Link to={href('/account', lang)}>{t(lang, 'yourAccount')}</Link>
-        </p>
-      ) : null}
-
-      {error ? (
-        <p className="note" role="alert">
-          {error}
-        </p>
+        <>
+          <p className="note">
+            {t(lang, 'alreadySignedIn')} <strong>{account.person.displayName}</strong>.
+          </p>
+          {/* Signed in, a new passkey belongs on this account, never on a new one. */}
+          <p>
+            <Link className="button" to={href('/account', lang)}>
+              {t(lang, 'addPasskeyHere')}
+            </Link>
+          </p>
+        </>
       ) : null}
 
       {!supported ? <p className="note">{t(lang, 'noPasskeys')}</p> : null}
 
-      <section>
-        <h2 className="section-header">{t(lang, 'haveAccount')}</h2>
-        <p>{t(lang, 'haveAccountText')}</p>
-        <button type="button" onClick={signIn} disabled={busy !== null || !supported}>
-          {busy === 'in' ? t(lang, 'waiting') : t(lang, 'signInWithPasskey')}
-        </button>
-      </section>
+      {account ? null : (
+        <>
+          <section>
+            <h2 className="section-header">{t(lang, 'haveAccount')}</h2>
+            <p>{t(lang, 'haveAccountText')}</p>
+            <button type="button" onClick={signIn} disabled={busy !== null || !supported}>
+              {busy === 'in' ? t(lang, 'waiting') : t(lang, 'signInWithPasskey')}
+            </button>
+          </section>
 
-      <section>
-        <h2 className="section-header">{t(lang, 'newAccount')}</h2>
-        <form onSubmit={create} className="signin-form">
-          <label htmlFor="name">{t(lang, 'nameToShow')}</label>
-          <input id="name" name="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required autoComplete="name" dir="auto" />
-          <p className="row-sub">{t(lang, 'nameToShowHint')}</p>
-          <button type="submit" disabled={busy !== null || !supported || !name.trim()}>
-            {busy === 'new' ? t(lang, 'waiting') : t(lang, 'createAccount')}
-          </button>
-        </form>
-      </section>
+          <section>
+            <h2 className="section-header">{t(lang, 'newAccount')}</h2>
+            <form onSubmit={create} className="signin-form">
+              <label htmlFor="name">{t(lang, 'nameToShow')}</label>
+              <input id="name" name="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required autoComplete="name" dir="auto" />
+              <p className="row-sub">{t(lang, 'nameToShowHint')}</p>
+              <p className="row-sub">{t(lang, 'newAccountHint')}</p>
+              <button type="submit" disabled={busy !== null || !supported || !name.trim()}>
+                {busy === 'new' ? t(lang, 'waiting') : t(lang, 'createAccount')}
+              </button>
+            </form>
+          </section>
 
-      {google ? (
-        <section>
-          <h2 className="section-header">{t(lang, 'orGoogle')}</h2>
-          <p>{t(lang, 'orGoogleText')}</p>
-          {/* A whole-page visit: the browser goes to Google and comes back. */}
-          <a className="button secondary" href={`/_/auth/google/start?return=${encodeURIComponent(safeReturn(params.get('return')))}`}>
-            {t(lang, 'signInWithGoogle')}
-          </a>
-        </section>
-      ) : null}
+          {google ? (
+            <section>
+              <h2 className="section-header">{t(lang, 'orGoogle')}</h2>
+              <p>{t(lang, 'orGoogleText')}</p>
+              {/* A whole-page visit: the browser goes to Google and comes back. */}
+              <a className="button secondary" href={`/_/auth/google/start?return=${encodeURIComponent(safeReturn(params.get('return')))}`}>
+                {t(lang, 'signInWithGoogle')}
+              </a>
+            </section>
+          ) : null}
+        </>
+      )}
 
       <section className="note">
         <b>{t(lang, 'whatIsPasskey')}</b>

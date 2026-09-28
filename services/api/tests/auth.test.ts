@@ -13,6 +13,7 @@ import { freshCatalog } from '../../../packages/core/tests/helpers.js';
 
 const SITE = 'https://rebbehub.test';
 let app: Hono;
+let catalog: Awaited<ReturnType<typeof freshCatalog>>['catalog'];
 
 const verify: NonNullable<AuthOptions['verify']> = {
   // A registration "verifies" when the response names a credential; its public key is made up.
@@ -22,7 +23,7 @@ const verify: NonNullable<AuthOptions['verify']> = {
 };
 
 beforeEach(async () => {
-  const { catalog } = await freshCatalog();
+  ({ catalog } = await freshCatalog());
   app = createApp({
     catalog,
     auth: {
@@ -128,6 +129,56 @@ describe('passkey sign-in', () => {
     expect(signedIn.body.person.id).toBe(body.person.id);
   });
 
+  it('will not make a second account for someone signed in', async () => {
+    const { cookie } = await register('Mendy');
+    expect(await call('POST', '/v1/auth/passkey/register/options', { cookie, body: { name: 'Mendy' } })).toMatchObject({ status: 400, body: { message: 'you are signed in; add a passkey from your account page' } });
+  });
+
+  it('keeps a steward a steward when the catalog is rebuilt', async () => {
+    const created = await register('Mendy');
+    await catalog.db.query('UPDATE auth.person SET steward = TRUE WHERE id = $1', [created.body.person.id]);
+    await catalog.db.query('DELETE FROM account WHERE id = $1', [created.body.person.id]);
+    await call('POST', '/v1/suggestions', { body: { title: 'A fix' }, cookie: created.cookie });
+    expect((await catalog.account(created.body.person.id))?.is_steward).toBe(true);
+    expect((await call('GET', '/v1/auth/me', { cookie: created.cookie })).body.person.steward).toBe(true);
+  });
+
+  it("lets an admin appoint stewards, and stewards see people and reports, but not appoint", async () => {
+    const admin = await register('Admin', 'cred-a');
+    await catalog.db.query('UPDATE auth.person SET admin = TRUE WHERE id = $1', [admin.body.person.id]);
+    const other = await register('Mendy', 'cred-m');
+    const third = await register('Chaim', 'cred-c');
+    const id = other.body.person.id;
+
+    // Not yet a steward: nothing here, and no reports.
+    expect((await call('GET', '/v1/admin/people', { cookie: other.cookie })).status).toBe(403);
+    expect((await call('GET', '/v1/reports', { cookie: other.cookie })).status).toBe(403);
+
+    const people = (await call('GET', '/v1/admin/people', { cookie: admin.cookie })).body;
+    expect(people.me.admin).toBe(true);
+    expect(people.people.map((p: { displayName: string }) => p.displayName)).toEqual(['Chaim', 'Mendy', 'Admin']);
+    expect((await call('GET', '/v1/admin/people?q=men', { cookie: admin.cookie })).body.people).toHaveLength(1);
+
+    expect((await call('POST', `/v1/admin/people/${id}/role`, { cookie: admin.cookie, body: { steward: true } })).status).toBe(200);
+    expect((await catalog.account(id))?.is_steward).toBe(true);
+    expect((await call('GET', '/v1/auth/me', { cookie: other.cookie })).body.person.steward).toBe(true);
+    expect((await call('GET', '/v1/reports', { cookie: other.cookie })).status).toBe(200);
+
+    // A steward sees people and suspends, but appoints no one, and never touches an admin.
+    expect((await call('GET', '/v1/admin/people', { cookie: other.cookie })).body.me.admin).toBe(false);
+    expect((await call('POST', `/v1/admin/people/${third.body.person.id}/role`, { cookie: other.cookie, body: { steward: true } })).status).toBe(403);
+    expect((await call('POST', `/v1/admin/people/${admin.body.person.id}/suspend`, { cookie: other.cookie, body: { on: true } })).status).toBe(403);
+    expect((await call('POST', `/v1/admin/people/${third.body.person.id}/suspend`, { cookie: other.cookie, body: { on: true } })).status).toBe(200);
+    expect((await catalog.account(third.body.person.id))?.suspended_at).not.toBeNull();
+    expect((await call('POST', '/v1/suggestions', { body: { title: 'x' }, cookie: third.cookie })).status).toBe(403);
+
+    // An admin keeps their own admin; removing a steward takes it from the catalog account too.
+    expect((await call('POST', `/v1/admin/people/${admin.body.person.id}/role`, { cookie: admin.cookie, body: { admin: false } })).status).toBe(400);
+    await call('POST', `/v1/admin/people/${id}/role`, { cookie: admin.cookie, body: { steward: false } });
+    expect((await catalog.account(id))?.is_steward).toBe(false);
+    expect((await call('GET', '/v1/auth/me', { cookie: other.cookie })).body.person.steward).toBeUndefined();
+  });
+
   it('changes the name a person goes by', async () => {
     const { cookie } = await register('Mendy');
     expect((await call('POST', '/v1/auth/name', { body: { name: 'Menachem Mendel' } })).status).toBe(401);
@@ -226,6 +277,17 @@ describe('Google sign-in', () => {
     const me = (await call('GET', '/v1/auth/me', { cookie: linked.cookie })).body;
     expect(me.person.id).toBe(created.body.person.id);
     expect(me.googleAccounts).toHaveLength(1);
+  });
+
+  it('never switches a signed-in person to the account their Google account already belongs to', async () => {
+    const first = await viaGoogle();
+    const other = await register('Someone', 'cred-9');
+    claims = {};
+    const linking = await viaGoogle({ cookie: other.cookie });
+    expect(linking.location).toBe('/account?error=google-taken');
+    expect(linking.cookie).toBeUndefined();
+    expect((await call('GET', '/v1/auth/me', { cookie: other.cookie })).body.googleAccounts).toEqual([]);
+    expect((await call('GET', '/v1/auth/me', { cookie: first.cookie })).body.googleAccounts).toHaveLength(1);
   });
 
   it('refuses a code Google does not know, a token for another site or nonce, and a browser that did not start here', async () => {

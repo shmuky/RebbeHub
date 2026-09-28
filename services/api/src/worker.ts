@@ -1,4 +1,4 @@
-import { Catalog } from '@rebbehub/core';
+import { Catalog, deliverWebhooks } from '@rebbehub/core';
 import { connectPostgres } from '@rebbehub/db';
 import { createApp, turnstileVerifier, type FileStore } from './app.js';
 import { authFor } from './auth.js';
@@ -17,11 +17,14 @@ interface R2ObjectBody {
 
 interface R2Bucket {
   get(key: string, options?: { range?: { offset: number; length?: number } }): Promise<R2ObjectBody | null>;
+  put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
 }
 
 interface Env {
   HYPERDRIVE: { connectionString: string };
   FILES_PUBLIC?: R2Bucket;
+  /** Uploaded bytes whose rights do not let them be served. Written, never read: nothing here is served. */
+  FILES_PRESERVATION?: R2Bucket;
   REPORT_SALT?: string;
   TURNSTILE_SECRET?: string;
   /** Where files are served from, when not this Worker (a separate media domain). */
@@ -31,6 +34,10 @@ interface Env {
   /** Google sign-in's client (secrets); without both, sign-in is by passkey alone. */
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+}
+
+function r2Writer(bucket: R2Bucket) {
+  return { put: async (key: string, bytes: ArrayBuffer, mime: string) => void (await bucket.put(key, bytes, { httpMetadata: { contentType: mime } })) };
 }
 
 function r2Store(bucket: R2Bucket): FileStore {
@@ -43,6 +50,16 @@ function r2Store(bucket: R2Bucket): FileStore {
 }
 
 export default {
+  /** Every few minutes (wrangler.toml, [triggers]): webhooks get the merges they have not had yet. */
+  async scheduled(_event: unknown, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): Promise<void> {
+    const db = connectPostgres(env.HYPERDRIVE.connectionString, { max: 1 });
+    ctx.waitUntil(
+      deliverWebhooks(new Catalog(db))
+        .catch((error) => console.error('webhooks', error))
+        .finally(() => db.close()),
+    );
+  },
+
   async fetch(request: Request, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): Promise<Response> {
     const db = connectPostgres(env.HYPERDRIVE.connectionString, { max: 1 });
     const app = createApp({
@@ -51,6 +68,7 @@ export default {
       verifyCaptcha: env.TURNSTILE_SECRET ? turnstileVerifier(env.TURNSTILE_SECRET) : undefined,
       filesBaseUrl: env.FILES_BASE_URL,
       files: env.FILES_PUBLIC ? r2Store(env.FILES_PUBLIC) : undefined,
+      uploads: env.FILES_PUBLIC && env.FILES_PRESERVATION ? { public: r2Writer(env.FILES_PUBLIC), preservation: r2Writer(env.FILES_PRESERVATION) } : undefined,
       auth: env.SITE_URL ? authFor(env.SITE_URL, { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }) : undefined,
     });
     try {

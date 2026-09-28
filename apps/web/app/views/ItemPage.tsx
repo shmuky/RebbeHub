@@ -229,13 +229,20 @@ function PublicationPage({ entity, view, lang }: { entity: Entity; view: ItemVie
         <section>
           <h2>{t(lang, 'scans')}</h2>
           {scans.map((scan) => (
-            <ScanViewer
-              key={scan.id}
-              file={view.files[scan.id] ?? null}
-              title={nameOf(d.title, lang)}
-              sourceLink={d.identifiers?.hebrewbooks ? sourceUrl({ source: 'hebrewbooks', sourceId: d.identifiers.hebrewbooks }) : null}
-              pageLabels={(scan.data as D).pageLabels}
-            />
+            <div key={scan.id}>
+              <ScanViewer
+                file={view.files[scan.id] ?? null}
+                title={nameOf(d.title, lang)}
+                sourceLink={d.identifiers?.hebrewbooks ? sourceUrl({ source: 'hebrewbooks', sourceId: d.identifiers.hebrewbooks }) : null}
+                pageLabels={(scan.data as D).pageLabels}
+              />
+              {/* Its text, page by page, where the machine has read it; a scan whose file is not served has none shown. */}
+              {view.files[scan.id]?.url ? (
+                <p>
+                  <Link to={href(`/text/${scan.id}`, lang)}>{t(lang, 'readTheText')}</Link>
+                </p>
+              ) : null}
+            </div>
           ))}
         </section>
       ) : d.identifiers?.hebrewbooks ? (

@@ -22,7 +22,7 @@ export async function openDatabase(database?: string): Promise<Db> {
   return /^postgres(ql)?:\/\//.test(target) ? connectPostgres(target) : openPGlite(target);
 }
 
-async function withCatalog<T>(ctx: Context, fn: (catalog: Catalog) => Promise<T>): Promise<T> {
+export async function withCatalog<T>(ctx: Context, fn: (catalog: Catalog) => Promise<T>): Promise<T> {
   const db = await openDatabase(ctx.database);
   try {
     const catalog = new Catalog(db);
@@ -64,7 +64,8 @@ export async function migrateCommand(ctx: Context): Promise<void> {
  * replaces the catalog.
  */
 export const PEOPLE_MADE_SQL = `SELECT EXISTS (SELECT 1 FROM changeset c JOIN account a ON a.id = c.author WHERE c.author <> 'system' AND NOT a.is_bot)
-  OR EXISTS (SELECT 1 FROM report) OR EXISTS (SELECT 1 FROM comment) OR EXISTS (SELECT 1 FROM follow) OR EXISTS (SELECT 1 FROM file)`;
+  OR EXISTS (SELECT 1 FROM report) OR EXISTS (SELECT 1 FROM comment) OR EXISTS (SELECT 1 FROM follow) OR EXISTS (SELECT 1 FROM file)
+  OR EXISTS (SELECT 1 FROM project) OR EXISTS (SELECT 1 FROM webhook)`;
 
 /**
  * Whether everything in the catalog came from importers, so it can be
@@ -83,7 +84,7 @@ export async function catalogIsRebuildable(db: Db): Promise<boolean> {
  * whole-catalog copy runs it first, so it can never replace anything
  * people have made.
  */
-export const REBUILD_GUARD_SQL = `LOCK TABLE changeset, report, comment, follow, file IN ACCESS EXCLUSIVE MODE;
+export const REBUILD_GUARD_SQL = `LOCK TABLE changeset, report, comment, follow, file, project, webhook IN ACCESS EXCLUSIVE MODE;
 DO $$ BEGIN IF (${PEOPLE_MADE_SQL}) THEN RAISE EXCEPTION 'people have added to the catalog; not replacing it'; END IF; END $$;`;
 
 /** Prints `rebuildable` or `not-rebuildable`, for scripts; with `guard`, prints REBUILD_GUARD_SQL instead. */

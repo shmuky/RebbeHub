@@ -157,6 +157,8 @@ export function sessionAuthenticator(catalog: Catalog, auth: AuthOptions) {
     const person = await sessionPerson(catalog.db, token);
     if (!person) return null;
     await catalog.createAccount({ id: person.id, displayName: person.displayName });
+    // The person's steward mark is the one that counts; their catalog account follows it.
+    await catalog.db.query('UPDATE account SET is_steward = $2 WHERE id = $1 AND is_steward <> $2', [person.id, Boolean(person.steward)]);
     return person.id;
   };
 }
@@ -216,6 +218,9 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
 
   // A new account: the name they go by, and a passkey made on their device for this site.
   app.post('/v1/auth/passkey/register/options', async (c) => {
+    // Signed in already, a new passkey goes on this account (passkey/add), never on a second one.
+    const token = readSession(c);
+    if (token && (await sessionPerson(db, token))) return refuse(c, 400, 'you are signed in; add a passkey from your account page');
     const { name } = (await c.req.json().catch(() => ({}))) as { name?: unknown };
     const displayName = cleanDisplayName(name);
     if (!displayName) return refuse(c, 400, 'a name of 1 to 60 characters');
@@ -359,10 +364,12 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
     const email = claims.email && claims.email_verified !== false ? claims.email : null;
 
     // Known: sign in as its person. New, while signed in: add it to this account. New otherwise: a new account, named as on Google.
+    const token = readSession(c);
+    const current = token ? await sessionPerson(db, token) : null;
     let person = await googleSignedIn(db, claims.sub, email);
+    // Linking a Google account that is already another account's never switches accounts behind the person's back.
+    if (person && current && person.id !== current.id) return c.redirect('/account?error=google-taken', 302);
     if (!person) {
-      const token = readSession(c);
-      const current = token ? await sessionPerson(db, token) : null;
       person = current ?? (await createPerson(db, cleanDisplayName(claims.name) ?? cleanDisplayName(email?.split('@')[0]) ?? 'Reader'));
       await linkGoogle(db, claims.sub, person.id, email);
     }

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
+import { ocrCommand } from '../ocrCommand.js';
+import { transcribeCommand } from '../transcribeCommand.js';
 import { accountCommand, dumpCommand, editionCommand, importCommand, keygenCommand, migrateCommand, mirrorCommand, rebuildableCommand, schemaCheckCommand, type Context } from '../commands.js';
 
 const HELP = `rebbehub - RebbeHub's command line
@@ -15,6 +17,13 @@ const HELP = `rebbehub - RebbeHub's command line
   rebbehub edition --by <steward> [--tag 2026.40] [--notes <text>]
   rebbehub dump --tag <tag> --out <folder> [--key <key.json>]
   rebbehub keygen --out <key.json>
+  rebbehub ocr --approve-as <steward> [--scan <id>] [--limit <n>] [--files <url>]
+                                                machine OCR of served scans that have none yet;
+                                                files from <url>/objects/<sha256> (default the live API)
+  rebbehub transcribe --approve-as <steward> [--recording <id>] [--limit <n>] [--linked] [--files <url>]
+                                                machine transcripts, with sync, of recordings that have
+                                                none (Whisper on Workers AI: CLOUDFLARE_ACCOUNT_ID and
+                                                CLOUDFLARE_AI_TOKEN); --linked also those heard elsewhere
 
   --database <url or folder>   Postgres URL, or a PGlite folder
                                (default: $DATABASE_URL, else .data/pglite)
@@ -42,6 +51,10 @@ const { values, positionals } = parseArgs({
     out: { type: 'string' },
     key: { type: 'string' },
     guard: { type: 'boolean' },
+    scan: { type: 'string' },
+    recording: { type: 'string' },
+    linked: { type: 'boolean' },
+    files: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
   },
 });
@@ -71,6 +84,12 @@ try {
       break;
     case 'import':
       await importCommand(ctx, { source: need(rest[0], 'source'), from: need(values.from, 'from'), approveAs: values['approve-as'], dryRun: values['dry-run'], chunkSize: number(values.chunk) });
+      break;
+    case 'ocr':
+      await ocrCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), scan: values.scan, limit: number(values.limit), files: values.files });
+      break;
+    case 'transcribe':
+      await transcribeCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files });
       break;
     case 'mirror':
       await mirrorCommand(ctx, { dir: need(values.dir, 'dir'), git: values.git, full: values.full, limit: number(values.limit) });

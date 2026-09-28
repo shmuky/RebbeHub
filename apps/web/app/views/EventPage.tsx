@@ -4,6 +4,7 @@ import { dateKeyToHDate } from '@rebbehub/hebrew';
 import type { LocalName } from '@rebbehub/model';
 import { eventData, type EventItem } from '../components/EventRow.js';
 import { ItemList } from '../components/ItemLink.js';
+import { Transcripts } from '../components/Transcripts.js';
 import type { Entity } from '../lib/api.js';
 import { dateLabel, yearLabel } from '../lib/dates.js';
 import { nameOf, t, type Lang } from '../lib/i18n.js';
@@ -211,6 +212,7 @@ export function EventPage({ entity, view, lang }: { entity: Entity; view: ItemVi
       </header>
 
       <Recordings entity={entity} recordings={recordings} sources={sources} lang={lang} />
+      <Transcripts tracks={tracksOf(entity, recordings, lang, sources)} lang={lang} />
       {links.length ? <Texts links={links} lang={lang} /> : null}
 
       {view.lists.units?.length ? (

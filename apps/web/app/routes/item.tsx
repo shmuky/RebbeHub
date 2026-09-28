@@ -1,7 +1,10 @@
 import { data, redirect } from 'react-router';
 import type { Route } from './+types/item';
+import { EmbedCode } from '../components/EmbedCode.js';
+import { FollowButton } from '../components/FollowButton.js';
 import { ReportForm, type ReportResult } from '../components/ReportForm.js';
-import { SuggestFix } from '../components/SuggestFix.js';
+import { SuggestFix, canSuggestFix } from '../components/SuggestFix.js';
+import { UploadForm } from '../components/UploadForm.js';
 import { ItemPage } from '../views/ItemPage.js';
 import { ApiError } from '../lib/api.js';
 import { siteOf } from '../lib/context.server.js';
@@ -100,12 +103,22 @@ export function meta({ loaderData }: Route.MetaArgs) {
   });
 }
 
+/** What people follow: sets, sefarim and their sichos, farbrengens, the Rebbeim and other people, printings. */
+const FOLLOWABLE = new Set(['set', 'work', 'unit', 'event', 'person', 'publication']);
+
 export default function Item({ loaderData }: Route.ComponentProps) {
   return (
     <>
+      {FOLLOWABLE.has(loaderData.entity.type) ? (
+        <div className="item-actions">
+          <FollowButton entity={loaderData.entity} lang={loaderData.lang} />
+        </div>
+      ) : null}
       <ItemPage entity={loaderData.entity} view={loaderData.view} />
-      {loaderData.entity.type === 'event' ? <SuggestFix entity={loaderData.entity} lang={loaderData.lang} /> : null}
+      {canSuggestFix(loaderData.entity) ? <SuggestFix entity={loaderData.entity} lang={loaderData.lang} /> : null}
+      {loaderData.entity.type === 'event' || loaderData.entity.type === 'work' ? <UploadForm entity={loaderData.entity} lang={loaderData.lang} /> : null}
       <ReportForm entityId={loaderData.entity.id} />
+      {FOLLOWABLE.has(loaderData.entity.type) ? <EmbedCode entity={loaderData.entity} lang={loaderData.lang} siteUrl={loaderData.siteUrl} /> : null}
     </>
   );
 }

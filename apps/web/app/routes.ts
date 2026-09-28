@@ -14,7 +14,17 @@ export default [
   route('_/auth/*', 'routes/auth.ts'),
   // Suggestions and their review, passed through the same way.
   route('_/suggestions/*', 'routes/suggestions.ts'),
+  route('_/follows', 'routes/follows.ts'),
+  route('_/uploads', 'routes/uploads.ts'),
+  route('_/steward/*', 'routes/admin-pass.ts'),
+  route('admin', 'routes/admin.tsx'),
   route('review', 'routes/review.tsx'),
+  route('missing', 'routes/missing.tsx'),
+  // What other sites embed: the only page they may frame.
+  route('embed/:id', 'routes/embed.tsx'),
+  route('text/:scan', 'routes/text.tsx'),
+  route('projects', 'routes/projects.tsx'),
+  route('projects/:slug', 'routes/project.tsx'),
   route('signin', 'routes/signin.tsx'),
   route('account', 'routes/account.tsx'),
   route('robots.txt', 'routes/robots.ts'),

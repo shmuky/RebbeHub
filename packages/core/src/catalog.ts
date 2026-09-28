@@ -123,15 +123,45 @@ export interface NewRevision {
 
 export type ReportReason = 'wrong-fact' | 'missing-page' | 'bad-scan' | 'audio-problem' | 'wrong-text' | 'duplicate' | 'rights' | 'offensive' | 'other';
 
+/** What a project works through: the farbrengens (of a year or month) missing recordings or texts. */
+export interface ProjectFocus {
+  missing: 'recordings' | 'texts';
+  within?: string;
+}
+
+export interface ProjectView {
+  id: number;
+  slug: string;
+  name: string;
+  goal: string | null;
+  set: string | null;
+  keepers: string[];
+  status: 'open' | 'merged' | 'closed';
+  focus: ProjectFocus;
+  createdBy: string;
+  creatorName: string | null;
+  createdAt: string;
+  /** Farbrengens in its focus, and how many of them have what was missing. */
+  total: number;
+  done: number;
+}
+
 export interface HistoryEntry {
   commit: number;
   at: string;
   message: string;
   mergedBy: string;
+  mergedByName: string | null;
   changeset: number;
   author: string;
+  authorName: string | null;
+  authorIsBot: boolean;
   rev: number;
   deleted: boolean;
+  /** Whether this version made the item (it had none before). */
+  created: boolean;
+  /** What this version changed from the one before, field by field (none for the first). */
+  changes: FieldChange[];
 }
 
 /** Where a type's items inherit their sets from, when they carry none themselves. */
@@ -482,14 +512,17 @@ export class Catalog {
 
   /** Every merged change to an item, newest first. */
   async history(id: EntityId): Promise<HistoryEntry[]> {
-    const { rows } = await this.db.query<HistoryEntry>(
-      `SELECT c.seq AS commit, c.at, c.message, c.merged_by AS "mergedBy", c.changeset_id AS changeset,
-              r.author, cc.rev_id AS rev, (r.data IS NULL) AS deleted
+    const { rows } = await this.db.query<Omit<HistoryEntry, 'changes' | 'created'> & { data: Json | null; prev: Json | null; has_prev: boolean }>(
+      `SELECT c.seq AS commit, c.at, c.message, c.merged_by AS "mergedBy", m.display_name AS "mergedByName", c.changeset_id AS changeset,
+              r.author, a.display_name AS "authorName", coalesce(a.is_bot, FALSE) AS "authorIsBot", cc.rev_id AS rev, (r.data IS NULL) AS deleted,
+              r.data, p.data AS prev, (cc.prev_rev_id IS NOT NULL) AS has_prev
        FROM commit_change cc JOIN commit c ON c.seq = cc.commit_seq JOIN revision r ON r.id = cc.rev_id
+       LEFT JOIN revision p ON p.id = cc.prev_rev_id
+       LEFT JOIN account a ON a.id = r.author LEFT JOIN account m ON m.id = c.merged_by
        WHERE cc.entity_id = $1 ORDER BY c.seq DESC`,
       [id],
     );
-    return rows;
+    return rows.map(({ data, prev, has_prev, ...entry }) => ({ ...entry, created: !has_prev, changes: has_prev ? diffData(prev, data) : [] }));
   }
 
   /** Full text search over names, labels, text and dates on main. */
@@ -1008,6 +1041,88 @@ export class Catalog {
     });
   }
 
+  /**
+   * The Missing board's third list: sefarim with no printing and no scan
+   * of one, most-browsed first (by how many sichos they hold).
+   */
+  async worksWithoutScans(limit = 50): Promise<{ total: number; items: EntityView[] }> {
+    const without = `FROM entity e JOIN revision r ON r.id = e.main_rev
+       WHERE e.type = 'work' AND NOT e.deleted
+         AND NOT EXISTS (SELECT 1 FROM entity_ref p JOIN entity pe ON pe.id = p.from_id AND pe.type = 'publication' AND NOT pe.deleted WHERE p.to_id = e.id AND p.field = 'work')`;
+    const total = await one<{ n: number }>(this.db, `SELECT count(*)::int AS n ${without}`);
+    const { rows } = await this.db.query<RevisionRow>(
+      `SELECT r.* ${without}
+       ORDER BY (SELECT count(*) FROM entity_ref u WHERE u.to_id = e.id AND u.field = 'work') DESC, e.path LIMIT ${Math.min(Math.max(limit, 1), 200)}`,
+    );
+    return { total: total?.n ?? 0, items: rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! })) };
+  }
+
+  /**
+   * A project that works through a gap (migration 0007): opened by a
+   * steward or the set's keepers, with a name, a goal in words, and its
+   * focus: which farbrengens (a year) lack what (recordings or texts).
+   */
+  async openFocusProject(by: string, input: { slug: string; name: string; goal?: string; set?: EntityId; focus: ProjectFocus }): Promise<number> {
+    if (input.focus.missing !== 'recordings' && input.focus.missing !== 'texts') throw invalid('a project works through farbrengens missing recordings or texts');
+    if (input.focus.within !== undefined && !/^\d{4}(-(0[1-9]|1[0-2]|06A|06B))?$/.test(input.focus.within)) throw invalid('within is a year (5745) or a month (5745-05)');
+    const id = await this.createProject(by, input);
+    await this.db.query('UPDATE project SET focus = $2 WHERE id = $1', [id, JSON.stringify(input.focus)]);
+    return id;
+  }
+
+  /** Projects with their progress: how many of the farbrengens in their focus now have what was missing. */
+  async projects(options: { slug?: string; status?: 'open' | 'merged' | 'closed' } = {}): Promise<ProjectView[]> {
+    const params: unknown[] = [];
+    const where: string[] = ['focus IS NOT NULL'];
+    if (options.slug) where.push(`slug = $${params.push(options.slug)}`);
+    if (options.status) where.push(`status = $${params.push(options.status)}`);
+    const { rows } = await this.db.query<{ id: number; slug: string; name: string; goal: string | null; set_id: string | null; keepers: string[]; status: ProjectView['status']; focus: ProjectFocus; created_by: string; created_at: Date | string; creator: string | null }>(
+      `SELECT p.*, a.display_name AS creator FROM project p LEFT JOIN account a ON a.id = p.created_by WHERE ${where.join(' AND ')} ORDER BY p.created_at DESC`,
+      params,
+    );
+    return Promise.all(
+      rows.map(async (p) => {
+        const counts = await one<{ total: number; done: number }>(
+          this.db,
+          `SELECT count(*)::int AS total,
+                  count(*) FILTER (WHERE ${p.focus.missing === 'recordings'
+                    ? "EXISTS (SELECT 1 FROM entity_ref x JOIN entity f ON f.id = x.from_id AND f.type = 'recording' AND NOT f.deleted WHERE x.to_id = e.id AND x.field = 'event')"
+                    : "coalesce(jsonb_array_length(r.data->'links'), 0) > 0"})::int AS done
+           FROM entity e JOIN revision r ON r.id = e.main_rev
+           WHERE e.type = 'event' AND NOT e.deleted ${p.focus.within ? "AND r.data->>'date' LIKE $1 || '%'" : ''}`,
+          p.focus.within ? [p.focus.within] : [],
+        );
+        return {
+          id: Number(p.id),
+          slug: p.slug,
+          name: p.name,
+          goal: p.goal,
+          set: p.set_id,
+          keepers: p.keepers,
+          status: p.status,
+          focus: p.focus,
+          createdBy: p.created_by,
+          creatorName: p.creator,
+          createdAt: new Date(p.created_at).toISOString(),
+          total: counts?.total ?? 0,
+          done: counts?.done ?? 0,
+        };
+      }),
+    );
+  }
+
+  /** Closes a project (done, or given up): its keepers or a steward. */
+  async closeProject(projectId: number, by: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const actor = await this.requireAccount(by, tx);
+      const project = await one<{ keepers: string[]; status: string }>(tx, 'SELECT keepers, status FROM project WHERE id = $1', [projectId]);
+      if (!project) throw notFound(`project ${projectId}`);
+      if (!actor.is_steward && !project.keepers.includes(by)) throw forbidden("a project is closed by its keepers");
+      await tx.query("UPDATE project SET status = 'closed' WHERE id = $1 AND status = 'open'", [projectId]);
+      await this.audit(tx, by, 'project.close', 'project', String(projectId));
+    });
+  }
+
   /** What merging a project into main would clash on, item by item. */
   async projectConflicts(projectId: number): Promise<Conflict[]> {
     const conflicts: Conflict[] = [];
@@ -1105,6 +1220,41 @@ export class Catalog {
     } else {
       await this.db.query('DELETE FROM follow WHERE account_id = $1 AND target_kind = $2 AND target_id = $3', [accountId, target.kind, target.id]);
     }
+  }
+
+  /** What a person follows: items and sets, newest first. */
+  async follows(accountId: string): Promise<Array<{ kind: 'entity' | 'set' | 'project' | 'changeset'; id: string; since: string }>> {
+    const { rows } = await this.db.query<{ target_kind: 'entity' | 'set' | 'project' | 'changeset'; target_id: string; created_at: Date | string }>(
+      'SELECT target_kind, target_id, created_at FROM follow WHERE account_id = $1 ORDER BY created_at DESC',
+      [accountId],
+    );
+    return rows.map((r) => ({ kind: r.target_kind, id: r.target_id, since: new Date(r.created_at).toISOString() }));
+  }
+
+  /**
+   * What changed lately in what a person follows: the item itself, and what
+   * belongs to it (a sefer's sichos, a farbrengen's recordings, a set's
+   * items). One line per merge, with how many of the followed things it
+   * changed; changes from before they followed are left out.
+   */
+  async followFeed(accountId: string, limit = 20): Promise<Array<{ seq: number; at: string; message: string; authorName: string; authorIsBot: boolean; entityId: string; changes: number }>> {
+    const { rows } = await this.db.query<{ seq: string; at: Date | string; message: string; author_name: string; author_is_bot: boolean; entity_id: string; changes: number }>(
+      `WITH targets AS (SELECT target_id, created_at FROM follow WHERE account_id = $1 AND target_kind IN ('entity', 'set')),
+            touched AS (
+              SELECT cc.commit_seq, cc.entity_id, t.created_at FROM commit_change cc JOIN targets t ON t.target_id = cc.entity_id
+              UNION
+              SELECT cc.commit_seq, cc.entity_id, t.created_at FROM entity_ref r JOIN targets t ON t.target_id = r.to_id
+                JOIN commit_change cc ON cc.entity_id = r.from_id
+              WHERE r.field IN ('work', 'event', 'sets')
+            )
+       SELECT c.seq, c.at, c.message, a.display_name AS author_name, a.is_bot AS author_is_bot, min(x.entity_id) AS entity_id, count(*)::int AS changes
+       FROM touched x JOIN commit c ON c.seq = x.commit_seq JOIN changeset cs ON cs.id = c.changeset_id JOIN account a ON a.id = cs.author
+       WHERE c.at >= x.created_at
+       GROUP BY c.seq, c.at, c.message, a.display_name, a.is_bot
+       ORDER BY c.seq DESC LIMIT ${Math.min(Math.max(limit, 1), 100)}`,
+      [accountId],
+    );
+    return rows.map((r) => ({ seq: Number(r.seq), at: new Date(r.at).toISOString(), message: r.message, authorName: r.author_name, authorIsBot: r.author_is_bot, entityId: r.entity_id, changes: r.changes }));
   }
 
   /** Who is told when this item changes: its own followers and those of its sets. */
