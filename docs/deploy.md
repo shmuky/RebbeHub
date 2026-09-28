@@ -18,14 +18,15 @@ always ahead of the code that uses it - for builds of `main` only. Cloudflare
 also builds every other branch as a preview; those skip the migration, so
 unmerged code never changes the live database.
 
-Previews need their own deploy command (**Settings → Build → Non-production
-branch deploy command**), since Cloudflare's default runs at the repository
-root, where there is no Wrangler config:
+Previews need their own command (**Settings → Build → Preview command**),
+since Cloudflare's default runs at the repository root, where there is no
+Wrangler config. `versions upload` uploads a preview version without
+touching the live one:
 
-| Worker | Non-production branch deploy command |
+| Worker | Preview command |
 | --- | --- |
-| `rebbehub-api` | `npx wrangler preview -c services/api/wrangler.toml` |
-| `rebbehub-web` | `npx wrangler preview -c apps/web/wrangler.toml` |
+| `rebbehub-api` | `npx wrangler versions upload -c services/api/wrangler.toml` |
+| `rebbehub-web` | `npx wrangler versions upload -c apps/web/wrangler.toml` |
 
 ## One-time setup
 
