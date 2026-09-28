@@ -40,9 +40,10 @@ stands. ✅ built and tested · 🟡 partly · ⬜ not yet.
 
 The engine behind it is built and tested (suggestions, review queue,
 history, revert, trust levels, follows, anonymous reports with captcha
-and rate limits, all over the API). Still to come: accounts and sign-in
-(passkey, email link, Google), the site's *Suggest a fix* / *Approve*
-screens, notifications for follows, the reviewer's AI summary.
+and rate limits, all over the API). Signing in with a passkey is built
+([accounts](accounts.md)). Still to come: signing in with Google and by
+email link, the site's *Suggest a fix* / *Approve* screens,
+notifications for follows, the reviewer's AI summary.
 
 ## Phases 3-6
 

@@ -2,20 +2,22 @@ import { Hono, type Context } from 'hono';
 import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, getFile, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
+import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
 import { OPENAPI } from './openapi.js';
 
 /**
  * The RebbeHub API. Reading needs nothing; reporting a problem needs no
  * account (a captcha and a rate limit instead); suggesting and reviewing
- * need a signed-in account, which the deployment establishes through
- * `authenticate` (accounts and sign-in arrive in phase 2 - until then no
- * request is signed in and those routes answer 401).
+ * need a signed-in account: a passkey session (auth.ts) or, in tests,
+ * whatever `authenticate` says.
  */
 
 export interface ApiOptions {
   catalog: Catalog;
-  /** The account a request is signed in as, or null. */
+  /** The account a request is signed in as, or null. Unset, the passkey session cookie (with `auth`). */
   authenticate?: (c: Context) => Promise<string | null> | string | null;
+  /** Passkey sign-in: where the site is, which passkeys and sessions belong to. Unset, nobody can sign in. */
+  auth?: AuthOptions;
   /** Salt for hashing reporters' addresses (only the hash is kept, for rate limits). */
   reportSalt?: string;
   /** Verifies a report's captcha token (Cloudflare Turnstile); unset, reports need none. */
@@ -97,6 +99,7 @@ async function body<T>(c: Context): Promise<T> {
 export function createApp(options: ApiOptions): Hono {
   const { catalog } = options;
   const app = new Hono();
+  const authenticate = options.authenticate ?? (options.auth ? sessionAuthenticator(catalog, options.auth) : undefined);
 
   // Words whose rights forbid copies are never served, only listed.
   const redact = (views: EntityView[]): Promise<Array<EntityView & { withheld?: string }>> => {
@@ -105,7 +108,7 @@ export function createApp(options: ApiOptions): Hono {
   };
 
   const signedIn = async (c: Context): Promise<string> => {
-    const account = (await options.authenticate?.(c)) ?? null;
+    const account = (await authenticate?.(c)) ?? null;
     if (!account) throw new HttpError(401, 'sign in to do this');
     return account;
   };
@@ -123,6 +126,8 @@ export function createApp(options: ApiOptions): Hono {
     c.header('Access-Control-Allow-Origin', '*');
     c.header('X-Content-Type-Options', 'nosniff');
   });
+
+  if (options.auth) authRoutes(app, catalog, options.auth);
 
   app.get('/', (c) => c.redirect('/v1'));
   app.get('/openapi.json', (c) => c.json(OPENAPI));
@@ -309,7 +314,7 @@ export function createApp(options: ApiOptions): Hono {
     const input = await body<{ entityId?: string; reason?: string; note?: string; captcha?: string }>(c);
     if (!input.reason || !REPORT_REASONS.includes(input.reason as ReportReason)) throw new HttpError(400, `reason must be one of ${REPORT_REASONS.join(', ')}`);
     const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim();
-    const account = (await options.authenticate?.(c)) ?? null;
+    const account = (await authenticate?.(c)) ?? null;
     if (!account && options.verifyCaptcha && !(await options.verifyCaptcha(input.captcha, ip))) throw new HttpError(403, 'the captcha was not solved');
     const reporterHash = ip ? await sha256Hex(`${options.reportSalt ?? 'rebbehub'}\u0000${ip}`) : undefined;
     if (reporterHash && !account) {

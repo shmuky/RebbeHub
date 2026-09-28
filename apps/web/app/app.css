@@ -2340,3 +2340,54 @@ a.volume:hover {
 .player-bar {
   border-radius: 10px;
 }
+
+/* ------------------------------------------------------------------ sign-in */
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.account-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 40px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.account-link:hover {
+  color: var(--accent);
+}
+
+.signin-form {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+}
+
+.signin-form label {
+  font-weight: 600;
+}
+
+.signin-form input {
+  min-height: 46px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  font-size: 1rem;
+}
+
+.signin-form input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+.signin-form button {
+  justify-self: start;
+}

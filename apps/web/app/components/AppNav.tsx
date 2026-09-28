@@ -22,6 +22,8 @@ function tabOf(pathname: string): string {
   if (pathname.startsWith('/calendar') || pathname.startsWith('/events')) return '/calendar';
   if (pathname.startsWith('/search')) return '/search';
   if (pathname.startsWith('/help')) return '/help';
+  // A person's own pages belong to no tab.
+  if (pathname.startsWith('/signin') || pathname.startsWith('/account')) return '';
   return '/sets';
 }
 
