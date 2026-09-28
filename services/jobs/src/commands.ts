@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Catalog } from '@rebbehub/core';
-import { connectPostgres, type Db } from '@rebbehub/db';
+import { connectPostgres, one, type Db } from '@rebbehub/db';
 import { openPGlite } from '@rebbehub/db/pglite';
 import { readSichosKodeshWorks, runImport, sichosKodeshWorksImporter } from '@rebbehub/importers';
 import { clearMirror, directorySink, exportCommits, exportSnapshot, generateKeyPair, writeDump, type KeyPair } from '@rebbehub/mirror';
@@ -55,6 +55,31 @@ export async function migrateCommand(ctx: Context): Promise<void> {
     return;
   }
   await withCatalog(ctx, async (catalog) => ctx.log(`database ready; main is at commit ${await catalog.head()}`));
+}
+
+/**
+ * What makes a catalog not empty: an item merged beyond the built-in
+ * schemas, or anything people have added (a report, a comment, a follow,
+ * a file). SQL, so the import can check it again inside the transaction
+ * that replaces the catalog.
+ */
+export const NOT_EMPTY_SQL = `SELECT EXISTS (SELECT 1 FROM entity WHERE type <> 'schema' AND main_rev IS NOT NULL)
+  OR EXISTS (SELECT 1 FROM report) OR EXISTS (SELECT 1 FROM comment) OR EXISTS (SELECT 1 FROM follow) OR EXISTS (SELECT 1 FROM file)`;
+
+/**
+ * Whether the catalog holds nothing yet but the built-in schemas. A first
+ * import into an empty catalog is built next to the code and copied in
+ * whole (scripts/import-catalog.sh), instead of item by item across the
+ * internet, which takes hours.
+ */
+export async function catalogIsEmpty(db: Db): Promise<boolean> {
+  const row = await one<{ not_empty: boolean }>(db, `${NOT_EMPTY_SQL} AS not_empty`);
+  return !row!.not_empty;
+}
+
+/** Prints `empty` or `not-empty`, for scripts. */
+export async function isEmptyCommand(ctx: Context): Promise<void> {
+  await withCatalog(ctx, async (catalog) => ctx.log((await catalogIsEmpty(catalog.db)) ? 'empty' : 'not-empty'));
 }
 
 /** Checks that every built-in schema can be used. */
