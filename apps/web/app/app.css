@@ -2782,3 +2782,68 @@ body.embedded {
 .embed-code textarea {
   width: 100%;
 }
+
+/* The reader (/read), as Sichos-Kodesh's PDF screen lays it out: pages
+   down a reading column, edge to edge while pinch-zoomed. */
+.pdf-viewer-screen {
+  max-width: 720px;
+  margin: 0 auto;
+  padding-bottom: 96px;
+}
+
+.pdf-viewer-screen.zoomed {
+  max-width: none;
+}
+
+.reader-head,
+.pdf-viewer-status {
+  padding: 0 4px;
+}
+
+.reader-head h1 {
+  font-size: 1.5rem;
+  margin: 8px 0 2px;
+}
+
+.pdf-pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  overflow-x: hidden;
+}
+
+.pdf-page {
+  flex-shrink: 0;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.18);
+  /* Only vertical panning is the browser's; a pinch or a sideways drag is the reader's (reader/pdfPageZoom.ts). */
+  touch-action: pan-y;
+}
+
+.pdf-page canvas {
+  display: block;
+}
+
+.pdf-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pdf-loading-spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.read-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}

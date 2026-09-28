@@ -23,7 +23,7 @@ function tabOf(pathname: string): string {
   if (pathname.startsWith('/search')) return '/search';
   if (['/help', '/review', '/missing', '/projects'].some((p) => pathname.startsWith(p))) return '/help';
   // A person's own pages belong to no tab.
-  if (pathname.startsWith('/signin') || pathname.startsWith('/account') || pathname.startsWith('/admin') || pathname.startsWith('/history')) return '';
+  if (pathname.startsWith('/signin') || pathname.startsWith('/account') || pathname.startsWith('/admin') || pathname.startsWith('/history') || pathname.startsWith('/read')) return '';
   return '/sets';
 }
 

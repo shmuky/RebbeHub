@@ -1,6 +1,9 @@
+import { Pause, Play } from 'lucide-react';
 import type { Entity } from '../lib/api.js';
 import { nameOf, t } from '../lib/i18n.js';
+import { href, itemPath } from '../lib/links.js';
 import { useLang } from '../lib/useLang.js';
+import { usePlayer, type Track } from '../player/PlayerProvider.js';
 
 interface RecordingData {
   title: { he: string; en?: string };
@@ -27,18 +30,25 @@ function videoAt(url: string, startMs?: number): string {
 }
 
 /**
- * The recordings of an event, part by part: the browser's own player for
- * audio RebbeHub may serve (`src` resolved from the file's rights), and a
- * plain link for audio and video kept elsewhere.
+ * Recordings, part by part, played in the site's own player (it keeps
+ * playing from page to page): audio RebbeHub may serve (`src` resolved
+ * from the file's rights) or heard where it is kept, and video links.
  */
 export function AudioPlayer({ recordings, sources }: { recordings: Entity[]; sources: Record<string, string | null> }) {
   const lang = useLang();
+  const player = usePlayer();
   const sorted = [...recordings].sort((a, b) => ((a.data as unknown as RecordingData).part ?? 0) - ((b.data as unknown as RecordingData).part ?? 0));
   return (
     <div>
       {sorted.map((recording) => {
         const data = recording.data as unknown as RecordingData;
         const src = sources[recording.id] ?? data.url ?? null;
+        const tracks: Track[] = sorted.flatMap((r) => {
+          const d = r.data as unknown as RecordingData;
+          const url = sources[r.id] ?? d.url;
+          return url ? [{ id: r.id, title: nameOf(d.title, lang), subtitle: '', url, durationMs: d.durationMs, href: href(itemPath(r), lang) }] : [];
+        });
+        const active = player.current?.id === recording.id;
         return (
           <div className="player" key={recording.id}>
             <strong>{nameOf(data.title, lang)}</strong>
@@ -49,7 +59,18 @@ export function AudioPlayer({ recordings, sources }: { recordings: Entity[]; sou
               </span>
             ) : null}
             {data.durationMs ? <span className="card-meta"> · {clock(data.durationMs)}</span> : null}
-            {src ? <audio controls preload="none" src={src} aria-label={`${t(lang, 'play')}: ${nameOf(data.title, lang)}`} /> : null}
+            {src ? (
+              <p>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => (active ? player.toggle() : player.play(tracks, tracks.findIndex((tr) => tr.id === recording.id)))}
+                  aria-label={`${t(lang, 'play')}: ${nameOf(data.title, lang)}`}
+                >
+                  {active && player.playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />} {active && player.playing ? t(lang, 'pause') : t(lang, 'play')}
+                </button>
+              </p>
+            ) : null}
             {data.videos?.length ? (
               <p>
                 {data.videos.map((v, i) => (
