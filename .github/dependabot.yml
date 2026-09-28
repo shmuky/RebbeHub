@@ -7,6 +7,13 @@ updates:
     groups:
       dev-tools:
         dependency-type: development
+    # React Router's build tool and runtime must move to a new major version together, by hand:
+    # a lone bump of @react-router/dev to 8 broke the site's page data on navigation.
+    ignore:
+      - dependency-name: 'react-router'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@react-router/*'
+        update-types: ['version-update:semver-major']
     open-pull-requests-limit: 5
   - package-ecosystem: github-actions
     directory: /

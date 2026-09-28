@@ -67,7 +67,12 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
       }
       const date = typeof d.date === 'string' ? d.date : '';
       const day = /^\d{4}-(\w{2,3}-\d{2})$/.exec(date)?.[1];
-      if (day) view.lists.otherYears = (await api.events({ day, limit: 50 })).filter((e) => e.id !== entity.id);
+      const [otherYears, sameYear] = await Promise.all([day ? api.events({ day, limit: 50 }) : [], date ? api.events({ within: date.slice(0, 4), limit: 2000 }) : []]);
+      view.lists.otherYears = otherYears.filter((e) => e.id !== entity.id);
+      // The farbrengens before and after it, in date order within its year.
+      const at = sameYear.findIndex((e) => e.id === entity.id);
+      if (at > 0) view.lists.previous = [sameYear[at - 1]!];
+      if (at >= 0 && at < sameYear.length - 1) view.lists.following = [sameYear[at + 1]!];
       break;
     }
     case 'publication': {

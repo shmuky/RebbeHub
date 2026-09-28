@@ -93,13 +93,15 @@ database address but cannot read the private Sichos-Kodesh repository.
    - `SICHOS_KODESH_TOKEN`: a
      [fine-grained token](https://github.com/settings/personal-access-tokens/new)
      with access to `shmuky/Sichos-Kodesh` only and **Contents: Read-only**.
-2. **Actions → Import the catalog (manual) → Run workflow**. It takes
-   about five minutes. While the live catalog is empty, the workflow
-   builds the catalog in a database next to itself and copies it in
+2. **Actions → Import the catalog (manual) → Run workflow** (never
+   **Re-run** an old run: it runs the code of its day). It takes about five
+   minutes: the works, and every farbrengen with its recordings and
+   hanachos. While everything in the live catalog came from importers, the
+   workflow rebuilds it in a database next to itself and copies it in
    whole: item by item across the internet it would take hours. The copy
-   runs in one transaction that first checks the live catalog is still
-   empty, so it never replaces anything. Once the catalog holds items,
-   later runs update it in place (`scripts/import-catalog.sh`).
+   runs in one transaction that first checks people have still added
+   nothing, so it never replaces their work. Once they have, runs update
+   the catalog in place (`scripts/import-catalog.sh`).
 
 Or, from a computer with this repository and a Sichos-Kodesh checkout:
 
@@ -107,6 +109,7 @@ Or, from a computer with this repository and a Sichos-Kodesh checkout:
 export DATABASE_URL='postgresql://…'   # the direct connection string
 npm run rebbehub -- account --id shmuly --name "Shmuly" --steward
 npm run rebbehub -- import sichos-kodesh-works --from ../Sichos-Kodesh --approve-as shmuly
+npm run rebbehub -- import sichos-kodesh-occasions --from ../Sichos-Kodesh --approve-as shmuly
 ```
 
 ## A domain of your own

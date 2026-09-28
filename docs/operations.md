@@ -21,6 +21,7 @@ yearly partitions ahead of time.
 ```sh
 rebbehub import sichos-kodesh-works --from ../Sichos-Kodesh --dry-run
 rebbehub import sichos-kodesh-works --from ../Sichos-Kodesh --approve-as shmuly
+rebbehub import sichos-kodesh-occasions --from ../Sichos-Kodesh --approve-as shmuly   # farbrengens, recordings, hanachos
 ```
 
 Without `--approve-as`, the bot's suggestions wait in the review queue.

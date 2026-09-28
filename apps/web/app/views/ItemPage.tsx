@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 import type { LocalName } from '@rebbehub/model';
 import { AudioPlayer } from '../components/AudioPlayer.js';
+import { EventPage } from './EventPage.js';
 import { ItemLink, ItemList } from '../components/ItemLink.js';
 import { ScanViewer } from '../components/ScanViewer.js';
 import { TextView } from '../components/TextView.js';
@@ -268,53 +269,6 @@ function UnitPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang
               ) : null;
             })}
           </ul>
-        </section>
-      ) : null}
-    </>
-  );
-}
-
-function EventPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang: Lang }) {
-  const d = entity.data as D;
-  const recordings = view.lists.recordings ?? [];
-  const sources = Object.fromEntries(recordings.map((r) => [r.id, view.files[r.id]?.url ?? null]));
-  const year = typeof d.date === 'string' ? d.date.slice(0, 4) : null;
-  return (
-    <>
-      <Crumbs items={[{ label: t(lang, 'calendar'), to: href('/calendar', lang) }, ...(year ? [{ label: yearLabel(Number(year), lang), to: href(`/calendar/${year}`, lang) }] : [])]} />
-      <h1>{nameOf(d.title, lang)}</h1>
-      <dl className="facts">
-        {d.date ? (
-          <>
-            <dt>{t(lang, 'date')}</dt>
-            <dd>{dateLabel(d.date, lang)}</dd>
-          </>
-        ) : null}
-        {d.place ? (
-          <>
-            <dt>{t(lang, 'place')}</dt>
-            <dd>
-              <Refs ids={d.place} view={view} />
-            </dd>
-          </>
-        ) : null}
-      </dl>
-      {recordings.length ? (
-        <section>
-          <h2>{t(lang, 'recordings')}</h2>
-          <AudioPlayer recordings={recordings} sources={sources} />
-        </section>
-      ) : null}
-      {view.lists.units?.length ? (
-        <section>
-          <h2>{t(lang, 'units')}</h2>
-          <ItemList items={view.lists.units} />
-        </section>
-      ) : null}
-      {view.lists.otherYears?.length ? (
-        <section>
-          <h2>{t(lang, 'thisDay')}</h2>
-          <ItemList items={view.lists.otherYears} meta={(e) => dateLabel((e.data as D).date, lang, { civil: false })} />
         </section>
       ) : null}
     </>

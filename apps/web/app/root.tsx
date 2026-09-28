@@ -1,15 +1,18 @@
-import { Form, isRouteErrorResponse, Link, Links, Meta, Outlet, Scripts, ScrollRestoration, useLocation, useRouteLoaderData, type LinksFunction } from 'react-router';
+import { isRouteErrorResponse, Link, Links, Meta, Outlet, Scripts, ScrollRestoration, useLocation, useRouteLoaderData, type LinksFunction } from 'react-router';
 import type { Route } from './+types/root';
 import { dir, langFrom, t, type Lang } from './lib/i18n.js';
 import { href } from './lib/links.js';
 import { useLang } from './lib/useLang.js';
 import { siteOf } from './lib/context.server.js';
+import { AppNav } from './components/AppNav.js';
+import { PlayerBar } from './player/PlayerBar.js';
+import { PlayerProvider } from './player/PlayerProvider.js';
 import './app.css';
 
 export const links: LinksFunction = () => [
   { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
   { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossOrigin: 'anonymous' },
-  { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&family=Noto+Sans+Hebrew:wght@400;500;600&family=Noto+Sans:wght@400;500;600&display=swap' },
+  { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&family=Noto+Sans+Hebrew:wght@400;600;700&family=Noto+Sans:wght@400;600;700&display=swap' },
   { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
 ];
 
@@ -36,33 +39,16 @@ function LanguageSwitch({ lang }: { lang: Lang }) {
   );
 }
 
-function Header({ lang }: { lang: Lang }) {
+function TopBar({ lang }: { lang: Lang }) {
   return (
-    <header className="site-header">
-      <div className="wrap header-row">
-        <Link to={href('/', lang)} className="brand" aria-label={t(lang, 'home')}>
-          <span className="brand-mark" aria-hidden="true">
-            ר
-          </span>
-          <span className="brand-name">RebbeHub</span>
-        </Link>
-        <nav className="main-nav" aria-label={lang === 'he' ? 'ניווט ראשי' : 'Main'}>
-          <Link to={href('/sets', lang)}>{t(lang, 'sets')}</Link>
-          <Link to={href('/calendar', lang)}>{t(lang, 'calendar')}</Link>
-          <Link to={href('/about', lang)}>{t(lang, 'about')}</Link>
-          <LanguageSwitch lang={lang} />
-        </nav>
-      </div>
-      <div className="wrap">
-        <Form method="get" action="/search" className="search-form" role="search">
-          <label className="visually-hidden" htmlFor="q">
-            {t(lang, 'search')}
-          </label>
-          <input id="q" name="q" type="search" placeholder={t(lang, 'searchPlaceholder')} enterKeyHint="search" />
-          {lang === 'en' ? <input type="hidden" name="lang" value="en" /> : null}
-          <button type="submit">{t(lang, 'search')}</button>
-        </Form>
-      </div>
+    <header className="top-bar">
+      <Link to={href('/', lang)} className="brand" aria-label={t(lang, 'home')}>
+        <span className="brand-mark" aria-hidden="true">
+          ר
+        </span>
+        <span className="brand-name">RebbeHub</span>
+      </Link>
+      <LanguageSwitch lang={lang} />
     </header>
   );
 }
@@ -70,7 +56,7 @@ function Header({ lang }: { lang: Lang }) {
 function Footer({ lang }: { lang: Lang }) {
   return (
     <footer className="site-footer">
-      <div className="wrap">
+      <div>
         <p>{t(lang, 'footerOpen')}</p>
         <p>
           <a href="https://github.com/shmuky/RebbeHub">{t(lang, 'code')}</a> · <a href="https://github.com/shmuky/RebbeHub/blob/main/CONTRIBUTING.md">{t(lang, 'help')}</a> ·{' '}
@@ -97,11 +83,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <a className="skip-link" href="#main">
           {lang === 'he' ? 'דלג לתוכן' : 'Skip to content'}
         </a>
-        <Header lang={lang} />
-        <main id="main" className="wrap">
-          {children}
-        </main>
-        <Footer lang={lang} />
+        <PlayerProvider>
+          <div className="app">
+            <AppNav lang={lang} />
+            <div className="app-main">
+              <TopBar lang={lang} />
+              <main id="main" className="screen">
+                {children}
+              </main>
+              <Footer lang={lang} />
+            </div>
+          </div>
+          <div className="bottom-bars">
+            <PlayerBar />
+          </div>
+        </PlayerProvider>
         <ScrollRestoration />
         <Scripts />
       </body>

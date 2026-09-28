@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@rebbehub/core": "^0.1.0",
+    "@rebbehub/hebrew": "^0.1.0",
     "@rebbehub/model": "^0.1.0"
   }
 }
