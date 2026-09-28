@@ -69,6 +69,8 @@ CREATE TABLE changeset (
   base_commit BIGINT NOT NULL DEFAULT 0,
   merged_commit BIGINT,
   reverts_changeset BIGINT REFERENCES changeset (id),
+  -- a live change (trusted, open set) is merged first and reviewed after
+  post_review TEXT CHECK (post_review IN ('pending', 'done')),
   -- results of the automatic checks, shown to the reviewer
   checks JSONB NOT NULL DEFAULT '[]',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -114,8 +116,8 @@ CREATE TABLE commit (
 CREATE TABLE commit_change (
   commit_seq BIGINT NOT NULL REFERENCES commit (seq),
   entity_id TEXT NOT NULL REFERENCES entity (id),
-  -- null when the commit deleted it
-  rev_id BIGINT,
+  -- the revision it became (a deletion is a revision with no data)
+  rev_id BIGINT NOT NULL,
   prev_rev_id BIGINT,
   PRIMARY KEY (commit_seq, entity_id)
 );
