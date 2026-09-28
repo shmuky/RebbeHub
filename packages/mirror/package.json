@@ -1,0 +1,26 @@
+{
+  "name": "@rebbehub/mirror",
+  "version": "0.1.0",
+  "description": "RebbeHub's open exports: the git mirror (one JSON file per item, texts as Markdown with segment anchors, sync as WebVTT), signed catalog-edition dumps (SQLite and JSON Lines), and the Sichos-Kodesh works release built from them.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@rebbehub/core": "^0.1.0",
+    "@rebbehub/db": "^0.1.0",
+    "@rebbehub/hebrew": "^0.1.0",
+    "@rebbehub/model": "^0.1.0",
+    "tweetnacl": "^1.0.3"
+  }
+}

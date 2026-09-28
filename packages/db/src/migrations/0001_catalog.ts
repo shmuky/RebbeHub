@@ -104,6 +104,9 @@ CREATE TABLE revision_default PARTITION OF revision DEFAULT;
 CREATE INDEX revision_id ON revision (id);
 CREATE INDEX revision_entity ON revision (entity_id, id DESC);
 CREATE INDEX revision_changeset ON revision (changeset_id, entity_id, id DESC);
+-- a text's segments and an alignment's spans, at any commit (the git mirror renders them together)
+CREATE INDEX revision_segment_text ON revision ((data->>'text')) WHERE entity_type = 'segment';
+CREATE INDEX revision_span_alignment ON revision ((data->>'alignment')) WHERE entity_type = 'alignment-span';
 
 CREATE TABLE commit (
   seq BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

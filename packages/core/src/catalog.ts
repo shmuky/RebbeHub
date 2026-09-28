@@ -965,8 +965,28 @@ export class Catalog {
     return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }));
   }
 
+  /**
+   * The children of an item as of a commit, in their order: a text's
+   * segments (`'segment', 'text', id`), an alignment's spans. Deleted and
+   * moved-away children are left out.
+   */
+  async childrenAt(at: number, childType: 'segment' | 'alignment-span', parentField: 'text' | 'alignment', parentId: EntityId): Promise<EntityView[]> {
+    // Both names are from the fixed unions above, never from input, so they are safe to write into the SQL (and let it use the partial indexes).
+    const { rows } = await this.db.query<RevisionRow>(
+      `SELECT r.* FROM (
+         SELECT DISTINCT ON (cc.entity_id) cc.entity_id, cc.rev_id FROM commit_change cc
+         WHERE cc.commit_seq <= $1 AND cc.entity_id IN (SELECT DISTINCT entity_id FROM revision WHERE entity_type = '${childType}' AND data->>'${parentField}' = $2)
+         ORDER BY cc.entity_id, cc.commit_seq DESC
+       ) latest JOIN revision r ON r.id = latest.rev_id
+       WHERE r.data IS NOT NULL AND r.data->>'${parentField}' = $2
+       ORDER BY coalesce(r.data->>'order', lpad(r.data->>'startMs', 12, '0')) COLLATE "C", r.entity_id`,
+      [at, parentId],
+    );
+    return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }));
+  }
+
   /** The commits after `since`, each with the items it changed (null data: deleted), for incremental export. */
-  async commitsSince(since: number, limit = 100): Promise<Array<{ seq: number; at: string; message: string; mergedBy: string; author: string; changes: Array<{ id: EntityId; type: EntityType; path: string | null; data: Json | null }> }>> {
+  async commitsSince(since: number, limit = 100): Promise<Array<{ seq: number; at: string; message: string; mergedBy: string; author: string; changes: Array<{ id: EntityId; type: EntityType; path: string | null; rev: number; data: Json | null }> }>> {
     const { rows: commits } = await this.db.query<{ seq: number; at: string; message: string; merged_by: string; author: string }>(
       'SELECT c.seq, c.at, c.message, c.merged_by, cs.author FROM commit c JOIN changeset cs ON cs.id = c.changeset_id WHERE c.seq > $1 ORDER BY c.seq LIMIT $2',
       [since, limit],
@@ -974,7 +994,7 @@ export class Catalog {
     const out = [];
     for (const c of commits) {
       const { rows } = await this.db.query<RevisionRow>('SELECT r.* FROM commit_change cc JOIN revision r ON r.id = cc.rev_id WHERE cc.commit_seq = $1 ORDER BY cc.entity_id', [c.seq]);
-      out.push({ seq: c.seq, at: c.at, message: c.message, mergedBy: c.merged_by, author: c.author, changes: rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, data: r.data })) });
+      out.push({ seq: c.seq, at: c.at, message: c.message, mergedBy: c.merged_by, author: c.author, changes: rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data })) });
     }
     return out;
   }
