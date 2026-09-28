@@ -264,6 +264,21 @@ export interface EventData extends CommonFields {
   people?: EntityId[];
   /** Order among events of the same day (a Shabbos farbrengen before a motzei Shabbos one). */
   order?: number;
+  /** Its documents kept where they are, hanachos first: RebbeHub links to them and holds no copy (docs/rights.md). */
+  links?: EventLink[];
+}
+
+/** What an event's document is: the edited text, the unedited hanacha, a maamar, the Rebbe's glosses, additions. */
+export type EventLinkKind = 'mugah' | 'bilti-mugah' | 'maamar' | 'hagahos' | 'hosofos' | 'other';
+
+export const EVENT_LINK_KINDS: readonly EventLinkKind[] = ['mugah', 'bilti-mugah', 'maamar', 'hagahos', 'hosofos', 'other'];
+
+/** One document of an event, where it is read (a PDF of a hanacha, through a proxy). */
+export interface EventLink {
+  kind: EventLinkKind;
+  label: LocalName;
+  url: string;
+  source?: CatalogSourceId;
 }
 
 // ---------------------------------------------------------------- print

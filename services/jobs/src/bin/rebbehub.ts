@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
-import { accountCommand, dumpCommand, editionCommand, importCommand, isEmptyCommand, keygenCommand, migrateCommand, mirrorCommand, schemaCheckCommand, type Context } from '../commands.js';
+import { accountCommand, dumpCommand, editionCommand, importCommand, keygenCommand, migrateCommand, mirrorCommand, rebuildableCommand, schemaCheckCommand, type Context } from '../commands.js';
 
 const HELP = `rebbehub - RebbeHub's command line
 
   rebbehub migrate                              create or update the database
   rebbehub schema-check                         check the built-in schemas
-  rebbehub is-empty [--guard]                   prints empty or not-empty; --guard prints
-                                                SQL that fails unless the catalog is empty
+  rebbehub rebuildable [--guard]                prints rebuildable when importers made everything;
+                                                --guard prints SQL that fails otherwise
   rebbehub account --id <id> --name <name> [--steward] [--bot]
-  rebbehub import sichos-kodesh-works --from <Sichos-Kodesh checkout>
+  rebbehub import sichos-kodesh-works|sichos-kodesh-occasions --from <Sichos-Kodesh checkout>
                   [--approve-as <steward>] [--dry-run] [--chunk <n>]
   rebbehub mirror --dir <folder> [--git] [--full] [--limit <n>]
   rebbehub edition --by <steward> [--tag 2026.40] [--notes <text>]
@@ -60,8 +60,8 @@ try {
     case 'migrate':
       await migrateCommand(ctx);
       break;
-    case 'is-empty':
-      await isEmptyCommand(ctx, { guard: values.guard });
+    case 'rebuildable':
+      await rebuildableCommand(ctx, { guard: values.guard });
       break;
     case 'schema-check':
       await schemaCheckCommand(ctx);

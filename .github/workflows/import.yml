@@ -93,7 +93,9 @@ jobs:
         run: |
           if [ "$DRY_RUN" = "true" ]; then
             npm run rebbehub -- migrate
-            npm run rebbehub -- import sichos-kodesh-works --from .sichos-kodesh --dry-run
+            for importer in sichos-kodesh-works sichos-kodesh-occasions; do
+              npm run rebbehub -- import "$importer" --from .sichos-kodesh --dry-run
+            done
           else
             scripts/import-catalog.sh .sichos-kodesh "$STEWARD" "$STEWARD_NAME"
           fi

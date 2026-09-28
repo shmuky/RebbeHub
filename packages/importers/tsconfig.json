@@ -2,5 +2,5 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "outDir": "dist", "rootDir": "src" },
   "include": ["src"],
-  "references": [{ "path": "../model" }, { "path": "../core" }]
+  "references": [{ "path": "../hebrew" }, { "path": "../model" }, { "path": "../core" }]
 }

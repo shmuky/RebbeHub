@@ -1,4 +1,4 @@
-import type { EntityType, LocalName } from '../entities.js';
+import { EVENT_LINK_KINDS, type EntityType, type LocalName } from '../entities.js';
 import { EDITION_KINDS, GENRES, LICENCES, SOURCE_IDS } from '../works.js';
 
 /**
@@ -214,6 +214,12 @@ export const BUILTIN_SCHEMAS: Record<EntityType, JsonSchema> = {
       occasion: str({ pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' }),
       people: arrayOf(ref('entityId'), { uniqueItems: true }),
       order: int({ minimum: 0 }),
+      links: arrayOf({
+        type: 'object',
+        properties: { kind: enumOf(EVENT_LINK_KINDS), label: ref('localName'), url: ref('url'), source: ref('catalogSourceId') },
+        required: ['kind', 'label', 'url'],
+        additionalProperties: false,
+      }),
     },
     ['kind', 'title'],
   ),

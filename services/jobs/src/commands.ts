@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { Catalog } from '@rebbehub/core';
 import { connectPostgres, one, type Db } from '@rebbehub/db';
 import { openPGlite } from '@rebbehub/db/pglite';
-import { readSichosKodeshWorks, runImport, sichosKodeshWorksImporter } from '@rebbehub/importers';
+import { readSichosKodeshOccasions, readSichosKodeshWorks, runImport, sichosKodeshOccasionsImporter, sichosKodeshWorksImporter, type Importer } from '@rebbehub/importers';
 import { clearMirror, directorySink, exportCommits, exportSnapshot, generateKeyPair, writeDump, type KeyPair } from '@rebbehub/mirror';
 import { BUILTIN_SCHEMAS, SchemaRegistry } from '@rebbehub/model';
 import { commitAll, git } from './git.js';
@@ -58,37 +58,38 @@ export async function migrateCommand(ctx: Context): Promise<void> {
 }
 
 /**
- * What makes a catalog not empty: an item merged beyond the built-in
- * schemas, or anything people have added (a report, a comment, a follow,
- * a file). SQL, so the import can check it again inside the transaction
- * that replaces the catalog.
+ * What people have made in the catalog: a suggestion from anyone but an
+ * importer bot (merged, open or draft), a report, a comment, a follow, a
+ * file. SQL, so the import can check it again inside the transaction that
+ * replaces the catalog.
  */
-export const NOT_EMPTY_SQL = `SELECT EXISTS (SELECT 1 FROM entity WHERE type <> 'schema' AND main_rev IS NOT NULL)
+export const PEOPLE_MADE_SQL = `SELECT EXISTS (SELECT 1 FROM changeset c JOIN account a ON a.id = c.author WHERE c.author <> 'system' AND NOT a.is_bot)
   OR EXISTS (SELECT 1 FROM report) OR EXISTS (SELECT 1 FROM comment) OR EXISTS (SELECT 1 FROM follow) OR EXISTS (SELECT 1 FROM file)`;
 
 /**
- * Whether the catalog holds nothing yet but the built-in schemas. A first
- * import into an empty catalog is built next to the code and copied in
- * whole (scripts/import-catalog.sh), instead of item by item across the
- * internet, which takes hours.
+ * Whether everything in the catalog came from importers, so it can be
+ * rebuilt from its sources next to the code and copied in whole
+ * (scripts/import-catalog.sh), instead of updated item by item across the
+ * internet, which takes hours. Once people have added anything, it never is.
  */
-export async function catalogIsEmpty(db: Db): Promise<boolean> {
-  const row = await one<{ not_empty: boolean }>(db, `${NOT_EMPTY_SQL} AS not_empty`);
-  return !row!.not_empty;
+export async function catalogIsRebuildable(db: Db): Promise<boolean> {
+  const row = await one<{ people: boolean }>(db, `${PEOPLE_MADE_SQL} AS people`);
+  return !row!.people;
 }
 
 /**
- * SQL that stops a transaction unless the catalog is empty, locking out
- * new reports and comments until it ends. The whole-catalog copy runs it
- * first, so it can never replace anything people have added.
+ * SQL that stops a transaction unless the catalog is still rebuildable,
+ * locking out new suggestions, reports and comments until it ends. The
+ * whole-catalog copy runs it first, so it can never replace anything
+ * people have made.
  */
-export const EMPTY_GUARD_SQL = `LOCK TABLE entity, report, comment, follow, file IN ACCESS EXCLUSIVE MODE;
-DO $$ BEGIN IF (${NOT_EMPTY_SQL}) THEN RAISE EXCEPTION 'the catalog is not empty; not replacing it'; END IF; END $$;`;
+export const REBUILD_GUARD_SQL = `LOCK TABLE changeset, report, comment, follow, file IN ACCESS EXCLUSIVE MODE;
+DO $$ BEGIN IF (${PEOPLE_MADE_SQL}) THEN RAISE EXCEPTION 'people have added to the catalog; not replacing it'; END IF; END $$;`;
 
-/** Prints `empty` or `not-empty`, for scripts; with `guard`, prints EMPTY_GUARD_SQL instead. */
-export async function isEmptyCommand(ctx: Context, input: { guard?: boolean } = {}): Promise<void> {
-  if (input.guard) return ctx.log(EMPTY_GUARD_SQL);
-  await withCatalog(ctx, async (catalog) => ctx.log((await catalogIsEmpty(catalog.db)) ? 'empty' : 'not-empty'));
+/** Prints `rebuildable` or `not-rebuildable`, for scripts; with `guard`, prints REBUILD_GUARD_SQL instead. */
+export async function rebuildableCommand(ctx: Context, input: { guard?: boolean } = {}): Promise<void> {
+  if (input.guard) return ctx.log(REBUILD_GUARD_SQL);
+  await withCatalog(ctx, async (catalog) => ctx.log((await catalogIsRebuildable(catalog.db)) ? 'rebuildable' : 'not-rebuildable'));
 }
 
 /** Checks that every built-in schema can be used. */
@@ -106,10 +107,17 @@ export async function accountCommand(ctx: Context, input: { id: string; name: st
   });
 }
 
+/** The importers `rebbehub import` runs, each reading a Sichos-Kodesh checkout. */
+export const IMPORTERS: Record<string, (from: string) => Importer> = {
+  'sichos-kodesh-works': (from) => sichosKodeshWorksImporter(() => readSichosKodeshWorks(from)),
+  'sichos-kodesh-occasions': (from) => sichosKodeshOccasionsImporter(() => readSichosKodeshOccasions(from)),
+};
+
 export async function importCommand(ctx: Context, input: { source: string; from: string; approveAs?: string; dryRun?: boolean; chunkSize?: number }): Promise<void> {
-  if (input.source !== 'sichos-kodesh-works') throw new Error(`unknown importer "${input.source}" (known: sichos-kodesh-works)`);
+  const make = IMPORTERS[input.source];
+  if (!make) throw new Error(`unknown importer "${input.source}" (known: ${Object.keys(IMPORTERS).join(', ')})`);
   await withCatalog(ctx, async (catalog) => {
-    const importer = sichosKodeshWorksImporter(await readSichosKodeshWorks(input.from));
+    const importer = make(input.from);
     const result = await runImport(catalog, importer, { approveAs: input.approveAs, dryRun: input.dryRun, chunkSize: input.chunkSize, log: ctx.log });
     ctx.log(`${input.dryRun ? 'would create' : 'created'} ${result.created}, updated ${result.updated}, unchanged ${result.unchanged}; kept ${result.keptHumanEdits} human edits; suggestions: ${result.changesets.join(', ') || 'none'}`);
   });

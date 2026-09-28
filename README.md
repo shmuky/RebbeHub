@@ -64,6 +64,7 @@ npm run check                      # types, tests, schemas
 npm run rebbehub -- migrate        # creates .data/pglite
 npm run rebbehub -- account --id me --name "Me" --steward
 npm run rebbehub -- import sichos-kodesh-works --from ../Sichos-Kodesh --approve-as me
+npm run rebbehub -- import sichos-kodesh-occasions --from ../Sichos-Kodesh --approve-as me
 npm run dev:api                    # http://127.0.0.1:8787/v1
 npm run dev:web                    # http://localhost:5173 (reads the API above)
 ```
