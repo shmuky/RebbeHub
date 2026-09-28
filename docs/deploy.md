@@ -93,8 +93,13 @@ database address but cannot read the private Sichos-Kodesh repository.
    - `SICHOS_KODESH_TOKEN`: a
      [fine-grained token](https://github.com/settings/personal-access-tokens/new)
      with access to `shmuky/Sichos-Kodesh` only and **Contents: Read-only**.
-2. **Actions → Import the catalog (manual) → Run workflow**. It takes a
-   few minutes; the log ends with how many items it created.
+2. **Actions → Import the catalog (manual) → Run workflow**. It takes
+   about five minutes. While the live catalog is empty, the workflow
+   builds the catalog in a database next to itself and copies it in
+   whole: item by item across the internet it would take hours. The copy
+   runs in one transaction that first checks the live catalog is still
+   empty, so it never replaces anything. Once the catalog holds items,
+   later runs update it in place (`scripts/import-catalog.sh`).
 
 Or, from a computer with this repository and a Sichos-Kodesh checkout:
 

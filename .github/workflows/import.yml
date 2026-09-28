@@ -1,7 +1,7 @@
 name: Import the catalog (manual)
 
-# Fills the live catalog from Sichos-Kodesh, and brings it up to date when
-# run again: the importer changes only what the source changed and never
+# Fills the live catalog from Sichos-Kodesh (about five minutes), and
+# brings it up to date when run again: the importer changes only what the source changed and never
 # overwrites what people have fixed. RebbeHub keeps no copy of
 # Sichos-Kodesh's content, so this reads a fresh checkout of it each run.
 #
@@ -38,6 +38,21 @@ jobs:
     name: Import from Sichos-Kodesh
     runs-on: ubuntu-latest
     environment: production
+    # An empty live catalog is built in this database, next to the import, then copied in whole
+    # (scripts/import-catalog.sh): item by item across the internet it takes hours.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rebbehub
+          POSTGRES_PASSWORD: rebbehub
+          POSTGRES_DB: build
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U rebbehub"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       SICHOS_KODESH_TOKEN: ${{ secrets.SICHOS_KODESH_TOKEN }}
@@ -69,21 +84,16 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Migrate the database
-        run: npm run rebbehub -- migrate
-      - name: Make sure the steward exists
-        if: ${{ !inputs.dry_run }}
-        env:
-          STEWARD: ${{ inputs.steward }}
-          STEWARD_NAME: ${{ inputs.steward_name }}
-        run: npm run rebbehub -- account --id "$STEWARD" --name "$STEWARD_NAME" --steward
       - name: Import
         env:
           STEWARD: ${{ inputs.steward }}
+          STEWARD_NAME: ${{ inputs.steward_name }}
           DRY_RUN: ${{ inputs.dry_run }}
+          BUILD_DATABASE_URL: postgres://rebbehub:rebbehub@localhost:5432/build
         run: |
           if [ "$DRY_RUN" = "true" ]; then
+            npm run rebbehub -- migrate
             npm run rebbehub -- import sichos-kodesh-works --from .sichos-kodesh --dry-run
           else
-            npm run rebbehub -- import sichos-kodesh-works --from .sichos-kodesh --approve-as "$STEWARD"
+            scripts/import-catalog.sh .sichos-kodesh "$STEWARD" "$STEWARD_NAME"
           fi
