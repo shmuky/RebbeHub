@@ -2600,3 +2600,35 @@ a.volume:hover {
 .history-entry p {
   margin: 0;
 }
+
+.rights-choice {
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.rights-choice legend {
+  font-size: 0.875rem;
+  margin-bottom: 4px;
+}
+
+.rights-choice label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.upload progress {
+  width: 100%;
+}
+
+.new-item {
+  display: grid;
+  gap: 6px;
+}
+
+.new-item audio {
+  width: 100%;
+}

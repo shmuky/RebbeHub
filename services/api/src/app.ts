@@ -4,6 +4,7 @@ import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
 import { adminRoutes } from './admin.js';
+import { uploadRoutes, type UploadOptions } from './uploads.js';
 import { OPENAPI } from './openapi.js';
 
 /**
@@ -27,6 +28,8 @@ export interface ApiOptions {
   reportsPerHour?: number;
   /** Where servable files are fetched from: `<filesBaseUrl>/objects/<sha256>`. Unset, this API's own address. */
   filesBaseUrl?: string;
+  /** Where uploaded bytes are written: the public bucket for files that may be served, the preservation bucket for the rest. Unset, uploads are refused. */
+  uploads?: UploadOptions;
   /** The public bucket's bytes (R2 on Workers). With it, this API serves `/objects/<sha256>` itself, for files whose rights allow. */
   files?: FileStore;
   version?: string;
@@ -130,6 +133,7 @@ export function createApp(options: ApiOptions): Hono {
 
   if (options.auth) authRoutes(app, catalog, options.auth);
   adminRoutes(app, catalog, signedIn);
+  uploadRoutes(app, catalog, signedIn, options.uploads);
 
   app.get('/', (c) => c.redirect('/v1'));
   app.get('/openapi.json', (c) => c.json(OPENAPI));
@@ -390,8 +394,18 @@ export function createApp(options: ApiOptions): Hono {
     const names = async (ids: string[]) => Object.fromEntries(await Promise.all([...new Set(ids)].map(async (id) => [id, (await catalog.account(id))?.display_name ?? id])));
     const viewer = (await authenticate?.(c)) ?? null;
     const mayApprove = viewer && view.changeset.status === 'open' ? await catalog.mayApprove(view.changeset.id, viewer) : { ok: false as const, reason: viewer ? `this suggestion is ${view.changeset.status}` : 'sign in to review' };
+    // The files it adds, where each may be heard or read (null while its rights keep it private), so the reviewer checks it first.
+    const base = options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
+    const files: Record<string, { url: string | null; mime: string; bytes: number; rights: string }> = {};
+    for (const entry of view.entries) {
+      const sha = (entry.after as { file?: unknown } | null)?.file;
+      if (typeof sha !== 'string' || files[sha]) continue;
+      const file = await getFile(catalog.db, sha);
+      if (file) files[sha] = { url: base && mayServe(file.rights_state) && file.storage_tier === 'public' ? `${base}/objects/${sha}` : null, mime: file.mime, bytes: file.bytes, rights: file.rights_state };
+    }
     return c.json({
       ...view,
+      files,
       names: await names([view.changeset.author, ...(view.reviews as Array<{ reviewer: string }>).map((r) => r.reviewer)]),
       mayApprove: mayApprove.ok,
       mayApproveReason: mayApprove.ok ? null : mayApprove.reason,

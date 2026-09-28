@@ -15,6 +15,7 @@ export default [
   // Suggestions and their review, passed through the same way.
   route('_/suggestions/*', 'routes/suggestions.ts'),
   route('_/follows', 'routes/follows.ts'),
+  route('_/uploads', 'routes/uploads.ts'),
   route('_/steward/*', 'routes/admin-pass.ts'),
   route('admin', 'routes/admin.tsx'),
   route('review', 'routes/review.tsx'),

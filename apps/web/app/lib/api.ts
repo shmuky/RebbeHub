@@ -96,6 +96,17 @@ export class RebbeHubApi {
     return this.fetcher(`${this.baseUrl}${path}${new URL(request.url).search}`, { method: request.method, headers, body, redirect: 'manual' });
   }
 
+  /** Like `forward`, for a file: the body streams through as bytes, never read as text. */
+  async forwardUpload(path: string, request: Request): Promise<Response> {
+    const headers = new Headers({ accept: 'application/json' });
+    for (const name of ['content-type', 'content-length', 'cookie', 'origin', 'user-agent', 'x-forwarded-proto']) {
+      const value = request.headers.get(name);
+      if (value) headers.set(name, value);
+    }
+    if (!headers.has('x-forwarded-proto')) headers.set('x-forwarded-proto', new URL(request.url).protocol.replace(':', ''));
+    return this.fetcher(`${this.baseUrl}${path}${new URL(request.url).search}`, { method: 'POST', headers, body: request.body, duplex: 'half' } as RequestInit);
+  }
+
   /** Null when there is nothing there. */
   private async maybe<T>(promise: Promise<T>): Promise<T | null> {
     try {

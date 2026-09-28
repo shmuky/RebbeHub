@@ -3,6 +3,7 @@ import type { Route } from './+types/item';
 import { FollowButton } from '../components/FollowButton.js';
 import { ReportForm, type ReportResult } from '../components/ReportForm.js';
 import { SuggestFix, canSuggestFix } from '../components/SuggestFix.js';
+import { UploadForm } from '../components/UploadForm.js';
 import { ItemPage } from '../views/ItemPage.js';
 import { ApiError } from '../lib/api.js';
 import { siteOf } from '../lib/context.server.js';
@@ -114,6 +115,7 @@ export default function Item({ loaderData }: Route.ComponentProps) {
       ) : null}
       <ItemPage entity={loaderData.entity} view={loaderData.view} />
       {canSuggestFix(loaderData.entity) ? <SuggestFix entity={loaderData.entity} lang={loaderData.lang} /> : null}
+      {loaderData.entity.type === 'event' || loaderData.entity.type === 'work' ? <UploadForm entity={loaderData.entity} lang={loaderData.lang} /> : null}
       <ReportForm entityId={loaderData.entity.id} />
     </>
   );

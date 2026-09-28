@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import type { Route } from './+types/review';
 import { ChangeTable } from '../components/ChangeTable.js';
-import { langFrom, t, type Lang } from '../lib/i18n.js';
+import { langFrom, t, typeName, type Lang } from '../lib/i18n.js';
 import { labelOf } from '../lib/labels.js';
 import { href } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
@@ -41,6 +41,7 @@ interface Detail {
   entries: Array<{ entityId: string; type: string; before: unknown; after: unknown; changes: Array<{ path: string; before?: unknown; after?: unknown }>; conflicts: unknown[]; withheld?: string }>;
   reviews: Array<{ reviewer: string; verdict: 'approve' | 'send_back'; body: string | null; created_at: string }>;
   names: Record<string, string>;
+  files: Record<string, { url: string | null; mime: string; bytes: number; rights: string }>;
   mayApprove: boolean;
   mine: boolean;
 }
@@ -55,6 +56,27 @@ async function call<T>(path: string, init?: { method: 'POST'; body: unknown }): 
   const json = (await response.json().catch(() => ({}))) as T & { message?: string };
   if (!response.ok) throw new Error(json.message ?? response.statusText);
   return json;
+}
+
+/** A new item, as the reviewer needs it: what kind it is, its name, and its file to hear or read before approving. */
+function NewItem({ type, data, files, lang }: { type: string; data: Record<string, unknown>; files: Detail['files']; lang: Lang }) {
+  const sha = typeof data.file === 'string' ? data.file : null;
+  const file = sha ? files[sha] : undefined;
+  return (
+    <div className="new-item">
+      <p className="row-sub">
+        {t(lang, 'newItem')}: {typeName(type, lang)}
+        {file ? ` · ${(file.bytes / 1024 / 1024).toFixed(1)} MB` : ''}
+      </p>
+      {file?.url && file.mime.startsWith('audio/') ? <audio controls preload="none" src={file.url} /> : null}
+      {file?.url && file.mime === 'application/pdf' ? (
+        <a href={file.url} target="_blank" rel="noreferrer">
+          {t(lang, 'openFile')}
+        </a>
+      ) : null}
+      {file && !file.url ? <p className="row-sub">{t(lang, 'filePrivate')}</p> : null}
+    </div>
+  );
 }
 
 function SuggestionCard({ detail, lang, onDone, open }: { detail: Detail; lang: Lang; onDone: () => void; open: boolean }) {
@@ -92,9 +114,16 @@ function SuggestionCard({ detail, lang, onDone, open }: { detail: Detail; lang: 
         const item = { id: entry.entityId, type: entry.type, data: (entry.after ?? entry.before ?? {}) as Record<string, unknown> };
         return (
           <div key={entry.entityId} className="suggestion-item">
-            <Link to={href(`/${entry.entityId}`, lang)}>{labelOf(item as Parameters<typeof labelOf>[0], lang)}</Link>
+            {/* A new item has no page until it is approved. */}
+            {entry.before === null ? (
+              <strong>{labelOf(item as Parameters<typeof labelOf>[0], lang)}</strong>
+            ) : (
+              <Link to={href(`/${entry.entityId}`, lang)}>{labelOf(item as Parameters<typeof labelOf>[0], lang)}</Link>
+            )}
             {entry.withheld ? (
               <p className="row-sub">{t(lang, 'withheldChange')}</p>
+            ) : entry.before === null ? (
+              <NewItem data={item.data} files={detail.files} type={entry.type} lang={lang} />
             ) : (
               <ChangeTable changes={entry.changes} lang={lang} />
             )}
