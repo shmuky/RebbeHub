@@ -1,0 +1,23 @@
+{
+  "name": "@rebbehub/model",
+  "version": "0.1.0",
+  "description": "The RebbeHub data model: every kind of item (authors, works, units, events, publications, scans, text, recordings, sync, relations) as TypeScript types and as JSON Schema, permanent ids and paths, the rights policy, and the Sichos-Kodesh works contract it grew from.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@cfworker/json-schema": "^4.1.1",
+    "@rebbehub/hebrew": "^0.1.0"
+  }
+}

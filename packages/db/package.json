@@ -1,0 +1,28 @@
+{
+  "name": "@rebbehub/db",
+  "version": "0.1.0",
+  "description": "RebbeHub's Postgres schema (the versioned catalog of plan section 6), its migrations, and a small database interface with adapters for node-postgres (Neon, Hyperdrive) and PGlite (tests and local work, no server needed).",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "pg": "^8.13.0"
+  },
+  "optionalDependencies": {
+    "@electric-sql/pglite": "^0.5.8"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.0"
+  }
+}

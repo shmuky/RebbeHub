@@ -1,0 +1,24 @@
+name: Something is missing
+description: A sefer, printing, teshura, letter, farbrengen or recording RebbeHub should have.
+title: "[Missing] "
+labels: ["missing", "catalog"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What is missing?
+      placeholder: "The 5722 printing of Likkutei Sichos vol. 4 by Kehot"
+    validations:
+      required: true
+  - type: textarea
+    id: where
+    attributes:
+      label: Where can it be found?
+      description: A link, a library, or who has a copy. Please do not attach files you do not have the right to share.
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Can you help add it?
+      options:
+        - label: I have a scan or recording I am allowed to share
+        - label: I can check the details (title page, date, publisher)

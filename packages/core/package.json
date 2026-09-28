@@ -1,0 +1,24 @@
+{
+  "name": "@rebbehub/core",
+  "version": "0.1.0",
+  "description": "The RebbeHub catalog engine: suggestions, review and merge with three-way field and line merging, history and revert, projects, reports, trust levels and permissions, automatic checks, files and their rights, catalog editions and search - over the versioned Postgres schema.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@rebbehub/db": "^0.1.0",
+    "@rebbehub/hebrew": "^0.1.0",
+    "@rebbehub/model": "^0.1.0"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
+  "include": ["src"],
+  "references": [{ "path": "../../packages/hebrew" }, { "path": "../../packages/model" }, { "path": "../../packages/db" }, { "path": "../../packages/core" }]
+}

@@ -1,0 +1,12 @@
+name: Idea or suggestion
+description: Something RebbeHub could do better, or a new feature.
+title: "[Idea] "
+labels: ["idea"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help, and whom?
+      description: Describe the need first; a solution is welcome but optional.
+    validations:
+      required: true

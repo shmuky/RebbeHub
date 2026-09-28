@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "rootDir": ".",
+    "paths": {
+      "@rebbehub/hebrew": ["./packages/hebrew/src/index.ts"],
+      "@rebbehub/model": ["./packages/model/src/index.ts"],
+      "@rebbehub/db": ["./packages/db/src/index.ts"],
+      "@rebbehub/core": ["./packages/core/src/index.ts"],
+      "@rebbehub/mirror": ["./packages/mirror/src/index.ts"],
+      "@rebbehub/importers": ["./packages/importers/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/tests", "services/*/tests", "vitest.config.ts"]
+}

@@ -1,0 +1,1177 @@
+import { migrate, one, type Db } from '@rebbehub/db';
+import { validateDateKey } from '@rebbehub/hebrew';
+import {
+  BUILTIN_SCHEMAS,
+  ENTITY_LABELS,
+  SchemaRegistry,
+  contentHash,
+  idFromSeed,
+  isEntityId,
+  isEntityPath,
+  newId,
+  referencesOf,
+  type EntityId,
+  type EntityType,
+  type SchemaData,
+  type SetData,
+} from '@rebbehub/model';
+import { badState, CatalogError, forbidden, invalid, notFound } from './errors.js';
+import { diffData, threeWayMerge, resolveConflicts, UnresolvedConflictError, type Conflict, type FieldChange, type Json, type Resolution } from './merge.js';
+import { canApprove, canSuggest, earnedTrust, mayGoLive, type Account, type SetInfo } from './permissions.js';
+import { searchTextOf, toTsQuery } from './searchText.js';
+
+/**
+ * The catalog: GitHub's model over the versioned Postgres schema, in the
+ * words people see (docs/plans/rebbehub.md, sections 3, 6 and 7).
+ *
+ *   Suggestion (changeset)  revisions proposed together, sent for review
+ *   Approve / Send back     a keeper's decision; approving merges to main
+ *   History                 every version of an item, restorable
+ *   Project                 a branch: suggestions merged into an overlay,
+ *                           then into main as one commit
+ *   Report                  one sentence about something wrong
+ *   Catalog edition         a dated, tagged commit
+ *
+ * Every write runs in one transaction, and merges to main take a lock, so
+ * main stays a single line of commits.
+ */
+
+export interface RevisionRow {
+  id: number;
+  entity_id: EntityId;
+  entity_type: EntityType;
+  parent_rev: number | null;
+  merge_rev: number | null;
+  data: Json | null;
+  path: string | null;
+  hash: string;
+  changeset_id: number;
+  author: string;
+  created_at: string;
+}
+
+export type ChangesetStatus = 'draft' | 'open' | 'merged' | 'sent_back' | 'withdrawn';
+export type ChangesetKind = 'suggestion' | 'import' | 'revert' | 'live';
+
+export interface ChangesetRow {
+  id: number;
+  title: string;
+  description: string | null;
+  author: string;
+  status: ChangesetStatus;
+  kind: ChangesetKind;
+  project_id: number | null;
+  base_commit: number;
+  merged_commit: number | null;
+  reverts_changeset: number | null;
+  post_review: 'pending' | 'done' | null;
+  checks: Check[];
+  created_at: string;
+  submitted_at: string | null;
+  closed_at: string | null;
+}
+
+export interface Check {
+  check: 'schema' | 'references' | 'dates' | 'path' | 'duplicates' | 'machine';
+  status: 'pass' | 'fail' | 'warn';
+  message: string;
+  entityId?: EntityId;
+  path?: string;
+}
+
+/** Checks that stop a merge when they fail; the others are advice for the reviewer. */
+const BLOCKING_CHECKS = new Set<Check['check']>(['schema', 'references', 'path', 'dates']);
+
+export interface EntityView<T = Json> {
+  id: EntityId;
+  type: EntityType;
+  path: string | null;
+  rev: number;
+  data: T;
+}
+
+export interface ChangeEntry {
+  entityId: EntityId;
+  type: EntityType;
+  /** Main's version now; null for a new item. */
+  before: Json | null;
+  /** The suggestion's version; null for a deletion. */
+  after: Json | null;
+  changes: FieldChange[];
+  /** Fields main has changed since the suggestion was written that clash with it. */
+  conflicts: Conflict[];
+}
+
+export interface Proposal {
+  entityId: EntityId;
+  type: EntityType;
+  /** The version the change was made from (null: a new item). */
+  baseRev: number | null;
+  /** The proposed version. */
+  rev: RevisionRow;
+}
+
+export interface NewRevision {
+  /** Leave out to create a new item. */
+  id?: EntityId;
+  type: EntityType;
+  /** The item's data; null deletes it. */
+  data: Json | null;
+  /** Its readable path; left out, it keeps the one it has. */
+  path?: string | null;
+}
+
+export type ReportReason = 'wrong-fact' | 'missing-page' | 'bad-scan' | 'audio-problem' | 'wrong-text' | 'duplicate' | 'rights' | 'offensive' | 'other';
+
+export interface HistoryEntry {
+  commit: number;
+  at: string;
+  message: string;
+  mergedBy: string;
+  changeset: number;
+  author: string;
+  rev: number;
+  deleted: boolean;
+}
+
+/** Where a type's items inherit their sets from, when they carry none themselves. */
+const SET_PARENTS: Partial<Record<EntityType, string[]>> = {
+  unit: ['work'],
+  segment: ['text'],
+  text: ['unit', 'publication', 'recording'],
+  'text-page': ['layer'],
+  'text-layer': ['scan'],
+  scan: ['publication'],
+  'contents-map': ['publication'],
+  'alignment-span': ['alignment'],
+  alignment: ['recording'],
+  recording: ['event'],
+  publication: ['work'],
+  relation: ['from'],
+};
+
+const MERGE_LOCK = 7_240_001;
+
+export interface CatalogOptions {
+  /** Clock for tags; tests pin it. */
+  now?: () => Date;
+}
+
+export class Catalog {
+  private registryCache: { seq: number; registry: SchemaRegistry } | null = null;
+
+  constructor(
+    readonly db: Db,
+    private readonly options: CatalogOptions = {},
+  ) {}
+
+  /** Migrates the database and, on an empty catalog, seeds the built-in schemas as `schema` items (commit 1). */
+  async init(): Promise<void> {
+    await migrate(this.db);
+    const seeded = await one<{ n: number }>(this.db, "SELECT count(*)::int AS n FROM entity WHERE type = 'schema'");
+    if (seeded && seeded.n > 0) return;
+    const cs = await this.createChangeset('system', { title: 'Built-in schemas', kind: 'import' });
+    for (const [type, jsonSchema] of Object.entries(BUILTIN_SCHEMAS)) {
+      const data: SchemaData = { entityType: type, label: ENTITY_LABELS[type as EntityType], jsonSchema, version: 1 };
+      await this.putRevision(cs.id, 'system', { id: await idFromSeed('schema', type), type: 'schema', data: data as unknown as Json, path: `/schemas/${type}` });
+    }
+    await this.submit(cs.id, 'system');
+    await this.merge(cs.id, 'system');
+  }
+
+  // ------------------------------------------------------------ accounts
+
+  async createAccount(input: { id: string; displayName: string; email?: string; isBot?: boolean }): Promise<Account> {
+    const row = await one<Account>(
+      this.db,
+      `INSERT INTO account (id, display_name, email, is_bot) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (id) DO UPDATE SET display_name = EXCLUDED.display_name RETURNING *`,
+      [input.id, input.displayName, input.email ?? null, input.isBot ?? false],
+    );
+    return row!;
+  }
+
+  async account(id: string, db: Db = this.db): Promise<Account | null> {
+    return one<Account>(db, 'SELECT * FROM account WHERE id = $1', [id]);
+  }
+
+  private async requireAccount(id: string, db: Db = this.db): Promise<Account> {
+    const account = await this.account(id, db);
+    if (!account) throw notFound(`account ${id}`);
+    return account;
+  }
+
+  /** Appoints or removes a steward. Stewards only. */
+  async setSteward(by: string, accountId: string, steward: boolean): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const actor = await this.requireAccount(by, tx);
+      if (!actor.is_steward) throw forbidden('only stewards appoint stewards');
+      await tx.query('UPDATE account SET is_steward = $2 WHERE id = $1', [accountId, steward]);
+      await this.audit(tx, by, steward ? 'steward.appoint' : 'steward.remove', 'account', accountId);
+    });
+  }
+
+  /** Suspends or restores an account. Stewards only. */
+  async setSuspended(by: string, accountId: string, suspended: boolean, reason?: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const actor = await this.requireAccount(by, tx);
+      if (!actor.is_steward) throw forbidden('only stewards suspend accounts');
+      await tx.query('UPDATE account SET suspended_at = CASE WHEN $2 THEN now() ELSE NULL END WHERE id = $1', [accountId, suspended]);
+      await this.audit(tx, by, suspended ? 'account.suspend' : 'account.restore', 'account', accountId, { reason });
+    });
+  }
+
+  // ------------------------------------------------------------ reading
+
+  async head(db: Db = this.db): Promise<number> {
+    const row = await one<{ seq: number }>(db, 'SELECT coalesce(max(seq), 0)::bigint AS seq FROM commit');
+    return row!.seq;
+  }
+
+  async revision(id: number, db: Db = this.db): Promise<RevisionRow | null> {
+    return one<RevisionRow>(db, 'SELECT * FROM revision WHERE id = $1', [id]);
+  }
+
+  /**
+   * An item as it is on main, or as of a commit, or as a project sees it
+   * (its own changes over main). Deleted items are not found.
+   */
+  async get(id: EntityId, options: { at?: number; project?: number } = {}, db: Db = this.db): Promise<EntityView | null> {
+    let revId: number | null = null;
+    if (options.project !== undefined) {
+      const row = await one<{ rev_id: number }>(db, 'SELECT rev_id FROM project_head WHERE project_id = $1 AND entity_id = $2', [options.project, id]);
+      revId = row?.rev_id ?? null;
+    }
+    if (revId === null && options.at !== undefined) {
+      const row = await one<{ rev_id: number }>(db, 'SELECT rev_id FROM commit_change WHERE entity_id = $1 AND commit_seq <= $2 ORDER BY commit_seq DESC LIMIT 1', [id, options.at]);
+      revId = row?.rev_id ?? null;
+    } else if (revId === null) {
+      const row = await one<{ main_rev: number | null }>(db, 'SELECT main_rev FROM entity WHERE id = $1', [id]);
+      revId = row?.main_rev ?? null;
+    }
+    if (revId === null) return null;
+    const rev = await this.revision(revId, db);
+    if (!rev || rev.data === null) return null;
+    return { id: rev.entity_id, type: rev.entity_type, path: rev.path, rev: rev.id, data: rev.data };
+  }
+
+  /** The item at a readable path; an old path answers with where it moved. */
+  async resolvePath(path: string): Promise<{ id: EntityId; redirected: boolean; path: string | null } | null> {
+    const lower = path.toLowerCase().replace(/\/+$/, '') || '/';
+    const live = await one<{ id: EntityId; path: string }>(this.db, 'SELECT id, path FROM entity WHERE path = $1 AND NOT deleted AND main_rev IS NOT NULL', [lower]);
+    if (live) return { id: live.id, redirected: false, path: live.path };
+    const moved = await one<{ id: EntityId; path: string | null }>(
+      this.db,
+      'SELECT e.id, e.path FROM path_redirect r JOIN entity e ON e.id = r.entity_id WHERE r.path = $1 AND NOT e.deleted',
+      [lower],
+    );
+    return moved ? { id: moved.id, redirected: true, path: moved.path } : null;
+  }
+
+  /** Items of a type on main, optionally in a set, in path order, a page at a time. */
+  async list(options: { type?: EntityType; set?: EntityId; limit?: number; after?: string }): Promise<EntityView[]> {
+    const params: unknown[] = [];
+    const where = ['e.main_rev IS NOT NULL', 'NOT e.deleted'];
+    if (options.type) where.push(`e.type = $${params.push(options.type)}`);
+    if (options.set) where.push(`EXISTS (SELECT 1 FROM entity_ref s WHERE s.from_id = e.id AND s.field = 'sets' AND s.to_id = $${params.push(options.set)})`);
+    if (options.after) where.push(`(coalesce(e.path, '') || e.id) > $${params.push(options.after)}`);
+    const limit = Math.min(Math.max(options.limit ?? 50, 1), 500);
+    const { rows } = await this.db.query<RevisionRow>(
+      `SELECT r.* FROM entity e JOIN revision r ON r.id = e.main_rev
+       WHERE ${where.join(' AND ')} ORDER BY coalesce(e.path, '') || e.id LIMIT ${limit}`,
+      params,
+    );
+    return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }));
+  }
+
+  /** Items on main that point at this one: "Printed in…", "Cited by…", a work's units. */
+  async backlinks(id: EntityId, options: { field?: string; type?: EntityType; limit?: number } = {}): Promise<Array<{ from: EntityId; type: EntityType; field: string; path: string | null }>> {
+    const params: unknown[] = [id];
+    const where = ['r.to_id = $1', 'NOT e.deleted'];
+    if (options.field) where.push(`r.field = $${params.push(options.field)}`);
+    if (options.type) where.push(`e.type = $${params.push(options.type)}`);
+    const { rows } = await this.db.query<{ from: EntityId; type: EntityType; field: string; path: string | null }>(
+      `SELECT r.from_id AS "from", e.type, r.field, e.path FROM entity_ref r JOIN entity e ON e.id = r.from_id
+       WHERE ${where.join(' AND ')} ORDER BY coalesce(e.path, '') || e.id LIMIT ${Math.min(options.limit ?? 200, 1000)}`,
+      params,
+    );
+    return rows;
+  }
+
+  /** The latest version of an item that `author` proposed and that was merged: what a bot last said about it. */
+  async lastMergedBy(id: EntityId, author: string): Promise<RevisionRow | null> {
+    return one<RevisionRow>(
+      this.db,
+      `SELECT r.* FROM revision r JOIN changeset c ON c.id = r.changeset_id
+       WHERE r.entity_id = $1 AND r.author = $2 AND c.status = 'merged' AND r.merge_rev IS NULL ORDER BY r.id DESC LIMIT 1`,
+      [id, author],
+    );
+  }
+
+  /** Every merged change to an item, newest first. */
+  async history(id: EntityId): Promise<HistoryEntry[]> {
+    const { rows } = await this.db.query<HistoryEntry>(
+      `SELECT c.seq AS commit, c.at, c.message, c.merged_by AS "mergedBy", c.changeset_id AS changeset,
+              r.author, cc.rev_id AS rev, (r.data IS NULL) AS deleted
+       FROM commit_change cc JOIN commit c ON c.seq = cc.commit_seq JOIN revision r ON r.id = cc.rev_id
+       WHERE cc.entity_id = $1 ORDER BY c.seq DESC`,
+      [id],
+    );
+    return rows;
+  }
+
+  /** Full text search over names, labels, text and dates on main. */
+  async search(query: string, options: { type?: EntityType; limit?: number } = {}): Promise<EntityView[]> {
+    const tsQuery = toTsQuery(query);
+    if (!tsQuery) return [];
+    const params: unknown[] = [tsQuery];
+    const where = ["to_tsvector('simple', coalesce(e.search_text, '')) @@ to_tsquery('simple', $1)", 'NOT e.deleted', 'e.main_rev IS NOT NULL'];
+    if (options.type) where.push(`e.type = $${params.push(options.type)}`);
+    const { rows } = await this.db.query<RevisionRow>(
+      `SELECT r.* FROM entity e JOIN revision r ON r.id = e.main_rev WHERE ${where.join(' AND ')}
+       ORDER BY ts_rank(to_tsvector('simple', coalesce(e.search_text, '')), to_tsquery('simple', $1)) DESC, e.path
+       LIMIT ${Math.min(options.limit ?? 20, 100)}`,
+      params,
+    );
+    return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }));
+  }
+
+  /** The entity types and their schemas as main has them now. */
+  async registry(db: Db = this.db): Promise<SchemaRegistry> {
+    const seq = await this.head(db);
+    if (this.registryCache && this.registryCache.seq === seq) return this.registryCache.registry;
+    const { rows } = await db.query<{ data: SchemaData }>(
+      "SELECT r.data FROM entity e JOIN revision r ON r.id = e.main_rev WHERE e.type = 'schema' AND NOT e.deleted",
+    );
+    const registry = SchemaRegistry.withOverrides(rows.map((r) => [r.data.entityType, r.data.jsonSchema]));
+    this.registryCache = { seq, registry };
+    return registry;
+  }
+
+  // ------------------------------------------------------------ suggestions
+
+  /** Starts a suggestion (a draft), written against main as it is now, or within a project. */
+  async createChangeset(author: string, input: { title: string; description?: string; kind?: ChangesetKind; project?: number }): Promise<ChangesetRow> {
+    return this.db.transaction(async (tx) => {
+      const account = await this.requireAccount(author, tx);
+      if (!canSuggest(account)) throw forbidden('this account cannot make suggestions');
+      if (input.title.trim().length === 0) throw invalid('a suggestion needs a title');
+      if (input.project !== undefined) {
+        const project = await one<{ status: string }>(tx, 'SELECT status FROM project WHERE id = $1', [input.project]);
+        if (!project) throw notFound(`project ${input.project}`);
+        if (project.status !== 'open') throw badState('that project is closed');
+      }
+      const kind = input.kind ?? (account.is_bot ? 'import' : 'suggestion');
+      const row = await one<ChangesetRow>(
+        tx,
+        `INSERT INTO changeset (title, description, author, kind, project_id, base_commit)
+         VALUES ($1, $2, $3, $4, $5, (SELECT coalesce(max(seq), 0) FROM commit)) RETURNING *`,
+        [input.title.trim(), input.description ?? null, author, kind, input.project ?? null],
+      );
+      return row!;
+    });
+  }
+
+  async changeset(id: number, db: Db = this.db): Promise<ChangesetRow> {
+    const row = await one<ChangesetRow>(db, 'SELECT * FROM changeset WHERE id = $1', [id]);
+    if (!row) throw notFound(`suggestion ${id}`);
+    return row;
+  }
+
+  async listChangesets(options: { status?: ChangesetStatus; author?: string; project?: number; postReview?: boolean; limit?: number } = {}): Promise<ChangesetRow[]> {
+    const params: unknown[] = [];
+    const where: string[] = [];
+    if (options.status) where.push(`status = $${params.push(options.status)}`);
+    if (options.author) where.push(`author = $${params.push(options.author)}`);
+    if (options.project !== undefined) where.push(`project_id = $${params.push(options.project)}`);
+    if (options.postReview) where.push("post_review = 'pending'");
+    const { rows } = await this.db.query<ChangesetRow>(
+      `SELECT * FROM changeset ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+       ORDER BY coalesce(submitted_at, created_at) ASC LIMIT ${Math.min(options.limit ?? 50, 500)}`,
+      params,
+    );
+    return rows;
+  }
+
+  /** What the item is as this suggestion sees it: its own latest version, else the project's, else main's. */
+  private async currentFor(tx: Db, changeset: ChangesetRow, id: EntityId): Promise<RevisionRow | null> {
+    const own = await one<RevisionRow>(tx, 'SELECT * FROM revision WHERE changeset_id = $1 AND entity_id = $2 ORDER BY id DESC LIMIT 1', [changeset.id, id]);
+    if (own) return own;
+    if (changeset.project_id !== null) {
+      const head = await one<{ rev_id: number }>(tx, 'SELECT rev_id FROM project_head WHERE project_id = $1 AND entity_id = $2', [changeset.project_id, id]);
+      if (head) return this.revision(head.rev_id, tx);
+    }
+    const entity = await one<{ main_rev: number | null }>(tx, 'SELECT main_rev FROM entity WHERE id = $1', [id]);
+    return entity?.main_rev ? this.revision(entity.main_rev, tx) : null;
+  }
+
+  /** Adds (or replaces) one item's proposed version in a draft suggestion. Returns the item's id. */
+  async putRevision(changesetId: number, by: string, input: NewRevision): Promise<EntityId> {
+    return this.db.transaction(async (tx) => {
+      const cs = await this.changeset(changesetId, tx);
+      if (cs.author !== by) throw forbidden('only its author edits a suggestion');
+      if (cs.status !== 'draft' && cs.status !== 'sent_back') throw badState('this suggestion has been sent for review; it can no longer be edited');
+      const registry = await this.registry(tx);
+      if (!registry.has(input.type)) throw invalid(`unknown entity type "${input.type}"`);
+      const id = input.id ?? newId();
+      if (!isEntityId(id)) throw invalid(`"${id}" is not an entity id`);
+      const existing = await one<{ type: string }>(tx, 'SELECT type FROM entity WHERE id = $1', [id]);
+      if (existing && existing.type !== input.type) throw invalid(`${id} is a ${existing.type}, not a ${input.type}`);
+      if (!existing) {
+        if (input.data === null) throw notFound(`item ${id}`);
+        await tx.query('INSERT INTO entity (id, type) VALUES ($1, $2)', [id, input.type]);
+      }
+      const parent = await this.currentFor(tx, cs, id);
+      if (input.data === null && (!parent || parent.data === null)) throw badState(`${id} is already deleted`);
+      let path = input.path === undefined ? (parent?.path ?? null) : input.path;
+      if (path !== null) {
+        path = path.toLowerCase();
+        if (!isEntityPath(path)) throw invalid(`"${path}" is not a path: lower-case letters, digits and hyphens between slashes`);
+      }
+      const hash = await contentHash({ type: input.type, data: input.data, path });
+      if (parent && parent.hash === hash) return id; // no change
+      await tx.query(
+        `INSERT INTO revision (entity_id, entity_type, parent_rev, data, path, hash, changeset_id, author)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [id, input.type, parent?.id ?? null, input.data === null ? null : JSON.stringify(input.data), path, hash, cs.id, by],
+      );
+      return id;
+    });
+  }
+
+  /** The latest version of each item a suggestion changes, with the version it was made from. */
+  async proposals(changesetId: number, db: Db = this.db): Promise<Proposal[]> {
+    const { rows } = await db.query<RevisionRow & { base_rev: number | null }>(
+      `SELECT DISTINCT ON (r.entity_id) r.*,
+              (SELECT f.parent_rev FROM revision f WHERE f.changeset_id = r.changeset_id AND f.entity_id = r.entity_id ORDER BY f.id ASC LIMIT 1) AS base_rev
+       FROM revision r WHERE r.changeset_id = $1 AND r.merge_rev IS NULL ORDER BY r.entity_id, r.id DESC`,
+      [changesetId],
+    );
+    return rows.map(({ base_rev, ...rev }) => ({ entityId: rev.entity_id, type: rev.entity_type, baseRev: base_rev, rev }));
+  }
+
+  /** The reviewer's view: each item before and after, field by field, and what clashes with main as it is now. */
+  async review(changesetId: number): Promise<{ changeset: ChangesetRow; entries: ChangeEntry[]; reviews: unknown[] }> {
+    const cs = await this.changeset(changesetId);
+    const proposals = await this.proposals(changesetId);
+    const entries: ChangeEntry[] = [];
+    for (const p of proposals) {
+      const current = await this.targetRev(this.db, cs.project_id, p.entityId);
+      const base = p.baseRev === null ? null : await this.revision(p.baseRev);
+      const before = current?.data ?? null;
+      const result = current?.id === p.baseRev ? { merged: p.rev.data, conflicts: [] } : threeWayMerge(base?.data ?? null, before, p.rev.data);
+      entries.push({ entityId: p.entityId, type: p.type, before, after: p.rev.data, changes: diffData(before, p.rev.data), conflicts: result.conflicts });
+    }
+    const { rows: reviews } = await this.db.query('SELECT * FROM review WHERE changeset_id = $1 ORDER BY created_at', [changesetId]);
+    return { changeset: cs, entries, reviews };
+  }
+
+  /** Where a merge would land: the project's version, or main's. */
+  private async targetRev(db: Db, project: number | null, id: EntityId): Promise<RevisionRow | null> {
+    if (project !== null) {
+      const head = await one<{ rev_id: number }>(db, 'SELECT rev_id FROM project_head WHERE project_id = $1 AND entity_id = $2', [project, id]);
+      if (head) return this.revision(head.rev_id, db);
+    }
+    const entity = await one<{ main_rev: number | null }>(db, 'SELECT main_rev FROM entity WHERE id = $1', [id]);
+    return entity?.main_rev ? this.revision(entity.main_rev, db) : null;
+  }
+
+  /**
+   * "Send for review": runs the automatic checks and opens the suggestion.
+   * A trusted person's line fixes in open sets go live at once, and are
+   * reviewed after.
+   */
+  async submit(changesetId: number, by: string): Promise<ChangesetRow> {
+    const result = await this.db.transaction(async (tx) => {
+      const cs = await this.changeset(changesetId, tx);
+      if (cs.author !== by) throw forbidden('only its author sends a suggestion for review');
+      if (cs.status !== 'draft' && cs.status !== 'sent_back') throw badState(`this suggestion is ${cs.status}`);
+      const proposals = await this.proposals(cs.id, tx);
+      if (proposals.length === 0) throw badState('this suggestion changes nothing yet');
+      const checks = await this.runChecks(tx, cs, proposals);
+      await tx.query("UPDATE changeset SET status = 'open', submitted_at = now(), checks = $2 WHERE id = $1", [cs.id, JSON.stringify(checks)]);
+      const author = await this.requireAccount(cs.author, tx);
+      const sets = await this.setsOfProposals(tx, proposals);
+      const live =
+        cs.project_id === null && !checks.some((c) => c.status === 'fail' && BLOCKING_CHECKS.has(c.check)) && mayGoLive(author, { types: new Set(proposals.map((p) => p.type)), sets });
+      return { live };
+    });
+    if (result.live) {
+      await this.db.query("UPDATE changeset SET kind = 'live', post_review = 'pending' WHERE id = $1", [changesetId]);
+      await this.mergeInternal(changesetId, by, {}, { skipPermission: true });
+    }
+    return this.changeset(changesetId);
+  }
+
+  /** Withdraws a suggestion that has not been merged. */
+  async withdraw(changesetId: number, by: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const cs = await this.changeset(changesetId, tx);
+      const actor = await this.requireAccount(by, tx);
+      if (cs.author !== by && !actor.is_steward) throw forbidden('only its author withdraws a suggestion');
+      if (cs.status === 'merged' || cs.status === 'withdrawn') throw badState(`this suggestion is ${cs.status}`);
+      await tx.query("UPDATE changeset SET status = 'withdrawn', closed_at = now() WHERE id = $1", [cs.id]);
+    });
+  }
+
+  /** "Send back": returns a suggestion to its author with a note; they can edit and send it again. */
+  async sendBack(changesetId: number, by: string, note: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const cs = await this.changeset(changesetId, tx);
+      if (cs.status !== 'open') throw badState(`this suggestion is ${cs.status}`);
+      await this.assertMayApprove(tx, cs, by);
+      if (note.trim().length === 0) throw invalid('say what should change');
+      await tx.query("INSERT INTO review (changeset_id, reviewer, verdict, body) VALUES ($1, $2, 'send_back', $3)", [cs.id, by, note]);
+      await tx.query("UPDATE changeset SET status = 'sent_back' WHERE id = $1", [cs.id]);
+      await this.audit(tx, by, 'changeset.send_back', 'changeset', String(cs.id), { note });
+    });
+  }
+
+  /** A comment on a suggestion, report, item or project. */
+  async comment(by: string, target: { kind: 'changeset' | 'report' | 'entity' | 'project'; id: string }, body: string, parent?: number): Promise<number> {
+    const account = await this.requireAccount(by);
+    if (!canSuggest(account)) throw forbidden('this account cannot comment');
+    if (body.trim().length === 0) throw invalid('an empty comment');
+    const row = await one<{ id: number }>(this.db, 'INSERT INTO comment (target_kind, target_id, parent_id, author, body) VALUES ($1, $2, $3, $4, $5) RETURNING id', [
+      target.kind,
+      target.id,
+      parent ?? null,
+      by,
+      body,
+    ]);
+    return row!.id;
+  }
+
+  /**
+   * "Approve": merges a suggestion into main (or into its project). Clashes
+   * with main are decided by the reviewer through `resolutions`, keyed by
+   * item id and then field path.
+   */
+  async merge(changesetId: number, by: string, resolutions: Record<string, Record<string, Resolution>> = {}, note?: string): Promise<{ commit: number | null }> {
+    return this.mergeInternal(changesetId, by, resolutions, { note });
+  }
+
+  private async mergeInternal(
+    changesetId: number,
+    by: string,
+    resolutions: Record<string, Record<string, Resolution>>,
+    options: { skipPermission?: boolean; note?: string },
+  ): Promise<{ commit: number | null }> {
+    const result = await this.db.transaction(async (tx) => {
+      await tx.query('SELECT pg_advisory_xact_lock($1)', [MERGE_LOCK]);
+      const cs = await this.changeset(changesetId, tx);
+      if (cs.status !== 'open') throw badState(cs.status === 'draft' ? 'send the suggestion for review first' : `this suggestion is ${cs.status}`);
+      if (!options.skipPermission) await this.assertMayApprove(tx, cs, by);
+      const failed = cs.checks.filter((c) => c.status === 'fail' && BLOCKING_CHECKS.has(c.check));
+      if (failed.length > 0) throw invalid(`failed checks: ${failed.map((c) => c.message).join('; ')}`, failed);
+      const proposals = await this.proposals(cs.id, tx);
+      if (!options.skipPermission) {
+        await tx.query("INSERT INTO review (changeset_id, reviewer, verdict, body) VALUES ($1, $2, 'approve', $3)", [cs.id, by, options.note ?? null]);
+      }
+      if (cs.project_id !== null) {
+        await this.applyToProject(tx, cs, proposals, by, resolutions);
+        await tx.query("UPDATE changeset SET status = 'merged', closed_at = now() WHERE id = $1", [cs.id]);
+        return { commit: null, author: cs.author };
+      }
+      const seq = await this.applyToMain(tx, cs.id, proposals, by, cs.title, resolutions);
+      await tx.query("UPDATE changeset SET status = 'merged', merged_commit = $2, closed_at = now() WHERE id = $1", [cs.id, seq]);
+      await this.audit(tx, by, 'changeset.merge', 'changeset', String(cs.id), { commit: seq });
+      return { commit: seq, author: cs.author };
+    });
+    await this.credit(result.author, 'approved');
+    return { commit: result.commit };
+  }
+
+  /** A live change, reviewed after it went live: approved (it stays), or reverted. */
+  async reviewLive(changesetId: number, by: string, verdict: 'approve' | 'revert', note?: string): Promise<{ revertChangeset?: number }> {
+    const cs = await this.changeset(changesetId);
+    if (cs.post_review !== 'pending') throw badState('this change is not waiting for review');
+    await this.db.transaction(async (tx) => {
+      await this.assertMayApprove(tx, cs, by);
+      await tx.query('INSERT INTO review (changeset_id, reviewer, verdict, body) VALUES ($1, $2, $3, $4)', [cs.id, by, verdict === 'approve' ? 'approve' : 'send_back', note ?? null]);
+      await tx.query("UPDATE changeset SET post_review = 'done' WHERE id = $1", [cs.id]);
+    });
+    if (verdict === 'approve') return {};
+    const revert = await this.revert(changesetId, by, note);
+    return { revertChangeset: revert.changeset };
+  }
+
+  private async assertMayApprove(tx: Db, cs: ChangesetRow, by: string): Promise<void> {
+    const reviewer = await this.requireAccount(by, tx);
+    const proposals = await this.proposals(cs.id, tx);
+    const sets = await this.setsOfProposals(tx, proposals);
+    let projectKeepers: string[] | undefined;
+    if (cs.project_id !== null) {
+      const project = await one<{ keepers: string[] }>(tx, 'SELECT keepers FROM project WHERE id = $1', [cs.project_id]);
+      projectKeepers = project?.keepers;
+    }
+    // Undoing a merged change is a keeper's own act; any other suggestion is approved by someone else.
+    const decision = canApprove(reviewer, { author: cs.kind === 'revert' ? '' : cs.author, types: new Set(proposals.map((p) => p.type)), sets, projectKeepers });
+    if (!decision.ok) throw forbidden(decision.reason);
+  }
+
+  /** Merges proposals into main as one commit. Returns the commit's number. */
+  private async applyToMain(tx: Db, changesetId: number, proposals: Proposal[], by: string, message: string, resolutions: Record<string, Record<string, Resolution>>): Promise<number> {
+    const registry = await this.registry(tx);
+    const planned: Array<{ proposal: Proposal; current: RevisionRow | null; data: Json | null; path: string | null; direct: boolean }> = [];
+    const unresolved: Conflict[] = [];
+    for (const p of proposals) {
+      const current = await this.targetRev(tx, null, p.entityId);
+      if ((current?.id ?? null) === p.baseRev) {
+        planned.push({ proposal: p, current, data: p.rev.data, path: p.rev.path, direct: true });
+        continue;
+      }
+      const base = p.baseRev === null ? null : await this.revision(p.baseRev, tx);
+      const merged = threeWayMerge(base?.data ?? null, current?.data ?? null, p.rev.data);
+      let data = merged.merged;
+      if (merged.conflicts.length > 0) {
+        const decided = resolutions[p.entityId];
+        const open = merged.conflicts.filter((c) => !decided?.[c.path]);
+        if (open.length > 0) {
+          unresolved.push(...open.map((c) => ({ ...c, path: `${p.entityId}${c.path}` })));
+          continue;
+        }
+        data = resolveConflicts(merged, decided!);
+      }
+      // A path changed on one side only follows that side; changed on both, theirs wins unless the reviewer said otherwise.
+      const path = (base?.path ?? null) === (current?.path ?? null) ? p.rev.path : (base?.path ?? null) === p.rev.path ? (current?.path ?? null) : p.rev.path;
+      planned.push({ proposal: p, current, data, path, direct: false });
+    }
+    if (unresolved.length > 0) throw new UnresolvedConflictError(unresolved);
+
+    // What main will hold once this lands, for checking the merged result.
+    const landing = new Map(planned.map((x) => [x.proposal.entityId, x]));
+    for (const x of planned) {
+      if (x.data === null) continue;
+      const valid = registry.validate(x.proposal.type, x.data);
+      if (!valid.ok) throw invalid(`${x.proposal.entityId} would not be valid after merging: ${valid.issues.map((i) => `${i.path || '/'} ${i.message}`).join('; ')}`, valid.issues);
+      for (const ref of referencesOf(x.proposal.type, x.data)) {
+        const target = landing.get(ref.id);
+        if (target) {
+          if (target.data === null) throw invalid(`${x.proposal.entityId} points at ${ref.id}, which this change deletes`);
+          continue;
+        }
+        const row = await one<{ type: string; deleted: boolean; main_rev: number | null }>(tx, 'SELECT type, deleted, main_rev FROM entity WHERE id = $1', [ref.id]);
+        if (!row || row.deleted || row.main_rev === null) throw invalid(`${x.proposal.entityId} points at ${ref.id} (${ref.field}), which is not in the catalog`);
+      }
+      if (x.path !== null) {
+        const taken = await one<{ id: string }>(tx, 'SELECT id FROM entity WHERE path = $1 AND id <> $2 AND NOT deleted', [x.path, x.proposal.entityId]);
+        if (taken && !(landing.get(taken.id as EntityId)?.path !== x.path && landing.has(taken.id as EntityId))) throw invalid(`the path ${x.path} already belongs to ${taken.id}`);
+      }
+    }
+
+    const commit = await one<{ seq: number }>(tx, 'INSERT INTO commit (changeset_id, merged_by, message) VALUES ($1, $2, $3) RETURNING seq', [changesetId, by, message]);
+    const seq = commit!.seq;
+    // Paths are released before they are taken, so two items may swap paths in one change.
+    for (const x of planned) await tx.query('UPDATE entity SET path = NULL WHERE id = $1', [x.proposal.entityId]);
+    for (const x of planned) {
+      let revId = x.proposal.rev.id;
+      if (!x.direct) {
+        const hash = await contentHash({ type: x.proposal.type, data: x.data, path: x.path });
+        const row = await one<{ id: number }>(
+          tx,
+          `INSERT INTO revision (entity_id, entity_type, parent_rev, merge_rev, data, path, hash, changeset_id, author)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+          [x.proposal.entityId, x.proposal.type, x.current?.id ?? null, x.proposal.rev.id, x.data === null ? null : JSON.stringify(x.data), x.path, hash, changesetId, by],
+        );
+        revId = row!.id;
+      }
+      await tx.query('INSERT INTO commit_change (commit_seq, entity_id, rev_id, prev_rev_id) VALUES ($1, $2, $3, $4)', [seq, x.proposal.entityId, revId, x.current?.id ?? null]);
+      await this.updateMain(tx, x.proposal.entityId, x.proposal.type, revId, x.data, x.path, x.current?.path ?? null, seq);
+    }
+    return seq;
+  }
+
+  /** Points main at a new revision and refreshes what is derived from it: path, redirects, links, search text. */
+  private async updateMain(tx: Db, id: EntityId, type: EntityType, revId: number, data: Json | null, path: string | null, oldPath: string | null, seq: number): Promise<void> {
+    const deleted = data === null;
+    await tx.query('UPDATE entity SET main_rev = $2, path = $3, deleted = $4, search_text = $5, updated_seq = $6 WHERE id = $1', [
+      id,
+      revId,
+      deleted ? null : path,
+      deleted,
+      deleted ? null : searchTextOf(data),
+      seq,
+    ]);
+    if (oldPath !== null && oldPath !== path) {
+      await tx.query('INSERT INTO path_redirect (path, entity_id) VALUES ($1, $2) ON CONFLICT (path) DO UPDATE SET entity_id = EXCLUDED.entity_id, created_at = now()', [oldPath, id]);
+    }
+    if (path !== null) await tx.query('DELETE FROM path_redirect WHERE path = $1', [path]);
+    await tx.query('DELETE FROM entity_ref WHERE from_id = $1', [id]);
+    await tx.query('DELETE FROM entity_external_id WHERE entity_id = $1', [id]);
+    if (!deleted) {
+      const externalIds = (data as { externalIds?: Record<string, string> }).externalIds ?? {};
+      for (const [key, value] of Object.entries(externalIds)) {
+        if (typeof value === 'string') await tx.query('INSERT INTO entity_external_id (entity_id, key, value) VALUES ($1, $2, $3)', [id, key, value]);
+      }
+      const seen = new Set<string>();
+      for (const ref of referencesOf(type, data)) {
+        const key = `${ref.field}\u0000${ref.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        await tx.query('INSERT INTO entity_ref (from_id, field, to_id) VALUES ($1, $2, $3)', [id, ref.field, ref.id]);
+      }
+    }
+  }
+
+  /** Merges a project's suggestion into the project's overlay rather than main. */
+  private async applyToProject(tx: Db, cs: ChangesetRow, proposals: Proposal[], by: string, resolutions: Record<string, Record<string, Resolution>>): Promise<void> {
+    const projectId = cs.project_id!;
+    for (const p of proposals) {
+      const head = await one<{ rev_id: number; base_rev: number | null }>(tx, 'SELECT rev_id, base_rev FROM project_head WHERE project_id = $1 AND entity_id = $2', [projectId, p.entityId]);
+      const current = await this.targetRev(tx, projectId, p.entityId);
+      let revId = p.rev.id;
+      if ((current?.id ?? null) !== p.baseRev) {
+        const base = p.baseRev === null ? null : await this.revision(p.baseRev, tx);
+        const merged = threeWayMerge(base?.data ?? null, current?.data ?? null, p.rev.data);
+        const decided = resolutions[p.entityId] ?? {};
+        const open = merged.conflicts.filter((c) => !decided[c.path]);
+        if (open.length > 0) throw new UnresolvedConflictError(open.map((c) => ({ ...c, path: `${p.entityId}${c.path}` })));
+        const data = merged.conflicts.length > 0 ? resolveConflicts(merged, decided) : merged.merged;
+        const hash = await contentHash({ type: p.type, data, path: p.rev.path });
+        const row = await one<{ id: number }>(
+          tx,
+          `INSERT INTO revision (entity_id, entity_type, parent_rev, merge_rev, data, path, hash, changeset_id, author)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+          [p.entityId, p.type, current?.id ?? null, p.rev.id, data === null ? null : JSON.stringify(data), p.rev.path, hash, cs.id, by],
+        );
+        revId = row!.id;
+      }
+      if (head) {
+        await tx.query('UPDATE project_head SET rev_id = $3 WHERE project_id = $1 AND entity_id = $2', [projectId, p.entityId, revId]);
+      } else {
+        // The first change a project makes to an item remembers main's version then: the base of the project's own merge.
+        const main = await one<{ main_rev: number | null }>(tx, 'SELECT main_rev FROM entity WHERE id = $1', [p.entityId]);
+        await tx.query('INSERT INTO project_head (project_id, entity_id, rev_id, base_rev) VALUES ($1, $2, $3, $4)', [projectId, p.entityId, revId, main?.main_rev ?? null]);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------ history and revert
+
+  /**
+   * Undoes a merged suggestion in one step: a new suggestion that puts each
+   * item it changed back as it was, merged at once when `by` may approve it.
+   * Later changes to the same items are kept where they do not clash.
+   */
+  async revert(changesetId: number, by: string, reason?: string): Promise<{ changeset: number; commit: number | null }> {
+    const target = await this.changeset(changesetId);
+    if (target.status !== 'merged' || target.merged_commit === null) throw badState('only a suggestion merged into main can be reverted');
+    const { rows: changes } = await this.db.query<{ entity_id: EntityId; rev_id: number; prev_rev_id: number | null; entity_type: EntityType }>(
+      'SELECT cc.entity_id, cc.rev_id, cc.prev_rev_id, e.type AS entity_type FROM commit_change cc JOIN entity e ON e.id = cc.entity_id WHERE cc.commit_seq = $1',
+      [target.merged_commit],
+    );
+    const revert = await this.createChangeset(by, { title: `Revert: ${target.title}`, description: reason, kind: 'revert' });
+    await this.db.transaction(async (tx) => {
+      await tx.query('UPDATE changeset SET reverts_changeset = $2 WHERE id = $1', [revert.id, target.id]);
+      for (const change of changes) {
+        const undone = await this.revision(change.rev_id, tx);
+        const previous = change.prev_rev_id === null ? null : await this.revision(change.prev_rev_id, tx);
+        const data = previous?.data ?? null;
+        const path = previous?.path ?? null;
+        // Made from the version being undone, so the merge keeps what changed since.
+        await tx.query(
+          `INSERT INTO revision (entity_id, entity_type, parent_rev, data, path, hash, changeset_id, author)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [change.entity_id, change.entity_type, undone!.id, data === null ? null : JSON.stringify(data), path, await contentHash({ type: change.entity_type, data, path }), revert.id, by],
+        );
+      }
+      await tx.query("UPDATE changeset SET status = 'open', submitted_at = now() WHERE id = $1", [revert.id]);
+    });
+    let commit: number | null = null;
+    try {
+      commit = (await this.mergeInternal(revert.id, by, {}, { skipPermission: false, note: reason })).commit;
+    } catch (error) {
+      // Not theirs to merge (or it clashes): the revert waits for review as a suggestion.
+      if (!(error instanceof CatalogError && error.code === 'forbidden') && !(error instanceof UnresolvedConflictError)) throw error;
+    }
+    if (commit !== null) await this.credit(target.author, 'reverted');
+    return { changeset: revert.id, commit };
+  }
+
+  /** "Restore this version": a suggestion putting an item back as it was at one revision. */
+  async restore(entityId: EntityId, revId: number, by: string): Promise<number> {
+    const rev = await this.revision(revId);
+    if (!rev || rev.entity_id !== entityId) throw notFound(`version ${revId} of ${entityId}`);
+    const cs = await this.createChangeset(by, { title: `Restore ${entityId} to version ${revId}` });
+    await this.putRevision(cs.id, by, { id: entityId, type: rev.entity_type, data: rev.data, path: rev.path });
+    await this.submit(cs.id, by);
+    return cs.id;
+  }
+
+  // ------------------------------------------------------------ projects
+
+  /** Opens a project (a branch): suggestions made in it merge into it, and it merges into main when done. Keepers and stewards. */
+  async createProject(by: string, input: { slug: string; name: string; goal?: string; set?: EntityId; keepers?: string[] }): Promise<number> {
+    return this.db.transaction(async (tx) => {
+      const actor = await this.requireAccount(by, tx);
+      if (input.set) {
+        const set = await this.setInfo(tx, input.set);
+        if (!set) throw notFound(`set ${input.set}`);
+        if (!actor.is_steward && !set.keepers.includes(by)) throw forbidden('projects are opened by the set\'s keepers');
+      } else if (!actor.is_steward) {
+        throw forbidden('a project outside a set is opened by a steward');
+      }
+      if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(input.slug)) throw invalid('a project slug is lower-case letters, digits and hyphens');
+      const row = await one<{ id: number }>(
+        tx,
+        `INSERT INTO project (slug, name, goal, set_id, keepers, base_commit, created_by)
+         VALUES ($1, $2, $3, $4, $5, (SELECT coalesce(max(seq), 0) FROM commit), $6) RETURNING id`,
+        [input.slug, input.name, input.goal ?? null, input.set ?? null, input.keepers ?? [by], by],
+      );
+      await this.audit(tx, by, 'project.open', 'project', String(row!.id));
+      return row!.id;
+    });
+  }
+
+  /** What merging a project into main would clash on, item by item. */
+  async projectConflicts(projectId: number): Promise<Conflict[]> {
+    const conflicts: Conflict[] = [];
+    for (const p of await this.projectProposals(this.db, projectId)) {
+      const current = await this.targetRev(this.db, null, p.entityId);
+      if ((current?.id ?? null) === p.baseRev) continue;
+      const base = p.baseRev === null ? null : await this.revision(p.baseRev);
+      conflicts.push(...threeWayMerge(base?.data ?? null, current?.data ?? null, p.rev.data).conflicts.map((c) => ({ ...c, path: `${p.entityId}${c.path}` })));
+    }
+    return conflicts;
+  }
+
+  private async projectProposals(db: Db, projectId: number): Promise<Proposal[]> {
+    const { rows } = await db.query<RevisionRow & { base_rev: number | null }>(
+      'SELECT r.*, h.base_rev FROM project_head h JOIN revision r ON r.id = h.rev_id WHERE h.project_id = $1 ORDER BY h.entity_id',
+      [projectId],
+    );
+    return rows.map(({ base_rev, ...rev }) => ({ entityId: rev.entity_id, type: rev.entity_type, baseRev: base_rev, rev }));
+  }
+
+  /** Merges a finished project into main as one commit. */
+  async mergeProject(projectId: number, by: string, resolutions: Record<string, Record<string, Resolution>> = {}): Promise<number> {
+    return this.db.transaction(async (tx) => {
+      await tx.query('SELECT pg_advisory_xact_lock($1)', [MERGE_LOCK]);
+      const project = await one<{ id: number; name: string; status: string; set_id: EntityId | null; keepers: string[]; created_by: string }>(tx, 'SELECT * FROM project WHERE id = $1', [projectId]);
+      if (!project) throw notFound(`project ${projectId}`);
+      if (project.status !== 'open') throw badState('this project is closed');
+      const actor = await this.requireAccount(by, tx);
+      const proposals = await this.projectProposals(tx, projectId);
+      if (proposals.length === 0) throw badState('this project has changed nothing yet');
+      const sets = await this.setsOfProposals(tx, proposals);
+      const decision = canApprove(actor, { author: '', types: new Set(proposals.map((p) => p.type)), sets, projectKeepers: project.keepers });
+      if (!decision.ok) throw forbidden(decision.reason);
+      const carrier = await one<{ id: number }>(
+        tx,
+        `INSERT INTO changeset (title, author, status, kind, project_id, base_commit, submitted_at)
+         VALUES ($1, $2, 'open', 'suggestion', $3, (SELECT coalesce(max(seq), 0) FROM commit), now()) RETURNING id`,
+        [`Project: ${project.name}`, by, projectId],
+      );
+      const seq = await this.applyToMain(tx, carrier!.id, proposals, by, `Project: ${project.name}`, resolutions);
+      await tx.query("UPDATE changeset SET status = 'merged', merged_commit = $2, closed_at = now() WHERE id = $1", [carrier!.id, seq]);
+      await tx.query("UPDATE project SET status = 'merged', merged_commit = $2 WHERE id = $1", [projectId, seq]);
+      await this.audit(tx, by, 'project.merge', 'project', String(projectId), { commit: seq });
+      return seq;
+    });
+  }
+
+  // ------------------------------------------------------------ reports, follows
+
+  /** "Report a problem": no account needed. Lands in the inbox of the item's set. */
+  async report(input: { entityId?: EntityId; reason: ReportReason; note?: string; reporter?: string; reporterHash?: string }): Promise<number> {
+    return this.db.transaction(async (tx) => {
+      let setId: string | null = null;
+      if (input.entityId) {
+        const main = await this.targetRev(tx, null, input.entityId);
+        if (!main || main.data === null) throw notFound(`item ${input.entityId}`);
+        const sets = await this.setsOf(tx, main.entity_type, main.data);
+        setId = sets[0]?.id ?? null;
+      }
+      if (input.note && input.note.length > 2000) throw invalid('a report note is at most 2000 characters');
+      const row = await one<{ id: number }>(
+        tx,
+        'INSERT INTO report (entity_id, set_id, reason, note, reporter, reporter_hash) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+        [input.entityId ?? null, setId, input.reason, input.note ?? null, input.reporter ?? null, input.reporterHash ?? null],
+      );
+      return row!.id;
+    });
+  }
+
+  /** A set's inbox of open reports (all sets, and reports on no set, for stewards). */
+  async reports(options: { set?: EntityId; status?: 'open' | 'resolved' | 'dismissed'; limit?: number } = {}): Promise<unknown[]> {
+    const params: unknown[] = [options.status ?? 'open'];
+    const where = ['status = $1'];
+    if (options.set) where.push(`set_id = $${params.push(options.set)}`);
+    const { rows } = await this.db.query(`SELECT * FROM report WHERE ${where.join(' AND ')} ORDER BY created_at LIMIT ${Math.min(options.limit ?? 100, 500)}`, params);
+    return rows;
+  }
+
+  async closeReport(reportId: number, by: string, outcome: 'resolved' | 'dismissed', resolution?: { changeset?: number; note?: string }): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const report = await one<{ set_id: EntityId | null; status: string }>(tx, 'SELECT set_id, status FROM report WHERE id = $1', [reportId]);
+      if (!report) throw notFound(`report ${reportId}`);
+      if (report.status !== 'open') throw badState(`this report is ${report.status}`);
+      const actor = await this.requireAccount(by, tx);
+      const set = report.set_id ? await this.setInfo(tx, report.set_id) : null;
+      if (!actor.is_steward && !(set && set.keepers.includes(by))) throw forbidden("reports are closed by the set's keepers");
+      await tx.query('UPDATE report SET status = $2, resolved_by = $3, resolution_changeset = $4, closed_at = now() WHERE id = $1', [reportId, outcome, by, resolution?.changeset ?? null]);
+      await this.audit(tx, by, `report.${outcome}`, 'report', String(reportId), { note: resolution?.note });
+    });
+  }
+
+  async follow(accountId: string, target: { kind: 'entity' | 'set' | 'project' | 'changeset'; id: string }, on = true): Promise<void> {
+    if (on) {
+      await this.db.query('INSERT INTO follow (account_id, target_kind, target_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [accountId, target.kind, target.id]);
+    } else {
+      await this.db.query('DELETE FROM follow WHERE account_id = $1 AND target_kind = $2 AND target_id = $3', [accountId, target.kind, target.id]);
+    }
+  }
+
+  /** Who is told when this item changes: its own followers and those of its sets. */
+  async followersOfEntity(id: EntityId): Promise<string[]> {
+    const main = await this.targetRev(this.db, null, id);
+    const sets = main?.data ? (await this.setsOf(this.db, main.entity_type, main.data)).map((s) => s.id) : [];
+    const { rows } = await this.db.query<{ account_id: string }>(
+      "SELECT DISTINCT account_id FROM follow WHERE (target_kind = 'entity' AND target_id = $1) OR (target_kind = 'set' AND target_id = ANY($2::text[])) ORDER BY account_id",
+      [id, sets],
+    );
+    return rows.map((r) => r.account_id);
+  }
+
+  // ------------------------------------------------------------ editions
+
+  /** Tags the head of main as a catalog edition (`2026.40`: year and ISO week). Stewards only. */
+  async tagEdition(by: string, options: { tag?: string; notes?: string } = {}): Promise<{ tag: string; commit: number }> {
+    return this.db.transaction(async (tx) => {
+      const actor = await this.requireAccount(by, tx);
+      if (!actor.is_steward) throw forbidden('catalog editions are made by stewards');
+      const seq = await this.head(tx);
+      if (seq === 0) throw badState('the catalog is empty');
+      let tag = options.tag ?? isoWeekTag((this.options.now ?? (() => new Date()))());
+      if (!options.tag) {
+        for (let n = 1; await one(tx, 'SELECT 1 FROM catalog_edition WHERE tag = $1', [tag]); n++) tag = `${isoWeekTag((this.options.now ?? (() => new Date()))())}.${n}`;
+      }
+      await tx.query('INSERT INTO catalog_edition (tag, commit_seq, created_by, notes) VALUES ($1, $2, $3, $4)', [tag, seq, by, options.notes ?? null]);
+      await this.audit(tx, by, 'edition.tag', 'edition', tag, { commit: seq });
+      return { tag, commit: seq };
+    });
+  }
+
+  async editions(): Promise<Array<{ tag: string; commit_seq: number; created_at: string; notes: string | null; manifest: unknown }>> {
+    const { rows } = await this.db.query<{ tag: string; commit_seq: number; created_at: string; notes: string | null; manifest: unknown }>(
+      'SELECT tag, commit_seq, created_at, notes, manifest FROM catalog_edition ORDER BY commit_seq DESC',
+    );
+    return rows;
+  }
+
+  /** Records the signed manifest of an edition's dumps. */
+  async setEditionManifest(tag: string, manifest: unknown): Promise<void> {
+    await this.db.query('UPDATE catalog_edition SET manifest = $2 WHERE tag = $1', [tag, JSON.stringify(manifest)]);
+  }
+
+  // ------------------------------------------------------------ snapshots (for the git mirror and dumps)
+
+  /** Every live item as of a commit, in id order, a page at a time. */
+  async snapshot(at: number, options: { after?: EntityId; limit?: number } = {}): Promise<EntityView[]> {
+    const { rows } = await this.db.query<RevisionRow>(
+      `SELECT r.* FROM (
+         SELECT DISTINCT ON (entity_id) entity_id, rev_id FROM commit_change
+         WHERE commit_seq <= $1 AND entity_id > $2 ORDER BY entity_id, commit_seq DESC
+       ) latest JOIN revision r ON r.id = latest.rev_id
+       WHERE r.data IS NOT NULL ORDER BY latest.entity_id LIMIT ${Math.min(options.limit ?? 1000, 10_000)}`,
+      [at, options.after ?? ''],
+    );
+    return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }));
+  }
+
+  /**
+   * The children of an item as of a commit, in their order: a text's
+   * segments (`'segment', 'text', id`), an alignment's spans. Deleted and
+   * moved-away children are left out.
+   */
+  async childrenAt(at: number, childType: 'segment' | 'alignment-span', parentField: 'text' | 'alignment', parentId: EntityId): Promise<EntityView[]> {
+    // Both names are from the fixed unions above, never from input, so they are safe to write into the SQL (and let it use the partial indexes).
+    const { rows } = await this.db.query<RevisionRow>(
+      `SELECT r.* FROM (
+         SELECT DISTINCT ON (cc.entity_id) cc.entity_id, cc.rev_id FROM commit_change cc
+         WHERE cc.commit_seq <= $1 AND cc.entity_id IN (SELECT DISTINCT entity_id FROM revision WHERE entity_type = '${childType}' AND data->>'${parentField}' = $2)
+         ORDER BY cc.entity_id, cc.commit_seq DESC
+       ) latest JOIN revision r ON r.id = latest.rev_id
+       WHERE r.data IS NOT NULL AND r.data->>'${parentField}' = $2
+       ORDER BY coalesce(r.data->>'order', lpad(r.data->>'startMs', 12, '0')) COLLATE "C", r.entity_id`,
+      [at, parentId],
+    );
+    return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }));
+  }
+
+  /** The commits after `since`, each with the items it changed (null data: deleted), for incremental export. */
+  async commitsSince(since: number, limit = 100): Promise<Array<{ seq: number; at: string; message: string; mergedBy: string; author: string; changes: Array<{ id: EntityId; type: EntityType; path: string | null; rev: number; data: Json | null }> }>> {
+    const { rows: commits } = await this.db.query<{ seq: number; at: string; message: string; merged_by: string; author: string }>(
+      'SELECT c.seq, c.at, c.message, c.merged_by, cs.author FROM commit c JOIN changeset cs ON cs.id = c.changeset_id WHERE c.seq > $1 ORDER BY c.seq LIMIT $2',
+      [since, limit],
+    );
+    const out = [];
+    for (const c of commits) {
+      const { rows } = await this.db.query<RevisionRow>('SELECT r.* FROM commit_change cc JOIN revision r ON r.id = cc.rev_id WHERE cc.commit_seq = $1 ORDER BY cc.entity_id', [c.seq]);
+      out.push({ seq: c.seq, at: c.at, message: c.message, mergedBy: c.merged_by, author: c.author, changes: rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data })) });
+    }
+    return out;
+  }
+
+  // ------------------------------------------------------------ checks
+
+  private async runChecks(tx: Db, cs: ChangesetRow, proposals: Proposal[]): Promise<Check[]> {
+    const registry = await this.registry(tx);
+    const checks: Check[] = [];
+    const inChange = new Map(proposals.map((p) => [p.entityId, p]));
+    for (const p of proposals) {
+      const id = p.entityId;
+      if (p.rev.data === null) {
+        const { rows } = await tx.query<{ from_id: string }>('SELECT from_id FROM entity_ref WHERE to_id = $1 LIMIT 5', [id]);
+        const still = rows.filter((r) => inChange.get(r.from_id as EntityId)?.rev.data !== null);
+        if (still.length > 0) checks.push({ check: 'references', status: 'fail', entityId: id, message: `${id} is still pointed at by ${still.map((r) => r.from_id).join(', ')}` });
+        continue;
+      }
+      if (p.type === 'schema') {
+        // A new schema must itself be usable before it governs anything.
+        const schema = p.rev.data as unknown as SchemaData;
+        try {
+          new SchemaRegistry(new Map([[schema.entityType, schema.jsonSchema]])).validate(schema.entityType, {});
+        } catch (error) {
+          checks.push({ check: 'schema', status: 'fail', entityId: id, message: `the JSON Schema cannot be used: ${(error as Error).message}` });
+        }
+      }
+      for (const field of ['file'] as const) {
+        const sha256 = (p.rev.data as Record<string, unknown>)[field];
+        if ((p.type === 'scan' || p.type === 'recording') && typeof sha256 === 'string') {
+          const file = await one(tx, 'SELECT 1 FROM file WHERE sha256 = $1', [sha256]);
+          if (!file) checks.push({ check: 'references', status: 'fail', entityId: id, path: field, message: `no file ${sha256.slice(0, 12)}… has been uploaded` });
+        }
+      }
+      const valid = registry.validate(p.type, p.rev.data);
+      checks.push(
+        valid.ok
+          ? { check: 'schema', status: 'pass', entityId: id, message: 'fields are well formed' }
+          : { check: 'schema', status: 'fail', entityId: id, message: valid.issues.map((i) => `${i.path || '/'}: ${i.message}`).join('; ') },
+      );
+      for (const ref of referencesOf(p.type, p.rev.data)) {
+        const other = inChange.get(ref.id);
+        let type: string | null = null;
+        if (other) type = other.rev.data === null ? null : other.type;
+        else {
+          const row = await one<{ type: string; deleted: boolean; main_rev: number | null }>(tx, 'SELECT type, deleted, main_rev FROM entity WHERE id = $1', [ref.id]);
+          const inProject = cs.project_id !== null && row ? await one(tx, 'SELECT 1 FROM project_head WHERE project_id = $1 AND entity_id = $2', [cs.project_id, ref.id]) : null;
+          type = row && !row.deleted && (row.main_rev !== null || inProject) ? row.type : null;
+        }
+        if (type === null) checks.push({ check: 'references', status: 'fail', entityId: id, path: ref.field, message: `${ref.field} points at ${ref.id}, which is not in the catalog` });
+        else if (ref.expected.length > 0 && !ref.expected.includes(type as EntityType)) checks.push({ check: 'references', status: 'fail', entityId: id, path: ref.field, message: `${ref.field} should be a ${ref.expected.join(' or ')}, but ${ref.id} is a ${type}` });
+      }
+      for (const [field, value] of dateFields(p.rev.data)) {
+        const check = validateDateKey(value);
+        checks.push(check.ok ? { check: 'dates', status: 'pass', entityId: id, path: field, message: `${value} is a real date` } : { check: 'dates', status: 'fail', entityId: id, path: field, message: check.reason });
+      }
+      if (p.rev.path !== null) {
+        const taken = await one<{ id: string }>(tx, 'SELECT id FROM entity WHERE path = $1 AND id <> $2 AND NOT deleted', [p.rev.path, id]);
+        const movingAway = taken ? inChange.get(taken.id as EntityId)?.rev.path !== p.rev.path && inChange.has(taken.id as EntityId) : false;
+        if (taken && !movingAway) checks.push({ check: 'path', status: 'fail', entityId: id, message: `the path ${p.rev.path} already belongs to ${taken.id}` });
+      }
+      const externalIds = (p.rev.data as { externalIds?: Record<string, string> }).externalIds ?? {};
+      for (const [key, value] of Object.entries(externalIds)) {
+        const dup = await one<{ id: string }>(
+          tx,
+          'SELECT e.id FROM entity_external_id x JOIN entity e ON e.id = x.entity_id WHERE x.key = $3 AND x.value = $4 AND e.type = $1 AND e.id <> $2 AND NOT e.deleted LIMIT 1',
+          [p.type, id, key, value],
+        );
+        if (dup) checks.push({ check: 'duplicates', status: 'warn', entityId: id, message: `${dup.id} has the same ${key} (${value}): the same item twice?` });
+      }
+    }
+    const author = await this.requireAccount(cs.author, tx);
+    if (author.is_bot) checks.push({ check: 'machine', status: 'warn', message: `made by ${author.display_name}, a bot` });
+    return checks;
+  }
+
+  // ------------------------------------------------------------ sets
+
+  private async setInfo(db: Db, id: EntityId): Promise<SetInfo | null> {
+    const main = await this.targetRev(db, null, id);
+    if (!main || main.data === null || main.entity_type !== 'set') return null;
+    const data = main.data as unknown as SetData;
+    return { id, policy: data.policy, keepers: data.keepers };
+  }
+
+  /** The sets an item belongs to: its own `sets`, else its parent's (a segment's text's unit's work's). */
+  async setsOf(db: Db, type: EntityType, data: Json, depth = 0): Promise<SetInfo[]> {
+    if (type === 'set') {
+      const parent = (data as unknown as SetData).parent;
+      const info = parent ? await this.setInfo(db, parent) : null;
+      return info ? [info] : [];
+    }
+    const own = (data as { sets?: EntityId[] }).sets;
+    if (own && own.length > 0) return (await Promise.all(own.map((id) => this.setInfo(db, id)))).filter((s): s is SetInfo => s !== null);
+    if (depth > 6) return [];
+    for (const field of SET_PARENTS[type] ?? []) {
+      const parentId = (data as Record<string, unknown>)[field];
+      if (typeof parentId !== 'string' || !isEntityId(parentId)) continue;
+      const parent = await this.targetRev(db, null, parentId);
+      if (parent?.data) return this.setsOf(db, parent.entity_type, parent.data, depth + 1);
+    }
+    return [];
+  }
+
+  private async setsOfProposals(db: Db, proposals: Proposal[]): Promise<SetInfo[]> {
+    const byId = new Map<string, SetInfo>();
+    for (const p of proposals) {
+      const data = p.rev.data ?? (p.baseRev !== null ? (await this.revision(p.baseRev, db))?.data : null) ?? null;
+      if (data === null) continue;
+      // A change to a set is judged by the set as it stands now (its keepers approve changes to it, stewards its policy).
+      const sets = await this.setsOf(db, p.type, data);
+      if (p.type === 'set') {
+        const itself = await this.setInfo(db, p.entityId);
+        if (itself) sets.push(itself);
+      }
+      for (const s of sets) byId.set(s.id, s);
+    }
+    return [...byId.values()];
+  }
+
+  // ------------------------------------------------------------ internals
+
+  private async credit(accountId: string, what: 'approved' | 'reverted'): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const column = what === 'approved' ? 'approved_count' : 'reverted_count';
+      const row = await one<Account>(tx, `UPDATE account SET ${column} = ${column} + 1 WHERE id = $1 RETURNING *`, [accountId]);
+      if (row && !row.is_bot) await tx.query('UPDATE account SET trust = $2 WHERE id = $1', [accountId, earnedTrust(row)]);
+    });
+  }
+
+  private async audit(db: Db, actor: string, action: string, targetKind: string, targetId: string, detail: Record<string, unknown> = {}): Promise<void> {
+    await db.query('INSERT INTO audit_log (actor, action, target_kind, target_id, detail) VALUES ($1, $2, $3, $4, $5)', [actor, action, targetKind, targetId, JSON.stringify(detail)]);
+  }
+
+  /** The audit log for one target, oldest first: every moderator action is logged. */
+  async auditLog(target: { kind: string; id: string }): Promise<Array<{ at: string; actor: string; action: string; detail: unknown }>> {
+    const { rows } = await this.db.query<{ at: string; actor: string; action: string; detail: unknown }>(
+      'SELECT at, actor, action, detail FROM audit_log WHERE target_kind = $1 AND target_id = $2 ORDER BY id',
+      [target.kind, target.id],
+    );
+    return rows;
+  }
+}
+
+/** Fields holding date keys, anywhere in the data, as [field path, key]. */
+function dateFields(data: Json): Array<[string, string]> {
+  const out: Array<[string, string]> = [];
+  const walk = (value: Json, path: string, key: string): void => {
+    if (typeof value === 'string' && ['date', 'dateEnd', 'born', 'passed'].includes(key)) out.push([path, value]);
+    else if (Array.isArray(value)) value.forEach((v, i) => walk(v, `${path}/${i}`, key));
+    else if (value && typeof value === 'object') for (const [k, v] of Object.entries(value)) walk(v, `${path}/${k}`, k);
+  };
+  walk(data, '', '');
+  return out;
+}
+
+/** `2026.40`: the ISO week-numbering year and week of a date. */
+export function isoWeekTag(date: Date): string {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+  return `${d.getUTCFullYear()}.${String(week).padStart(2, '0')}`;
+}

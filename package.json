@@ -1,0 +1,31 @@
+{
+  "name": "rebbehub",
+  "private": true,
+  "description": "RebbeHub: the open, community-edited index of Chabad Torah and media.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*",
+    "services/*"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b && tsc -p tsconfig.tests.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm test && npm run catalog:check",
+    "catalog:check": "tsx services/jobs/src/bin/rebbehub.ts schema-check",
+    "db:migrate": "tsx services/jobs/src/bin/rebbehub.ts migrate",
+    "dev:api": "tsx services/api/src/node.ts",
+    "rebbehub": "tsx services/jobs/src/bin/rebbehub.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "tsx": "^4.19.2",
+    "typescript": "~6.0.2",
+    "vitest": "^3.2.0"
+  }
+}

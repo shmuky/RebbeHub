@@ -1,0 +1,22 @@
+{
+  "name": "@rebbehub/hebrew",
+  "version": "0.1.0",
+  "description": "Hebrew dates and text for RebbeHub: the date key every event and letter is filed under, Hebrew numerals, date parsing in Hebrew and English, and the search normalisation shared with Sichos-Kodesh.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@hebcal/core": "^6.9.2"
+  }
+}

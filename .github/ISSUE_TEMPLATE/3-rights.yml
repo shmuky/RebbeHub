@@ -1,0 +1,35 @@
+name: Rights or takedown request
+description: For rightsholders and families (for example, of a teshura). A steward answers every request.
+title: "[Rights] "
+labels: ["rights"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A steward takes a file out of public view (keeping it privately preserved) as soon as a request is confirmed, and every such action is logged.
+        **Do not put private contact details here** - this page is public. Say how we may reach you, and a steward will contact you privately.
+  - type: input
+    id: item
+    attributes:
+      label: Which item or file?
+      description: A link or id (rh-…), or a description.
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: You are
+      options:
+        - The publisher or rightsholder
+        - A family member (for a teshura)
+        - Acting for one of the above
+        - Someone else who noticed a problem
+    validations:
+      required: true
+  - type: textarea
+    id: request
+    attributes:
+      label: What do you ask?
+      description: Take it down, credit it differently, link to the source instead, or something else.
+    validations:
+      required: true
