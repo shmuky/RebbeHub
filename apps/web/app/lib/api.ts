@@ -49,6 +49,16 @@ export interface FileInfo {
   url: string | null;
 }
 
+/** One page of a scan's text, as GET /v1/scans/:id/text gives it. */
+export interface ScanText {
+  scan: string;
+  page: number;
+  pages: number;
+  machine: boolean;
+  engine: { name: string; version: string } | null;
+  lines: Array<{ id: string; text: string; checked: boolean }>;
+}
+
 /** A project working through a gap, with its progress. */
 export interface Project {
   id: number;
@@ -221,6 +231,11 @@ export class RebbeHubApi {
   async events(options: { within?: string; day?: string | readonly string[]; dates?: readonly string[]; missing?: 'recordings' | 'texts'; limit?: number }) {
     const list = (v: string | readonly string[] | undefined) => (v === undefined ? undefined : typeof v === 'string' ? v : v.join(','));
     return (await this.get<{ items: Array<Entity & { recordings: number }> }>('/v1/events', { within: options.within, day: list(options.day), dates: list(options.dates), missing: options.missing, limit: options.limit })).items;
+  }
+
+  /** One page of a scan's text; null when the scan has not been read, or its text is withheld. */
+  scanText(scan: string, page: number) {
+    return this.maybe(this.get<ScanText>(`/v1/scans/${encodeURIComponent(scan)}/text`, { page }));
   }
 
   file(sha256: string) {

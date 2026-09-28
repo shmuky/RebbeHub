@@ -20,6 +20,7 @@ export default [
   route('admin', 'routes/admin.tsx'),
   route('review', 'routes/review.tsx'),
   route('missing', 'routes/missing.tsx'),
+  route('text/:scan', 'routes/text.tsx'),
   route('projects', 'routes/projects.tsx'),
   route('projects/:slug', 'routes/project.tsx'),
   route('signin', 'routes/signin.tsx'),

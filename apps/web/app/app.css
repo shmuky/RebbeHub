@@ -2657,3 +2657,46 @@ a.volume:hover {
 .project-row .row-main {
   width: 100%;
 }
+
+/* A scan's text, line by line; lines the machine read and nobody checked are marked. */
+.text-lines {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  line-height: 1.9;
+}
+
+.text-line {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px dotted var(--border);
+}
+
+.text-line.editing form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 0;
+}
+
+.text-line.editing input {
+  flex: 1 1 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+}
+
+.pager {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 12px 0;
+}

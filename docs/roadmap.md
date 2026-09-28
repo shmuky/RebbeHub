@@ -52,9 +52,19 @@ notifications by email, the reviewer's AI summary.
 
 ## Phases 3-6
 
-Uploads and dedup (the `file` tables, rights tiers and takedowns are in
-place), IIIF, OCR and community text, sync, and the network - as the plan
-describes.
+- **Uploads** ✅: "Add a recording" on farbrengen pages, "Add a scan" on
+  sefer pages; hashed and kept once, stored by their rights, added through
+  a suggestion (docs/rights.md, Uploads).
+- **Missing board and projects** ✅: `/missing` (farbrengens without a
+  recording or a text, sefarim without a scan) and `/projects` (a gap
+  worked through, with progress and what is next).
+- **Machine OCR and Fix this line** ✅: `rebbehub ocr` and the nightly
+  *Machine OCR* workflow read served scans with Tesseract (Hebrew) into a
+  machine layer; `/text/<scan>` shows it page by page, marked as machine
+  reading, and a signed-in reader fixes a line into the community layer,
+  reviewed like any suggestion.
+- Still to come: IIIF page images, uploaded OCR, comparing printings,
+  transcription and sync of recordings, webhooks and embeds.
 
 ## Importers still to write
 

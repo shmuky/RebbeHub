@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, getFile, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, fixLine, getFile, scanText, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
@@ -256,6 +256,32 @@ export function createApp(options: ApiOptions): Hono {
     if (!project) throw new CatalogError('not-found', 'no such project');
     await catalog.closeProject(project.id, by);
     return c.json({ ok: true });
+  });
+
+  // A scan's text, page by page: the community's where people fixed it, else the machine's, each line marked checked or not.
+  // Its words follow its scan's file: withheld when the file may not be served.
+  const scanTextAllowed = async (scan: EntityId) => {
+    const entity = await catalog.get(scan);
+    if (!entity || entity.type !== 'scan') throw new CatalogError('not-found', 'no such scan');
+    const file = await getFile(catalog.db, String((entity.data as { file?: string }).file ?? ''));
+    if (!file || !mayServe(file.rights_state)) throw new CatalogError('not-found', "this scan's text is withheld for its rights");
+  };
+
+  app.get('/v1/scans/:id/text', async (c) => {
+    const scan = entityId(c.req.param('id'));
+    await scanTextAllowed(scan);
+    const text = await scanText(catalog, scan, intParam(c.req.query('page'), 'page') ?? 1);
+    if (!text) throw new CatalogError('not-found', 'this scan has not been read yet');
+    return c.json(text);
+  });
+
+  app.post('/v1/scans/:id/text/fix', async (c) => {
+    const by = await signedIn(c);
+    const scan = entityId(c.req.param('id'));
+    await scanTextAllowed(scan);
+    const input = await body<{ page?: number; line?: string; text?: string }>(c);
+    if (typeof input.page !== 'number' || !input.line || typeof input.text !== 'string') throw new HttpError(400, 'give page, line and text');
+    return c.json(await fixLine(catalog, by, { scan, page: input.page, line: input.line, text: input.text }), 201);
   });
 
   app.get('/v1/stats', async (c) => c.json({ head: await catalog.head(), counts: await catalog.counts() }));

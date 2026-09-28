@@ -1,0 +1,58 @@
+name: Machine OCR
+
+# Reads the served scans that have no machine text yet, page by page, with
+# Tesseract (Hebrew), and adds each one's text as machine OCR: labelled as
+# such on the site until people check it line by line (services/jobs/src/ocr.ts).
+# Runs every night for a few scans, and on demand. Needs the DATABASE_URL
+# repository secret, as the import does (docs/deploy.md).
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      steward:
+        description: The steward who approves the machine's text
+        default: shmuly
+        required: true
+      limit:
+        description: How many scans to read this run
+        default: "5"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ocr-production
+  cancel-in-progress: false
+
+jobs:
+  ocr:
+    name: Read scans
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 120
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - name: Check it is configured
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "::error::Add the DATABASE_URL repository secret (see docs/deploy.md)."; exit 1; fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Tesseract (Hebrew) and Poppler
+        run: sudo apt-get update -q && sudo apt-get install -y -q tesseract-ocr tesseract-ocr-heb poppler-utils
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Read
+        env:
+          STEWARD: ${{ inputs.steward || 'shmuly' }}
+          LIMIT: ${{ inputs.limit || '5' }}
+        run: |
+          npm run rebbehub -- migrate
+          npm run rebbehub -- ocr --approve-as "$STEWARD" --limit "$LIMIT"

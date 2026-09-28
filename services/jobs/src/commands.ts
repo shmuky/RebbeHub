@@ -22,7 +22,7 @@ export async function openDatabase(database?: string): Promise<Db> {
   return /^postgres(ql)?:\/\//.test(target) ? connectPostgres(target) : openPGlite(target);
 }
 
-async function withCatalog<T>(ctx: Context, fn: (catalog: Catalog) => Promise<T>): Promise<T> {
+export async function withCatalog<T>(ctx: Context, fn: (catalog: Catalog) => Promise<T>): Promise<T> {
   const db = await openDatabase(ctx.database);
   try {
     const catalog = new Catalog(db);
