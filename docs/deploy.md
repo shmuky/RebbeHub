@@ -77,7 +77,13 @@ In **rebbehub-api → Settings → Variables and Secrets**:
 - `REPORT_SALT` - any long random string (`openssl rand -hex 32`); hashes
   reporters' addresses for rate limits;
 - `TURNSTILE_SECRET` - a [Turnstile](https://developers.cloudflare.com/turnstile/)
-  secret, for a captcha on anonymous reports.
+  secret, for a captcha on anonymous reports;
+- `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_TOKEN` - the same pair the
+  transcription uses (step 7), for search by meaning: the API turns each
+  question into a vector with Workers AI. Without them the site does not
+  offer "By idea";
+- `OAI_ADMIN_EMAIL` - the address OAI-PMH gives libraries for the
+  repository's administrators; without it, `/oai` is not offered.
 
 ### 6. Fill the catalog
 
@@ -128,6 +134,13 @@ npm run rebbehub -- import sichos-kodesh-occasions --from ../Sichos-Kodesh --app
 
 Both mark what the machine made as machine output on the site until
 people check it.
+
+- **Links, embeddings and citations** runs every night: it checks the
+  catalog's links for the health page (`/health`), and, once the two
+  Workers AI secrets above are set, reads items for search by meaning
+  (BGE-M3, a fraction of a cent per thousand items). **Run workflow**
+  also proposes the citations found in the texts as links, for keepers to
+  review ([operations](operations.md)).
 
 ## A domain of your own
 

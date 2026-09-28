@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server';
-import { Catalog } from '@rebbehub/core';
+import { Catalog, embedderFromEnv } from '@rebbehub/core';
 import { connectPostgres } from '@rebbehub/db';
 import { openPGlite } from '@rebbehub/db/pglite';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -16,6 +16,8 @@ import { authFor } from './auth.js';
  *   SITE_URL       the site signing in happens on (default http://localhost:5173)
  *   DEV_ACCOUNT    sign every request in as this account - local testing only,
  *                  refused unless the server listens on localhost
+ *   CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_AI_TOKEN   search by meaning (Workers AI)
+ *   OAI_ADMIN_EMAIL                              OAI-PMH at /oai
  */
 const url = process.env.DATABASE_URL;
 const db = url ? connectPostgres(url) : await openPGlite(process.env.PGLITE_DIR ?? '.data/pglite');
@@ -56,6 +58,8 @@ const app = createApp({
   filesBaseUrl: process.env.FILES_BASE_URL,
   files: publicFolder,
   uploads: filesDir ? { public: folder('public'), preservation: folder('preservation') } : undefined,
+  embedder: embedderFromEnv(process.env),
+  oai: process.env.OAI_ADMIN_EMAIL ? { adminEmail: process.env.OAI_ADMIN_EMAIL, siteUrl: process.env.SITE_URL } : undefined,
 });
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port, hostname });

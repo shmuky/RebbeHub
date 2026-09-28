@@ -6,6 +6,7 @@ import { AuthorPage, SetPage, WorkPage } from './LibraryPages.js';
 import { ItemLink, ItemList } from '../components/ItemLink.js';
 import { PageBody } from '../components/PageBody.js';
 import { PageTabs } from '../components/PageTabs.js';
+import { Relations } from '../components/Relations.js';
 import { ScanViewer } from '../components/ScanViewer.js';
 import { TextView } from '../components/TextView.js';
 import type { Entity } from '../lib/api.js';
@@ -361,6 +362,7 @@ export function ItemPage({ entity, view }: { entity: Entity; view: ItemView }) {
       <PageTabs entity={entity} lang={lang} current="page" />
       <Page entity={entity} view={view} lang={lang} />
       {entity.type === 'unit' ? null : <PageBody entity={entity} lang={lang} />}
+      <Relations relations={view.relations ?? []} refs={view.refs} lang={lang} />
       <div className="item-footer">
         <span>
           {t(lang, 'permanentLink')}: <Link to={href(`/${entity.id}`, lang)}><code>{entity.id}</code></Link>

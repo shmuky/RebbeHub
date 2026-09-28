@@ -1,11 +1,13 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, getDerivations, getFile, getPageFix, listWebhooks, recordingTranscript, scanText, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, getDerivations, getFile, getPageFix, listWebhooks, recordingTranscript, scanText, type ChangesetStatus, type Embedder, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
 import { adminRoutes } from './admin.js';
 import { uploadRoutes, type UploadOptions } from './uploads.js';
 import { OPENAPI } from './openapi.js';
+import { networkRoutes } from './network.js';
+import { oaiRoutes, type OaiOptions } from './oai.js';
 
 /**
  * The RebbeHub API. Reading needs nothing; reporting a problem needs no
@@ -35,6 +37,10 @@ export interface ApiOptions {
   /** Where the texts of seforim are kept (`texts/<sha256>` in the public bucket), and where they are first copied from: Sichos-Kodesh's published archive. */
   texts?: { store: FileStore; writer: { put(key: string, bytes: ArrayBuffer, mime: string): Promise<void> }; from?: FileStore };
   version?: string;
+  /** Turns questions into vectors for search by meaning (Workers AI); unset, that search says it is not available. */
+  embedder?: Embedder | null;
+  /** OAI-PMH for libraries, at /oai; unset (no administrators' address), it is not offered. */
+  oai?: OaiOptions;
 }
 
 /** A byte range asked for with `Range: bytes=…`. */
@@ -136,6 +142,8 @@ export function createApp(options: ApiOptions): Hono {
   if (options.auth) authRoutes(app, catalog, options.auth);
   adminRoutes(app, catalog, signedIn);
   uploadRoutes(app, catalog, signedIn, options.uploads);
+  networkRoutes(app, catalog, { embedder: options.embedder });
+  if (options.oai) oaiRoutes(app, catalog, options.oai);
 
   app.get('/', (c) => c.redirect('/v1'));
   app.get('/openapi.json', (c) => c.json(OPENAPI));

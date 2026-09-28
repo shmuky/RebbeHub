@@ -35,3 +35,23 @@ export {
 } from './auth.js';
 export { fixLine, fixParagraph, recordingTranscript, scanText, type ScanTextPage, type TranscriptView } from './text.js';
 export { MAX_HOOKS_PER_ACCOUNT, createWebhook, deleteWebhook, deliverWebhooks, listWebhooks, type WebhookRow } from './webhooks.js';
+export { bestLine, matchingWords, momentOf, queryWords, searchMoments, snippetOf, type Moment, type ParagraphMoment, type ScanLineMoment } from './moments.js';
+export {
+  EMBEDDED_TYPES,
+  EMBEDDING_DIMENSIONS,
+  EMBEDDING_MODEL,
+  embedItems,
+  embedderFromEnv,
+  embeddingCoverage,
+  embeddingInput,
+  hasPgvector,
+  itemsToEmbed,
+  nearest,
+  searchSimilar,
+  unitVector,
+  workersAiEmbedder,
+  type Embedder,
+  type SimilarItem,
+} from './semantic.js';
+export { CITATIONS_BOT, findCitations, proposeCitations, relationsOf, resolveCitation, type Citation, type CitationTarget, type RelationView } from './citations.js';
+export { catalogHealth, type CatalogHealth } from './health.js';

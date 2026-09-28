@@ -63,4 +63,10 @@ The git mirror and the dumps carry catalog facts always, file hashes but
 never files, and words only when their rights allow: a text copied from a
 source keeps that source's licence (site-terms and commercial texts are
 listed as withheld), community text is CC BY-SA, and OCR pages follow
-their scan's file.
+their scan's file. The Parquet dump carries exactly what the SQLite and
+JSON Lines dumps do.
+
+Machines that read the words (search by meaning, citations) send words
+to Workers AI only when they may be exported; citations found are facts
+(a link and the reference as written), so they are proposed from any
+text.

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { t, type Lang } from '../lib/i18n.js';
+import { clockOf, tn } from '../lib/i18nNetwork.js';
 import { href } from '../lib/links.js';
 import { useAccount } from '../lib/useAccount.js';
 import { usePlayer, type Track } from '../player/PlayerProvider.js';
@@ -11,6 +12,8 @@ import { usePlayer, type Track } from '../player/PlayerProvider.js';
  * paragraph being heard is marked and kept in view; tapping a paragraph
  * plays from there. Paragraphs the machine heard and nobody checked are
  * marked as such, and a signed-in listener fixes one as they hear it.
+ * A search hit opens here at its paragraph (`?at=`), lit up, with a
+ * button to play from the moment it is heard.
  */
 
 interface Paragraph {
@@ -39,7 +42,7 @@ async function send<T>(path: string, body?: unknown): Promise<T> {
   return json;
 }
 
-function Para({ recording, paragraph, active, onPlay, lang, canFix }: { recording: string; paragraph: Paragraph; active: boolean; onPlay: () => void; lang: Lang; canFix: boolean }) {
+function Para({ recording, paragraph, active, found, onPlay, lang, canFix }: { recording: string; paragraph: Paragraph; active: boolean; found: boolean; onPlay: () => void; lang: Lang; canFix: boolean }) {
   const ref = useRef<HTMLLIElement>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -47,6 +50,9 @@ function Para({ recording, paragraph, active, onPlay, lang, canFix }: { recordin
   useEffect(() => {
     if (active) ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [active]);
+  useEffect(() => {
+    if (found) ref.current?.scrollIntoView({ block: 'center' });
+  }, [found]);
 
   if (editing !== null)
     return (
@@ -76,10 +82,16 @@ function Para({ recording, paragraph, active, onPlay, lang, canFix }: { recordin
       </li>
     );
   return (
-    <li ref={ref} className={['transcript-para', active ? 'active' : '', paragraph.checked ? '' : 'unchecked'].filter(Boolean).join(' ')}>
+    <li ref={ref} id={`p-${paragraph.id}`} className={['transcript-para', active ? 'active' : '', found ? 'found' : '', paragraph.checked ? '' : 'unchecked'].filter(Boolean).join(' ')}>
       <button type="button" className="transcript-text" onClick={onPlay} dir="auto">
         {paragraph.content}
       </button>
+      {found ? (
+        <button type="button" className="link-button" onClick={onPlay}>
+          {tn(lang, 'playFromHere')}
+          {paragraph.startMs !== null ? ` (${clockOf(paragraph.startMs)})` : ''}
+        </button>
+      ) : null}
       {sent ? <span className="row-sub">{t(lang, 'lineSent')}</span> : null}
       {canFix && !sent ? (
         <button type="button" className="link-button" onClick={() => setEditing(paragraph.content)}>
@@ -93,6 +105,8 @@ function Para({ recording, paragraph, active, onPlay, lang, canFix }: { recordin
 export function Transcripts({ tracks, lang }: { tracks: Track[]; lang: Lang }) {
   const player = usePlayer();
   const account = useAccount();
+  const [params] = useSearchParams();
+  const found = params.get('at');
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const ids = tracks.map((tr) => tr.id).join(',');
 
@@ -129,6 +143,7 @@ export function Transcripts({ tracks, lang }: { tracks: Track[]; lang: Lang }) {
                   paragraph={p}
                   lang={lang}
                   canFix={Boolean(account)}
+                  found={p.id === found}
                   active={playing && p.startMs !== null && p.endMs !== null && nowMs >= p.startMs && nowMs < p.endMs}
                   onPlay={() => (playing ? player.seek((p.startMs ?? 0) / 1000) : player.play(tracks, index, (p.startMs ?? 0) / 1000))}
                 />

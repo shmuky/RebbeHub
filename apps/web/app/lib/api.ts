@@ -99,6 +99,56 @@ export interface Project {
   done: number;
 }
 
+/** Where a search's words are: a line on a scan's page, or a paragraph of a text or transcript (with when it is heard). */
+export type Moment =
+  | { kind: 'scan-line'; id: string; scan: string; publication: string | null; page: number; line: { id: string; text: string }; hits: string[]; machine: boolean }
+  | {
+      kind: 'paragraph';
+      id: string;
+      text: string;
+      textKind: string;
+      unit: string | null;
+      recording: string | null;
+      event: string | null;
+      startMs: number | null;
+      snippet: string;
+      hits: string[];
+      machine: boolean;
+    };
+
+/** One item found by meaning: always the machine's choice. */
+export interface SimilarItem {
+  score: number;
+  item: Entity;
+  moment: Moment | null;
+  machine: true;
+}
+
+/** One of an item's links, seen from the item. */
+export interface RelationLink {
+  id: string;
+  kind: string;
+  direction: 'in' | 'out';
+  other: string;
+  at: string | null;
+  note: string | null;
+  machine: boolean;
+}
+
+/** The health of the catalog, as GET /v1/health gives it. */
+export interface CatalogHealth {
+  years: Array<{ year: number; events: number; withRecording: number; withText: number; withTranscript: number }>;
+  sets: Array<{ id: string; path: string | null; name: { he: string; en?: string } | null; items: number; byType: Record<string, number> }>;
+  pages: { total: number; checked: number };
+  uncheckedScans: Array<{ scan: string; publication: string | null; title: { he: string; en?: string } | null; pages: number; checked: number }>;
+  recordings: { total: number; transcribed: number; synced: number };
+  unsynced: Array<{ id: string; path: string | null; title: { he: string; en?: string } | null; event: string | null }>;
+  openSuggestions: Array<{ id: number; title: string; author: string; authorName: string; authorIsBot: boolean; submittedAt: string }>;
+  links: { checked: number; dead: number; lastChecked: string | null };
+  deadLinks: Array<{ url: string; status: number | null; error: string | null; checkedAt: string; failingSince: string | null; entities: string[] }>;
+  embeddings: { embedded: number; waiting: number };
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -250,6 +300,25 @@ export class RebbeHubApi {
 
   search(q: string, options: { type?: string; limit?: number } = {}) {
     return this.get<{ query: string; date: { key: string; he: string; en: string } | null; results: Entity[] }>('/v1/search', { q, ...options });
+  }
+
+  /** Where the words are in the texts: lines on scans, paragraphs of transcripts. */
+  async moments(q: string, limit?: number) {
+    return (await this.get<{ moments: Moment[] }>('/v1/search/moments', { q, limit })).moments;
+  }
+
+  /** Search by meaning; `available` is false until it is set up. */
+  similar(q: string, options: { types?: string[]; limit?: number } = {}) {
+    return this.get<{ available: boolean; model?: string; results: SimilarItem[] }>('/v1/search/similar', { q, types: options.types?.join(','), limit: options.limit });
+  }
+
+  /** An item's links both ways: what it cites, where it was printed, what cites it. */
+  async relations(id: string) {
+    return (await this.get<{ relations: RelationLink[] }>(`/v1/entities/${encodeURIComponent(id)}/relations`)).relations;
+  }
+
+  health() {
+    return this.get<CatalogHealth>('/v1/health');
   }
 
   /** Events by date, each with how many recordings it has: within a year or month, on days of any year (`05-10`), or on exact dates. */

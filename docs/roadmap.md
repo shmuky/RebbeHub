@@ -24,11 +24,11 @@ stands. ✅ built and tested · 🟡 partly · ⬜ not yet.
 | Plan item | Status | Where |
 | --- | --- | --- |
 | Public read API (REST + OpenAPI) | ✅ | `services/api` |
-| Search (built-in Postgres full text over normalised names, text and dates; Hebrew and English date queries) | 🟡 | `core` search, the site's `/search`; Meilisearch when the catalog outgrows it |
+| Search (built-in Postgres full text over normalised names, text and dates; Hebrew and English date queries); hits in scans open at the lit-up line, in transcripts at the moment heard | ✅ | `core` search and `moments.ts`, the site's `/search`; Meilisearch only if the catalog outgrows it |
 | Permanent links (ids, paths, redirects) | ✅ | `core`, `api /v1/resolve` |
 | Git mirror (JSON per item, texts as Markdown, sync as WebVTT; one git commit per merge) | ✅ | `packages/mirror`, `rebbehub mirror` |
 | First dump (signed SQLite + JSON Lines; Sichos-Kodesh release) | ✅ | `rebbehub edition`, `rebbehub dump` |
-| Parquet dump | ⬜ | with the first public edition |
+| Parquet dump | ✅ | `rebbehub dump` writes `rebbehub-<tag>.parquet` beside SQLite and JSON Lines |
 | Public site: sets, events calendar, item and publication pages, search, permanent links | ✅ | `apps/web` (React Router 7, server-rendered; Node or Workers) |
 | The site as Sichos-Kodesh's app works: this week first (today's parsha, the kvius year, every year), farbrengen pages, one player across pages, smart search by parsha, chag, date and year | ✅ | `apps/web/app/routes/home.tsx`, `views/EventPage.tsx`, `player/`, `lib/smartSearch.ts` |
 | Audio player (recordings by part, video links at the moment) | ✅ | `apps/web/app/components/AudioPlayer.tsx`; words highlighted as spoken come with sync (phase 5) |
@@ -79,8 +79,25 @@ notifications by email, the reviewer's AI summary.
   paragraph, and take fixes.
 - **Webhooks and embeds** ✅: every merge posted, signed, to registered
   addresses; `/embed/<id>` for other sites ([api](api.md)).
+- **Search by meaning** ✅: "By idea" on `/search` finds sichos and
+  passages about an idea in other words (BGE-M3 embeddings on Workers AI,
+  `rebbehub embed`; pgvector where the database has it), every result
+  marked as the machine's choice. Off until `CLOUDFLARE_ACCOUNT_ID` and
+  `CLOUDFLARE_AI_TOKEN` are set ([operations](operations.md)).
+- **Citation cross-linking** ✅: `rebbehub citations` finds citations in
+  texts, scans' pages and pages of sichos (`לקו"ש חי"ב`, `אג"ק ח"ג`,
+  sichos by date) and proposes them as Relations in suggestions by the
+  citations bot; every page shows "Printed in…", "Based on this
+  farbrengen", "Cited by…", marked as found by machine until checked.
+- **Health** ✅: `/health` shows coverage per year and set, pages nobody
+  has checked, recordings not synced, links that no longer answer
+  (`rebbehub check-links`, nightly) and the suggestions waiting longest.
+- **OAI-PMH** ✅: `/oai` on the API gives libraries Dublin Core records,
+  harvested by date and set, deletions included ([api](api.md)); on once
+  `OAI_ADMIN_EMAIL` is set.
 - Still to come: IIIF page images, uploaded OCR, comparing printings,
-  word-level sync, semantic search, translations, mirrors.
+  word-level sync, translations, mirrors; letters reproduced in teshuros
+  found by text (cross-linking reads citations only).
 
 ## Importers still to write
 

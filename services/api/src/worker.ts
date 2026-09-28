@@ -1,4 +1,4 @@
-import { Catalog, deliverWebhooks } from '@rebbehub/core';
+import { Catalog, deliverWebhooks, embedderFromEnv } from '@rebbehub/core';
 import { connectPostgres } from '@rebbehub/db';
 import { createApp, turnstileVerifier, type FileStore } from './app.js';
 import { authFor } from './auth.js';
@@ -8,7 +8,9 @@ import { authFor } from './auth.js';
  * bytes from the public R2 bucket. Each request gets its own connection,
  * which Hyperdrive pools. Configured in wrangler.toml; secrets REPORT_SALT,
  * for captchas on reports TURNSTILE_SECRET, and for Google sign-in
- * GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.
+ * GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET; for search by meaning
+ * CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_AI_TOKEN; for OAI-PMH the
+ * administrators' address OAI_ADMIN_EMAIL.
  */
 interface R2ObjectBody {
   body: ReadableStream;
@@ -36,6 +38,11 @@ interface Env {
   /** Google sign-in's client (secrets); without both, sign-in is by passkey alone. */
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  /** Workers AI, for search by meaning (a token allowed only Workers AI); without both, that search is not offered. */
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_AI_TOKEN?: string;
+  /** The address OAI-PMH names for the repository's administrators; without it, /oai is not offered. */
+  OAI_ADMIN_EMAIL?: string;
 }
 
 function r2Writer(bucket: R2Bucket) {
@@ -72,6 +79,8 @@ export default {
       files: env.FILES_PUBLIC ? r2Store(env.FILES_PUBLIC) : undefined,
       texts: env.FILES_PUBLIC ? { store: r2Store(env.FILES_PUBLIC), writer: r2Writer(env.FILES_PUBLIC), from: env.SK_ARCHIVE ? r2Store(env.SK_ARCHIVE) : undefined } : undefined,
       uploads: env.FILES_PUBLIC && env.FILES_PRESERVATION ? { public: r2Writer(env.FILES_PUBLIC), preservation: r2Writer(env.FILES_PRESERVATION) } : undefined,
+      embedder: embedderFromEnv({ CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_AI_TOKEN: env.CLOUDFLARE_AI_TOKEN }),
+      oai: env.OAI_ADMIN_EMAIL ? { adminEmail: env.OAI_ADMIN_EMAIL, siteUrl: env.SITE_URL } : undefined,
       auth: env.SITE_URL ? authFor(env.SITE_URL, { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }) : undefined,
     });
     try {
