@@ -22,6 +22,7 @@ import {
   linkGoogle,
   passkeyUsed,
   passkeysOf,
+  renamePerson,
   saveChallenge,
   sessionPerson,
   startSession,
@@ -243,6 +244,56 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
     await addPasskey(db, { ...credential, personId: person.id });
     await signIn(c, person.id);
     return c.json({ person }, 201);
+  });
+
+  // A signed-in person adds a passkey (say, after coming in with Google, or for another device).
+  const signedIn = async (c: Context) => {
+    const token = readSession(c);
+    return token ? sessionPerson(db, token) : null;
+  };
+
+  app.post('/v1/auth/passkey/add/options', async (c) => {
+    const person = await signedIn(c);
+    if (!person) return refuse(c, 401, 'sign in first');
+    const existing = await passkeysOf(db, person.id);
+    const options = await generateRegistrationOptions({
+      rpName: auth.rpName,
+      rpID: auth.rpId,
+      userName: person.displayName,
+      userDisplayName: person.displayName,
+      userID: new TextEncoder().encode(person.id),
+      attestationType: 'none',
+      excludeCredentials: existing.map((p) => ({ id: p.credentialId })),
+      authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' },
+    });
+    const challengeId = await saveChallenge(db, options.challenge, 'register');
+    return c.json({ challengeId, options });
+  });
+
+  app.post('/v1/auth/passkey/add/verify', async (c) => {
+    const person = await signedIn(c);
+    if (!person) return refuse(c, 401, 'sign in first');
+    const input = (await c.req.json().catch(() => ({}))) as { challengeId?: string; response?: RegistrationResponseJSON };
+    if (!input.challengeId || !input.response) return refuse(c, 400, 'give challengeId and response');
+    const challenge = await takeChallenge(db, input.challengeId, 'register');
+    if (!challenge) return refuse(c, 400, 'that request has expired; try again');
+    const credential = await verify.registration({ response: input.response, challenge }).catch(() => null);
+    if (!credential) return refuse(c, 400, 'the passkey could not be verified');
+    if (await findPasskey(db, credential.credentialId)) return refuse(c, 400, 'this passkey already belongs to an account');
+    await addPasskey(db, { ...credential, personId: person.id });
+    return c.json({ passkeys: await passkeysOf(db, person.id) }, 201);
+  });
+
+  // The name a person goes by, next to their suggestions and fixes.
+  app.post('/v1/auth/name', async (c) => {
+    const person = await signedIn(c);
+    if (!person) return refuse(c, 401, 'sign in first');
+    const { name } = (await c.req.json().catch(() => ({}))) as { name?: unknown };
+    const displayName = cleanDisplayName(name);
+    if (!displayName) return refuse(c, 400, 'a name of 1 to 60 characters');
+    await renamePerson(db, person.id, displayName);
+    await catalog.createAccount({ id: person.id, displayName });
+    return c.json({ person: { id: person.id, displayName } });
   });
 
   // Signing in: the browser offers the passkeys it holds for this site, and the person picks one.

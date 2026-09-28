@@ -1,3 +1,4 @@
+import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import type { Route } from './+types/account';
@@ -7,7 +8,7 @@ import { pageMeta } from '../lib/seo.js';
 import { refreshAccount, useAccount, useGoogleSignIn } from '../lib/useAccount.js';
 import { useLang } from '../lib/useLang.js';
 
-/** A person's own page: their name, their passkeys and Google accounts, and signing out. Filled in by the browser; the page itself is the same for everyone. */
+/** A person's own page: their name (which they can change), their passkeys (and adding one), their Google account, and signing out. Filled in by the browser; the page itself is the same for everyone. */
 export function loader({ request }: Route.LoaderArgs) {
   return { lang: langFrom(request), siteUrl: new URL(request.url).origin };
 }
@@ -22,7 +23,46 @@ export default function Account() {
   const account = useAccount();
   const google = useGoogleSignIn();
   const [leaving, setLeaving] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const when = (iso: string) => new Intl.DateTimeFormat(lang === 'he' ? 'he-IL' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso));
+
+  async function post<T>(path: string, body: unknown = {}): Promise<T> {
+    const response = await fetch(`/_/auth/${path}`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', accept: 'application/json' }, body: JSON.stringify(body) });
+    const json = (await response.json().catch(() => ({}))) as T & { message?: string };
+    if (!response.ok) throw new Error(json.message ?? response.statusText);
+    return json;
+  }
+
+  async function act(work: () => Promise<void>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await work();
+      refreshAccount();
+    } catch (e) {
+      // Closing the device's prompt is changing one's mind, not a failure.
+      setError(e instanceof Error && e.name === 'NotAllowedError' ? t(lang, 'signInCancelled') : e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const saveName = (event: React.FormEvent) => {
+    event.preventDefault();
+    void act(async () => {
+      await post('name', { name: editing });
+      setEditing(null);
+    });
+  };
+
+  const addPasskey = () =>
+    act(async () => {
+      const { challengeId, options } = await post<{ challengeId: string; options: Parameters<typeof startRegistration>[0]['optionsJSON'] }>('passkey/add/options');
+      const response = await startRegistration({ optionsJSON: options });
+      await post('passkey/add/verify', { challengeId, response });
+    });
 
   async function signOut() {
     setLeaving(true);
@@ -43,8 +83,35 @@ export default function Account() {
     );
   return (
     <>
-      <h1>{account.person.displayName}</h1>
+      {editing === null ? (
+        <h1>
+          {account.person.displayName}{' '}
+          <button type="button" className="link-button" onClick={() => setEditing(account.person.displayName)}>
+            {t(lang, 'changeName')}
+          </button>
+        </h1>
+      ) : (
+        <form onSubmit={saveName} className="signin-form">
+          <label htmlFor="name">{t(lang, 'nameToShow')}</label>
+          <input id="name" value={editing} onChange={(e) => setEditing(e.target.value)} maxLength={60} required autoFocus autoComplete="name" dir="auto" />
+          <p className="row-sub">{t(lang, 'nameToShowHint')}</p>
+          <p>
+            <button type="submit" disabled={busy || !editing.trim()}>
+              {t(lang, 'save')}
+            </button>{' '}
+            <button type="button" className="secondary" onClick={() => setEditing(null)}>
+              {t(lang, 'cancel')}
+            </button>
+          </p>
+        </form>
+      )}
       <p className="subtitle">{t(lang, 'accountIntro')}</p>
+
+      {error ? (
+        <p className="note" role="alert">
+          {error}
+        </p>
+      ) : null}
 
       <section>
         <h2 className="section-header">{t(lang, 'yourPasskeys')}</h2>
@@ -61,6 +128,12 @@ export default function Account() {
             </li>
           ))}
         </ul>
+        {account.passkeys.length === 0 ? <p>{t(lang, 'noPasskeysYet')}</p> : null}
+        {typeof window === 'undefined' || browserSupportsWebAuthn() ? (
+          <button type="button" className="secondary" onClick={addPasskey} disabled={busy}>
+            {busy ? t(lang, 'waiting') : t(lang, account.passkeys.length ? 'addAnotherPasskey' : 'addPasskey')}
+          </button>
+        ) : null}
       </section>
 
       {google || account.googleAccounts.length ? (
@@ -80,7 +153,7 @@ export default function Account() {
               </li>
             ))}
           </ul>
-          {google ? (
+          {google && account.googleAccounts.length === 0 ? (
             <p>
               <a href="/_/auth/google/start?return=%2Faccount">{t(lang, 'addGoogle')}</a> <span className="row-sub">{t(lang, 'addGoogleText')}</span>
             </p>

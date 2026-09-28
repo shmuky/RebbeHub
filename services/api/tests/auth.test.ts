@@ -112,6 +112,30 @@ describe('passkey sign-in', () => {
     expect((await call('POST', '/v1/suggestions', { body: { title: 'x' }, cookie, origin: 'https://elsewhere.test' })).status).toBe(401);
   });
 
+  it('adds a passkey to the account signed in, and not without one', async () => {
+    const { cookie, body } = await register('Mendy', 'cred-1');
+    expect((await call('POST', '/v1/auth/passkey/add/options')).status).toBe(401);
+    const options = await call('POST', '/v1/auth/passkey/add/options', { cookie });
+    expect(options.body.options.excludeCredentials).toEqual([expect.objectContaining({ id: 'cred-1' })]);
+    const added = await call('POST', '/v1/auth/passkey/add/verify', { cookie, body: { challengeId: options.body.challengeId, response: { id: 'cred-2' } } });
+    expect(added.status).toBe(201);
+    expect(added.body.passkeys).toHaveLength(2);
+    const again = await call('POST', '/v1/auth/passkey/add/options', { cookie });
+    expect((await call('POST', '/v1/auth/passkey/add/verify', { cookie, body: { challengeId: again.body.challengeId, response: { id: 'cred-2' } } })).status).toBe(400);
+
+    const start = async () => (await call('POST', '/v1/auth/passkey/sign-in/options')).body.challengeId as string;
+    const signedIn = await call('POST', '/v1/auth/passkey/sign-in/verify', { body: { challengeId: await start(), response: { id: 'cred-2', ok: true } } });
+    expect(signedIn.body.person.id).toBe(body.person.id);
+  });
+
+  it('changes the name a person goes by', async () => {
+    const { cookie } = await register('Mendy');
+    expect((await call('POST', '/v1/auth/name', { body: { name: 'Menachem Mendel' } })).status).toBe(401);
+    expect((await call('POST', '/v1/auth/name', { cookie, body: { name: ' ' } })).status).toBe(400);
+    expect((await call('POST', '/v1/auth/name', { cookie, body: { name: '  Menachem   Mendel ' } })).body.person.displayName).toBe('Menachem Mendel');
+    expect((await call('GET', '/v1/auth/me', { cookie })).body.person.displayName).toBe('Menachem Mendel');
+  });
+
   it('lets a signed-in person make a suggestion, as the account the catalog knows them by', async () => {
     const created = await register('Mendy Cohen');
     const suggestion = await call('POST', '/v1/suggestions', { body: { title: 'A fix' }, cookie: created.cookie });
