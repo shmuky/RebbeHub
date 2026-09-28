@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { ocrCommand } from '../ocrCommand.js';
-import { transcribeCommand } from '../transcribeCommand.js';
+import { alignCommand, transcribeCommand } from '../transcribeCommand.js';
 import {
   accountCommand,
   crawlLibraryCommand,
@@ -37,13 +37,18 @@ const HELP = `rebbehub - RebbeHub's command line
   rebbehub edition --by <steward> [--tag 2026.40] [--notes <text>]
   rebbehub dump --tag <tag> --out <folder> [--key <key.json>]
   rebbehub keygen --out <key.json>
-  rebbehub ocr --approve-as <steward> [--scan <id>] [--limit <n>] [--files <url>]
+  rebbehub ocr --approve-as <steward> [--scan <id>] [--limit <n>] [--files <url>] [--reread]
                                                 machine OCR of served scans that have none yet;
-                                                files from <url>/objects/<sha256> (default the live API)
+                                                files from <url>/objects/<sha256> (default the live API);
+                                                --reread: scans read by an older engine, read again
+                                                (lines people checked are kept)
   rebbehub transcribe --approve-as <steward> [--recording <id>] [--limit <n>] [--linked] [--files <url>]
                                                 machine transcripts, with sync, of recordings that have
                                                 none (Whisper on Workers AI: CLOUDFLARE_ACCOUNT_ID and
                                                 CLOUDFLARE_AI_TOKEN); --linked also those heard elsewhere
+  rebbehub align --approve-as <steward> [--recording <id>] [--limit <n>] [--linked] [--files <url>]
+                                                word timings for transcripts that have none, and the
+                                                farbrengen's hanacha synced paragraph by paragraph
   rebbehub reading-copies make --from <Sichos-Kodesh checkout> --work <folder> [--shard 0/4] [--limit <n>]
                   [--archive <objects.json>] [--source-bucket sichos-kodesh-archive] [--bucket rebbehub-public]
   rebbehub reading-copies publish --from <Sichos-Kodesh checkout> --work <folder> [--bucket rebbehub-public]
@@ -94,6 +99,7 @@ const { values, positionals } = parseArgs({
     scan: { type: 'string' },
     recording: { type: 'string' },
     linked: { type: 'boolean' },
+    reread: { type: 'boolean' },
     files: { type: 'string' },
     minutes: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
@@ -130,7 +136,10 @@ try {
       await crawlLibraryCommand(ctx, { from: need(values.from, 'from'), out: need(values.out, 'out'), minutes: number(values.minutes) });
       break;
     case 'ocr':
-      await ocrCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), scan: values.scan, limit: number(values.limit), files: values.files });
+      await ocrCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), scan: values.scan, limit: number(values.limit), files: values.files, reread: values.reread });
+      break;
+    case 'align':
+      await alignCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files });
       break;
     case 'transcribe':
       await transcribeCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files });

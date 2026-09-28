@@ -126,6 +126,12 @@ npm run rebbehub -- import sichos-kodesh-occasions --from ../Sichos-Kodesh --app
   - `CLOUDFLARE_AI_TOKEN`: a Cloudflare API token with **Workers AI:
     Read** and **Workers AI: Edit** only.
 
+  Its **align** box then runs `rebbehub align` too, with the same keys:
+  word timings for transcripts that have none (made before word timings,
+  or corrected since) and the farbrengen's hanacha synced paragraph by
+  paragraph where the catalog has its text. Without the two secrets
+  neither runs, and the site shows paragraph-level sync only.
+
 Both mark what the machine made as machine output on the site until
 people check it.
 

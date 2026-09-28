@@ -33,5 +33,27 @@ export {
   type Person,
   type StoredPasskey,
 } from './auth.js';
-export { fixLine, fixParagraph, recordingTranscript, scanText, type ScanTextPage, type TranscriptView } from './text.js';
+export { OCR_UPLOAD_LIMITS, chooseSeed, confirmPage, fixLine, pageLevel, reseedLines, scanProgress, scanText, uploadOcr, type ScanTextLayer, type ScanTextPage } from './text.js';
+export { parseAlto, parseHocr, parseOcr, parsePlainText, sniffOcrFormat, type OcrFormat, type OcrPage } from './ocrFormats.js';
+export {
+  alignAroundLocks,
+  alignParagraphs,
+  alignWords,
+  anchorSync,
+  confirmSync,
+  fixParagraph,
+  hanachaOf,
+  hanachaSync,
+  heardWords,
+  recordingTranscript,
+  remapper,
+  type HeardWord,
+  type Timed,
+  type TranscriptParagraph,
+  type TranscriptView,
+  type WordTiming,
+} from './sync.js';
+export { comparePrintings, diffWords, printingText, printingsOf, type DiffRun, type Printing } from './compare.js';
+export { matchWords, wordKey, words, type Word } from './words.js';
+export { CLAIM_HOURS, claimNext, focusCounts, projectTodo, releaseClaim, type ProjectItem } from './projectWork.js';
 export { MAX_HOOKS_PER_ACCOUNT, createWebhook, deleteWebhook, deliverWebhooks, listWebhooks, type WebhookRow } from './webhooks.js';

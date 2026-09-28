@@ -39,6 +39,8 @@ interface PlayerApi extends PlayerState {
   prev: () => void;
   seek: (seconds: number) => void;
   close: () => void;
+  /** Where the audio is this moment, in seconds: finer than `time`, which the browser updates a few times a second. */
+  now: () => number;
 }
 
 const PlayerContext = createContext<PlayerApi | null>(null);
@@ -173,7 +175,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [current, next, prev, seek, state.index, state.queue.length]);
 
-  const api = useMemo<PlayerApi>(() => ({ ...state, current, play, toggle, next, prev, seek, close }), [state, current, play, toggle, next, prev, seek, close]);
+  const now = useCallback(() => audio.current?.currentTime ?? 0, []);
+  const api = useMemo<PlayerApi>(() => ({ ...state, current, play, toggle, next, prev, seek, close, now }), [state, current, play, toggle, next, prev, seek, close, now]);
 
   return (
     <PlayerContext.Provider value={api}>

@@ -390,3 +390,37 @@ describe('the wiki model', () => {
     expect((await call('GET', `/v1/entities/${event}/talk`)).body.talk[0]).toMatchObject({ hidden: true, body: null });
   });
 });
+
+describe('text and sync over the API', () => {
+  it("takes someone's OCR, proofreads a page, and hands out pages of a proofreading project", async () => {
+    await registerFile(catalog.db, { sha256: 'e'.repeat(64), bytes: 10, mime: 'application/pdf', source: 'contribution', licence: 'cc0', held: true });
+    const publication = await add(catalog, 'mendy', 'keeper', 'publication', { kind: 'book-volume', title: { he: 'כרך' }, sets: [set] });
+    const scan = await add(catalog, 'mendy', 'keeper', 'scan', { publication, file: 'e'.repeat(64), completeness: 'complete', sets: [set] });
+    expect((await call('GET', `/v1/scans/${scan}/text`)).status).toBe(404);
+
+    const upload = { content: 'שורה א\nשורה ב\fעמוד ב', engine: { name: 'Kraken', version: '5' } };
+    expect((await call('POST', `/v1/scans/${scan}/ocr`, { body: upload })).status).toBe(401);
+    expect((await call('POST', `/v1/scans/${scan}/ocr`, { as: 'chaim', body: { content: 'x' } })).status).toBe(400);
+    const made = await call('POST', `/v1/scans/${scan}/ocr`, { as: 'chaim', body: upload });
+    expect(made).toMatchObject({ status: 201, body: { pages: 2, lines: 3, status: 'open' } });
+    await call('POST', `/v1/suggestions/${made.body.id}/approve`, { as: 'keeper' });
+
+    const page = (await call('GET', `/v1/scans/${scan}/text?page=1`)).body;
+    expect(page).toMatchObject({ pages: 2, level: 0, engine: { name: 'Kraken' } });
+    expect(page.layers.map((l: { kind: string }) => l.kind).sort()).toEqual(['community', 'uploaded-ocr']);
+    const confirmed = await call('POST', `/v1/scans/${scan}/text/confirm`, { as: 'mendy', body: { page: 1 } });
+    expect(confirmed.status).toBe(201);
+    await call('POST', `/v1/suggestions/${confirmed.body.id}/approve`, { as: 'keeper' });
+    expect((await call('GET', `/v1/scans/${scan}/progress`)).body).toEqual({ pages: 2, levels: [1, 0] });
+
+    expect((await call('POST', '/v1/projects', { as: 'keeper', body: { slug: 'proofread', name: 'הגהה', set, missing: 'proofreading', scan } })).status).toBe(201);
+    expect((await call('GET', '/v1/projects/proofread')).body).toMatchObject({ project: { total: 2, done: 1 }, todo: [{ item: 'page:2' }] });
+    expect((await call('POST', '/v1/projects/proofread/next', { as: 'chaim' })).body.item).toMatchObject({ item: 'page:2', claimedBy: 'chaim' });
+    expect((await call('POST', '/v1/projects/proofread/next', { as: 'mendy' })).body.item).toBeNull();
+    await call('POST', '/v1/projects/proofread/release', { as: 'chaim', body: { item: 'page:2' } });
+    expect((await call('POST', '/v1/projects/proofread/next', { as: 'mendy' })).body.item).toMatchObject({ item: 'page:2' });
+
+    expect((await call('GET', '/v1/compare?a=text:x')).status).toBe(400);
+    expect((await call('GET', `/v1/compare?a=scan:${scan}:1-1&b=scan:${scan}:2-2`)).body).toMatchObject({ removed: 3, added: 1, same: 1 }); // "ב" is on both pages
+  });
+});

@@ -3,7 +3,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import type { Catalog, Json } from '@rebbehub/core';
+import { alignAroundLocks, alignParagraphs, alignWords, hanachaOf, heardWords, recordingTranscript, type Catalog, type HeardWord, type Json } from '@rebbehub/core';
 import { orderKeys, type EntityId, type Language } from '@rebbehub/model';
 
 /**
@@ -11,7 +11,8 @@ import { orderKeys, type EntityId, type Language } from '@rebbehub/model';
  * automatically: transcribe, then align"). A recording is transcribed by
  * machine into a transcript text of paragraphs, each synced to where it is
  * heard: a `transcript` text, its segments, and a paragraph-level
- * alignment whose spans the player follows. Everything is marked as
+ * alignment whose spans the player follows, word by word where the
+ * recogniser gave word times. Everything is marked as
  * machine output (proofread 0, `origin.by`) until a person checks it; the
  * bot never merges its own work, a steward does.
  */
@@ -25,6 +26,8 @@ export interface Heard {
   startMs: number;
   endMs: number;
   text: string;
+  /** Each word's own time, when the recogniser gives them. */
+  words?: HeardWord[];
 }
 
 export interface Transcriber {
@@ -56,12 +59,21 @@ export function workersAiWhisper(input: { accountId: string; token: string; mode
           headers: { Authorization: `Bearer ${input.token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ audio: bytes.toString('base64'), language, task: 'transcribe' }),
         });
-        const body = (await response.json()) as { success?: boolean; errors?: unknown; result?: { segments?: Array<{ start: number; end: number; text: string }>; text?: string } };
+        type Word = { word: string; start: number; end: number };
+        const body = (await response.json()) as { success?: boolean; errors?: unknown; result?: { segments?: Array<{ start: number; end: number; text: string; words?: Word[] }>; words?: Word[]; text?: string } };
         if (!response.ok || !body.success) throw new Error(`Workers AI: ${response.status} ${JSON.stringify(body.errors ?? body)}`);
         const offset = i * PIECE_SECONDS * 1000;
-        for (const s of body.result?.segments ?? []) {
+        // Whisper gives each word's time too (in its segments, or for the older model at the top); kept for word-level sync.
+        const toWords = (ws: Word[] | undefined): HeardWord[] | undefined =>
+          ws?.length ? ws.filter((w) => w.word?.trim()).map((w) => ({ text: w.word.trim(), startMs: offset + Math.round(w.start * 1000), endMs: offset + Math.round(w.end * 1000) })) : undefined;
+        const segments = body.result?.segments ?? [];
+        for (const s of segments) {
           const text = s.text.trim();
-          if (text) heard.push({ startMs: offset + Math.round(s.start * 1000), endMs: offset + Math.round(s.end * 1000), text });
+          if (text) heard.push({ startMs: offset + Math.round(s.start * 1000), endMs: offset + Math.round(s.end * 1000), text, words: toWords(s.words) });
+        }
+        if (!segments.length && body.result?.text?.trim()) {
+          const words = toWords(body.result.words);
+          heard.push({ startMs: words?.[0]?.startMs ?? offset, endMs: words?.at(-1)?.endMs ?? offset + PIECE_SECONDS * 1000, text: body.result.text.trim(), words });
         }
       }
       return heard;
@@ -79,8 +91,9 @@ export function paragraphs(heard: Heard[], options: { targetMs?: number; pauseMs
     if (last && h.startMs - last.endMs < pause && last.endMs - last.startMs < target) {
       last.text = `${last.text} ${h.text}`;
       last.endMs = h.endMs;
+      last.words = last.words && h.words ? [...last.words, ...h.words] : undefined;
     } else {
-      out.push({ ...h });
+      out.push({ ...h, words: h.words ? [...h.words] : undefined });
     }
   }
   return out;
@@ -137,21 +150,156 @@ export async function transcribeRecordings(
         log(`${rec.id}: nothing heard`);
         continue;
       }
+      // Word timings: each paragraph's words matched to the words as they were heard.
+      const timed = paras.some((p) => p.words?.length) ? alignWords(paras.map((p) => p.text), heardWords(paras)) : null;
       const suggestion = await catalog.createChangeset(TRANSCRIBE_BOT, { title: `Machine transcript of ${rec.id} (${input.transcriber.version})` });
       const text = await catalog.putRevision(suggestion.id, TRANSCRIBE_BOT, { type: 'text', data: { kind: 'transcript', recording: rec.id, language: rec.language } as Json });
       const alignment = await catalog.putRevision(suggestion.id, TRANSCRIBE_BOT, {
         type: 'alignment',
-        data: { recording: rec.id, text, granularity: 'paragraph', engine: { name: input.transcriber.name, version: input.transcriber.version } } as Json,
+        data: { recording: rec.id, text, granularity: timed ? 'word' : 'paragraph', engine: { name: input.transcriber.name, version: input.transcriber.version } } as Json,
       });
       const orders = orderKeys(paras.length);
       for (const [i, p] of paras.entries()) {
         const segment = await catalog.putRevision(suggestion.id, TRANSCRIBE_BOT, { type: 'segment', data: { text, order: orders[i]!, kind: 'paragraph', content: p.text, proofread: 0, origin } as Json });
-        await catalog.putRevision(suggestion.id, TRANSCRIBE_BOT, { type: 'alignment-span', data: { alignment, segment, startMs: p.startMs, endMs: p.endMs, origin } as Json });
+        const words = timed?.[i]?.words;
+        await catalog.putRevision(suggestion.id, TRANSCRIBE_BOT, { type: 'alignment-span', data: { alignment, segment, startMs: p.startMs, endMs: p.endMs, ...(words ? { words } : {}), origin } as unknown as Json });
       }
       await catalog.submit(suggestion.id, TRANSCRIBE_BOT);
       await catalog.merge(suggestion.id, input.approveAs, {}, 'Machine transcript, labelled as such until checked');
       log(`${rec.id}: ${paras.length} paragraphs`);
       done.push({ recording: rec.id, paragraphs: paras.length });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+  return done;
+}
+
+export const ALIGN_BOT = 'bot:align';
+
+/**
+ * Recordings whose transcript has no word timings yet (it was transcribed
+ * before them, or a person changed its words since), and recordings whose
+ * farbrengen's hanacha is in the catalog but not yet synced to them.
+ */
+export async function recordingsToAlign(catalog: Catalog, options: { recording?: EntityId; limit?: number; linked?: boolean } = {}): Promise<Array<{ id: EntityId; file: string | null; url: string | null; language: Language }>> {
+  const params: unknown[] = [];
+  const only = options.recording ? `AND e.id = $${params.push(options.recording)}` : '';
+  const heardHere = "EXISTS (SELECT 1 FROM file f WHERE f.sha256 = r.data->>'file' AND f.storage_tier = 'public' AND f.rights_state IN ('open', 'credit'))";
+  const { rows } = await catalog.db.query<{ id: EntityId; file: string | null; url: string | null; language: Language | null }>(
+    `SELECT e.id, r.data->>'file' AS file, r.data->>'url' AS url, r.data->>'language' AS language
+     FROM entity e JOIN revision r ON r.id = e.main_rev
+     WHERE e.type = 'recording' AND NOT e.deleted ${only}
+       AND (${heardHere}${options.linked ? " OR r.data->>'url' IS NOT NULL" : ''})
+       AND EXISTS (
+         SELECT 1 FROM entity a JOIN revision ar ON ar.id = a.main_rev
+         JOIN entity_ref y ON y.to_id = a.id AND y.field = 'alignment'
+         JOIN entity sp ON sp.id = y.from_id AND sp.type = 'alignment-span' AND NOT sp.deleted JOIN revision spr ON spr.id = sp.main_rev
+         WHERE a.type = 'alignment' AND NOT a.deleted AND ar.data->>'recording' = e.id
+           AND NOT coalesce((spr.data->>'locked')::boolean, FALSE) AND NOT (spr.data ? 'words'))
+     ORDER BY e.id LIMIT ${Math.min(options.limit ?? 5, 500)}`,
+    params,
+  );
+  const out = rows.map((r) => ({ id: r.id, file: r.file, url: r.url, language: r.language ?? ('yi' as Language) }));
+  if (options.recording && !out.length) {
+    // One recording asked for by name: align it to its hanacha even when its transcript is timed already.
+    const rec = await catalog.get(options.recording);
+    const d = rec?.data as { file?: string; url?: string; language?: Language } | undefined;
+    if (rec?.type === 'recording' && (await hanachaOf(catalog, rec.id))) out.push({ id: rec.id, file: d?.file ?? null, url: d?.url ?? null, language: d?.language ?? 'yi' });
+  }
+  return out;
+}
+
+/**
+ * Forced alignment (the plan, section 9: "then forced alignment for word
+ * timings; paragraph-level alignment to hanachos by text similarity"):
+ * each recording is heard afresh for its word times, its transcript as it
+ * now stands (people's corrections and all) is timed word by word, and,
+ * when the catalog has its farbrengen's hanacha, the hanacha is synced
+ * paragraph by paragraph. Spans a person locked are never moved; the
+ * rest are aligned only to what was heard between the locked ones. As the
+ * alignment bot, approved by `approveAs`, labelled until checked.
+ */
+export async function alignRecordings(
+  catalog: Catalog,
+  input: {
+    approveAs: string;
+    transcriber: Transcriber;
+    fetchAudio: (recording: { file: string | null; url: string | null }) => Promise<Uint8Array>;
+    recording?: EntityId;
+    limit?: number;
+    linked?: boolean;
+    log?: (line: string) => void;
+  },
+): Promise<Array<{ recording: EntityId; words: number; hanacha: number }>> {
+  const log = input.log ?? (() => {});
+  await catalog.createAccount({ id: ALIGN_BOT, displayName: 'Machine sync', isBot: true });
+  const origin = { by: `align:${input.transcriber.name}@${input.transcriber.version}` };
+  const done: Array<{ recording: EntityId; words: number; hanacha: number }> = [];
+  for (const rec of await recordingsToAlign(catalog, input)) {
+    const dir = await mkdtemp(join(tmpdir(), 'rebbehub-align-'));
+    try {
+      const audio = join(dir, 'audio');
+      await writeFile(audio, await input.fetchAudio(rec));
+      const heard = heardWords(await input.transcriber.transcribe(audio, rec.language, dir));
+      if (!heard.length) {
+        log(`${rec.id}: nothing heard`);
+        continue;
+      }
+      const suggestion = await catalog.createChangeset(ALIGN_BOT, { title: `Machine sync of ${rec.id} (${input.transcriber.version})` });
+      let words = 0;
+      let hanachaParagraphs = 0;
+      const view = await recordingTranscript(catalog, rec.id);
+      if (view?.alignment) {
+        const timed = alignAroundLocks(
+          view.paragraphs.map((p) => ({ content: p.content, ...(p.locked && p.startMs !== null && p.endMs !== null ? { locked: { startMs: p.startMs, endMs: p.endMs } } : {}) })),
+          heard,
+        );
+        const alignment = (await catalog.get(view.alignment))!;
+        await catalog.putRevision(suggestion.id, ALIGN_BOT, {
+          id: alignment.id,
+          type: 'alignment',
+          data: { ...(alignment.data as Record<string, Json>), granularity: 'word', engine: { name: input.transcriber.name, version: input.transcriber.version } },
+        });
+        for (const [i, p] of view.paragraphs.entries()) {
+          const t = timed[i];
+          if (!t || p.locked) continue;
+          words += t.words.length;
+          const data = { alignment: view.alignment, segment: p.id, startMs: t.startMs, endMs: t.endMs, words: t.words, origin } as unknown as Json;
+          await catalog.putRevision(suggestion.id, ALIGN_BOT, p.span ? { id: p.span, type: 'alignment-span', data } : { type: 'alignment-span', data });
+        }
+      }
+      const hanacha = await hanachaOf(catalog, rec.id);
+      const synced = hanacha
+        ? await catalog.db.query("SELECT 1 FROM entity a JOIN revision ar ON ar.id = a.main_rev WHERE a.type = 'alignment' AND NOT a.deleted AND ar.data->>'recording' = $1 AND ar.data->>'text' = $2", [rec.id, hanacha])
+        : null;
+      if (hanacha && !synced?.rows.length) {
+        const segments = (await catalog.children(hanacha, 'text', 'segment', { limit: 5000 }))
+          .map((s) => ({ id: s.id, ...(s.data as { order: string; content: string; kind: string }) }))
+          .filter((s) => s.kind !== 'heading')
+          .sort((a, b) => (a.order < b.order ? -1 : 1));
+        const spans = alignParagraphs(segments.map((s) => s.content), heard);
+        if (spans.some(Boolean)) {
+          const alignment = await catalog.putRevision(suggestion.id, ALIGN_BOT, {
+            type: 'alignment',
+            data: { recording: rec.id, text: hanacha, granularity: 'paragraph', engine: { name: 'similarity', version: '1' } } as Json,
+          });
+          for (const [i, span] of spans.entries()) {
+            if (!span) continue;
+            hanachaParagraphs++;
+            await catalog.putRevision(suggestion.id, ALIGN_BOT, { type: 'alignment-span', data: { alignment, segment: segments[i]!.id, startMs: span.startMs, endMs: span.endMs, origin: { by: 'align:similarity@1' } } as Json });
+          }
+        }
+      }
+      if (!words && !hanachaParagraphs) {
+        await catalog.withdraw(suggestion.id, ALIGN_BOT);
+        log(`${rec.id}: nothing to align`);
+        continue;
+      }
+      await catalog.submit(suggestion.id, ALIGN_BOT);
+      await catalog.merge(suggestion.id, input.approveAs, {}, 'Machine sync, labelled as such until checked');
+      log(`${rec.id}: ${words} words timed, ${hanachaParagraphs} hanacha paragraphs synced`);
+      done.push({ recording: rec.id, words, hanacha: hanachaParagraphs });
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

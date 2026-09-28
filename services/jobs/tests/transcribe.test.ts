@@ -67,3 +67,48 @@ describe('machine transcription and sync', () => {
     expect((await recordingTranscript(catalog, served))!.paragraphs[1]).toMatchObject({ content: 'עס שטייט אין פסוק', checked: true, startMs: 9000 });
   });
 });
+
+describe('word-level sync', () => {
+  it('keeps the word times Whisper gives, and aligns a corrected transcript and the hanacha afresh', async () => {
+    const { alignRecordings, recordingsToAlign } = await import('../src/transcribe.js');
+    const { fixParagraph, recordingTranscript, anchorSync, hanachaSync } = await import('@rebbehub/core');
+    const { catalog, set } = await freshCatalog();
+    const event = await add(catalog, 'mendy', 'keeper', 'event', yudShvat(set));
+    await registerFile(catalog.db, { sha256: 'd'.repeat(64), bytes: 10, mime: 'audio/mpeg', source: 'contribution', licence: 'cc0', held: true });
+    const recording = await add(catalog, 'mendy', 'keeper', 'recording', { event, title: { he: 'שיחה א׳' }, file: 'd'.repeat(64), sets: [set] });
+    const heard = [
+      { startMs: 0, endMs: 2000, text: 'לחיים עס', words: [{ text: 'לחיים', startMs: 0, endMs: 1000 }, { text: 'עס', startMs: 1000, endMs: 2000 }] },
+      { startMs: 5000, endMs: 7000, text: 'שטייט אין', words: [{ text: 'שטייט', startMs: 5000, endMs: 6000 }, { text: 'אין', startMs: 6000, endMs: 7000 }] },
+    ];
+    const transcriber: Transcriber = { name: 'fake', version: '2', transcribe: async () => heard };
+    await transcribeRecordings(catalog, { approveAs: 'shmuly', transcriber, fetchAudio: async () => new Uint8Array([1]) });
+    let view = (await recordingTranscript(catalog, recording))!;
+    expect(view.granularity).toBe('word');
+    expect(view.paragraphs.map((p) => p.words?.map((w) => w.startMs))).toEqual([[0, 1000], [5000, 6000]]);
+    expect(await recordingsToAlign(catalog)).toEqual([]);
+
+    // A person corrects the second paragraph and fixes where the first is heard: its word times go, and it is locked.
+    await catalog.merge((await fixParagraph(catalog, 'chaim', { segment: view.paragraphs[1]!.id, content: 'שטייט דאך אין' })).id, 'keeper');
+    await catalog.merge((await anchorSync(catalog, 'chaim', { recording, segment: view.paragraphs[0]!.id, atMs: 500 })).id, 'keeper');
+    expect((await recordingsToAlign(catalog)).map((r) => r.id)).toEqual([recording]);
+
+    // The farbrengen's hanacha is in the catalog too.
+    const author = await add(catalog, 'mendy', 'keeper', 'author', { name: { he: 'הרבי' }, kind: 'rebbe', slug: 'the-rebbe', sets: [set] });
+    const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'התוועדויות' }, slug: 'hisvaaduyos', authors: [author], genre: 'sichos', levels: ['sicha'], sets: [set] });
+    const unit = await add(catalog, 'mendy', 'keeper', 'unit', { work, position: [{ level: 'sicha', value: '1' }], order: 'a', label: { he: 'שיחה א' }, events: [event], sets: [set] });
+    const hanacha = await add(catalog, 'mendy', 'keeper', 'text', { kind: 'hanacha', unit, language: 'he' });
+    await add(catalog, 'mendy', 'keeper', 'segment', { text: hanacha, order: 'a', kind: 'paragraph', content: 'לחיים', proofread: 1 });
+    await add(catalog, 'mendy', 'keeper', 'segment', { text: hanacha, order: 'b', kind: 'paragraph', content: 'כמו שכתוב אין', proofread: 1 });
+
+    const done = await alignRecordings(catalog, { approveAs: 'shmuly', transcriber, fetchAudio: async () => new Uint8Array([1]) });
+    expect(done).toEqual([{ recording, words: 3, hanacha: 2 }]);
+    view = (await recordingTranscript(catalog, recording))!;
+    // The locked paragraph is left as the person set it; the corrected one is timed word by word, "דאך" between its neighbours.
+    expect(view.paragraphs[0]).toMatchObject({ locked: true, startMs: 500 });
+    expect(view.paragraphs[1]!.words!.map((w) => [w.startMs, w.endMs])).toEqual([[5000, 6000], [6000, 6000], [6000, 7000]]);
+    expect(view.paragraphs[1]).toMatchObject({ syncChecked: false });
+    const synced = (await hanachaSync(catalog, recording))!;
+    expect(synced.paragraphs.map((p) => p.startMs !== null)).toEqual([true, true]);
+    expect((await catalog.history(synced.alignment))[0]).toMatchObject({ author: 'bot:align', mergedBy: 'shmuly' });
+  });
+});

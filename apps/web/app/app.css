@@ -2756,6 +2756,160 @@ a.volume:hover {
   font: inherit;
 }
 
+/* Proofread levels: pages change colour as they are checked (the plan, section 7).
+   Not yet checked is the machine's amber; once, a light green; twice, the full green. */
+.text-line.level-0 > span:first-child {
+  color: var(--machine);
+}
+
+.text-line.level-2 > span:first-child::after {
+  content: ' ✓✓';
+  color: var(--accent);
+  font-size: 0.75em;
+}
+
+.page-strip-box {
+  margin: 12px 0;
+}
+
+.page-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.page-strip a,
+.swatch {
+  display: inline-block;
+  min-width: 2.1em;
+  padding: 1px 3px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  text-align: center;
+  text-decoration: none;
+  color: var(--fg);
+}
+
+.swatch {
+  min-width: 1em;
+  height: 0.9em;
+  padding: 0;
+  vertical-align: middle;
+}
+
+.page-strip .level-0,
+.swatch.level-0 {
+  background: var(--bg);
+  border-color: var(--machine);
+}
+
+.page-strip .level-1,
+.swatch.level-1 {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.page-strip .level-2,
+.swatch.level-2 {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.page-strip a.current {
+  outline: 2px solid var(--fg);
+  outline-offset: 1px;
+  font-weight: 700;
+}
+
+.page-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 6px 0 0;
+}
+
+.page-level.level-0 {
+  color: var(--machine);
+}
+
+.page-level.level-1,
+.page-level.level-2 {
+  color: var(--accent);
+}
+
+.confirm-page {
+  margin: 12px 0;
+}
+
+/* Word-level sync: the word being said, and the words already said. */
+.transcript-para .word.said {
+  color: var(--fg);
+}
+
+.transcript-para .word.spoken {
+  background: var(--mark);
+  border-radius: 2px;
+}
+
+.transcript-para.sync-unchecked {
+  border-inline-start: 2px dotted var(--machine);
+}
+
+.transcript-actions {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.said-now {
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.hanacha-sync {
+  margin: 12px 0;
+}
+
+/* Compare printings: what only the first has is struck through, what only the second has is underlined. */
+.compare-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+}
+
+.compare-pick select {
+  max-width: 100%;
+}
+
+.compare-text {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  line-height: 2;
+}
+
+.compare-text del,
+.compare-counts del {
+  color: var(--danger);
+  text-decoration-thickness: 2px;
+}
+
+.compare-text ins,
+.compare-counts ins {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
 /* An embed: the item alone, in another site's frame. */
 body.embedded {
   padding: 12px 16px;

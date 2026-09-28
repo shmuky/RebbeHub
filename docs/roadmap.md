@@ -31,7 +31,7 @@ stands. ✅ built and tested · 🟡 partly · ⬜ not yet.
 | Parquet dump | ⬜ | with the first public edition |
 | Public site: sets, events calendar, item and publication pages, search, permanent links | ✅ | `apps/web` (React Router 7, server-rendered; Node or Workers) |
 | The site as Sichos-Kodesh's app works: this week first (today's parsha, the kvius year, every year), farbrengen pages, one player across pages, smart search by parsha, chag, date and year | ✅ | `apps/web/app/routes/home.tsx`, `views/EventPage.tsx`, `player/`, `lib/smartSearch.ts` |
-| Audio player (recordings by part, video links at the moment) | ✅ | `apps/web/app/components/AudioPlayer.tsx`; words highlighted as spoken come with sync (phase 5) |
+| Audio player (recordings by part, video links at the moment) | ✅ | `apps/web/app/components/AudioPlayer.tsx`; words highlighted as spoken in `Transcripts.tsx` |
 | Scan viewer (served scans in the browser's PDF viewer by page; link-only scans at their source) | 🟡 | `ScanViewer.tsx`; IIIF and page images come with uploads (phase 3) |
 | SEO: canonical and hreflang links, schema.org data, sitemaps, robots.txt | ✅ | `apps/web/app/lib/seo.ts`, `/sitemap.xml` |
 | Report a problem on every page (no account, works without JavaScript) | ✅ | `ReportForm.tsx` |
@@ -79,8 +79,24 @@ notifications by email, the reviewer's AI summary.
   paragraph, and take fixes.
 - **Webhooks and embeds** ✅: every merge posted, signed, to registered
   addresses; `/embed/<id>` for other sites ([api](api.md)).
-- Still to come: IIIF page images, uploaded OCR, comparing printings,
-  word-level sync, semantic search, translations, mirrors.
+- **Uploaded OCR and proofread levels** ✅: anyone uploads their own OCR
+  of a scan (hOCR, ALTO, plain text), kept as its own layer with its
+  engine and version; keepers pick which layer seeds the community text;
+  `rebbehub ocr --reread` re-reads with a newer engine and never touches a
+  checked line. Pages are proofread once, then twice by someone else, and
+  change colour on `/text/<scan>`.
+- **Compare printings** ✅: `/compare/<unit>`, two printings of a sicha
+  (texts of it, or scanned pages a contents map gives it) word by word,
+  Hebrew-aware. Waits on edition texts and contents maps in the catalog.
+- **Word-level sync** ✅: Whisper's word times kept, and `rebbehub align`
+  times existing (and corrected) transcripts by forced alignment and syncs
+  a farbrengen's hanacha paragraph by paragraph by similarity. The player
+  marks the word being said; "Said now" fixes a drifting line in one or
+  two taps (locked, what follows moved with it); "The sync is right"
+  checks it. Machine sync is labelled until then.
+- **Sync and proofreading projects** ✅: the project page hands out the
+  next recording to sync or page to proofread nobody holds, with progress.
+- Still to come: IIIF page images, semantic search, translations, mirrors.
 
 ## Importers still to write
 

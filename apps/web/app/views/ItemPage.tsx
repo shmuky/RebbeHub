@@ -130,6 +130,12 @@ function UnitPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang
           <TextView segments={view.segments[text.id] ?? []} language={(text.data as D).language} withheld={(view.segments[text.id] ?? []).some((s) => s.withheld) ? 'withheld' : undefined} />
         </section>
       ))}
+      {/* Two printings of it with text (texts of it, or scanned pages a contents map gives it): compare them word by word. */}
+      {(view.lists.texts ?? []).filter((x) => (x.data as D).kind !== 'transcript' && (x.data as D).kind !== 'translation').length + (view.lists.printedIn ?? []).length >= 2 ? (
+        <p>
+          <Link to={href(`/compare/${entity.id}`, lang)}>{t(lang, 'comparePrintings')}</Link>
+        </p>
+      ) : null}
       {/* The chapter's own words come first; where they and other copies are from, after. */}
       <PageBody entity={entity} lang={lang} />
       {(d.editions ?? [])

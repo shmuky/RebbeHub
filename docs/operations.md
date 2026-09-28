@@ -129,6 +129,33 @@ does not hold (a publisher's scan: link only, stored nowhere) with its
 page fix. `GET /v1/page-fixes/drive/<Drive id>` answers the reader: the
 turns, or the reading copy to open instead when RebbeHub serves one.
 
+## Text and sync
+
+- `rebbehub ocr --reread` reads again the scans an older version of the
+  engine read. The machine layer takes the new reading (its engine and
+  version with it); community pages seeded from it take the new lines,
+  except every line a person checked, which stays as they left it.
+- People upload their own OCR on a scan's text page (hOCR, ALTO, or plain
+  text with a form feed between pages); it is kept as its own layer, with
+  the program and version they name. The scan's keepers pick which layer
+  seeds the community text ("Seed the text from this"); pages people
+  already worked on keep their checked lines.
+- Pages are proofread once when every line on them is checked, twice when
+  a second person reads the page through ("This page is right"); the
+  strip of pages on `/text/<scan>` shows each page's level.
+- `rebbehub align --approve-as <steward>` hears recordings again with
+  Whisper for word times (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_AI_TOKEN) and
+  aligns them to the transcripts as they now stand; spans a person locked
+  ("Said now" on a farbrengen page) are never moved, and the rest are
+  aligned only between them. Where the catalog has the farbrengen's
+  hanacha (a `hanacha` text of a unit of the event), it is synced
+  paragraph by paragraph by shared words. New transcripts get word
+  timings straight away.
+- Projects of kind *sync* (recordings of a year to check) and
+  *proofreading* (a scan's pages, to once or twice) hand out the next
+  recording or page nobody holds; a claim lapses after three hours
+  (migration 0013).
+
 ## The API
 
 - Local: `npm run dev:api` (PGlite, or `DATABASE_URL`). `DEV_ACCOUNT=me`
