@@ -1,15 +1,51 @@
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Catalog } from '@rebbehub/core';
 import { connectPostgres, one, type Db } from '@rebbehub/db';
 import { openPGlite } from '@rebbehub/db/pglite';
-import { OTZROS_FOLDER, chabadLibraryImporter, driveLibraryImporter, listDriveFolder, crawlChabadLibrary, libraryWorks, readChabadLibrary, readMafteiachCrawl, readSichosKodeshOccasions, readSichosKodeshWorks, runImport, sichosKodeshOccasionsImporter, sichosKodeshWorksImporter, type DriveFolder, type Importer } from '@rebbehub/importers';
+import {
+  OTZROS_FOLDER,
+  archiveImporter,
+  archiveTarget,
+  chabadLibraryImporter,
+  crawlChabadLibrary,
+  crawlSefaria,
+  driveLibraryImporter,
+  hebrewBooksImporter,
+  idForKey,
+  igrosImporter,
+  jemImporter,
+  libraryWorks,
+  listDriveFolder,
+  mayKeepText,
+  readArchiveIndex,
+  readChabadLibrary,
+  readHebrewBooks,
+  readIgrosBuild,
+  readJemIndex,
+  readMafteiachCrawl,
+  readSefariaCrawl,
+  readSichosKodeshOccasions,
+  readSichosKodeshWorks,
+  rebbehubSetsImporter,
+  runImport,
+  sefariaClient,
+  sefariaImporter,
+  sichosKodeshOccasionsImporter,
+  sichosKodeshSefariaTitles,
+  sichosKodeshWorksImporter,
+  type DriveFolder,
+  type Importer,
+  type SefariaCrawl,
+} from '@rebbehub/importers';
 import { clearMirror, directorySink, exportCommits, exportSnapshot, generateKeyPair, writeDump, type KeyPair } from '@rebbehub/mirror';
 import { BUILTIN_SCHEMAS, SchemaRegistry } from '@rebbehub/model';
 import { commitAll, git } from './git.js';
+import { pullMirror } from './mirrorPull.js';
 import { collectPageFixes, loadPageFixes, makePageFixes, OTZROS_COLLECTION, otzrosPdfs, pageFixesKey, pageFixesUrl, registerPageFixes } from './pageFixes.js';
-import { ARCHIVE_OBJECTS_URL, archivePdfs, collectManifest, loadManifest, makeReadingCopies, MANIFEST_KEY, MANIFEST_URL, R2Store, registerReadingCopies, sichosKodeshScans } from './readingCopies.js';
+import { ARCHIVE_OBJECTS_URL, archivePdfs, collectManifest, loadManifest, makeReadingCopies, MANIFEST_KEY, MANIFEST_URL, R2Store, registerReadingCopies, type ObjectStore, sichosKodeshScans } from './readingCopies.js';
 
 export interface Context {
   log: (line: string) => void;
@@ -121,6 +157,8 @@ export const IMPORTERS: Record<string, (from: string) => Importer> = {
   'sichos-kodesh-works': (from) =>
     sichosKodeshWorksImporter(() => readSichosKodeshWorks(from, { texts: !process.env.REBBEHUB_NO_TEXTS, api: process.env.REBBEHUB_API_URL, log: (line) => console.log(line) })),
   // With MAFTEIACH_DATA (a crawl of mafteiach.app by Sichos-Kodesh's packages/mafteiach-index), every link and content outline the index has.
+  // The sets RebbeHub keeps itself (the Teshuros set); `--from` is not used.
+  'rebbehub-sets': () => rebbehubSetsImporter(),
   // Otzros HaRebbe's Drive library of seforim, listed from Drive at run time (`--from` is not used).
   otzros: () => driveLibraryImporter(() => listDriveFolder(OTZROS_FOLDER, { log: (line) => console.log(line) })),
   // With CHABADLIBRARY_TREE (the contents `rebbehub crawl-library` gathered), a page for every chapter in the library.
@@ -130,7 +168,131 @@ export const IMPORTERS: Record<string, (from: string) => Importer> = {
   },
   'sichos-kodesh-occasions': (from) =>
     sichosKodeshOccasionsImporter(() => readSichosKodeshOccasions(from), { mafteiach: process.env.MAFTEIACH_DATA && existsSync(process.env.MAFTEIACH_DATA) ? () => readMafteiachCrawl(process.env.MAFTEIACH_DATA!) : undefined }),
+  // The Chabad shelf of HebrewBooks, link-only: the one Sichos-Kodesh's works catalog carries, or with HEBREWBOOKS_SHELF
+  // one read afresh from the latest Otzaria catalog by its packages/hebrewbooks-index.
+  hebrewbooks: (from) => hebrewBooksImporter(() => readHebrewBooks(from, process.env.HEBREWBOOKS_SHELF)),
+  // With JEM_DB (a crawl of JEM's catalog by Sichos-Kodesh's packages/jem-index), JEM's recordings, on the farbrengens they belong to.
+  jem: (from) => {
+    const db = need('JEM_DB', 'a crawl of JEM by Sichos-Kodesh\'s packages/jem-index (jem.db)');
+    return jemImporter(async () => ({ jem: await readJemIndex(db), occasions: await farbrengens(from) }));
+  },
+  // With SEFARIA_DATA (what `rebbehub crawl-sefaria` read), Sefaria's Chabad books that Sichos-Kodesh does not publish.
+  sefaria: (from) => {
+    const dir = need('SEFARIA_DATA', 'the folder `rebbehub crawl-sefaria` wrote');
+    return sefariaImporter(async () => ({ ...(await readSefariaCrawl(dir)), authors: await skAuthors(from), api: process.env.REBBEHUB_API_URL }));
+  },
+  // With IGROS_DATA (Sichos-Kodesh's build-igros output, from the Igros app's files), each letter's date.
+  igros: () => {
+    const dir = need('IGROS_DATA', "the folder Sichos-Kodesh's build-igros wrote from the Igros app's files");
+    return igrosImporter(() => readIgrosBuild(dir));
+  },
+  // With SK_ARCHIVE_DB (a copy of Sichos-Kodesh's archive index), the archive's history, one suggestion per commit.
+  archive: () => {
+    const db = need('SK_ARCHIVE_DB', "a copy of Sichos-Kodesh's archive index (raw/index.sqlite)");
+    return archiveImporter(() => readArchiveIndex(db));
+  },
 };
+
+function need(name: string, what: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is not set: give ${what}`);
+  return value;
+}
+
+/** Sichos-Kodesh's author ids, from its works registry. */
+async function skAuthors(from: string): Promise<Set<string>> {
+  const dir = from.endsWith('works') ? from : join(from, 'apps/mobile/src/catalog/data/works');
+  const index = JSON.parse(await readFile(join(dir, 'works.json'), 'utf8')) as { authors: Array<{ id: string }> };
+  return new Set(index.authors.map((a) => a.id));
+}
+
+/** The farbrengens the occasions importer brings: Sichos-Kodesh's catalog, and with MAFTEIACH_DATA the ones only the index knows. */
+async function farbrengens(from: string) {
+  const entries = await readSichosKodeshOccasions(from);
+  const crawl = process.env.MAFTEIACH_DATA;
+  if (crawl && existsSync(crawl)) {
+    const known = new Set(entries.map((e) => e.occasionId));
+    for (const r of await readMafteiachCrawl(crawl)) if (!known.has(r.id)) entries.push({ occasionId: r.id, hebrewYear: r.hebrewYear, hebrewDate: r.hebrewDate, occasionLabel: r.occasionLabel, audio: [], pdfs: [] });
+  }
+  return entries;
+}
+
+/**
+ * Reads Sefaria's Chabad books that Sichos-Kodesh does not publish into
+ * `out`, asking Sefaria only for what `cache` does not have; with `keep`,
+ * puts each text with a licence that lets it be kept on RebbeHub's own
+ * storage (`texts/<sha256>` in rebbehub-public), once.
+ */
+export async function crawlSefariaCommand(ctx: Context, input: { from: string; out: string; cache?: string; keep?: boolean; only?: string[]; bucket?: string }): Promise<void> {
+  const exclude = await sichosKodeshSefariaTitles(input.from);
+  const client = sefariaClient({ cacheDir: input.cache });
+  const crawl = await crawlSefaria({ out: input.out, exclude, client, only: input.only, log: ctx.log });
+  if (!input.keep) return;
+  const kept = await keepSefariaTexts(crawl, input.out, r2(input.bucket ?? 'rebbehub-public'), ctx.log);
+  await writeFile(join(input.out, 'crawl.json'), JSON.stringify(crawl));
+  ctx.log(`${kept.stored} texts stored, ${kept.already} already there`);
+}
+
+/** Stores each kept text of a crawl as `texts/<sha256>`, checked against its hash, and marks it kept. */
+export async function keepSefariaTexts(crawl: SefariaCrawl, dir: string, store: ObjectStore, log: (line: string) => void = () => {}): Promise<{ stored: number; already: number }> {
+  let stored = 0;
+  let already = 0;
+  const done = new Set<string>();
+  for (const book of crawl.books) {
+    for (const unit of book.units) {
+      for (const text of unit.texts) {
+        if (!text.sha256 || !mayKeepText(text.licence)) continue;
+        if (!done.has(text.sha256)) {
+          const key = `texts/${text.sha256}`;
+          const bytes = new Uint8Array(await readFile(join(dir, 'texts', `${text.sha256}.html`)));
+          if (createHash('sha256').update(bytes).digest('hex') !== text.sha256) throw new Error(`${key}: the file does not match its hash`);
+          if (await store.has(key)) already++;
+          else {
+            await store.put(key, bytes, 'text/html; charset=utf-8');
+            if (++stored % 500 === 0) log(`${stored} texts stored`);
+          }
+          done.add(text.sha256);
+        }
+        text.kept = true;
+      }
+    }
+  }
+  return { stored, already };
+}
+
+/**
+ * Loads the files Sichos-Kodesh's archive wants and could not get (from a
+ * copy of its index) into the Missing board, each with the RebbeHub item
+ * it belongs to.
+ */
+export async function archiveGapsCommand(ctx: Context, input: { db: string }): Promise<void> {
+  const { gaps } = await readArchiveIndex(input.db);
+  await withCatalog(ctx, async (catalog) => {
+    const rows = await Promise.all(
+      gaps.map(async (g) => {
+        const target = archiveTarget(g);
+        return {
+          collection: g.collection,
+          item_id: g.itemId,
+          kind: g.kind,
+          source_id: g.sourceId,
+          role: g.role,
+          entity_id: target ? await idForKey(target.key) : null,
+          source: g.source,
+          url: g.url,
+          label: g.label,
+          hebrew_date: g.hebrewDate,
+          status: g.status,
+          http_status: g.httpStatus,
+          error: g.error,
+          attempts: g.attempts,
+          checked_at: g.checkedAt,
+        };
+      }),
+    );
+    ctx.log(`${await catalog.loadArchiveGaps(rows)} files the archive could not get, on the Missing board`);
+  });
+}
 
 /**
  * Crawls chabadlibrary.org's contents for every work of Sichos-Kodesh's
@@ -155,7 +317,7 @@ export async function importCommand(ctx: Context, input: { source: string; from:
   await withCatalog(ctx, async (catalog) => {
     const importer = make(input.from);
     const result = await runImport(catalog, importer, { approveAs: input.approveAs, dryRun: input.dryRun, chunkSize: input.chunkSize, log: ctx.log });
-    ctx.log(`${input.dryRun ? 'would create' : 'created'} ${result.created}, updated ${result.updated}, unchanged ${result.unchanged}; kept ${result.keptHumanEdits} human edits; suggestions: ${result.changesets.join(', ') || 'none'}`);
+    ctx.log(`${input.dryRun ? 'would create' : 'created'} ${result.created}, updated ${result.updated}, unchanged ${result.unchanged}${result.skipped ? `, skipped ${result.skipped} (not in the catalog yet)` : ''}; kept ${result.keptHumanEdits} human edits; suggestions: ${result.changesets.join(', ') || 'none'}`);
   });
 }
 
@@ -200,15 +362,32 @@ export async function editionCommand(ctx: Context, input: { by: string; tag?: st
   });
 }
 
-export async function dumpCommand(ctx: Context, input: { tag: string; out: string; keyFile?: string }): Promise<void> {
+export async function dumpCommand(ctx: Context, input: { tag: string; out: string; keyFile?: string; upload?: boolean; bucket?: string }): Promise<void> {
+  // Checked first, so a long dump never ends in "cannot upload".
+  const store = input.upload ? r2(input.bucket ?? 'rebbehub-public') : null;
   await withCatalog(ctx, async (catalog) => {
     const edition = (await catalog.editions()).find((e) => e.tag === input.tag);
     if (!edition) throw new Error(`no catalog edition ${input.tag}; tag one first`);
     const key = input.keyFile ? (JSON.parse(await readFile(input.keyFile, 'utf8')) as KeyPair) : undefined;
     const manifest = await writeDump(catalog, input.out, { tag: input.tag, at: edition.commit_seq, key });
+    // Uploaded before the manifest is recorded: an edition lists its dumps only once mirrors can fetch them.
+    if (store) {
+      for (const file of [...manifest.files.map((f) => f.name), 'manifest.json']) {
+        const mime = file.endsWith('.gz') ? 'application/gzip' : file.endsWith('.json') ? 'application/json' : 'application/vnd.sqlite3';
+        await store.put(`dumps/${input.tag}/${file}`, new Uint8Array(await readFile(join(input.out, file))), mime);
+        ctx.log(`uploaded dumps/${input.tag}/${file}`);
+      }
+    }
     await catalog.setEditionManifest(input.tag, manifest);
-    ctx.log(`dumps of ${input.tag} in ${input.out}${key ? `, signed with key ${key.keyId}` : ' (unsigned: give --key to sign)'}`);
+    ctx.log(`dumps of ${input.tag} in ${input.out}${key ? `, signed with key ${key.keyId}` : ' (unsigned: give --key to sign)'}${store ? ', and in R2 for /dumps' : ''}`);
   });
+}
+
+/** Keeps a mirror's copy of every edition's dumps, checked (mirrorPull.ts; docs/mirrors.md). */
+export async function mirrorPullCommand(ctx: Context, input: { api?: string; out: string; keys?: string[]; tag?: string; allowUnsigned?: boolean }): Promise<void> {
+  const result = await pullMirror({ api: input.api ?? 'https://api.rebbehub.org', out: input.out, keys: input.keys, tag: input.tag, allowUnsigned: input.allowUnsigned, log: ctx.log });
+  ctx.log(`pulled ${result.pulled.length}, already here ${result.kept.length}, failed ${result.failed.length}`);
+  if (result.failed.length) throw new Error(`not kept: ${result.failed.map((f) => `${f.tag} (${f.reason})`).join('; ')}`);
 }
 
 export async function keygenCommand(ctx: Context, input: { out: string }): Promise<void> {

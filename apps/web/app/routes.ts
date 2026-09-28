@@ -6,6 +6,8 @@ export default [
   route('sets', 'routes/sets.tsx'),
   route('calendar/:year?/:month?', 'routes/calendar.tsx'),
   route('about', 'routes/about.tsx'),
+  // Asking for a file to stop being served (rights holders, families): no account needed.
+  route('takedown', 'routes/takedown.tsx'),
   route('help', 'routes/help.tsx'),
   route('history/:id', 'routes/history.tsx'),
   // Every page's talk page and its editing, beside its history (the wiki model).
@@ -19,16 +21,25 @@ export default [
   route('_/suggestions/*', 'routes/suggestions.ts'),
   route('_/follows', 'routes/follows.ts'),
   route('_/uploads', 'routes/uploads.ts'),
+  // Where you stopped reading and listening, and translations sent for review.
+  route('_/places', 'routes/places.ts'),
+  route('_/translations/*', 'routes/translations-pass.ts'),
+  route('_/uploads/check', 'routes/uploads-check.ts'),
+  route('_/lookup', 'routes/lookup.ts'),
   route('_/steward/*', 'routes/admin-pass.ts'),
   route('admin', 'routes/admin.tsx'),
   route('review', 'routes/review.tsx'),
   route('missing', 'routes/missing.tsx'),
+  route('health', 'routes/health.tsx'),
   // Reading a PDF in the site, the player still playing.
   route('read', 'routes/read.tsx'),
   // What other sites embed: the only page they may frame.
   route('embed/:id', 'routes/embed.tsx'),
   route('text/:scan', 'routes/text.tsx'),
+  route('compare/:unit', 'routes/compare.tsx'),
   route('projects', 'routes/projects.tsx'),
+  // How to keep a full copy of the catalog: the git mirror, every edition's dumps with their checksums.
+  route('mirrors', 'routes/mirrors.tsx'),
   route('projects/:slug', 'routes/project.tsx'),
   route('signin', 'routes/signin.tsx'),
   route('account', 'routes/account.tsx'),

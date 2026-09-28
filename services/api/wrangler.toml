@@ -32,7 +32,8 @@ bucket_name = "rebbehub-preservation"
 binding = "SK_ARCHIVE"
 bucket_name = "sichos-kodesh-archive"
 
-# Webhooks are delivered every five minutes (src/worker.ts, scheduled).
+# Every five minutes (src/worker.ts, scheduled): webhooks, email updates (once RESEND_API_KEY is set)
+# and the reviewer's advice on suggestions (once CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_AI_TOKEN are set).
 [triggers]
 crons = ["*/5 * * * *"]
 

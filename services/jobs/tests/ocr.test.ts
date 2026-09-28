@@ -90,5 +90,28 @@ describe('fix this line', () => {
     const machinePage = (await catalog.list({ type: 'text-page' })).find((p) => p.id !== after.pageId)!;
     expect((machinePage.data as { lines: Array<{ text: string }> }).lines[1]!.text).toBe('שיחח א');
     await expect(fixLine(catalog, 'chaim', { scan, page: 1, line: 'l9', text: 'x' })).rejects.toThrow(/line l9/);
+
+    // A better engine reads it again: the machine layer takes the new reading, and the community page
+    // takes it too, except the line Chaim checked.
+    const better: OcrEngine = {
+      ...engine,
+      version: async () => '2.0',
+      lines: async () => [
+        { id: 'l1', text: 'ב"ה', box: [0, 0, 1, 0.1] },
+        { id: 'l2', text: 'שיחה א (מכונה)', box: [0, 0.1, 1, 0.1] },
+        { id: 'l3', text: 'שורה חדשה', box: [0, 0.3, 1, 0.1] },
+      ],
+    };
+    expect(await readScans(catalog, { approveAs: 'shmuly', engine: better, fetchFile: async () => new Uint8Array([1]) })).toEqual([]);
+    expect(await readScans(catalog, { approveAs: 'shmuly', engine: better, reread: true, fetchFile: async () => new Uint8Array([1]) })).toEqual([{ scan, pages: 1, lines: 3 }]);
+    const reread = (await scanText(catalog, scan, 1))!;
+    expect(reread.engine).toEqual({ name: 'fake', version: '2.0' });
+    expect(reread.lines.map((l) => [l.text, l.level])).toEqual([
+      ['ב"ה', 0],
+      ['שיחה א׳', 1],
+      ['שורה חדשה', 0],
+    ]);
+    expect((await catalog.list({ type: 'text-layer' })).length).toBe(2);
+    expect(await readScans(catalog, { approveAs: 'shmuly', engine: better, reread: true, fetchFile: async () => new Uint8Array([1]) })).toEqual([]);
   });
 });

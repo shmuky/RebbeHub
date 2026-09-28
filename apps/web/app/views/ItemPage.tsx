@@ -6,13 +6,17 @@ import { AuthorPage, SetPage, WorkPage } from './LibraryPages.js';
 import { ItemLink, ItemList } from '../components/ItemLink.js';
 import { PageBody } from '../components/PageBody.js';
 import { PageTabs } from '../components/PageTabs.js';
+import { Relations } from '../components/Relations.js';
+import { Printings } from '../components/Printings.js';
 import { ScanViewer } from '../components/ScanViewer.js';
 import { TextView } from '../components/TextView.js';
+import { UnitTexts } from '../components/Translations.js';
 import type { Entity } from '../lib/api.js';
 import { dateLabel, yearLabel } from '../lib/dates.js';
 import { kindName, languageName, nameOf, t, typeName, type Lang } from '../lib/i18n.js';
 import type { ItemView } from '../lib/itemData.server.js';
 import { labelOf } from '../lib/labels.js';
+import { st } from '../lib/scanStrings.js';
 import { href, itemPath, SOURCE_NAMES, sourceUrl } from '../lib/links.js';
 import { useLang } from '../lib/useLang.js';
 import { readHref } from '../routes/read.js';
@@ -122,14 +126,14 @@ function UnitPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang
           </>
         ) : null}
       </dl>
-      {(view.lists.texts ?? []).map((text) => (
-        <section key={text.id}>
-          <h2>
-            {t(lang, 'text')} <span className="card-meta">({languageName((text.data as D).language, lang)})</span>
-          </h2>
-          <TextView segments={view.segments[text.id] ?? []} language={(text.data as D).language} withheld={(view.segments[text.id] ?? []).some((s) => s.withheld) ? 'withheld' : undefined} />
-        </section>
-      ))}
+      {/* Its words, one language at a time, with its translations and "Add a translation". */}
+      <UnitTexts unit={entity} texts={view.lists.texts ?? []} segments={view.segments} lang={lang} />
+      {/* Two printings of it with text (texts of it, or scanned pages a contents map gives it): compare them word by word. */}
+      {(view.lists.texts ?? []).filter((x) => (x.data as D).kind !== 'transcript' && (x.data as D).kind !== 'translation').length + (view.lists.printedIn ?? []).length >= 2 ? (
+        <p>
+          <Link to={href(`/compare/${entity.id}`, lang)}>{t(lang, 'comparePrintings')}</Link>
+        </p>
+      ) : null}
       {/* The chapter's own words come first; where they and other copies are from, after. */}
       <PageBody entity={entity} lang={lang} />
       {(d.editions ?? [])
@@ -213,6 +217,14 @@ function PublicationPage({ entity, view, lang }: { entity: Entity; view: ItemVie
             <dd>{d.printing}</dd>
           </>
         ) : null}
+        {d.reprintOf && view.refs[d.reprintOf] ? (
+          <>
+            <dt>{st(lang, 'reprintOf')}</dt>
+            <dd>
+              <Refs ids={d.reprintOf} view={view} />
+            </dd>
+          </>
+        ) : null}
         {d.simcha ? (
           <>
             <dt>{t(lang, 'simcha')}</dt>
@@ -252,6 +264,7 @@ function PublicationPage({ entity, view, lang }: { entity: Entity; view: ItemVie
                 title={nameOf(d.title, lang)}
                 sourceLink={d.identifiers?.hebrewbooks ? sourceUrl({ source: 'hebrewbooks', sourceId: d.identifiers.hebrewbooks }) : null}
                 pageLabels={(scan.data as D).pageLabels}
+                pages={view.pages[scan.id]}
               />
               {/* Its text, page by page, where the machine has read it; a scan whose file is not served has none shown. */}
               {view.files[scan.id]?.url ? (
@@ -286,6 +299,12 @@ function PublicationPage({ entity, view, lang }: { entity: Entity; view: ItemVie
           </ul>
         </section>
       ) : null}
+      {view.lists.otherPrintings?.length ? (
+        <section>
+          <h2>{st(lang, 'otherPrintings')}</h2>
+          <Printings publications={view.lists.otherPrintings} lang={lang} />
+        </section>
+      ) : null}
     </>
   );
 }
@@ -300,7 +319,7 @@ function ScanPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang
         {typeName('scan', lang)}
         {pub ? ` · ${labelOf(pub, lang)}` : ''}
       </h1>
-      <ScanViewer file={view.files[entity.id] ?? null} title={pub ? labelOf(pub, lang) : entity.id} sourceLink={null} pageLabels={d.pageLabels} />
+      <ScanViewer file={view.files[entity.id] ?? null} title={pub ? labelOf(pub, lang) : entity.id} sourceLink={null} pageLabels={d.pageLabels} pages={view.pages[entity.id]} />
     </>
   );
 }
@@ -324,7 +343,8 @@ function TextPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang
     <>
       {unit ? <Crumbs items={[{ label: labelOf(unit, lang), to: href(itemPath(unit), lang) }]} /> : null}
       <h1>{unit ? labelOf(unit, lang) : typeName('text', lang)}</h1>
-      <TextView segments={segments} language={d.language} withheld={segments.some((s) => s.withheld) ? 'withheld' : undefined} />
+      {d.kind === 'translation' && d.credit ? <p className="row-sub text-credit">{d.credit}</p> : null}
+      <TextView segments={segments} language={d.language} withheld={segments.some((s) => s.withheld) ? 'withheld' : undefined} fixable={d.kind === 'translation'} translation={d.kind === 'translation'} />
     </>
   );
 }
@@ -361,6 +381,7 @@ export function ItemPage({ entity, view }: { entity: Entity; view: ItemView }) {
       <PageTabs entity={entity} lang={lang} current="page" />
       <Page entity={entity} view={view} lang={lang} />
       {entity.type === 'unit' ? null : <PageBody entity={entity} lang={lang} />}
+      <Relations relations={view.relations ?? []} refs={view.refs} lang={lang} />
       <div className="item-footer">
         <span>
           {t(lang, 'permanentLink')}: <Link to={href(`/${entity.id}`, lang)}><code>{entity.id}</code></Link>

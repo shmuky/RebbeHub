@@ -11,9 +11,10 @@ import { useLang } from '../lib/useLang.js';
 
 /**
  * The stewards' page: the people with accounts (appointing stewards, for
- * platform admins; suspending, for stewards) and the reports readers sent
- * (resolved or dismissed). Filled in by the browser; the API decides who
- * may see and do what.
+ * platform admins; suspending, for stewards), the reports readers sent
+ * (resolved or dismissed), and takedown requests, where each file the
+ * request points at is taken down in one click (logged). Filled in by the
+ * browser; the API decides who may see and do what.
  */
 export function loader({ request }: Route.LoaderArgs) {
   return { lang: langFrom(request), siteUrl: new URL(request.url).origin };
@@ -183,11 +184,90 @@ function Reports({ lang, onError }: { lang: Lang; onError: (message: string | nu
   );
 }
 
+interface Takedown {
+  report: number;
+  at: string;
+  name: string;
+  email: string;
+  relation: 'rights-holder' | 'family' | 'representative' | 'other';
+  target: string;
+  statement: string | null;
+  entityId: string | null;
+  files: Array<{ sha256: string; mime: string; bytes: number; rights: string; usedBy: string | null }>;
+}
+
+function Takedowns({ lang, onError }: { lang: Lang; onError: (message: string | null) => void }) {
+  const [data, setData] = useState<Takedown[] | null>(null);
+  const load = useCallback(async () => {
+    try {
+      setData((await call<{ takedowns: Takedown[] }>('admin/takedowns')).takedowns);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : String(e));
+    }
+  }, [onError]);
+  useEffect(() => void load(), [load]);
+
+  const act = (path: string, body: unknown, confirmText?: string) => async () => {
+    if (confirmText && !window.confirm(confirmText)) return;
+    onError(null);
+    try {
+      await call(path, body);
+      await load();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  if (data && data.length === 0) return <p>{t(lang, 'noTakedowns')}</p>;
+  return (
+    <ul className="rows">
+      {data?.map((d) => (
+        <li key={d.report} className="row admin-report">
+          <span className="row-main">
+            <span className="row-title">
+              {d.name} · {t(lang, `relation_${d.relation}`)}
+            </span>
+            <span className="row-sub" dir="ltr">
+              {d.email}
+            </span>
+            {d.entityId ? <Link to={href(`/${d.entityId}`, lang)}>{d.target}</Link> : <span dir="ltr">{d.target}</span>}
+            {d.statement ? <span className="suggestion-note">{d.statement}</span> : null}
+            <span className="row-sub">{when(d.at, lang)}</span>
+            {d.files.length === 0 ? <span className="row-sub">{t(lang, 'takedownNoFiles')}</span> : null}
+            {d.files.map((f) => (
+              <span key={f.sha256} className="row-sub">
+                <span dir="ltr">
+                  {f.mime} · {(f.bytes / 1024 / 1024).toFixed(1)} MB · {f.sha256.slice(0, 12)}…
+                </span>{' '}
+                {f.rights === 'preserved' ? (
+                  <span className="badge">{t(lang, 'takenDown')}</span>
+                ) : (
+                  <button type="button" className="link-button" onClick={act(`admin/files/${f.sha256}/takedown`, { report: d.report }, t(lang, 'takeDownConfirm'))}>
+                    {t(lang, 'takeDown')}
+                  </button>
+                )}
+              </span>
+            ))}
+          </span>
+          <span className="admin-actions">
+            <button type="button" className="link-button" onClick={act(`reports/${d.report}/close`, { outcome: 'resolved' })}>
+              {t(lang, 'takedownDone')}
+            </button>
+            <button type="button" className="link-button" onClick={act(`reports/${d.report}/close`, { outcome: 'dismissed' })}>
+              {t(lang, 'reportDismiss')}
+            </button>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default function Admin() {
   const lang = useLang();
   const account = useAccount();
   const [params] = useSearchParams();
-  const tab = params.get('tab') === 'reports' ? 'reports' : 'people';
+  const tab = params.get('tab') === 'reports' ? 'reports' : params.get('tab') === 'takedowns' ? 'takedowns' : 'people';
   const [error, setError] = useState<string | null>(null);
 
   if (account === undefined) return <h1>{t(lang, 'adminTitle')}</h1>;
@@ -209,6 +289,9 @@ export default function Admin() {
         <Link to={href('/admin', lang, { tab: 'reports' })} aria-current={tab === 'reports' ? 'page' : undefined}>
           {t(lang, 'adminReports')}
         </Link>
+        <Link to={href('/admin', lang, { tab: 'takedowns' })} aria-current={tab === 'takedowns' ? 'page' : undefined}>
+          {t(lang, 'adminTakedowns')}
+        </Link>
         <Link to={href('/review', lang)}>{t(lang, 'reviewTitle')}</Link>
       </nav>
       {error ? (
@@ -216,7 +299,7 @@ export default function Admin() {
           {error}
         </p>
       ) : null}
-      {tab === 'people' ? <People lang={lang} onError={setError} /> : <Reports lang={lang} onError={setError} />}
+      {tab === 'people' ? <People lang={lang} onError={setError} /> : tab === 'takedowns' ? <Takedowns lang={lang} onError={setError} /> : <Reports lang={lang} onError={setError} />}
     </>
   );
 }

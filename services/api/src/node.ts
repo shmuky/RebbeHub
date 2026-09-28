@@ -1,11 +1,13 @@
 import { serve } from '@hono/node-server';
-import { Catalog } from '@rebbehub/core';
+import { Catalog, embedderFromEnv } from '@rebbehub/core';
 import { connectPostgres } from '@rebbehub/db';
 import { openPGlite } from '@rebbehub/db/pglite';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { createApp, type FileStore } from './app.js';
 import { authFor } from './auth.js';
+import { resendMailer } from './mail.js';
+import { sendNotifications, type Mailer } from '@rebbehub/core';
 
 /**
  * The API on Node, for local work: `npm run dev:api`.
@@ -16,6 +18,10 @@ import { authFor } from './auth.js';
  *   SITE_URL       the site signing in happens on (default http://localhost:5173)
  *   DEV_ACCOUNT    sign every request in as this account - local testing only,
  *                  refused unless the server listens on localhost
+ *   RESEND_API_KEY, EMAIL_FROM   email sign-in and notifications (looked
+ *                  for every minute); DEV_EMAIL=1 prints email here instead
+ *   CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_AI_TOKEN   search by meaning (Workers AI)
+ *   OAI_ADMIN_EMAIL                              OAI-PMH at /oai
  */
 const url = process.env.DATABASE_URL;
 const db = url ? connectPostgres(url) : await openPGlite(process.env.PGLITE_DIR ?? '.data/pglite');
@@ -49,14 +55,31 @@ const publicFolder: FileStore | undefined = filesDir
     }
   : undefined;
 
+// Email: through Resend with its key, or printed here to try signing in by email locally.
+const mailer: Mailer | undefined = process.env.RESEND_API_KEY
+  ? resendMailer({ apiKey: process.env.RESEND_API_KEY, from: process.env.EMAIL_FROM })
+  : process.env.DEV_EMAIL
+    ? { send: async (message) => console.log(`\n--- email to ${message.to}: ${message.subject}\n${message.text}\n---`) }
+    : undefined;
+
 const app = createApp({
+  mailer,
   catalog,
   authenticate: devAccount ? () => devAccount : undefined,
   auth: authFor(process.env.SITE_URL ?? 'http://localhost:5173', { clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET }),
   filesBaseUrl: process.env.FILES_BASE_URL,
   files: publicFolder,
   uploads: filesDir ? { public: folder('public'), preservation: folder('preservation') } : undefined,
+  embedder: embedderFromEnv(process.env),
+  oai: process.env.OAI_ADMIN_EMAIL ? { adminEmail: process.env.OAI_ADMIN_EMAIL, siteUrl: process.env.SITE_URL } : undefined,
+  mirrors: {
+    gitUrls: (process.env.CATALOG_GIT_URL ?? '').split(',').filter(Boolean),
+    publicKeys: (process.env.RELEASE_PUBLIC_KEYS ?? '').split(',').filter(Boolean),
+    dumpsBaseUrl: process.env.DUMPS_BASE_URL || undefined,
+  },
 });
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port, hostname });
 console.log(`RebbeHub API on http://${hostname}:${port}/v1 (${url ? 'Postgres' : 'PGlite'}${devAccount ? `, signed in as ${devAccount}` : ''})`);
+// What the Workers' cron does every few minutes, here every minute: notifications by email.
+if (mailer) setInterval(() => void sendNotifications(catalog, mailer, { siteUrl: new URL(process.env.SITE_URL ?? 'http://localhost:5173').origin }).catch((error) => console.error('notifications', error)), 60_000);

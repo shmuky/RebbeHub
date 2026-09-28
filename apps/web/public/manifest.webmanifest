@@ -1,0 +1,24 @@
+{
+  "name": "RebbeHub",
+  "short_name": "RebbeHub",
+  "description": "The open, community-edited index of Chabad Torah and media: sichos, maamarim, letters, farbrengens and their recordings.",
+  "lang": "he",
+  "dir": "rtl",
+  "id": "/",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#faf8f4",
+  "theme_color": "#16744a",
+  "categories": ["books", "education", "music"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    { "name": "חיפוש · Search", "url": "/search", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "התוועדויות · Farbrengens", "url": "/calendar", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

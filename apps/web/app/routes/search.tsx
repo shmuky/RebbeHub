@@ -4,11 +4,14 @@ import { CalendarDays, Search as SearchIcon } from 'lucide-react';
 import type { Route } from './+types/search';
 import { EventRows, eventData, type EventItem } from '../components/EventRow.js';
 import { ItemList } from '../components/ItemLink.js';
-import type { Entity } from '../lib/api.js';
+import { MomentRows, momentHref, momentRefs } from '../components/Moments.js';
+import type { Entity, Moment, SimilarItem } from '../lib/api.js';
 import { siteOf } from '../lib/context.server.js';
 import { dateLabel, yearLabel } from '../lib/dates.js';
 import { langFrom, t, typeName, type Lang } from '../lib/i18n.js';
-import { href } from '../lib/links.js';
+import { tn } from '../lib/i18nNetwork.js';
+import { labelOf } from '../lib/labels.js';
+import { href, itemPath } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
 import { datesOf, parseSmartQuery, parshaLabel } from '../lib/smartSearch.js';
 
@@ -17,13 +20,42 @@ import { datesOf, parseSmartQuery, parshaLabel } from '../lib/smartSearch.js';
  * day of a month and a year are read out of the words (lib/smartSearch.ts)
  * and find farbrengens by date; the rest is searched in names. A query that
  * names nothing of the kind is searched as it is, dates and all.
+ *
+ * Beside the names, the words are looked for inside the texts: a line on
+ * a scan opens at that line, a paragraph of a transcript at the moment it
+ * is heard. "By idea" (`?by=meaning`) searches by meaning instead, where
+ * that is set up, and says the machine chose what it shows.
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { api, siteUrl } = siteOf(context);
   const lang = langFrom(request);
-  const q = new URL(request.url).searchParams.get('q')?.trim() ?? '';
-  const empty = { lang, siteUrl, q, understood: null, events: [] as EventItem[], results: [] as Entity[], date: null as { key: string } | null };
+  const url = new URL(request.url);
+  const q = url.searchParams.get('q')?.trim() ?? '';
+  const byMeaning = url.searchParams.get('by') === 'meaning';
+  // Whether search by meaning is set up: asked with no question, it costs nothing.
+  const meaning = await api.similar('').catch(() => ({ available: false, results: [] as SimilarItem[] }));
+  const empty = {
+    lang,
+    siteUrl,
+    q,
+    by: byMeaning && meaning.available ? ('meaning' as const) : ('words' as const),
+    meaningAvailable: meaning.available,
+    understood: null,
+    events: [] as EventItem[],
+    results: [] as Entity[],
+    date: null as { key: string } | null,
+    moments: [] as Moment[],
+    similar: [] as SimilarItem[],
+    refs: {} as Record<string, Entity>,
+  };
   if (!q) return empty;
+  if (empty.by === 'meaning') {
+    const similar = (await api.similar(q, { limit: 30 })).results;
+    const refs = Object.fromEntries(await api.entities(momentRefs(similar.flatMap((s) => (s.moment ? [s.moment] : [])))));
+    return { ...empty, similar, refs };
+  }
+  const moments = await api.moments(q, 20).catch(() => [] as Moment[]);
+  const refs = Object.fromEntries(await api.entities(momentRefs(moments)));
 
   const smart = parseSmartQuery(q);
   const understood = smart.parsha || smart.day || smart.year ? {
@@ -63,7 +95,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const shown = new Set(events.map((e) => e.id));
   results = results.filter((r) => !shown.has(r.id));
   const moreEvents = results.filter((r) => r.type === 'event') as EventItem[];
-  return { ...empty, understood, events: [...events, ...moreEvents], results: results.filter((r) => r.type !== 'event'), date };
+  // Pages and paragraphs show as the moments they are, above.
+  const inText = new Set(['text-page', 'segment']);
+  return { ...empty, moments, refs, understood, events: [...events, ...moreEvents], results: results.filter((r) => r.type !== 'event' && !inText.has(r.type)), date };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -80,22 +114,35 @@ const EXAMPLES: Record<Lang, string[]> = {
 const yearOf = (e: EventItem) => Number(String(eventData(e).date ?? '').slice(0, 4));
 
 export default function Search({ loaderData }: Route.ComponentProps) {
-  const { lang, q, understood, events, results, date } = loaderData;
+  const { lang, q, by, meaningAvailable, understood, events, results, date, moments, similar, refs } = loaderData;
   return (
     <>
       <h1>{t(lang, 'search')}</h1>
+      {meaningAvailable ? (
+        <nav className="page-tabs" aria-label={t(lang, 'search')}>
+          <Link to={href('/search', lang, { q: q || undefined })} aria-current={by === 'words' ? 'page' : undefined}>
+            {tn(lang, 'byWords')}
+          </Link>
+          <Link to={href('/search', lang, { q: q || undefined, by: 'meaning' })} aria-current={by === 'meaning' ? 'page' : undefined}>
+            {tn(lang, 'byMeaning')}
+          </Link>
+        </nav>
+      ) : null}
       <Form method="get" action="/search" className="search-box" role="search">
         <label className="visually-hidden" htmlFor="q">
           {t(lang, 'search')}
         </label>
         <input id="q" name="q" type="search" dir="auto" defaultValue={q} placeholder={t(lang, 'searchPlaceholder')} enterKeyHint="search" autoFocus={!q} />
         {lang === 'en' ? <input type="hidden" name="lang" value="en" /> : null}
+        {by === 'meaning' ? <input type="hidden" name="by" value="meaning" /> : null}
         <button type="submit" aria-label={t(lang, 'search')}>
           <SearchIcon size={18} />
         </button>
       </Form>
 
-      {!q ? (
+      {by === 'meaning' ? (
+        <MeaningResults q={q} similar={similar} refs={refs} lang={lang} />
+      ) : !q ? (
         <section>
           <p className="search-hints">{t(lang, 'searchHint')}</p>
           <ul className="pills">
@@ -110,7 +157,7 @@ export default function Search({ loaderData }: Route.ComponentProps) {
         </section>
       ) : null}
 
-      {understood || date ? (
+      {by === 'meaning' ? null : understood || date ? (
         <ul className="pills" aria-label={t(lang, 'understood')}>
           {understood?.parsha ? (
             <li className="pill on">
@@ -135,6 +182,16 @@ export default function Search({ loaderData }: Route.ComponentProps) {
         </ul>
       ) : null}
 
+      {q && moments.length ? (
+        <section>
+          <h2 className="section-header">
+            {tn(lang, 'inTheTexts')} · {moments.length}
+          </h2>
+          <p className="row-sub">{tn(lang, 'inTheTextsHint')}</p>
+          <MomentRows moments={moments} refs={refs} lang={lang} />
+        </section>
+      ) : null}
+
       {q && events.length ? (
         <section>
           <h2 className="section-header">
@@ -153,7 +210,36 @@ export default function Search({ loaderData }: Route.ComponentProps) {
         </section>
       ) : null}
 
-      {q && !events.length && !results.length ? <p className="subtitle">{t(lang, 'noResults')}</p> : null}
+      {q && by === 'words' && !events.length && !results.length && !moments.length ? <p className="subtitle">{t(lang, 'noResults')}</p> : null}
     </>
+  );
+}
+
+/** What search by meaning found: each item, or the place in a text, with how near it is, all marked as the machine's choice. */
+function MeaningResults({ q, similar, refs, lang }: { q: string; similar: SimilarItem[]; refs: Record<string, Entity>; lang: Lang }) {
+  if (!q) return <p className="search-hints">{tn(lang, 'byMeaningHint')}</p>;
+  if (!similar.length) return <p className="subtitle">{t(lang, 'noResults')}</p>;
+  return (
+    <section>
+      <p className="note machine-note">{tn(lang, 'byMeaningMachine')}</p>
+      <ol className="moments">
+        {similar.map((s) => {
+          const to = s.moment ? momentHref(s.moment, refs, lang) : href(itemPath(s.item), lang);
+          const words = s.moment ? (s.moment.kind === 'scan-line' ? s.moment.line.text : s.moment.snippet) : labelOf(s.item, lang);
+          const owner = s.moment?.kind === 'paragraph' ? (s.moment.event ?? s.moment.unit) : s.moment?.kind === 'scan-line' ? (s.moment.publication ?? s.moment.scan) : null;
+          return (
+            <li key={s.item.id} className="moment machine">
+              <p className="moment-words" dir="auto">
+                {to ? <Link to={to}>{words}</Link> : words}
+              </p>
+              <p className="row-sub">
+                {owner && refs[owner] ? `${labelOf(refs[owner]!, lang)} · ` : ''}
+                {typeName(s.item.type, lang)} · {tn(lang, 'nearness')} {Math.round(s.score * 100)}%<span className="unchecked"> · {tn(lang, 'foundByMachine')}</span>
+              </p>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }

@@ -10,7 +10,9 @@ export type ReportResult = { reported: true } | { reported: false; error: string
  */
 export function ReportForm({ entityId }: { entityId: string }) {
   const lang = useLang();
-  const result = useActionData() as ReportResult;
+  // Only a report's own answer (the page's other forms post here too).
+  const data = useActionData() as ReportResult | Record<string, unknown> | undefined;
+  const result = data && 'reported' in data ? (data as ReportResult) : undefined;
   const navigation = useNavigation();
   const busy = navigation.state === 'submitting';
   return (

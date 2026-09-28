@@ -77,7 +77,24 @@ In **rebbehub-api → Settings → Variables and Secrets**:
 - `REPORT_SALT` - any long random string (`openssl rand -hex 32`); hashes
   reporters' addresses for rate limits;
 - `TURNSTILE_SECRET` - a [Turnstile](https://developers.cloudflare.com/turnstile/)
-  secret, for a captcha on anonymous reports.
+  secret, for a captcha on anonymous reports;
+- `RESEND_API_KEY` - a [Resend](https://resend.com) API key, for signing in
+  by email link, email updates and takedown receipts (and optionally the
+  variable `EMAIL_FROM`); see [accounts](accounts.md#email-updates);
+- `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_TOKEN` - Workers AI, the same
+  pair the transcription uses (step 7): for the reviewer's advice on
+  suggestions (see [accounts](accounts.md#the-reviewers-advice)) and for
+  search by meaning, where the API turns each question into a vector.
+  Without them the site does not offer "By idea";
+- `OAI_ADMIN_EMAIL` - the address OAI-PMH gives libraries for the
+  repository's administrators; without it, `/oai` is not offered.
+
+Each is off until its secret is set; nothing on the site shows it before.
+
+For mirrors, three public values (not secrets) go in `[vars]` of
+`services/api/wrangler.toml` once they exist: `CATALOG_GIT_URL`,
+`RELEASE_PUBLIC_KEYS` and, if dumps live elsewhere, `DUMPS_BASE_URL`
+([mirrors](mirrors.md)). Until then `/mirrors` says they are coming.
 
 ### 6. Fill the catalog
 
@@ -103,6 +120,13 @@ database address but cannot read the private Sichos-Kodesh repository.
    nothing, so it never replaces their work. Once they have, runs update
    the catalog in place (`scripts/import-catalog.sh`).
 
+   Each run also crawls, politely and cached, what the other importers
+   read: the mafteiach index, chabadlibrary.org's contents, JEM's catalog,
+   HebrewBooks' shelf and Sefaria's Chabad books ([importers](importers.md)).
+   To keep Sefaria's texts on RebbeHub's own storage, add
+   `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (a token with
+   **Workers R2 Storage: Edit**); without them the pages link to Sefaria.
+
 Or, from a computer with this repository and a Sichos-Kodesh checkout:
 
 ```sh
@@ -126,8 +150,21 @@ npm run rebbehub -- import sichos-kodesh-occasions --from ../Sichos-Kodesh --app
   - `CLOUDFLARE_AI_TOKEN`: a Cloudflare API token with **Workers AI:
     Read** and **Workers AI: Edit** only.
 
+  Its **align** box then runs `rebbehub align` too, with the same keys:
+  word timings for transcripts that have none (made before word timings,
+  or corrected since) and the farbrengen's hanacha synced paragraph by
+  paragraph where the catalog has its text. Without the two secrets
+  neither runs, and the site shows paragraph-level sync only.
+
 Both mark what the machine made as machine output on the site until
 people check it.
+
+- **Links, embeddings and citations** runs every night: it checks the
+  catalog's links for the health page (`/health`), and, once the two
+  Workers AI secrets above are set, reads items for search by meaning
+  (BGE-M3, a fraction of a cent per thousand items). **Run workflow**
+  also proposes the citations found in the texts as links, for keepers to
+  review ([operations](operations.md)).
 
 ## A domain of your own
 

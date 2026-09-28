@@ -51,11 +51,46 @@ reads (`services/api/src/uploads.ts`). A file already known is not taken
 twice: the uploader is shown where it is. The file joins the catalog
 through a suggestion, reviewed like any other.
 
+A new teshura ("Add a teshura" on the Teshuros set, or a scan the upload
+check takes for one) is always a teshura scan: `credit`, credited to the
+families ("משפחות כהן – לוי"), whatever rights statement comes with it.
+Page images and thumbnails made from a scan are derivations and follow
+its state.
+
+## A family's request
+
+Every teshura page has *A family's request*: no account, works without
+JavaScript, captcha and rate limit as for reports. The teshura's served
+scans (and their page images) move to `preserved` at once, as the
+`system` actor in the audit log; a rights report and a
+`family_request` row are kept for the stewards, who may restore the
+state with `setRights` if the request was not from the family. Nothing
+is deleted (`familyRequest` in `packages/core/src/print.ts`). Requests
+about anything other than a teshura use the general report form.
+
+## Translations
+
+"Add a translation" on a unit's page takes the words themselves, so it
+takes only what may be copied, and says whose it is:
+
+| The translator says | Licence | Served |
+| --- | --- | --- |
+| Mine, I translated it | none (community text, CC BY-SA) | yes, credited to them |
+| Public domain | public domain | yes |
+| CC0 / CC BY / CC BY-NC | as given | yes, with the credit given (Sefaria's are CC BY-NC) |
+
+A publisher's all-rights-reserved translation (Kehot's, a site's terms)
+is never pasted in: it is listed as a copy elsewhere, a link. A machine
+translation says which tool made it and is marked as machine text,
+paragraph by paragraph, until a person checks each one.
+
 ## Changing it
 
 Only stewards change a file's state (`setRights`), and every change is in
 the audit log. A takedown moves a file to `preserved`: it stops being
-served at once and is never deleted.
+served at once and is never deleted. Anyone asks for one at `/takedown`,
+with no account; a steward answers within two weeks and takes each file the
+request points at down in one click from `/admin` ([accounts](accounts.md#stewards-and-platform-admins)).
 
 ## Exports
 
@@ -63,4 +98,10 @@ The git mirror and the dumps carry catalog facts always, file hashes but
 never files, and words only when their rights allow: a text copied from a
 source keeps that source's licence (site-terms and commercial texts are
 listed as withheld), community text is CC BY-SA, and OCR pages follow
-their scan's file.
+their scan's file. The Parquet dump carries exactly what the SQLite and
+JSON Lines dumps do.
+
+Machines that read the words (search by meaning, citations) send words
+to Workers AI only when they may be exported; citations found are facts
+(a link and the reference as written), so they are proposed from any
+text.

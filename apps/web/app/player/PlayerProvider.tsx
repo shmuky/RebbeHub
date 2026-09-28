@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { forgetPlace, localPlace, placeKey, recordPlace, resumeFrom } from '../lib/places.js';
+import { useAccount } from '../lib/useAccount.js';
 
 /**
  * One player for the whole site, as in Sichos-Kodesh's app: a single
@@ -6,6 +8,11 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
  * The queue is one event's parts. Where you are is kept in this browser
  * (localStorage), so a reload or a return visit picks up where you left
  * off, paused.
+ *
+ * Each farbrengen also keeps its own place (lib/places.ts): playing it
+ * again starts where you stopped, and a signed-in listener's place is kept
+ * on their account too, for "continue listening" on the home page of any
+ * device. A farbrengen heard to its end is forgotten there.
  */
 
 export interface Track {
@@ -32,13 +39,19 @@ interface PlayerState {
 
 interface PlayerApi extends PlayerState {
   current: Track | null;
-  /** Plays a queue from one of its parts (the first by default), from `startAt` seconds into it (a transcript's line). */
+  /**
+   * Plays a queue from one of its parts, from `startAt` seconds into it (a
+   * transcript's line). Without them, from where this farbrengen was
+   * stopped, if it was, else from the start.
+   */
   play: (queue: Track[], index?: number, startAt?: number) => void;
   toggle: () => void;
   next: () => void;
   prev: () => void;
   seek: (seconds: number) => void;
   close: () => void;
+  /** Where the audio is this moment, in seconds: finer than `time`, which the browser updates a few times a second. */
+  now: () => number;
 }
 
 const PlayerContext = createContext<PlayerApi | null>(null);
@@ -77,6 +90,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const lastSaved = useRef(0);
   const [state, setState] = useState<PlayerState>({ queue: [], index: 0, playing: false, loading: false, time: 0, duration: 0, error: false });
   const current = state.queue[state.index] ?? null;
+  const account = useAccount();
+  const signedIn = useRef(false);
+  signedIn.current = Boolean(account);
 
   // Restore the last queue, paused, once the page is in the browser.
   useEffect(() => {
@@ -86,13 +102,29 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, queue: saved.queue, index: saved.index, time: saved.time }));
   }, []);
 
-  const persist = useCallback((queue: Track[], index: number, time: number) => {
+  const persist = useCallback((queue: Track[], index: number, time: number, flush = false) => {
     lastSaved.current = Date.now();
     save(queue.length ? { queue, index, time } : null);
+    const track = queue[index];
+    if (track) {
+      const duration = audio.current?.duration;
+      recordPlace(
+        { kind: 'listen', key: placeKey(track), title: track.subtitle, sub: track.title, href: track.href, place: { queue, index, time, duration: Number.isFinite(duration) ? duration : 0 } },
+        { sync: signedIn.current, flush },
+      );
+    }
   }, []);
 
   const play = useCallback(
-    (queue: Track[], index = 0, startAt?: number) => {
+    (queue: Track[], asked?: number, startAt?: number) => {
+      let index = asked ?? 0;
+      if (startAt === undefined && queue[0]) {
+        const resume = resumeFrom(queue, localPlace('listen', placeKey(queue[0])));
+        if (resume && (asked === undefined || asked === resume.index)) {
+          index = resume.index;
+          startAt = resume.time || undefined;
+        }
+      }
       autoplay.current = true;
       pendingSeek.current = startAt ?? null;
       setState((s) => ({ ...s, queue, index, time: startAt ?? 0, duration: 0, playing: false, loading: true, error: false }));
@@ -173,7 +205,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [current, next, prev, seek, state.index, state.queue.length]);
 
-  const api = useMemo<PlayerApi>(() => ({ ...state, current, play, toggle, next, prev, seek, close }), [state, current, play, toggle, next, prev, seek, close]);
+  const now = useCallback(() => audio.current?.currentTime ?? 0, []);
+  const api = useMemo<PlayerApi>(() => ({ ...state, current, play, toggle, next, prev, seek, close, now }), [state, current, play, toggle, next, prev, seek, close, now]);
 
   return (
     <PlayerContext.Provider value={api}>
@@ -193,7 +226,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         onPause={() => {
           setState((s) => ({ ...s, playing: false }));
           const el = audio.current;
-          if (el) persist(state.queue, state.index, el.currentTime);
+          if (el && !el.ended) persist(state.queue, state.index, el.currentTime, true);
         }}
         onWaiting={() => setState((s) => ({ ...s, loading: true }))}
         onTimeUpdate={(e) => {
@@ -203,7 +236,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         }}
         onEnded={() => {
           if (state.index < state.queue.length - 1) goTo(state.index + 1);
-          else setState((s) => ({ ...s, playing: false }));
+          else {
+            setState((s) => ({ ...s, playing: false }));
+            // Heard to its end: nothing to continue.
+            if (current) forgetPlace('listen', placeKey(current), signedIn.current);
+          }
         }}
         onError={() => setState((s) => ({ ...s, loading: false, playing: false, error: true }))}
       />

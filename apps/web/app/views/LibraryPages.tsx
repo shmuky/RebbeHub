@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router';
 import type { LocalName } from '@rebbehub/model';
 import { ItemList } from '../components/ItemLink.js';
 import { Books, RebbePortrait, coverColour } from '../components/Library.js';
+import { Printings } from '../components/Printings.js';
 import type { Entity } from '../lib/api.js';
 import { dateLabel } from '../lib/dates.js';
 import { kindName, languageName, nameOf, t, type Lang } from '../lib/i18n.js';
@@ -242,7 +243,7 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
         )
       ) : null}
       {tab === 'sources' && copies.length ? <Sources copies={copies} lang={lang} /> : null}
-      {tab === 'printings' && publications.length ? <ItemList items={publications} /> : null}
+      {tab === 'printings' && publications.length ? <Printings publications={publications} scanCounts={view.scanCounts} lang={lang} /> : null}
 
       <HelpCallout lang={lang} title={t(lang, 'knowPrinting')} text={t(lang, 'knowPrintingText')} />
     </>

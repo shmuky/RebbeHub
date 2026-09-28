@@ -1,11 +1,11 @@
 import { browserSupportsWebAuthn, startAuthentication, startRegistration } from '@simplewebauthn/browser';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import type { Route } from './+types/signin';
 import { langFrom, t } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
-import { refreshAccount, useAccount, useGoogleSignIn } from '../lib/useAccount.js';
+import { refreshAccount, useAccount, useEmailSignIn, useGoogleSignIn } from '../lib/useAccount.js';
 import { useLang } from '../lib/useLang.js';
 
 /**
@@ -14,6 +14,9 @@ import { useLang } from '../lib/useLang.js';
  * face or screen lock, and works only on RebbeHub. New here: a name to be
  * known by, and the device makes the passkey. Or with Google, once the
  * site has its Google sign-in keys: the browser goes to Google and back.
+ * Or by a link sent by email, once the site can send email: the link comes
+ * back here (`?email-token=`), and the page asks once more before using it,
+ * so a mail program that opens links to check them cannot use it up.
  */
 
 /** Why a Google sign-in came back here (the API's `?error=`). */
@@ -39,6 +42,115 @@ function safeReturn(value: string | null): string {
   return value && value.startsWith('/') && !value.startsWith('//') ? value : '/account';
 }
 
+/** Arriving from the link in an email: what it is for, a new person's name, and one button that uses it. */
+function EmailLink({ token, onDone }: { token: string; onDone: () => void }) {
+  const lang = useLang();
+  const [info, setInfo] = useState<{ email: string; known: boolean; adding: { displayName: string } | null; suggestedName: string | null } | null>(null);
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [added, setAdded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    post<NonNullable<typeof info>>('email/check', { token })
+      .then((answer) => {
+        setInfo(answer);
+        setName(answer.suggestedName ?? '');
+      })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+  }, [token]);
+
+  async function use(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const answer = await post<{ added?: string }>('email/verify', { token, name: name.trim() || undefined });
+      if (answer.added) setAdded(true);
+      else onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="section-header">{t(lang, 'emailLinkTitle')}</h2>
+      {error ? (
+        <p className="note" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {added ? <p>{t(lang, 'emailLinkAdded')}</p> : null}
+      {info && !added ? (
+        <form onSubmit={use} className="signin-form">
+          <p>
+            {info.adding ? `${t(lang, 'emailLinkAdd')} ${info.adding.displayName}: ` : info.known ? `${t(lang, 'emailLinkSignIn')} ` : `${t(lang, 'emailLinkNew')} `}
+            <strong dir="ltr">{info.email}</strong>
+          </p>
+          {!info.known && !info.adding ? (
+            <>
+              <label htmlFor="email-name">{t(lang, 'nameToShow')}</label>
+              <input id="email-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required autoComplete="name" dir="auto" />
+              <p className="row-sub">{t(lang, 'nameToShowHint')}</p>
+            </>
+          ) : null}
+          <button type="submit" disabled={busy || (!info.known && !info.adding && !name.trim())}>
+            {busy ? t(lang, 'waiting') : t(lang, 'continueButton')}
+          </button>
+        </form>
+      ) : null}
+    </section>
+  );
+}
+
+/** Asking for a link by email. */
+function EmailStart({ returnTo }: { returnTo: string }) {
+  const lang = useLang();
+  const [email, setEmail] = useState('');
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function send(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await post('email/start', { email, return: returnTo, lang });
+      setSentTo(email.trim());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section>
+      <h2 className="section-header">{t(lang, 'orEmail')}</h2>
+      {sentTo ? (
+        <p role="status">
+          {t(lang, 'linkSent')} <strong dir="ltr">{sentTo}</strong>. {t(lang, 'linkSentText')}
+        </p>
+      ) : (
+        <form onSubmit={send} className="signin-form">
+          <p>{t(lang, 'orEmailText')}</p>
+          <label htmlFor="email">{t(lang, 'emailAddress')}</label>
+          <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={254} required autoComplete="email" dir="ltr" />
+          {error ? (
+            <p className="row-sub" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <button type="submit" className="secondary" disabled={busy || !email.trim()}>
+            {busy ? t(lang, 'waiting') : t(lang, 'sendLink')}
+          </button>
+        </form>
+      )}
+    </section>
+  );
+}
+
 export default function SignIn() {
   const lang = useLang();
   const account = useAccount();
@@ -46,6 +158,8 @@ export default function SignIn() {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState<'in' | 'new' | null>(null);
   const google = useGoogleSignIn();
+  const emailOn = useEmailSignIn();
+  const emailToken = params.get('email-token');
   const cameBack = GOOGLE_ERRORS[params.get('error') as keyof typeof GOOGLE_ERRORS];
   const [error, setError] = useState<string | null>(cameBack ? t(lang, cameBack) : null);
   const done = () => {
@@ -106,9 +220,17 @@ export default function SignIn() {
         </>
       ) : null}
 
+      {error ? (
+        <p className="note" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      {emailToken ? <EmailLink token={emailToken} onDone={done} /> : null}
+
       {!supported ? <p className="note">{t(lang, 'noPasskeys')}</p> : null}
 
-      {account ? null : (
+      {account || emailToken ? null : (
         <>
           <section>
             <h2 className="section-header">{t(lang, 'haveAccount')}</h2>
@@ -141,6 +263,8 @@ export default function SignIn() {
               </a>
             </section>
           ) : null}
+
+          {emailOn ? <EmailStart returnTo={safeReturn(params.get('return'))} /> : null}
         </>
       )}
 

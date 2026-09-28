@@ -4,6 +4,7 @@ import type { Route } from './+types/review';
 import { ChangeTable } from '../components/ChangeTable.js';
 import { langFrom, t, typeName, type Lang } from '../lib/i18n.js';
 import { labelOf } from '../lib/labels.js';
+import { st } from '../lib/scanStrings.js';
 import { href } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
 import { useAccount } from '../lib/useAccount.js';
@@ -13,8 +14,11 @@ import { useLang } from '../lib/useLang.js';
  * Suggestions waiting for review (the plan, section 7): each one's change
  * before and after, in words, and for the set's keepers Approve or Send
  * back with a note, in one tap. Also the signed-in person's own
- * suggestions and what became of them. Filled in by the browser, since
- * who may approve is personal; the page itself is the same for everyone.
+ * suggestions and what became of them, and trusted people's line fixes
+ * that went live at once, to keep or undo. Each may carry the reviewer's
+ * advice: a machine's summary, shown as such, which decides nothing.
+ * Filled in by the browser, since who may approve is personal; the page
+ * itself is the same for everyone.
  */
 export function loader({ request }: Route.LoaderArgs) {
   return { lang: langFrom(request), siteUrl: new URL(request.url).origin };
@@ -31,6 +35,8 @@ interface Suggestion {
   description: string | null;
   author: string;
   status: 'draft' | 'open' | 'merged' | 'sent_back' | 'withdrawn';
+  kind: 'suggestion' | 'import' | 'revert' | 'live';
+  post_review: 'pending' | 'done' | null;
   submitted_at: string | null;
   created_at: string;
   checks: Array<{ check: string; status: 'pass' | 'warn' | 'fail'; message: string }>;
@@ -41,9 +47,11 @@ interface Detail {
   entries: Array<{ entityId: string; type: string; before: unknown; after: unknown; changes: Array<{ path: string; before?: unknown; after?: unknown }>; conflicts: unknown[]; withheld?: string }>;
   reviews: Array<{ reviewer: string; verdict: 'approve' | 'send_back'; body: string | null; created_at: string }>;
   names: Record<string, string>;
-  files: Record<string, { url: string | null; mime: string; bytes: number; rights: string }>;
+  files: Record<string, { url: string | null; mime: string; bytes: number; rights: string; similar?: Array<{ kind: 'same' | 'shares'; matched?: number; of?: number; items: Array<{ id: string; type: string; path: string | null }> }> }>;
   mayApprove: boolean;
   mine: boolean;
+  /** The reviewer's advice, written by a machine (null until one has been written). */
+  advice: { summary: string; model: string; at: string; machine: true } | null;
 }
 
 async function call<T>(path: string, init?: { method: 'POST'; body: unknown }): Promise<T> {
@@ -75,6 +83,18 @@ function NewItem({ type, data, files, lang }: { type: string; data: Record<strin
         </a>
       ) : null}
       {file && !file.url ? <p className="row-sub">{t(lang, 'filePrivate')}</p> : null}
+      {/* What the jobs found it looks like: a machine's guess, for the reviewer to check. */}
+      {file?.similar?.map((s, i) => (
+        <p key={i} className="row-sub unchecked">
+          {st(lang, 'machineLooksLike')}{' '}
+          {s.items.map((item) => (
+            <Link key={item.id} to={href(item.path ?? `/${item.id}`, lang)}>
+              {typeName(item.type, lang)}
+            </Link>
+          ))}
+          {s.of ? ` (${s.matched}/${s.of} ${st(lang, 'pagesAlike')})` : ''}
+        </p>
+      ))}
     </div>
   );
 }
@@ -132,6 +152,17 @@ function SuggestionCard({ detail, lang, onDone, open }: { detail: Detail; lang: 
         );
       })}
       {cs.description ? <blockquote className="suggestion-note">{cs.description}</blockquote> : null}
+      {detail.advice && (cs.status === 'open' || cs.post_review === 'pending') ? (
+        <aside className="notice machine advice">
+          <b>{t(lang, 'adviceTitle')}</b>
+          <p dir="ltr" lang="en">
+            {detail.advice.summary}
+          </p>
+          <small>
+            {t(lang, 'adviceNote')} ({detail.advice.model})
+          </small>
+        </aside>
+      ) : null}
       {failed.length ? (
         <ul className="checks">
           {failed.map((c) => (
@@ -173,6 +204,16 @@ function SuggestionCard({ detail, lang, onDone, open }: { detail: Detail; lang: 
           </div>
         )
       ) : null}
+      {cs.post_review === 'pending' && detail.mayApprove ? (
+        <div className="actions">
+          <button type="button" onClick={act('review-live', { verdict: 'approve' })} disabled={busy}>
+            {t(lang, 'keepLive')}
+          </button>
+          <button type="button" className="secondary" onClick={act('review-live', { verdict: 'revert' })} disabled={busy}>
+            {t(lang, 'undoLive')}
+          </button>
+        </div>
+      ) : null}
       {detail.mine && (cs.status === 'open' || cs.status === 'sent_back') ? (
         <div className="actions">
           <button type="button" className="secondary" onClick={act('withdraw')} disabled={busy}>
@@ -191,6 +232,7 @@ export default function Review() {
   const focus = Number(params.get('s')) || null;
   const [waiting, setWaiting] = useState<Detail[] | null>(null);
   const [mine, setMine] = useState<Detail[]>([]);
+  const [live, setLive] = useState<Detail[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -198,6 +240,8 @@ export default function Review() {
       const details = (list: Suggestion[]) => Promise.all(list.map((s) => call<Detail>(`/${s.id}`)));
       const open = await call<{ suggestions: Suggestion[] }>('?status=open&limit=30');
       setWaiting(await details(open.suggestions));
+      const wentLive = await call<{ suggestions: Suggestion[] }>('?postReview=true&limit=30');
+      setLive(await details(wentLive.suggestions));
       if (account) {
         const own = await call<{ suggestions: Suggestion[] }>(`?author=${encodeURIComponent(account.person.id)}&limit=100`);
         // Newest first; those still waiting are already listed above.
@@ -228,6 +272,15 @@ export default function Review() {
       {waiting === null ? <p className="row-sub">{t(lang, 'waiting')}</p> : null}
       {waiting?.length === 0 ? <p>{t(lang, 'nothingWaiting')}</p> : null}
       {waiting?.map((d) => <SuggestionCard key={d.changeset.id} detail={d} lang={lang} onDone={load} open={d.changeset.id === focus} />)}
+      {live.length ? (
+        <section>
+          <h2 className="section-header">{t(lang, 'liveTitle')}</h2>
+          <p className="row-sub">{t(lang, 'liveIntro')}</p>
+          {live.map((d) => (
+            <SuggestionCard key={d.changeset.id} detail={d} lang={lang} onDone={load} open={d.changeset.id === focus} />
+          ))}
+        </section>
+      ) : null}
       {mine.length ? (
         <section>
           <h2 className="section-header">{t(lang, 'yourSuggestions')}</h2>

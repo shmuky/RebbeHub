@@ -24,6 +24,9 @@ rebbehub import sichos-kodesh-works --from ../Sichos-Kodesh --approve-as shmuly
 rebbehub import sichos-kodesh-occasions --from ../Sichos-Kodesh --approve-as shmuly   # farbrengens, recordings, hanachos
 ```
 
+The other importers (HebrewBooks, JEM, Sefaria, the Igros letters' dates,
+Sichos-Kodesh's archive) and what each needs are in [importers](importers.md).
+
 Without `--approve-as`, the bot's suggestions wait in the review queue.
 Running an import again changes only what the source changed, and never
 overwrites what people have fixed.
@@ -44,11 +47,53 @@ result to the public `rebbehub/catalog` repository.
 ```sh
 rebbehub keygen --out release-key.json        # once; keep it secret, publish the public key
 rebbehub edition --by shmuly                  # tags main as e.g. 2026.40
-rebbehub dump --tag 2026.40 --out dumps/2026.40 --key release-key.json
+rebbehub dump --tag 2026.40 --out dumps/2026.40 --key release-key.json --upload
 ```
 
 The dump folder holds the SQLite database, the JSON Lines file, the
-Sichos-Kodesh release and a signed `manifest.json`; upload it to R2.
+same table as Parquet (`rebbehub-<tag>.parquet`: `id`, `type`, `path`,
+`rev`, and `data` as JSON, for DuckDB, pandas or Spark), the
+Sichos-Kodesh release and a signed `manifest.json`; `--upload` puts them
+in the public bucket at `dumps/<tag>/`, where the API serves them at
+`/dumps/<tag>/<name>` and lists them, with their sha256, on
+`/v1/editions` and `/mirrors`. How others keep a copy: [mirrors](mirrors.md).
+
+## Links, search by meaning and citations
+
+```sh
+rebbehub check-links --limit 2000     # whether the catalog's links answer (the health page's dead links)
+rebbehub embed --limit 2000           # vectors for search by meaning (Workers AI keys needed)
+rebbehub citations                    # citations in the texts, proposed as links for review
+rebbehub citations --approve-as shmuly  # ... approved at once, as an import is
+```
+
+Each does only what earlier runs have not: `check-links` checks the
+links checked longest ago first, `embed` reads items it has not read at
+their current revision, `citations` reads items it has not read at their
+current revision and never proposes a link that was proposed before
+(merged, waiting, or sent back). The *Links, embeddings and citations*
+workflow runs `check-links` every night, and `embed` too once the
+Workers AI secrets are set; `citations` only when started.
+
+- **Search by meaning** uses BGE-M3 on Cloudflare Workers AI
+  (multilingual: Hebrew, Yiddish and English questions find the same
+  sichos). The vectors are kept in the `embedding` table as `real[]`;
+  where the database has pgvector (Neon), migration 0010 switches it on
+  and indexes them, and elsewhere (PGlite, a plain Postgres) they are
+  compared in plain SQL. Words whose rights forbid copies are never sent:
+  such an item is read by its name alone. The API offers the search once
+  its Worker has `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_TOKEN`
+  ([deploy](deploy.md)); until then the site does not show "By idea".
+  Everything it finds is marked as chosen by machine.
+- **Citations**: `לקו"ש חי"ב עמ' 123`, `אג"ק ח"ג אגרת תשסד`,
+  `תו"מ`, `סה"מ מלוקט`, and sichos by their date (`שיחת י"ט כסלו תשכ"ב`;
+  `משיחת…` says the page is based on that farbrengen; `נדפס ב…` says
+  where it was printed). Each is linked to the most precise thing the
+  catalog holds (the letter, the volume's printing, the farbrengen, else
+  the sefer) as a Relation in a suggestion by `bot:citations`, labelled as
+  found by machine until a keeper approves it (`packages/core/src/citations.ts`).
+- The whole-catalog copy (`scripts/import-catalog.sh`) replaces these
+  tables with the build's, which has none: run the jobs again after it.
 
 ## The Sichos Kodesh scans and their reading copies
 
@@ -129,6 +174,60 @@ does not hold (a publisher's scan: link only, stored nowhere) with its
 page fix. `GET /v1/page-fixes/drive/<Drive id>` answers the reader: the
 turns, or the reading copy to open instead when RebbeHub serves one.
 
+## Text and sync
+
+- `rebbehub ocr --reread` reads again the scans an older version of the
+  engine read. The machine layer takes the new reading (its engine and
+  version with it); community pages seeded from it take the new lines,
+  except every line a person checked, which stays as they left it.
+- People upload their own OCR on a scan's text page (hOCR, ALTO, or plain
+  text with a form feed between pages); it is kept as its own layer, with
+  the program and version they name. The scan's keepers pick which layer
+  seeds the community text ("Seed the text from this"); pages people
+  already worked on keep their checked lines.
+- Pages are proofread once when every line on them is checked, twice when
+  a second person reads the page through ("This page is right"); the
+  strip of pages on `/text/<scan>` shows each page's level.
+- `rebbehub align --approve-as <steward>` hears recordings again with
+  Whisper for word times (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_AI_TOKEN) and
+  aligns them to the transcripts as they now stand; spans a person locked
+  ("Said now" on a farbrengen page) are never moved, and the rest are
+  aligned only between them. Where the catalog has the farbrengen's
+  hanacha (a `hanacha` text of a unit of the event), it is synced
+  paragraph by paragraph by shared words. New transcripts get word
+  timings straight away.
+- Projects of kind *sync* (recordings of a year to check) and
+  *proofreading* (a scan's pages, to once or twice) hand out the next
+  recording or page nobody holds; a claim lapses after three hours
+  (migration 0013).
+
+## Page images and fingerprints
+
+Every served scan is shown page by page from JPEG **page images** (1600px
+wide) with a strip of **thumbnails** (240px), and has a IIIF Presentation
+3 manifest at `/manifests/iiif/<scan>.json` built from them. Both are
+derivations of the scan's file (profiles `page-image/<n>` and
+`thumbnail/<n>`, encoder `page-images@1`), so they follow its rights and
+stop being served with it. Rendering a page also gives its page hash, so
+`page-images` measures the file for the upload check as it goes.
+
+```sh
+export CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=…   # R2 edit rights on rebbehub-public
+rebbehub page-images --limit 200                         # or --scan <id>
+rebbehub fingerprints --limit 500                        # needs ffmpeg for recordings
+```
+
+`fingerprints` measures held files nobody has measured yet: a PDF's page
+hashes (`dhash-256@1`, one per page) and a recording's fingerprint
+(`rh-audio@1`, decoded with ffmpeg on the jobs machine only). It reads
+served files from the files host; with `--preservation-bucket
+rebbehub-preservation` (and the R2 keys above) it measures kept files
+too. The upload check (`POST /v1/uploads/check`) and the review queue
+use them to say "we already have this" or "another scan of this
+printing". A rebuild import clears them with the rest of the database;
+run both commands again after one. They are machine output and are only
+ever shown as a guess.
+
 ## The API
 
 - Local: `npm run dev:api` (PGlite, or `DATABASE_URL`). `DEV_ACCOUNT=me`
@@ -136,6 +235,8 @@ turns, or the reading copy to open instead when RebbeHub serves one.
   the server listens on localhost.
 - Cloudflare Workers: deployed on every merge to `main`; see
   [deploy.md](deploy.md).
+- `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_TOKEN` switch on search by
+  meaning; `OAI_ADMIN_EMAIL` switches on OAI-PMH at `/oai`.
 
 ## The site
 

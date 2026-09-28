@@ -1,5 +1,5 @@
 import type { Context, Hono } from 'hono';
-import { listPeople, setPersonRole, type Catalog } from '@rebbehub/core';
+import { listPeople, setPersonRole, takeDownFile, takedowns, type Catalog } from '@rebbehub/core';
 import { one } from '@rebbehub/db';
 import { HttpError } from './app.js';
 
@@ -49,6 +49,23 @@ export function adminRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context) 
     const now = await one<{ steward: boolean }>(db, 'SELECT steward FROM auth.person WHERE id = $1', [person.id]);
     await catalog.setSteward(me.id, person.id, Boolean(now?.steward));
     return c.json({ ok: true });
+  });
+
+  // Takedown requests (the public form), with the files each points at; and taking a file down in one click.
+  app.get('/v1/admin/takedowns', async (c) => {
+    const me = await roleOf(c);
+    if (!me.steward) throw new HttpError(403, 'only stewards see this');
+    const status = c.req.query('status');
+    if (status && !['open', 'resolved', 'dismissed'].includes(status)) throw new HttpError(400, 'status is open, resolved or dismissed');
+    return c.json({ takedowns: await takedowns(catalog, me.id, { status: status as 'open' | undefined }) });
+  });
+
+  app.post('/v1/admin/files/:sha256/takedown', async (c) => {
+    const me = await roleOf(c);
+    if (!me.steward) throw new HttpError(403, 'only stewards take files down');
+    const input = (await c.req.json().catch(() => ({}))) as { report?: number };
+    await takeDownFile(catalog, me.id, { sha256: c.req.param('sha256'), report: typeof input.report === 'number' ? input.report : undefined });
+    return c.json({ ok: true, rights: 'preserved' });
   });
 
   app.post('/v1/admin/people/:id/suspend', async (c) => {

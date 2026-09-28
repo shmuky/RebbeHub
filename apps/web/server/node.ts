@@ -22,7 +22,8 @@ const handler = createSiteHandler(build, {
 const app = new Hono();
 // Built assets have content hashes in their names, so they can be cached for good.
 app.use('/assets/*', serveStatic({ root: './build/client', onFound: (_path, c) => c.header('Cache-Control', 'public, max-age=31536000, immutable') }));
-app.use('/favicon.svg', serveStatic({ root: './build/client' }));
+// The rest of public/ (icons, the web app manifest, the service worker, the reader's pdf.js files); a miss goes on to the pages.
+app.use('*', serveStatic({ root: './build/client' }));
 app.all('*', (c) => handler(c.req.raw));
 
 serve({ fetch: app.fetch, port, hostname: process.env.HOST ?? '127.0.0.1' });

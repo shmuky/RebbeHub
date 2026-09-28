@@ -8,6 +8,7 @@ import { AccountLink } from './components/AccountLink.js';
 import { AppNav } from './components/AppNav.js';
 import { PlayerBar } from './player/PlayerBar.js';
 import { PlayerProvider } from './player/PlayerProvider.js';
+import { useServiceWorker } from './lib/pwa.js';
 import './app.css';
 
 export const links: LinksFunction = () => [
@@ -15,6 +16,9 @@ export const links: LinksFunction = () => [
   { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossOrigin: 'anonymous' },
   { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&family=Noto+Sans+Hebrew:wght@400;600;700&family=Noto+Sans:wght@400;600;700&display=swap' },
   { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
+  // Installable as an app, with an offline shell (public/sw.js, registered in lib/pwa.ts).
+  { rel: 'manifest', href: '/manifest.webmanifest' },
+  { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
 ];
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -65,7 +69,8 @@ function Footer({ lang }: { lang: Lang }) {
         <p>{t(lang, 'footerOpen')}</p>
         <p>
           <a href="https://github.com/shmuky/RebbeHub">{t(lang, 'code')}</a> · <a href="https://github.com/shmuky/RebbeHub/blob/main/CONTRIBUTING.md">{t(lang, 'help')}</a> ·{' '}
-          <Link to={href('/about', lang)}>{t(lang, 'about')}</Link>
+          <Link to={href('/about', lang)}>{t(lang, 'about')}</Link> · <Link to={href('/takedown', lang)}>{t(lang, 'takedownTitle')}</Link> ·{' '}
+          <Link to={href('/mirrors', lang)}>{lang === 'he' ? 'הורדה ואתרי מראה' : 'Download and mirror'}</Link>
         </p>
       </div>
     </footer>
@@ -77,12 +82,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const lang = data?.lang ?? 'he';
   // An embed is the item alone, in another site's frame: no menus, no player bar.
   const embedded = useLocation().pathname.startsWith('/embed/');
+  useServiceWorker(!embedded);
   return (
     <html lang={lang} dir={dir(lang)}>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="color-scheme" content="light dark" />
+        <meta name="theme-color" content="#faf8f4" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#0e1110" media="(prefers-color-scheme: dark)" />
         <Meta />
         <Links />
       </head>

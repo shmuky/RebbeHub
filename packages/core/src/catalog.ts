@@ -20,6 +20,7 @@ import { badState, CatalogError, forbidden, invalid, notFound } from './errors.j
 import { diffData, threeWayMerge, resolveConflicts, UnresolvedConflictError, type Conflict, type FieldChange, type Json, type Resolution } from './merge.js';
 import { canApprove, canSuggest, earnedTrust, mayGoLive, type Account, type SetInfo } from './permissions.js';
 import { searchTextOf, toTsQuery } from './searchText.js';
+import { focusCounts } from './projectWork.js';
 
 /**
  * The catalog: GitHub's model over the versioned Postgres schema, in the
@@ -124,10 +125,36 @@ export interface NewRevision {
 
 export type ReportReason = 'wrong-fact' | 'missing-page' | 'bad-scan' | 'audio-problem' | 'wrong-text' | 'duplicate' | 'rights' | 'offensive' | 'other';
 
-/** What a project works through: the farbrengens (of a year or month) missing recordings or texts. */
+/** A file Sichos-Kodesh's archive wants and upstream would not give (migration 0009). */
+export interface ArchiveGapRow {
+  collection: string;
+  item_id: string;
+  kind: string;
+  role: string;
+  source: string;
+  url: string;
+  label: string | null;
+  hebrew_date: string | null;
+  status: 'unresolved' | 'error';
+  http_status: number | null;
+  error: string | null;
+  attempts: number;
+  checked_at: string | null;
+  entity_id: string | null;
+}
+
+/**
+ * What a project works through: the farbrengens (of a year or month)
+ * missing recordings or texts; the recordings (of a year) whose sync nobody
+ * has checked yet; or the pages of a scan not yet proofread to `level`.
+ */
 export interface ProjectFocus {
-  missing: 'recordings' | 'texts';
+  missing: 'recordings' | 'texts' | 'sync' | 'proofreading';
   within?: string;
+  /** For proofreading: the scan whose pages are read. */
+  scan?: EntityId;
+  /** For proofreading: done at proofread once (1, the default) or twice (2). */
+  level?: 1 | 2;
 }
 
 export interface ProjectView {
@@ -1102,12 +1129,55 @@ export class Catalog {
   }
 
   /**
+   * Files Sichos-Kodesh's archive could not get from upstream (migration
+   * 0009): a Drive link that is gone, a recording the CDN no longer
+   * gives. Each with the item it belongs to, when RebbeHub has it, so
+   * someone who has the file can add it there.
+   */
+  async archiveGaps(limit = 50): Promise<{ total: number; items: Array<ArchiveGapRow & { entity: EntityView | null }> }> {
+    const total = await one<{ n: number }>(this.db, 'SELECT count(*)::int AS n FROM archive_gap');
+    const { rows } = await this.db.query<ArchiveGapRow & { rev_id: number | null; rev_type: EntityType | null; rev_path: string | null; rev_data: Json | null }>(
+      `SELECT g.collection, g.item_id, g.kind, g.role, g.source, g.url, g.label, g.hebrew_date, g.status, g.http_status, g.error, g.attempts, g.checked_at, g.entity_id,
+              r.id AS rev_id, r.entity_type AS rev_type, r.path AS rev_path, r.data AS rev_data
+       FROM archive_gap g LEFT JOIN entity e ON e.id = g.entity_id AND NOT e.deleted LEFT JOIN revision r ON r.id = e.main_rev
+       ORDER BY g.hebrew_date NULLS LAST, g.collection, g.item_id, g.role LIMIT ${Math.min(Math.max(limit, 1), 500)}`,
+    );
+    return {
+      total: total?.n ?? 0,
+      items: rows.map(({ rev_id, rev_type, rev_path, rev_data, ...gap }) => ({
+        ...gap,
+        entity: rev_id !== null && rev_type && rev_data && gap.entity_id ? { id: gap.entity_id as EntityId, type: rev_type, path: rev_path, rev: rev_id, data: rev_data } : null,
+      })),
+    };
+  }
+
+  /** Replaces the archive's list of files it could not get (`rebbehub archive-gaps`). */
+  async loadArchiveGaps(gaps: Array<ArchiveGapRow & { source_id: string }>): Promise<number> {
+    return this.db.transaction(async (tx) => {
+      await tx.query('DELETE FROM archive_gap');
+      for (const g of gaps) {
+        await tx.query(
+          `INSERT INTO archive_gap (collection, item_id, kind, source_id, role, entity_id, source, url, label, hebrew_date, status, http_status, error, attempts, checked_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) ON CONFLICT DO NOTHING`,
+          [g.collection, g.item_id, g.kind, g.source_id, g.role, g.entity_id, g.source, g.url, g.label, g.hebrew_date, g.status, g.http_status, g.error, g.attempts, g.checked_at],
+        );
+      }
+      return gaps.length;
+    });
+  }
+
+  /**
    * A project that works through a gap (migration 0007): opened by a
    * steward or the set's keepers, with a name, a goal in words, and its
    * focus: which farbrengens (a year) lack what (recordings or texts).
    */
   async openFocusProject(by: string, input: { slug: string; name: string; goal?: string; set?: EntityId; focus: ProjectFocus }): Promise<number> {
-    if (input.focus.missing !== 'recordings' && input.focus.missing !== 'texts') throw invalid('a project works through farbrengens missing recordings or texts');
+    if (!['recordings', 'texts', 'sync', 'proofreading'].includes(input.focus.missing)) throw invalid('a project works through farbrengens missing recordings or texts, recordings to sync, or a scan to proofread');
+    if (input.focus.missing === 'proofreading') {
+      const scan = input.focus.scan ? await this.get(input.focus.scan) : null;
+      if (!scan || scan.type !== 'scan') throw invalid('a proofreading project names its scan');
+      if (input.focus.level !== undefined && input.focus.level !== 1 && input.focus.level !== 2) throw invalid('level is 1 (proofread once) or 2 (twice)');
+    }
     if (input.focus.within !== undefined && !/^\d{4}(-(0[1-9]|1[0-2]|06A|06B))?$/.test(input.focus.within)) throw invalid('within is a year (5745) or a month (5745-05)');
     const id = await this.createProject(by, input);
     await this.db.query('UPDATE project SET focus = $2 WHERE id = $1', [id, JSON.stringify(input.focus)]);
@@ -1126,16 +1196,7 @@ export class Catalog {
     );
     return Promise.all(
       rows.map(async (p) => {
-        const counts = await one<{ total: number; done: number }>(
-          this.db,
-          `SELECT count(*)::int AS total,
-                  count(*) FILTER (WHERE ${p.focus.missing === 'recordings'
-                    ? "EXISTS (SELECT 1 FROM entity_ref x JOIN entity f ON f.id = x.from_id AND f.type = 'recording' AND NOT f.deleted WHERE x.to_id = e.id AND x.field = 'event')"
-                    : "coalesce(jsonb_array_length(r.data->'links'), 0) > 0"})::int AS done
-           FROM entity e JOIN revision r ON r.id = e.main_rev
-           WHERE e.type = 'event' AND NOT e.deleted ${p.focus.within ? "AND r.data->>'date' LIKE $1 || '%'" : ''}`,
-          p.focus.within ? [p.focus.within] : [],
-        );
+        const counts = await focusCounts(this, p.focus);
         return {
           id: Number(p.id),
           slug: p.slug,
@@ -1148,8 +1209,8 @@ export class Catalog {
           createdBy: p.created_by,
           creatorName: p.creator,
           createdAt: new Date(p.created_at).toISOString(),
-          total: counts?.total ?? 0,
-          done: counts?.done ?? 0,
+          total: counts.total,
+          done: counts.done,
         };
       }),
     );
@@ -1279,9 +1340,14 @@ export class Catalog {
    * What changed lately in what a person follows: the item itself, and what
    * belongs to it (a sefer's sichos, a farbrengen's recordings, a set's
    * items). One line per merge, with how many of the followed things it
-   * changed; changes from before they followed are left out.
+   * changed; changes from before they followed are left out. For email
+   * notifications: only merges after `afterSeq`, and none of the person's own.
    */
-  async followFeed(accountId: string, limit = 20): Promise<Array<{ seq: number; at: string; message: string; authorName: string; authorIsBot: boolean; entityId: string; changes: number }>> {
+  async followFeed(
+    accountId: string,
+    limit = 20,
+    options: { afterSeq?: number; notOwn?: boolean } = {},
+  ): Promise<Array<{ seq: number; at: string; message: string; authorName: string; authorIsBot: boolean; entityId: string; changes: number }>> {
     const { rows } = await this.db.query<{ seq: string; at: Date | string; message: string; author_name: string; author_is_bot: boolean; entity_id: string; changes: number }>(
       `WITH targets AS (SELECT target_id, created_at FROM follow WHERE account_id = $1 AND target_kind IN ('entity', 'set')),
             touched AS (
@@ -1293,10 +1359,10 @@ export class Catalog {
             )
        SELECT c.seq, c.at, c.message, a.display_name AS author_name, a.is_bot AS author_is_bot, min(x.entity_id) AS entity_id, count(*)::int AS changes
        FROM touched x JOIN commit c ON c.seq = x.commit_seq JOIN changeset cs ON cs.id = c.changeset_id JOIN account a ON a.id = cs.author
-       WHERE c.at >= x.created_at
+       WHERE c.at >= x.created_at AND c.seq > $2 AND NOT ($3 AND cs.author = $1)
        GROUP BY c.seq, c.at, c.message, a.display_name, a.is_bot
        ORDER BY c.seq DESC LIMIT ${Math.min(Math.max(limit, 1), 100)}`,
-      [accountId],
+      [accountId, options.afterSeq ?? 0, options.notOwn ?? false],
     );
     return rows.map((r) => ({ seq: Number(r.seq), at: new Date(r.at).toISOString(), message: r.message, authorName: r.author_name, authorIsBot: r.author_is_bot, entityId: r.entity_id, changes: r.changes }));
   }

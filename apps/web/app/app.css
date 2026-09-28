@@ -494,6 +494,35 @@ a.pill:hover {
   border-top: 1px solid var(--border);
 }
 
+/* "Continue where you stopped" (components/ContinueRow.tsx): a row, its play button, and a quiet remove. */
+.continue-rows > li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.continue-rows .row {
+  flex: 1;
+  min-width: 0;
+}
+
+.continue-rows .row-icon {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.continue-rows .icon-link {
+  border: 0;
+  background: none;
+  padding: 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.continue-rows .icon-link:hover {
+  color: var(--fg);
+}
+
 .row {
   display: flex;
   align-items: center;
@@ -1244,6 +1273,73 @@ html[lang='en'] .text-body[lang='he'] {
   padding-inline-start: 12px;
 }
 
+/* Download and mirror (routes/mirrors.tsx): each edition's files with their sizes and checksums. */
+.mirrors pre {
+  overflow-x: auto;
+  padding: 12px;
+  background: var(--card);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.mirrors .editions > li {
+  padding: 8px 0 12px;
+}
+
+.mirrors .editions h3 {
+  margin: 0 0 6px;
+  font-size: 1.1rem;
+}
+
+.checksums {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.checksums td {
+  padding: 4px 8px 4px 0;
+  vertical-align: top;
+  border-top: 1px solid var(--border);
+}
+
+.checksums code {
+  word-break: break-all;
+  color: var(--muted);
+}
+
+/* A translation (components/Translations.tsx): its languages as plain links, its credit, and "Fix" per paragraph. */
+.text-languages {
+  margin: -4px 0 8px;
+}
+
+.text-credit {
+  margin: 0 0 12px;
+}
+
+.segment-fix {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.segment-editing {
+  display: block;
+  margin-top: 8px;
+}
+
+.segment-editing textarea {
+  width: 100%;
+  font: inherit;
+}
+
+.segment-editing .actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 /* Media */
 .player {
   padding: 14px 16px;
@@ -1295,6 +1391,95 @@ html[lang='en'] .text-body[lang='he'] {
 
 .scan-toolbar button {
   min-height: 40px;
+}
+
+/* A scan's page images: the page itself, then a strip of its pages. */
+.scan-page {
+  margin: 0;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+}
+
+.scan-page img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(85vh, 1100px);
+  object-fit: contain;
+}
+
+.scan-thumbs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  list-style: none;
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.scan-thumbs button {
+  display: block;
+  padding: 0;
+  min-height: 0;
+  width: 56px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  background: #fff;
+  color: var(--muted);
+}
+
+.scan-thumbs button[aria-current='page'] {
+  border-color: var(--accent);
+}
+
+.scan-thumbs img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* A sefer's printings, one to a row, with their facts in small type. */
+.printings td,
+.printings th {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.printings {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.printings th {
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.upload-guess {
+  margin: 0;
+  padding: 8px 12px;
+  border-inline-start: 3px solid var(--machine);
+  background: var(--bg);
+}
+
+.lookup-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.lookup-results button {
+  width: 100%;
+  text-align: start;
+  min-height: 0;
+  padding: 6px 10px;
 }
 
 /* Calendar */
@@ -2392,6 +2577,66 @@ a.volume:hover {
   justify-self: start;
 }
 
+/* Choices within the account form (email updates): a plain line each, not a heavy label. */
+.signin-form label.choice {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 400;
+}
+
+.signin-form label.choice input {
+  min-height: 0;
+  padding: 0;
+}
+
+.signin-form select,
+.takedown-form input,
+.takedown-form select,
+.takedown-form textarea {
+  min-height: 40px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
+}
+
+/* The public takedown form. */
+.takedown-form {
+  display: grid;
+  gap: 12px;
+  max-width: 560px;
+}
+
+.takedown-form label {
+  display: grid;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.takedown-form button {
+  justify-self: start;
+}
+
+/* The reviewer's advice on a suggestion: set apart, marked as a machine's. */
+.advice b {
+  display: block;
+  font-family: var(--font-display);
+}
+
+.advice p {
+  margin: 4px 0 0;
+}
+
+.advice small {
+  display: block;
+  margin-block-start: 6px;
+  color: var(--muted);
+}
+
 /* A small action inside a heading ("change name"), set as a link, not a button. */
 .link-button {
   background: none;
@@ -2756,6 +3001,160 @@ a.volume:hover {
   font: inherit;
 }
 
+/* Proofread levels: pages change colour as they are checked (the plan, section 7).
+   Not yet checked is the machine's amber; once, a light green; twice, the full green. */
+.text-line.level-0 > span:first-child {
+  color: var(--machine);
+}
+
+.text-line.level-2 > span:first-child::after {
+  content: ' ✓✓';
+  color: var(--accent);
+  font-size: 0.75em;
+}
+
+.page-strip-box {
+  margin: 12px 0;
+}
+
+.page-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.page-strip a,
+.swatch {
+  display: inline-block;
+  min-width: 2.1em;
+  padding: 1px 3px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  text-align: center;
+  text-decoration: none;
+  color: var(--fg);
+}
+
+.swatch {
+  min-width: 1em;
+  height: 0.9em;
+  padding: 0;
+  vertical-align: middle;
+}
+
+.page-strip .level-0,
+.swatch.level-0 {
+  background: var(--bg);
+  border-color: var(--machine);
+}
+
+.page-strip .level-1,
+.swatch.level-1 {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.page-strip .level-2,
+.swatch.level-2 {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.page-strip a.current {
+  outline: 2px solid var(--fg);
+  outline-offset: 1px;
+  font-weight: 700;
+}
+
+.page-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 6px 0 0;
+}
+
+.page-level.level-0 {
+  color: var(--machine);
+}
+
+.page-level.level-1,
+.page-level.level-2 {
+  color: var(--accent);
+}
+
+.confirm-page {
+  margin: 12px 0;
+}
+
+/* Word-level sync: the word being said, and the words already said. */
+.transcript-para .word.said {
+  color: var(--fg);
+}
+
+.transcript-para .word.spoken {
+  background: var(--mark);
+  border-radius: 2px;
+}
+
+.transcript-para.sync-unchecked {
+  border-inline-start: 2px dotted var(--machine);
+}
+
+.transcript-actions {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.said-now {
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.hanacha-sync {
+  margin: 12px 0;
+}
+
+/* Compare printings: what only the first has is struck through, what only the second has is underlined. */
+.compare-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+}
+
+.compare-pick select {
+  max-width: 100%;
+}
+
+.compare-text {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  line-height: 2;
+}
+
+.compare-text del,
+.compare-counts del {
+  color: var(--danger);
+  text-decoration-thickness: 2px;
+}
+
+.compare-text ins,
+.compare-counts ins {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
 /* An embed: the item alone, in another site's frame. */
 body.embedded {
   padding: 12px 16px;
@@ -2824,6 +3223,36 @@ body.embedded {
 
 .pdf-page canvas {
   display: block;
+}
+
+/* The pages' colours (reader/look.ts, from Sichos-Kodesh's pdfCssFilter): dark pages, sepia or grey paper,
+   stronger contrast. Only the page is drawn through it; dark pages sit on black while they draw. */
+.pdf-viewer-screen .pdf-page canvas {
+  filter: var(--pdf-filter, none);
+}
+
+.pdf-viewer-screen.pdf-dark .pdf-page {
+  background: #000;
+}
+
+.reader-look {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  margin: 6px 0;
+}
+
+.reader-look select {
+  margin-inline-start: 4px;
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elevated);
+}
+
+.reader-resumed {
+  margin: 4px 0 8px;
 }
 
 .pdf-loading {
@@ -2994,4 +3423,81 @@ body.embedded {
   font-size: 0.8rem;
   text-align: center;
   opacity: 0.75;
+}
+
+/* Search that lands on the moment (routes/search.tsx, components/Moments.tsx). */
+.moments {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+}
+.moments > li {
+  padding: 10px 0;
+  border-block-end: 1px solid var(--border);
+}
+.moment-words {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  line-height: 1.8;
+}
+.moment-words a {
+  color: inherit;
+  text-decoration: none;
+}
+.moment-words a:hover {
+  text-decoration: underline;
+}
+.moment.machine .moment-words {
+  color: var(--machine);
+}
+.moments mark,
+.text-line.found mark {
+  background: var(--mark);
+  color: var(--fg);
+}
+.text-line.found,
+.transcript-para.found {
+  background: var(--mark);
+}
+
+/* An item's links (components/Relations.tsx). */
+.relations .list .meta {
+  max-width: 55%;
+  text-align: end;
+}
+
+/* The health of the catalog (routes/health.tsx): plain printed tables. */
+.table-scroll {
+  overflow-x: auto;
+}
+.health-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.health-table th,
+.health-table td {
+  padding: 6px 8px;
+  border-block-end: 1px solid var(--border);
+  text-align: start;
+  white-space: nowrap;
+}
+.health-table thead th {
+  font-weight: 600;
+  color: var(--muted);
+  border-block-end-color: var(--fg);
+}
+.health-table tbody th {
+  font-family: var(--font-display);
+  font-weight: 400;
+}
+.health-table tfoot th,
+.health-table tfoot td {
+  font-weight: 600;
+  border-block-start: 1px solid var(--fg);
+}
+.dead-links .row-title {
+  overflow-wrap: anywhere;
+  font-size: 0.9375rem;
 }

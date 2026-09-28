@@ -121,6 +121,56 @@ jobs:
           path: .chabadlibrary
           key: chabadlibrary-${{ github.run_id }}
 
+      # JEM's own catalog of the Rebbe's recordings (packages/importers/src/jem.ts), crawled with
+      # Sichos-Kodesh's packages/jem-index, which caches every answer: a run in the same month reads the cache.
+      - uses: actions/cache@v4
+        with:
+          path: .jem/.cache
+          key: jem-${{ steps.month.outputs.month }}
+      - name: Crawl JEM's catalog
+        continue-on-error: true
+        run: |
+          cp -r .sichos-kodesh/packages/jem-index .jem-crawler
+          cd .jem-crawler
+          npm install --no-save --no-package-lock --no-audit --no-fund tsx@^4
+          npx tsx bin/crawl.ts --db ../.jem/jem.db --cache ../.jem/.cache --delay-ms 400
+
+      # The Chabad shelf of HebrewBooks, read afresh from the latest Otzaria catalog by Sichos-Kodesh's
+      # packages/hebrewbooks-index (packages/importers/src/hebrewBooks.ts). Without it, the shelf the
+      # Sichos-Kodesh checkout carries is imported.
+      - name: Read the HebrewBooks shelf
+        continue-on-error: true
+        run: |
+          mkdir -p .hebrewbooks
+          curl -fsSL -o .hebrewbooks/otzar-HB_catalog.db.zst https://github.com/Otzaria/otzar-HB_catalog/releases/latest/download/otzar-HB_catalog.db.zst
+          cp -r .sichos-kodesh/packages/hebrewbooks-index .hebrewbooks-reader
+          cd .hebrewbooks-reader
+          npm install --no-save --no-package-lock --no-audit --no-fund tsx@^4
+          npx tsx bin/import.ts --catalog ../.hebrewbooks/otzar-HB_catalog.db.zst --out ../.hebrewbooks/shelf.json
+
+      # Sefaria's Chabad books Sichos-Kodesh does not publish (packages/importers/src/sefaria.ts), read
+      # politely and cached between runs. With CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (R2 edit on
+      # rebbehub-public), each text that may be kept is stored on RebbeHub's own storage by its sha256.
+      - uses: actions/cache/restore@v4
+        with:
+          path: .sefaria/cache
+          key: sefaria-${{ github.run_id }}
+          restore-keys: sefaria-
+      - name: Read Sefaria's Chabad books
+        continue-on-error: true
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          keep=""
+          if [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && [ -n "$CLOUDFLARE_API_TOKEN" ] && [ "${{ inputs.dry_run }}" != "true" ]; then keep="--keep"; fi
+          npm run --silent rebbehub -- crawl-sefaria --from .sichos-kodesh --out .sefaria/data --cache .sefaria/cache $keep
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: .sefaria/cache
+          key: sefaria-${{ github.run_id }}
+
       - name: Import
         env:
           STEWARD: ${{ inputs.steward }}
@@ -129,11 +179,14 @@ jobs:
           BUILD_DATABASE_URL: postgres://rebbehub:rebbehub@localhost:5432/build
           MAFTEIACH_DATA: .mafteiach/data
           CHABADLIBRARY_TREE: .chabadlibrary/tree.json
+          JEM_DB: .jem/jem.db
+          HEBREWBOOKS_SHELF: .hebrewbooks/shelf.json
+          SEFARIA_DATA: .sefaria/data
         run: |
           if [ "$DRY_RUN" = "true" ]; then
             npm run rebbehub -- migrate
-            for importer in sichos-kodesh-works sichos-kodesh-occasions otzros chabadlibrary; do
-              npm run rebbehub -- import "$importer" --from .sichos-kodesh --dry-run
+            for importer in rebbehub-sets sichos-kodesh-works sichos-kodesh-occasions otzros hebrewbooks chabadlibrary jem sefaria; do
+              npm run rebbehub -- import "$importer" --from .sichos-kodesh --dry-run || echo "::warning::$importer could not run"
             done
           else
             scripts/import-catalog.sh .sichos-kodesh "$STEWARD" "$STEWARD_NAME"

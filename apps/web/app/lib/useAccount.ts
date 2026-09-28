@@ -11,25 +11,45 @@ export interface SignedIn {
   person: { id: string; displayName: string; steward?: boolean; admin?: boolean };
   passkeys: Array<{ credentialId: string; deviceType: string | null; backedUp: boolean; createdAt: string; lastUsedAt: string | null }>;
   googleAccounts: Array<{ email: string | null; createdAt: string }>;
+  /** Addresses that sign this person in by email link (their Google accounts' too). */
+  emails: Array<{ email: string; createdAt: string; google: boolean }>;
+  /** Email updates of what they follow. */
+  notifications: { mode: 'off' | 'daily' | 'immediate'; email: string | null; lang: 'he' | 'en' };
+  /** Earned by approved suggestions: trusted people's line fixes in open sets go live at once. */
+  trust: 'contributor' | 'trusted';
 }
 
 interface Answer {
   account: SignedIn | null;
   /** Whether the site can sign in with Google yet. */
   google: boolean;
+  /** Whether the site can send email yet (sign-in links, updates). */
+  email: boolean;
 }
+
+type MeBody = Partial<Omit<SignedIn, 'person'>> & { person: SignedIn['person'] | null; google?: boolean; email?: boolean };
 
 let asked: Promise<Answer> | null = null;
 const listeners = new Set<(value: Answer) => void>();
 
 function ask(): Promise<Answer> {
   asked ??= fetch('/_/auth/me', { credentials: 'same-origin', headers: { accept: 'application/json' } })
-    .then((r) => (r.ok ? (r.json() as Promise<{ person: SignedIn['person'] | null; passkeys?: SignedIn['passkeys']; googleAccounts?: SignedIn['googleAccounts']; google?: boolean }>) : { person: null }))
+    .then((r) => (r.ok ? (r.json() as Promise<MeBody>) : ({ person: null } as MeBody)))
     .then((body) => ({
-      account: body.person ? { person: body.person, passkeys: body.passkeys ?? [], googleAccounts: body.googleAccounts ?? [] } : null,
+      account: body.person
+        ? {
+            person: body.person,
+            passkeys: body.passkeys ?? [],
+            googleAccounts: body.googleAccounts ?? [],
+            emails: body.emails ?? [],
+            notifications: body.notifications ?? { mode: 'off' as const, email: null, lang: 'he' as const },
+            trust: body.trust ?? 'contributor',
+          }
+        : null,
       google: body.google ?? false,
+      email: body.email ?? false,
     }))
-    .catch(() => ({ account: null, google: false }));
+    .catch(() => ({ account: null, google: false, email: false }));
   return asked;
 }
 
@@ -57,6 +77,11 @@ function useAnswer(): Answer | undefined {
 export function useAccount(): SignedIn | null | undefined {
   const answer = useAnswer();
   return answer === undefined ? undefined : answer.account;
+}
+
+/** Whether the site sends email (sign-in links, updates); false until it is known. */
+export function useEmailSignIn(): boolean {
+  return useAnswer()?.email ?? false;
 }
 
 /** Whether Google sign-in is switched on; false until it is known. */

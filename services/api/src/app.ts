@@ -1,11 +1,16 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, getDerivations, getFile, getPageFix, listWebhooks, recordingTranscript, scanText, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, getDerivations, getFile, getPageFix, hanachaSync, itemsUsingFile, listWebhooks, pageImageCount, printingsOf, projectTodo, recordingTranscript, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type Mailer, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
 import { adminRoutes } from './admin.js';
 import { uploadRoutes, type UploadOptions } from './uploads.js';
+import { scanRoutes } from './scans.js';
 import { OPENAPI } from './openapi.js';
+import { networkRoutes } from './network.js';
+import { oaiRoutes, type OaiOptions } from './oai.js';
+import { mirrorRoutes, type MirrorOptions } from './mirrors.js';
+import { readingRoutes } from './reading.js';
 
 /**
  * The RebbeHub API. Reading needs nothing; reporting a problem needs no
@@ -34,7 +39,17 @@ export interface ApiOptions {
   files?: FileStore;
   /** Where the texts of seforim are kept (`texts/<sha256>` in the public bucket), and where they are first copied from: Sichos-Kodesh's published archive. */
   texts?: { store: FileStore; writer: { put(key: string, bytes: ArrayBuffer, mime: string): Promise<void> }; from?: FileStore };
+  /** Where the catalog is mirrored, and the keys its editions are signed with (mirrors.ts). */
+  mirrors?: MirrorOptions;
+  /** The site's address (`https://rebbehub.org`), for links home from IIIF manifests. Unset, the passkeys' site, else rebbehub.org. */
+  siteUrl?: string;
   version?: string;
+  /** Sends email (Resend): sign-in links, and a receipt to whoever asks for a takedown. Unset, no email is sent. */
+  mailer?: Mailer;
+  /** Turns questions into vectors for search by meaning (Workers AI); unset, that search says it is not available. */
+  embedder?: Embedder | null;
+  /** OAI-PMH for libraries, at /oai; unset (no administrators' address), it is not offered. */
+  oai?: OaiOptions;
 }
 
 /** A byte range asked for with `Range: bytes=…`. */
@@ -133,9 +148,24 @@ export function createApp(options: ApiOptions): Hono {
     c.header('X-Content-Type-Options', 'nosniff');
   });
 
-  if (options.auth) authRoutes(app, catalog, options.auth);
+  if (options.auth) authRoutes(app, catalog, options.mailer && !options.auth.mailer ? { ...options.auth, mailer: options.mailer } : options.auth);
   adminRoutes(app, catalog, signedIn);
   uploadRoutes(app, catalog, signedIn, options.uploads);
+  networkRoutes(app, catalog, { embedder: options.embedder });
+  if (options.oai) oaiRoutes(app, catalog, options.oai);
+  readingRoutes(app, catalog, signedIn, (status, message) => {
+    throw new HttpError(status, message);
+  });
+  mirrorRoutes(app, catalog, { mirrors: options.mirrors, files: options.files });
+  scanRoutes(app, catalog, {
+    filesBase: (c) => options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null),
+    siteUrl: options.siteUrl ?? options.auth?.origins[0] ?? 'https://rebbehub.org',
+    signedIn,
+    authenticate,
+    reportSalt: options.reportSalt,
+    verifyCaptcha: options.verifyCaptcha,
+    reportsPerHour: options.reportsPerHour,
+  });
 
   app.get('/', (c) => c.redirect('/v1'));
   app.get('/openapi.json', (c) => c.json(OPENAPI));
@@ -222,7 +252,14 @@ export function createApp(options: ApiOptions): Hono {
       const { total, items } = await catalog.worksWithoutScans(limit);
       return c.json({ kind, total, items: await redact(items) });
     }
-    if (kind !== 'recordings' && kind !== 'texts') throw new HttpError(400, 'kind is recordings, texts or scans');
+    // Files Sichos-Kodesh's archive wants and upstream would not give (a Drive link gone, a recording the CDN lost).
+    if (kind === 'files') {
+      const { total, items } = await catalog.archiveGaps(limit);
+      const entities = await redact(items.flatMap((g) => (g.entity ? [g.entity] : [])));
+      const byId = new Map(entities.map((e) => [e.id, e]));
+      return c.json({ kind, total, items: items.map((g) => ({ ...g, entity: g.entity ? (byId.get(g.entity.id) ?? null) : null })) });
+    }
+    if (kind !== 'recordings' && kind !== 'texts') throw new HttpError(400, 'kind is recordings, texts, scans or files');
     if (within && !/^\d{4}(-(0[1-9]|1[0-2]|06A|06B))?$/.test(within)) throw new HttpError(400, 'within is a year (5745) or a month (5745-05)');
     const all = await catalog.events({ within, missing: kind, limit: 2000 });
     return c.json({ kind, within: within ?? null, total: all.length, items: await redact(all.slice(0, limit)) });
@@ -234,20 +271,41 @@ export function createApp(options: ApiOptions): Hono {
   app.get('/v1/projects/:slug', async (c) => {
     const [project] = await catalog.projects({ slug: c.req.param('slug') });
     if (!project) throw new CatalogError('not-found', 'no such project');
-    const next = project.status === 'open' ? await catalog.events({ within: project.focus.within, missing: project.focus.missing, limit: 30 }) : [];
-    return c.json({ project, next: await redact(next) });
+    const open = project.status === 'open';
+    const byEvent = project.focus.missing === 'recordings' || project.focus.missing === 'texts';
+    const next = open && byEvent ? await catalog.events({ within: project.focus.within, missing: project.focus.missing as 'recordings', limit: 30 }) : [];
+    const todo = open ? await projectTodo(catalog, project, 30) : [];
+    return c.json({ project, next: await redact(next), todo });
+  });
+
+  // "Give me the next one": the next item nobody holds, held for whoever asks for a few hours.
+  app.post('/v1/projects/:slug/next', async (c) => {
+    const by = await signedIn(c);
+    return c.json({ item: await claimNext(catalog, c.req.param('slug'), by) });
+  });
+
+  app.post('/v1/projects/:slug/release', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ item?: string }>(c);
+    if (!input.item) throw new HttpError(400, 'give the item to let go of');
+    await releaseClaim(catalog, c.req.param('slug'), by, input.item);
+    return c.json({ ok: true });
   });
 
   app.post('/v1/projects', async (c) => {
     const by = await signedIn(c);
-    const input = await body<{ slug?: string; name?: string; goal?: string; set?: string; missing?: 'recordings' | 'texts'; within?: string }>(c);
+    const input = await body<{ slug?: string; name?: string; goal?: string; set?: string; missing?: ProjectFocus['missing']; within?: string; scan?: string; level?: number }>(c);
     if (!input.slug || !input.name?.trim()) throw new HttpError(400, 'a project needs a slug and a name');
+    const focus: ProjectFocus =
+      input.missing === 'proofreading'
+        ? { missing: 'proofreading', scan: input.scan ? entityId(input.scan) : undefined, ...(input.level ? { level: input.level as 1 | 2 } : {}) }
+        : { missing: input.missing as 'recordings', ...(input.within ? { within: input.within } : {}) };
     const id = await catalog.openFocusProject(by, {
       slug: input.slug,
       name: input.name.trim().slice(0, 200),
       goal: input.goal?.trim().slice(0, 2000) || undefined,
       set: input.set ? entityId(input.set) : undefined,
-      focus: { missing: input.missing as 'recordings', ...(input.within ? { within: input.within } : {}) },
+      focus,
     });
     return c.json({ id, slug: input.slug }, 201);
   });
@@ -286,6 +344,56 @@ export function createApp(options: ApiOptions): Hono {
     return c.json(await fixLine(catalog, by, { scan, page: input.page, line: input.line, text: input.text }), 201);
   });
 
+  // How far each page of a scan is proofread (0, 1 or 2), for the page strip and proofreading projects.
+  app.get('/v1/scans/:id/progress', async (c) => {
+    const scan = entityId(c.req.param('id'));
+    await scanTextAllowed(scan);
+    const progress = await scanProgress(catalog, scan);
+    if (!progress) throw new CatalogError('not-found', 'this scan has not been read yet');
+    return c.json(progress);
+  });
+
+  // "This page is right": raises a page a proofreading level, with any lines fixed on the way.
+  app.post('/v1/scans/:id/text/confirm', async (c) => {
+    const by = await signedIn(c);
+    const scan = entityId(c.req.param('id'));
+    await scanTextAllowed(scan);
+    const input = await body<{ page?: number; fixes?: Record<string, string> }>(c);
+    if (typeof input.page !== 'number') throw new HttpError(400, 'give the page');
+    return c.json(await confirmPage(catalog, by, { scan, page: input.page, fixes: input.fixes }), 201);
+  });
+
+  // Someone's own OCR of a scan (hOCR, ALTO or plain text), as a new layer, for review.
+  app.post('/v1/scans/:id/ocr', async (c) => {
+    const by = await signedIn(c);
+    const scan = entityId(c.req.param('id'));
+    await scanTextAllowed(scan);
+    const input = await body<{ content?: string; format?: OcrFormat; engine?: { name?: string; version?: string }; firstPage?: number; language?: string }>(c);
+    if (typeof input.content !== 'string' || !input.engine?.name || !input.engine.version) throw new HttpError(400, 'give content and engine { name, version }');
+    if (input.format !== undefined && !['hocr', 'alto', 'text'].includes(input.format)) throw new HttpError(400, 'format is hocr, alto or text');
+    const made = await uploadOcr(catalog, by, { scan, content: input.content, format: input.format, engine: { name: input.engine.name, version: input.engine.version }, firstPage: input.firstPage, language: input.language });
+    return c.json(made, 201);
+  });
+
+  // Keepers pick which OCR layer seeds the community text.
+  app.post('/v1/scans/:id/text/seed', async (c) => {
+    const by = await signedIn(c);
+    const scan = entityId(c.req.param('id'));
+    const input = await body<{ layer?: string }>(c);
+    if (!input.layer) throw new HttpError(400, 'give the layer');
+    return c.json(await chooseSeed(catalog, by, { scan, layer: entityId(input.layer) }), 201);
+  });
+
+  // Compare printings: the printings of a unit whose text the catalog has, and two of them word by word.
+  app.get('/v1/units/:id/printings', async (c) => c.json({ printings: await printingsOf(catalog, entityId(c.req.param('id'))) }));
+
+  app.get('/v1/compare', async (c) => {
+    const a = c.req.query('a');
+    const b = c.req.query('b');
+    if (!a || !b) throw new HttpError(400, 'give a and b: text:<id> or scan:<id>:<from>-<to>');
+    return c.json(await comparePrintings(catalog, a, b));
+  });
+
   // A recording's transcript, paragraph by paragraph with where each is heard; machine paragraphs are marked until checked.
   app.get('/v1/recordings/:id/transcript', async (c) => {
     const transcript = await recordingTranscript(catalog, entityId(c.req.param('id')));
@@ -302,6 +410,29 @@ export function createApp(options: ApiOptions): Hono {
     return c.json(await fixParagraph(catalog, by, { segment: input.segment as EntityId, content: input.content }), 201);
   });
 
+  // "The Rebbe is saying this line now": sets a paragraph (or a word of it) at this moment, locks it, and moves what follows with it.
+  app.post('/v1/recordings/:id/sync/anchor', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ segment?: string; atMs?: number; word?: number }>(c);
+    if (!input.segment || typeof input.atMs !== 'number') throw new HttpError(400, 'give segment and atMs');
+    return c.json(await anchorSync(catalog, by, { recording: entityId(c.req.param('id')), segment: entityId(input.segment), atMs: input.atMs, word: typeof input.word === 'number' ? input.word : undefined }), 201);
+  });
+
+  // "The sync is right": every paragraph's sync of the recording marked checked.
+  app.post('/v1/recordings/:id/sync/confirm', async (c) => {
+    const by = await signedIn(c);
+    return c.json(await confirmSync(catalog, by, { recording: entityId(c.req.param('id')) }), 201);
+  });
+
+  // The farbrengen's hanacha, paragraph by paragraph with where each is heard in this recording.
+  app.get('/v1/recordings/:id/hanacha', async (c) => {
+    const found = await hanachaSync(catalog, entityId(c.req.param('id')));
+    if (!found) throw new CatalogError('not-found', 'this recording has no hanacha synced to it');
+    const gate = new ExportGate(catalog);
+    if (await gate.textWithheld(found.text)) throw new CatalogError('not-found', "this hanacha's text is withheld for its rights");
+    return c.json(found);
+  });
+
   app.get('/v1/stats', async (c) => c.json({ head: await catalog.head(), counts: await catalog.counts() }));
 
   app.get('/v1/files/:sha256', async (c) => {
@@ -311,9 +442,11 @@ export function createApp(options: ApiOptions): Hono {
     if (!file) throw new CatalogError('not-found', 'no such file');
     const base = options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
     const served = mayServe(file.rights_state) && file.storage_tier === 'public' && base;
-    // What was made from it (a scan's reading copy), served under the same rights.
-    const derivations = (await getDerivations(catalog.db, sha256)).map((d) => ({ profile: d.profile, sha256: d.sha256, bytes: d.bytes, encoder: d.encoder, url: served ? `${base}/objects/${d.sha256}` : null }));
-    return c.json({ sha256, bytes: file.bytes, mime: file.mime, rights: file.rights_state, credit: file.credit, url: served ? `${base}/objects/${sha256}` : null, derivations, pageFix: await pageFixOf(sha256) });
+    // What was made from it (a scan's reading copy), served under the same rights; its page images are counted, and listed by its scan's pages.
+    const derivations = (await getDerivations(catalog.db, sha256))
+      .filter((d) => !/^(page-image|thumbnail)\//.test(d.profile))
+      .map((d) => ({ profile: d.profile, sha256: d.sha256, bytes: d.bytes, encoder: d.encoder, url: served ? `${base}/objects/${d.sha256}` : null }));
+    return c.json({ sha256, bytes: file.bytes, mime: file.mime, rights: file.rights_state, credit: file.credit, url: served ? `${base}/objects/${sha256}` : null, derivations, pageFix: await pageFixOf(sha256), pageImages: served ? await pageImageCount(catalog.db, sha256) : 0 });
   });
 
   /** A file's page fix (docs/operations.md): measurements, open whatever the file's rights. */
@@ -486,8 +619,6 @@ export function createApp(options: ApiOptions): Hono {
     return c.json({ ok: true, key: parsed.key, he: describeDateKey(parsed.key, 'he'), en: describeDateKey(parsed.key, 'en') });
   });
 
-  app.get('/v1/editions', async (c) => c.json({ editions: await catalog.editions() }));
-
   app.get('/v1/commits', async (c) => {
     const since = intParam(c.req.query('since'), 'since') ?? 0;
     const limit = Math.min(intParam(c.req.query('limit'), 'limit') ?? 20, 100);
@@ -520,6 +651,34 @@ export function createApp(options: ApiOptions): Hono {
       reporterHash,
     });
     return c.json({ id }, 201);
+  });
+
+  // A takedown request (no account needed): a Report in the set's inbox, with who asked kept for stewards alone.
+  app.post('/v1/takedowns', async (c) => {
+    const input = await body<{ target?: string; name?: string; email?: string; relation?: string; statement?: string; captcha?: string }>(c);
+    const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim();
+    if (options.verifyCaptcha && !(await options.verifyCaptcha(input.captcha, ip))) throw new HttpError(403, 'the captcha was not solved');
+    const reporterHash = ip ? await sha256Hex(`${options.reportSalt ?? 'rebbehub'}\u0000${ip}`) : undefined;
+    if (reporterHash) {
+      const { rows } = await catalog.db.query<{ n: number }>("SELECT count(*)::int AS n FROM report WHERE reporter_hash = $1 AND created_at > now() - interval '1 hour'", [reporterHash]);
+      if ((rows[0]?.n ?? 0) >= (options.reportsPerHour ?? 10)) throw new HttpError(429, 'too many requests from here in the last hour; please try again later');
+    }
+    const id = await requestTakedown(catalog, {
+      target: input.target ?? '',
+      name: input.name ?? '',
+      email: input.email ?? '',
+      relation: input.relation as TakedownRelation,
+      statement: input.statement ?? '',
+      reporterHash,
+    });
+    // A receipt, so they know it arrived and when to expect an answer (best effort: the request is kept either way).
+    if (options.mailer && input.email) {
+      const text = `We received your takedown request (number ${id}) for: ${input.target}\n\nA steward will answer within ${TAKEDOWN_RESPONSE_DAYS} days. Until then nothing is deleted; if it is taken down, it stops being shown at once.\n\nRebbeHub`;
+      await options.mailer
+        .send({ to: input.email.trim(), subject: `RebbeHub: takedown request ${id} received`, text, html: `<p>${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>` })
+        .catch((error) => console.error('takedown receipt', error));
+    }
+    return c.json({ id, answerWithinDays: TAKEDOWN_RESPONSE_DAYS }, 201);
   });
 
   // Reports are private: stewards read them all, a set's keepers read their set's.
@@ -571,15 +730,19 @@ export function createApp(options: ApiOptions): Hono {
     // Names instead of ids, and whether the person asking may approve it (to show the buttons or not).
     const names = async (ids: string[]) => Object.fromEntries(await Promise.all([...new Set(ids)].map(async (id) => [id, (await catalog.account(id))?.display_name ?? id])));
     const viewer = (await authenticate?.(c)) ?? null;
-    const mayApprove = viewer && view.changeset.status === 'open' ? await catalog.mayApprove(view.changeset.id, viewer) : { ok: false as const, reason: viewer ? `this suggestion is ${view.changeset.status}` : 'sign in to review' };
+    // Open, or live and waiting to be reviewed after: then someone may decide it.
+    const decidable = view.changeset.status === 'open' || view.changeset.post_review === 'pending';
+    const mayApprove = viewer && decidable ? await catalog.mayApprove(view.changeset.id, viewer) : { ok: false as const, reason: viewer ? `this suggestion is ${view.changeset.status}` : 'sign in to review' };
     // The files it adds, where each may be heard or read (null while its rights keep it private), so the reviewer checks it first.
     const base = options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
-    const files: Record<string, { url: string | null; mime: string; bytes: number; rights: string }> = {};
+    const files: Record<string, { url: string | null; mime: string; bytes: number; rights: string; similar: Array<{ kind: string; matched?: number; of?: number; items: Array<{ id: string; type: string; path: string | null }> }> }> = {};
     for (const entry of view.entries) {
       const sha = (entry.after as { file?: unknown } | null)?.file;
       if (typeof sha !== 'string' || files[sha]) continue;
       const file = await getFile(catalog.db, sha);
-      if (file) files[sha] = { url: base && mayServe(file.rights_state) && file.storage_tier === 'public' ? `${base}/objects/${sha}` : null, mime: file.mime, bytes: file.bytes, rights: file.rights_state };
+      // And what the jobs found it looks like: the same scan or recording already held (a machine's guess, shown as one).
+      const similar = await Promise.all((await similarFiles(catalog.db, sha)).map(async (s) => ({ kind: s.kind, matched: s.matched, of: s.of, items: (await itemsUsingFile(catalog.db, s.sha256)).map((i) => ({ id: i.id, type: i.type, path: i.path })) })));
+      if (file) files[sha] = { url: base && mayServe(file.rights_state) && file.storage_tier === 'public' ? `${base}/objects/${sha}` : null, mime: file.mime, bytes: file.bytes, rights: file.rights_state, similar };
     }
     return c.json({
       ...view,
@@ -588,6 +751,8 @@ export function createApp(options: ApiOptions): Hono {
       mayApprove: mayApprove.ok,
       mayApproveReason: mayApprove.ok ? null : mayApprove.reason,
       mine: viewer === view.changeset.author,
+      // The reviewer's assist: a machine's summary, advice only, marked as such wherever it is shown.
+      advice: await adviceFor(catalog.db, view.changeset.id).then((a) => (a ? { ...a, machine: true } : null)),
     });
   });
 
@@ -641,6 +806,14 @@ export function createApp(options: ApiOptions): Hono {
     const input = await body<{ note?: string }>(c);
     await catalog.sendBack(intParam(c.req.param('id'), 'id')!, by, input.note ?? '');
     return c.json({ ok: true });
+  });
+
+  // A live change (a trusted person's line fix in an open set), reviewed after it went live: kept, or undone.
+  app.post('/v1/suggestions/:id/review-live', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ verdict?: 'approve' | 'revert'; note?: string }>(c);
+    if (input.verdict !== 'approve' && input.verdict !== 'revert') throw new HttpError(400, 'verdict is approve (keep it) or revert (undo it)');
+    return c.json(await catalog.reviewLive(intParam(c.req.param('id'), 'id')!, by, input.verdict, input.note?.trim().slice(0, 2000) || undefined));
   });
 
   app.post('/v1/suggestions/:id/withdraw', async (c) => {
