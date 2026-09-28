@@ -479,7 +479,7 @@ const STRINGS = {
   takedownDone: { he: 'טופל', en: 'Done' },
   takedownTitle: { he: 'בקשת הסרה', en: 'Ask for a takedown' },
   takedownIntro: { he: 'בעלי זכויות ומשפחות יכולים לבקש שנפסיק להגיש קובץ. אין צורך בחשבון.', en: 'Rights holders and families can ask us to stop serving a file. No account is needed.' },
-  takedownPromise: { he: 'מנהלי הקטלוג עונים תוך 3 ימים. עד אז דבר אינו נמחק; קובץ שמוסר מפסיק להיות מוגש מיד, ועותק פרטי שלו נשמר.', en: 'A steward answers within 3 days. Until then nothing is deleted; a file taken down stops being served at once, and a private copy of it is kept.' },
+  takedownPromise: { he: 'מנהלי הקטלוג עונים תוך שבועיים. עד אז דבר אינו נמחק; קובץ שמוסר מפסיק להיות מוגש מיד, ועותק פרטי שלו נשמר.', en: 'A steward answers within two weeks. Until then nothing is deleted; a file taken down stops being served at once, and a private copy of it is kept.' },
   takedownWhat: { he: 'מה להסיר: כתובת הדף באתר, או של הקובץ', en: 'What to take down: the address of its page on the site, or of the file' },
   takedownName: { he: 'השם שלכם', en: 'Your name' },
   takedownEmail: { he: 'כתובת מייל לתשובה', en: 'An email address to answer you at' },

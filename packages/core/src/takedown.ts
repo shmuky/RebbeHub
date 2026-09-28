@@ -17,7 +17,7 @@ import { setRights } from './files.js';
  */
 
 /** How soon a steward answers a takedown request; the form says so. */
-export const TAKEDOWN_RESPONSE_DAYS = 3;
+export const TAKEDOWN_RESPONSE_DAYS = 14;
 
 export type TakedownRelation = 'rights-holder' | 'family' | 'representative' | 'other';
 export const TAKEDOWN_RELATIONS: readonly TakedownRelation[] = ['rights-holder', 'family', 'representative', 'other'];

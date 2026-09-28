@@ -176,7 +176,7 @@ describe('the public site', () => {
   it('takes a takedown request with no account, without JavaScript, and says when it will be answered', async () => {
     const form = await get('/takedown?lang=en');
     expect(form.html).toContain('Ask for a takedown');
-    expect(form.html).toContain('A steward answers within 3 days');
+    expect(form.html).toContain('A steward answers within two weeks');
     const body = new URLSearchParams({ target: `${SITE}/events/5742-05-10`, name: 'Rivka', email: 'rivka@example.org', relation: 'family', statement: 'Our family recording; please take it down.' });
     const response = await handle(new Request(`${SITE}/takedown?lang=en`, { method: 'POST', body, headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-forwarded-for': '10.0.0.2' } }));
     expect(response.status).toBe(200);

@@ -124,7 +124,7 @@ export const OPENAPI = {
     },
     '/v1/takedowns': {
       post: {
-        summary: 'Ask for a file to stop being served (no account needed); stewards answer within 3 days',
+        summary: 'Ask for a file to stop being served (no account needed); stewards answer within two weeks',
         requestBody: json({
           type: 'object',
           required: ['target', 'name', 'email', 'relation', 'statement'],

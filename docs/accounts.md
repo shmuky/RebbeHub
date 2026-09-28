@@ -129,7 +129,7 @@ readers sent, and takedown requests.
   sefer's scans) and takes each down in one click: it moves to
   `preserved`, stops being served at once, a private copy is kept, and
   the audit log says who and for which request. The form promises an
-  answer within 3 days (`TAKEDOWN_RESPONSE_DAYS`, packages/core).
+  answer within two weeks (`TAKEDOWN_RESPONSE_DAYS`, packages/core).
 
 ## Trust
 

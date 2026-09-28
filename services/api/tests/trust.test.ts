@@ -136,10 +136,10 @@ describe('takedowns', () => {
       ip: '203.0.113.9',
       body: { target: 'https://rebbehub.org/events/5742-05-10', name: 'Rivka Cohen', email: 'rivka@example.org', relation: 'family', statement: 'This is our family recording; please take it down.' },
     });
-    expect(asked).toMatchObject({ status: 201, body: { answerWithinDays: 3 } });
+    expect(asked).toMatchObject({ status: 201, body: { answerWithinDays: 14 } });
     // A receipt with when to expect an answer.
     expect(outbox[0]).toMatchObject({ to: 'rivka@example.org', subject: `RebbeHub: takedown request ${asked.body.id} received` });
-    expect(outbox[0]!.text).toContain('within 3 days');
+    expect(outbox[0]!.text).toContain('within 14 days');
 
     // It is a Report on the item (reason rights) in the set's inbox; who asked is kept for stewards.
     const inbox = await call('GET', `/v1/reports?set=${set}`, { as: 'keeper' });

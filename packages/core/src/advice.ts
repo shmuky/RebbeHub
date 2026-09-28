@@ -139,11 +139,12 @@ export async function adviseSuggestions(catalog: Catalog, advisor: Advisor, opti
       error = e instanceof Error ? e.message.slice(0, 500) : String(e);
     }
     await catalog.db.query(
-      `INSERT INTO changeset_advice (changeset_id, summary, model, submitted_at, error) VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO changeset_advice (changeset_id, summary, model, submitted_at, error) VALUES ($1, $2, $3, (SELECT submitted_at FROM changeset WHERE id = $1), $4)
        ON CONFLICT (changeset_id) DO UPDATE SET summary = EXCLUDED.summary, model = EXCLUDED.model, error = EXCLUDED.error, created_at = now(),
          attempts = CASE WHEN changeset_advice.submitted_at IS NOT DISTINCT FROM EXCLUDED.submitted_at THEN changeset_advice.attempts + 1 ELSE 1 END,
          submitted_at = EXCLUDED.submitted_at`,
-      [view.changeset.id, summary, advisor.model, view.changeset.submitted_at, error],
+      // The time is copied in the database: read into JavaScript it loses its microseconds, and would never match again.
+      [view.changeset.id, summary, advisor.model, error],
     );
     if (summary) written++;
   }
