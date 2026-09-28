@@ -6,7 +6,7 @@ import { freshCatalog } from '../../../packages/core/tests/helpers.js';
 describe('a rebuildable catalog', () => {
   it('holds only the built-in schemas and what importers made', async () => {
     const { db } = await freshCatalog();
-    await db.exec('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
+    await db.exec('DROP SCHEMA IF EXISTS auth CASCADE; DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
     const catalog = new Catalog(db);
     await catalog.init();
     expect(await catalogIsRebuildable(db)).toBe(true);

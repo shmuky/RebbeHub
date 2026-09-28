@@ -17,6 +17,7 @@
     "@rebbehub/db": "^0.1.0",
     "@rebbehub/hebrew": "^0.1.0",
     "@rebbehub/model": "^0.1.0",
+    "@simplewebauthn/server": "^14.0.3",
     "hono": "^4.9.0"
   }
 }

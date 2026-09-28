@@ -4,6 +4,7 @@ import { dir, langFrom, t, type Lang } from './lib/i18n.js';
 import { href } from './lib/links.js';
 import { useLang } from './lib/useLang.js';
 import { siteOf } from './lib/context.server.js';
+import { AccountLink } from './components/AccountLink.js';
 import { AppNav } from './components/AppNav.js';
 import { PlayerBar } from './player/PlayerBar.js';
 import { PlayerProvider } from './player/PlayerProvider.js';
@@ -48,7 +49,10 @@ function TopBar({ lang }: { lang: Lang }) {
         </span>
         <span className="brand-name">RebbeHub</span>
       </Link>
-      <LanguageSwitch lang={lang} />
+      <span className="top-actions">
+        <AccountLink lang={lang} />
+        <LanguageSwitch lang={lang} />
+      </span>
     </header>
   );
 }

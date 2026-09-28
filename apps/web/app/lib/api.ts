@@ -74,6 +74,22 @@ export class RebbeHubApi {
     return (await response.json()) as T;
   }
 
+  /**
+   * Passes a browser's request through to the API as it is (sign-in):
+   * its method, body, cookie and Origin go, and the API's answer comes back
+   * whole, Set-Cookie and all.
+   */
+  async forward(path: string, request: Request): Promise<Response> {
+    const headers = new Headers({ accept: 'application/json' });
+    for (const name of ['content-type', 'cookie', 'origin', 'user-agent', 'x-forwarded-proto']) {
+      const value = request.headers.get(name);
+      if (value) headers.set(name, value);
+    }
+    if (!headers.has('x-forwarded-proto')) headers.set('x-forwarded-proto', new URL(request.url).protocol.replace(':', ''));
+    const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.text();
+    return this.fetcher(`${this.baseUrl}${path}`, { method: request.method, headers, body });
+  }
+
   /** Null when there is nothing there. */
   private async maybe<T>(promise: Promise<T>): Promise<T | null> {
     try {

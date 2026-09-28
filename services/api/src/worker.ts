@@ -1,6 +1,7 @@
 import { Catalog } from '@rebbehub/core';
 import { connectPostgres } from '@rebbehub/db';
 import { createApp, turnstileVerifier, type FileStore } from './app.js';
+import { authFor } from './auth.js';
 
 /**
  * The API on Cloudflare Workers: Postgres (Neon) through Hyperdrive, file
@@ -24,6 +25,8 @@ interface Env {
   TURNSTILE_SECRET?: string;
   /** Where files are served from, when not this Worker (a separate media domain). */
   FILES_BASE_URL?: string;
+  /** The site's address (`https://rebbehub.org`): passkeys are bound to its domain, and sign-in happens on its pages. */
+  SITE_URL?: string;
 }
 
 function r2Store(bucket: R2Bucket): FileStore {
@@ -44,6 +47,7 @@ export default {
       verifyCaptcha: env.TURNSTILE_SECRET ? turnstileVerifier(env.TURNSTILE_SECRET) : undefined,
       filesBaseUrl: env.FILES_BASE_URL,
       files: env.FILES_PUBLIC ? r2Store(env.FILES_PUBLIC) : undefined,
+      auth: env.SITE_URL ? authFor(env.SITE_URL) : undefined,
     });
     try {
       return await app.fetch(request);

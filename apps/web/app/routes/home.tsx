@@ -216,7 +216,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 <div>
                   <b>{c.authorIsBot ? (BOT_NAMES[c.author]?.[lang] ?? c.authorName) : c.authorName}</b> ·{' '}
                   {c.authorIsBot && c.message.startsWith('Import from') ? `${t(lang, 'addedItems')} ${num(c.changes, lang)} ${t(lang, 'unitsShort')}` : c.message}
-                  <small>
+                  {/* "2 hours ago" is said again by the browser, a moment later than the server said it. */}
+                  <small suppressHydrationWarning>
                     {num(c.changes, lang)} {t(lang, 'changes')} · {ago(c.at, lang)}
                     {c.mergedByName && c.mergedBy !== c.author ? ` · ${t(lang, 'approvedBy')} ${c.mergedByName}` : ''}
                   </small>

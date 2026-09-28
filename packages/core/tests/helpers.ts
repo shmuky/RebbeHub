@@ -10,13 +10,13 @@ let shared: Promise<Db> | null = null;
  * and a bot, and one moderated set kept by the keeper. One PGlite per test
  * file (starting one takes seconds), emptied for every test. With
  * REBBEHUB_TEST_DATABASE_URL set, a real Postgres server instead (CI runs
- * both); its public schema is dropped, so never point it at real data.
+ * both); its public and auth schemas are dropped, so never point it at real data.
  */
 export async function freshCatalog() {
   const url = process.env.REBBEHUB_TEST_DATABASE_URL;
   shared ??= url ? Promise.resolve(connectPostgres(url, { max: 4 })) : openPGlite();
   const db = await shared;
-  await db.exec('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
+  await db.exec('DROP SCHEMA IF EXISTS auth CASCADE; DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
   const catalog = new Catalog(db, { now: () => new Date('2026-09-28T12:00:00Z') });
   await catalog.init();
   await catalog.createAccount({ id: 'shmuly', displayName: 'Shmuly' });
