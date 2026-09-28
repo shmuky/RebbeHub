@@ -52,6 +52,15 @@ notifications by email, the reviewer's AI summary.
 
 ## Phases 3-6
 
+- **The Sichos Kodesh scans** ✅: 2,710 old typewritten hanachos, open,
+  2,573 with a lossless **reading copy** (pages straightened, centred, cut
+  free of the scanner's edges), and every page's measurements kept
+  (`@rebbehub/pdf-fix`, `rebbehub reading-copies`; see
+  [operations](operations.md)).
+- **Page fixes for linked PDFs**: the Otzros library's PDFs measured once
+  each and let go; books set in type and level scans left alone, a
+  scan's leaning pages turned level as the site's reader draws them, with
+  "Show as scanned" (`rebbehub page-fixes`).
 - **Uploads** ✅: "Add a recording" on farbrengen pages, "Add a scan" on
   sefer pages; hashed and kept once, stored by their rights, added through
   a suggestion (docs/rights.md, Uploads).

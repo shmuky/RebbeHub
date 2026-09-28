@@ -25,6 +25,10 @@ decisions map one to one (`ship`→`open`, `ship-with-credit`→`credit`,
 - HebrewBooks and chabadlibrary.org → `link` whatever else is said;
 - the Igros app's files → `preserved` (Sichos-Kodesh decides its own apps);
 - hanachos and publisher scans → `link` (a copy preserved);
+- the old typewritten Sichos Kodesh hanachos (5710-5741) → `open`: the
+  chozrim wrote them under no organisation, the typewritten set was printed
+  privately in 1985, and nobody holds rights in them (the re-typed edition
+  published since 1998 is a publisher scan);
 - teshuros, usually printed for free distribution → `credit`, with a fast
   path for families to ask for a takedown;
 - anything in a *locked* set → `preserved`.

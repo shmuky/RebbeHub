@@ -81,6 +81,111 @@ export async function getFile(db: Db, sha256: string): Promise<FileRow | null> {
   return one<FileRow>(db, 'SELECT * FROM file WHERE sha256 = $1', [sha256]);
 }
 
+/** A file made from another (a scan's reading copy, a web audio profile), regenerable from it. */
+export interface DerivationRow {
+  src_sha256: string;
+  profile: string;
+  sha256: string;
+  bytes: number;
+  encoder: string;
+  created_at: string;
+}
+
+export interface NewDerivation {
+  src: string;
+  /** What it is for: `reading-copy`. One per source file and profile. */
+  profile: string;
+  sha256: string;
+  bytes: number;
+  mime: string;
+  /** The tool and its version: `pdf-fix@1`. */
+  encoder: string;
+}
+
+/**
+ * Records a derivation, and its bytes as a file with its source's rights:
+ * a copy made from a file may be served exactly when the file may. Made
+ * again (a new version of the tool), it replaces the old one.
+ */
+export async function recordDerivation(db: Db, input: NewDerivation): Promise<DerivationRow> {
+  if (!/^[0-9a-f]{64}$/.test(input.sha256) || !/^[0-9a-f]{64}$/.test(input.src)) throw invalid('sha256 must be 64 lower-case hex characters');
+  if (!ALLOWED_MIME.test(input.mime)) throw invalid(`files of type ${input.mime} are not accepted`);
+  return db.transaction(async (tx) => {
+    const source = await one<FileRow>(tx, 'SELECT * FROM file WHERE sha256 = $1', [input.src]);
+    if (!source) throw notFound(`file ${input.src}`);
+    await tx.query(
+      `INSERT INTO file (sha256, bytes, mime, rights_state, credit, storage_tier) VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (sha256) DO NOTHING`,
+      [input.sha256, input.bytes, input.mime, source.rights_state, source.credit, source.storage_tier],
+    );
+    return (await one<DerivationRow>(
+      tx,
+      `INSERT INTO derivation (src_sha256, profile, sha256, bytes, encoder) VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (src_sha256, profile) DO UPDATE SET sha256 = EXCLUDED.sha256, bytes = EXCLUDED.bytes, encoder = EXCLUDED.encoder, created_at = now()
+       RETURNING *`,
+      [input.src, input.profile, input.sha256, input.bytes, input.encoder],
+    ))!;
+  });
+}
+
+/** What was made from a file, by profile. */
+export async function getDerivations(db: Db, src: string): Promise<DerivationRow[]> {
+  const { rows } = await db.query<DerivationRow>('SELECT * FROM derivation WHERE src_sha256 = $1 ORDER BY profile', [src]);
+  return rows;
+}
+
+/** What a scanned PDF needs to read straight (migration 0002): measured once per file, held or linked. */
+export interface PageFixRow {
+  sha256: string;
+  encoder: string;
+  verdict: PageFixVerdict;
+  reason: string | null;
+  /** Per page changed: its number, how far it leant, and the PDF matrix it is drawn through (and, for a reading copy, where it is cut). */
+  pages: unknown;
+  made_at: string;
+}
+
+/** `fixed`: pages to turn. `as-is`: nothing to do (set in type, or level already). `failed`: could not be fixed safely. */
+export type PageFixVerdict = 'fixed' | 'as-is' | 'failed';
+
+export interface NewPageFix {
+  sha256: string;
+  /** The tool and its version: `pdf-level@1`, `pdf-fix@1`. */
+  encoder: string;
+  verdict: PageFixVerdict;
+  reason?: string;
+  pages?: unknown[];
+}
+
+/** Records what a file needs; measured again (a new version of the tool), it replaces what was there. */
+export async function recordPageFix(db: Db, input: NewPageFix): Promise<PageFixRow> {
+  if (!/^[0-9a-f]{64}$/.test(input.sha256)) throw invalid('sha256 must be 64 lower-case hex characters');
+  if (!['fixed', 'as-is', 'failed'].includes(input.verdict)) throw invalid('verdict is fixed, as-is or failed');
+  if (!(await getFile(db, input.sha256))) throw notFound(`file ${input.sha256}`);
+  return (await one<PageFixRow>(
+    db,
+    `INSERT INTO page_fix (sha256, encoder, verdict, reason, pages) VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (sha256) DO UPDATE SET encoder = EXCLUDED.encoder, verdict = EXCLUDED.verdict, reason = EXCLUDED.reason, pages = EXCLUDED.pages, made_at = now()
+     RETURNING *`,
+    [input.sha256, input.encoder, input.verdict, input.reason ?? null, JSON.stringify(input.pages ?? [])],
+  ))!;
+}
+
+export async function getPageFix(db: Db, sha256: string): Promise<PageFixRow | null> {
+  return one<PageFixRow>(db, 'SELECT * FROM page_fix WHERE sha256 = $1', [sha256]);
+}
+
+/** The file registered from a Google Drive file, by the Drive file's id (its address with or without a resource key). */
+export async function fileFromDrive(db: Db, driveFileId: string): Promise<string | null> {
+  if (!/^[\w-]{10,}$/.test(driveFileId)) return null;
+  const row = await one<{ sha256: string }>(
+    db,
+    "SELECT sha256 FROM file_source WHERE split_part(url, '?', 1) = $1 ORDER BY created_at LIMIT 1",
+    [`https://drive.google.com/file/d/${driveFileId}/view`],
+  );
+  return row?.sha256 ?? null;
+}
+
 /**
  * Changes a file's rights: stewards only, logged. A takedown is
  * `setRights(…, 'preserved')`: the file stops being served at once and
@@ -97,6 +202,12 @@ export async function setRights(db: Db, by: string, sha256: string, state: Right
       tx,
       'UPDATE file SET rights_state = $2, storage_tier = $3, rights_changed_at = now(), rights_changed_by = $4 WHERE sha256 = $1 RETURNING *',
       [sha256, state, storageTierFor(state, held), by],
+    );
+    // What was made from it follows it: a takedown takes its reading copy down too.
+    await tx.query(
+      `UPDATE file SET rights_state = $2, storage_tier = CASE WHEN storage_tier = 'none' THEN 'none' ELSE $3 END, rights_changed_at = now(), rights_changed_by = $4
+       WHERE sha256 IN (SELECT sha256 FROM derivation WHERE src_sha256 = $1)`,
+      [sha256, state, storageTierFor(state, true), by],
     );
     await tx.query("INSERT INTO audit_log (actor, action, target_kind, target_id, detail) VALUES ($1, 'file.rights', 'file', $2, $3)", [
       by,

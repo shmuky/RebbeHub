@@ -4,10 +4,12 @@ import { join } from 'node:path';
 import { Catalog } from '@rebbehub/core';
 import { connectPostgres, one, type Db } from '@rebbehub/db';
 import { openPGlite } from '@rebbehub/db/pglite';
-import { OTZROS_FOLDER, chabadLibraryImporter, driveLibraryImporter, listDriveFolder, crawlChabadLibrary, libraryWorks, readChabadLibrary, readMafteiachCrawl, readSichosKodeshOccasions, readSichosKodeshWorks, runImport, sichosKodeshOccasionsImporter, sichosKodeshWorksImporter, type Importer } from '@rebbehub/importers';
+import { OTZROS_FOLDER, chabadLibraryImporter, driveLibraryImporter, listDriveFolder, crawlChabadLibrary, libraryWorks, readChabadLibrary, readMafteiachCrawl, readSichosKodeshOccasions, readSichosKodeshWorks, runImport, sichosKodeshOccasionsImporter, sichosKodeshWorksImporter, type DriveFolder, type Importer } from '@rebbehub/importers';
 import { clearMirror, directorySink, exportCommits, exportSnapshot, generateKeyPair, writeDump, type KeyPair } from '@rebbehub/mirror';
 import { BUILTIN_SCHEMAS, SchemaRegistry } from '@rebbehub/model';
 import { commitAll, git } from './git.js';
+import { collectPageFixes, loadPageFixes, makePageFixes, OTZROS_COLLECTION, otzrosPdfs, pageFixesKey, pageFixesUrl, registerPageFixes } from './pageFixes.js';
+import { ARCHIVE_OBJECTS_URL, archivePdfs, collectManifest, loadManifest, makeReadingCopies, MANIFEST_KEY, MANIFEST_URL, R2Store, registerReadingCopies, sichosKodeshScans } from './readingCopies.js';
 
 export interface Context {
   log: (line: string) => void;
@@ -60,11 +62,15 @@ export async function migrateCommand(ctx: Context): Promise<void> {
 /**
  * What people have made in the catalog: a suggestion from anyone but an
  * importer bot (merged, open or draft), a report, a comment, a follow, a
- * file. SQL, so the import can check it again inside the transaction that
- * replaces the catalog.
+ * file someone uploaded, a steward's rights decision on a file, a project,
+ * a webhook. Files the
+ * import registers itself (the Sichos Kodesh scans and their reading
+ * copies) are rebuilt with it. SQL, so the import can check it again
+ * inside the transaction that replaces the catalog.
  */
 export const PEOPLE_MADE_SQL = `SELECT EXISTS (SELECT 1 FROM changeset c JOIN account a ON a.id = c.author WHERE c.author <> 'system' AND NOT a.is_bot)
-  OR EXISTS (SELECT 1 FROM report) OR EXISTS (SELECT 1 FROM comment) OR EXISTS (SELECT 1 FROM follow) OR EXISTS (SELECT 1 FROM file)
+  OR EXISTS (SELECT 1 FROM report) OR EXISTS (SELECT 1 FROM comment) OR EXISTS (SELECT 1 FROM follow)
+  OR EXISTS (SELECT 1 FROM file_source WHERE uploaded_by IS NOT NULL) OR EXISTS (SELECT 1 FROM audit_log WHERE action = 'file.rights')
   OR EXISTS (SELECT 1 FROM project) OR EXISTS (SELECT 1 FROM webhook)`;
 
 /**
@@ -210,4 +216,111 @@ export async function keygenCommand(ctx: Context, input: { out: string }): Promi
   const key = generateKeyPair();
   await writeFile(input.out, `${JSON.stringify(key, null, 2)}\n`, { mode: 0o600 });
   ctx.log(`key ${key.keyId} written to ${input.out} (keep it secret). Public key: ${key.publicKey}`);
+}
+
+function r2(bucket: string): R2Store {
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const token = process.env.CLOUDFLARE_API_TOKEN;
+  if (!accountId || !token) throw new Error('set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (a token with R2 edit rights)');
+  return new R2Store(accountId, bucket, token);
+}
+
+/** Makes the Sichos Kodesh scans' reading copies from Sichos-Kodesh's archive into the public bucket (docs/operations.md). */
+export async function readingCopiesMakeCommand(
+  ctx: Context,
+  input: { from: string; work: string; shard?: string; limit?: number; archive?: string; sourceBucket?: string; bucket?: string },
+): Promise<void> {
+  const scans = await sichosKodeshScans(input.from);
+  const shard = input.shard?.split('/').map(Number) as [number, number] | undefined;
+  if (shard && !(shard.length === 2 && shard[0]! >= 0 && shard[0]! < shard[1]!)) throw new Error('--shard is i/n, as 0/4');
+  ctx.log(`${scans.length} Sichos Kodesh scans in the catalog${shard ? `; this is part ${shard[0]} of ${shard[1]}` : ''}`);
+  const result = await makeReadingCopies({
+    scans,
+    archive: await archivePdfs(input.archive ?? ARCHIVE_OBJECTS_URL),
+    source: r2(input.sourceBucket ?? 'sichos-kodesh-archive'),
+    target: r2(input.bucket ?? 'rebbehub-public'),
+    work: input.work,
+    ...(shard ? { shard } : {}),
+    ...(input.limit !== undefined ? { limit: input.limit } : {}),
+    log: ctx.log,
+  });
+  ctx.log(JSON.stringify(result));
+}
+
+/** Puts the parts together into the manifest, and publishes it next to the files. */
+export async function readingCopiesPublishCommand(ctx: Context, input: { from: string; work: string; bucket?: string }): Promise<void> {
+  const manifest = await collectManifest(input.work, await sichosKodeshScans(input.from));
+  const text = JSON.stringify(manifest);
+  await writeFile(join(input.work, 'manifest.json'), text);
+  await r2(input.bucket ?? 'rebbehub-public').put(MANIFEST_KEY, new TextEncoder().encode(text), 'application/json');
+  const copies = manifest.files.filter((entry) => entry.readingCopy).length;
+  ctx.log(`published ${MANIFEST_KEY}: ${manifest.files.length} scans, ${copies} reading copies, ${manifest.files.length - copies} left as they are`);
+}
+
+/** Records the published manifest in the catalog (every import runs this). */
+export async function readingCopiesRegisterCommand(ctx: Context, input: { manifest?: string }): Promise<void> {
+  const manifest = await loadManifest(input.manifest ?? MANIFEST_URL);
+  if (!manifest) {
+    ctx.log('no reading copies published yet: nothing to register');
+    return;
+  }
+  const db = await openDatabase(ctx.database);
+  try {
+    await registerReadingCopies(db, manifest, ctx.log);
+  } finally {
+    await db.close();
+  }
+}
+
+/**
+ * The Otzros library's PDFs, as its importer lists them from Drive. The
+ * listing is kept in the work folder, so every shard of a run, and its
+ * publish, work from the same list.
+ */
+async function otzrosList(ctx: Context, work: string) {
+  const file = join(work, 'otzros-tree.json');
+  let tree: DriveFolder;
+  try {
+    tree = JSON.parse(await readFile(file, 'utf8')) as DriveFolder;
+  } catch {
+    tree = await listDriveFolder(OTZROS_FOLDER, { log: ctx.log });
+    await mkdir(work, { recursive: true });
+    await writeFile(file, JSON.stringify(tree));
+  }
+  return otzrosPdfs(tree);
+}
+
+/** Measures the Otzros library's PDFs for page fixes (docs/operations.md); a run reads only what earlier runs have not. */
+export async function pageFixesMakeCommand(ctx: Context, input: { work: string; shard?: string; limit?: number }): Promise<void> {
+  const pdfs = await otzrosList(ctx, input.work);
+  const shard = input.shard?.split('/').map(Number) as [number, number] | undefined;
+  if (shard && !(shard.length === 2 && shard[0]! >= 0 && shard[0]! < shard[1]!)) throw new Error('--shard is i/n, as 0/4');
+  ctx.log(`${pdfs.length} PDFs in the Otzros library${shard ? `; this is part ${shard[0]} of ${shard[1]}` : ''}`);
+  const result = await makePageFixes({ pdfs, work: input.work, ...(shard ? { shard } : {}), ...(input.limit !== undefined ? { limit: input.limit } : {}), log: ctx.log });
+  ctx.log(JSON.stringify(result));
+}
+
+/** Puts the parts together into the manifest, and publishes it in the public bucket. */
+export async function pageFixesPublishCommand(ctx: Context, input: { work: string; bucket?: string }): Promise<void> {
+  const manifest = await collectPageFixes(input.work, OTZROS_COLLECTION, await otzrosList(ctx, input.work));
+  const text = JSON.stringify(manifest);
+  await writeFile(join(input.work, 'manifest.json'), text);
+  await r2(input.bucket ?? 'rebbehub-public').put(pageFixesKey(OTZROS_COLLECTION), new TextEncoder().encode(text), 'application/json');
+  const count = (verdict: string) => manifest.files.filter((entry) => entry.verdict === verdict).length;
+  ctx.log(`published ${pageFixesKey(OTZROS_COLLECTION)}: ${manifest.files.length} PDFs, ${count('fixed')} with pages to turn, ${count('as-is')} as they are, ${count('failed')} failed`);
+}
+
+/** Records the published manifest in the catalog (every import runs this). */
+export async function pageFixesRegisterCommand(ctx: Context, input: { manifest?: string }): Promise<void> {
+  const manifest = await loadPageFixes(input.manifest ?? pageFixesUrl(OTZROS_COLLECTION));
+  if (!manifest) {
+    ctx.log('no page fixes published yet: nothing to register');
+    return;
+  }
+  const db = await openDatabase(ctx.database);
+  try {
+    await registerPageFixes(db, manifest, ctx.log);
+  } finally {
+    await db.close();
+  }
 }

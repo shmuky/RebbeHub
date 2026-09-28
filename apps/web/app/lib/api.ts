@@ -49,6 +49,20 @@ export interface FileInfo {
   url: string | null;
 }
 
+/**
+ * What a PDF needs to read straight (the API's page fixes): each page it
+ * changes, drawn through `transform` (a PDF matrix) and, for a reading
+ * copy's placing, cut to `clip`; or the reading copy RebbeHub serves.
+ */
+export interface PageFixInfo {
+  sha256: string;
+  encoder: string;
+  verdict: 'fixed' | 'as-is' | 'failed';
+  reason: string | null;
+  pages: Array<{ page: number; angle?: number; transform?: number[]; clip?: number[] }>;
+  readingCopy: string | null;
+}
+
 /** One comment on a talk page. */
 export interface TalkComment {
   id: number;
@@ -256,6 +270,11 @@ export class RebbeHubApi {
 
   file(sha256: string) {
     return this.maybe(this.get<FileInfo>(`/v1/files/${sha256}`));
+  }
+
+  /** What a PDF on Google Drive needs to read straight, by its Drive id; null when nothing is known of it. */
+  pageFix(driveFileId: string) {
+    return this.maybe(this.get<PageFixInfo>(`/v1/page-fixes/drive/${encodeURIComponent(driveFileId)}`));
   }
 
   async report(input: { entityId?: string; reason: string; note?: string }, forwardedFor?: string): Promise<{ id: number }> {

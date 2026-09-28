@@ -1,5 +1,6 @@
 import type { Db } from './db.js';
 import * as catalog from './migrations/0001_catalog.js';
+import * as pageFixes from './migrations/0002_page_fixes.js';
 import * as auth from './migrations/0003_auth.js';
 import * as google from './migrations/0004_google.js';
 import * as steward from './migrations/0005_steward.js';
@@ -16,7 +17,7 @@ export interface Migration {
 /** Every migration, in order. A migration is never edited once released; a change is a new one. */
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: 'catalog', up: catalog.up },
-  // 2 is the reading copies' derivation params (feat/reading-copies).
+  { version: 2, name: 'page fixes', up: pageFixes.up },
   { version: 3, name: 'auth', up: auth.up },
   { version: 4, name: 'google', up: google.up },
   { version: 5, name: 'steward', up: steward.up },

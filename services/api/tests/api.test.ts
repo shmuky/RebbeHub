@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Hono } from 'hono';
 import type { EntityId } from '@rebbehub/model';
-import { registerFile, setRights } from '@rebbehub/core';
+import { recordDerivation, recordPageFix, registerFile, setRights } from '@rebbehub/core';
 import { createApp, parseRange } from '../src/app.js';
 import { add, freshCatalog, yudShvat } from '../../../packages/core/tests/helpers.js';
 
@@ -133,9 +133,57 @@ describe('the media proxy', () => {
     expect((await proxy.request(`http://api.test/objects/${sha256}`, { headers: { Range: 'bytes=20-' } })).status).toBe(416);
     expect(await (await proxy.request(`http://api.test/v1/files/${sha256}`)).json()).toMatchObject({ url: `http://api.test/objects/${sha256}` });
 
+    // A copy made from it (a scan's reading copy) is listed with it, and served under the same rights.
+    const copy = 'd'.repeat(64);
+    await recordDerivation(catalog.db, { src: sha256, profile: 'reading-copy', sha256: copy, bytes: 8, mime: 'audio/mpeg', encoder: 'test@1' });
+    expect(await (await proxy.request(`http://api.test/v1/files/${sha256}`)).json()).toMatchObject({
+      derivations: [{ profile: 'reading-copy', sha256: copy, bytes: 8, encoder: 'test@1', url: `http://api.test/objects/${copy}` }],
+    });
+
     await setRights(catalog.db, 'shmuly', sha256, 'preserved', 'takedown');
     expect((await proxy.request(`http://api.test/objects/${sha256}`)).status).toBe(404);
+    expect((await proxy.request(`http://api.test/objects/${copy}`)).status).toBe(404);
     expect(await (await proxy.request(`http://api.test/v1/files/${sha256}`)).json()).toMatchObject({ url: null });
+  });
+
+  it("tells the reader what a PDF on Drive needs, by its Drive id, and where its reading copy is", async () => {
+    const files = { async get() { return null; } };
+    const proxy = createApp({ catalog, files });
+    // A publisher's scan RebbeHub only links to: its turns, no copy.
+    const linked = 'e'.repeat(64);
+    await registerFile(catalog.db, { sha256: linked, bytes: 100, mime: 'application/pdf', source: 'other', licence: 'free-to-read', fileClass: 'publisher-scan', url: 'https://drive.google.com/file/d/1LinkedDriveFile_x/view?resourcekey=0-abc', held: false });
+    const turn = { page: 2, angle: 0.6, transform: [1, 0.01, -0.01, 1, 2, -1.5] };
+    await recordPageFix(catalog.db, { sha256: linked, encoder: 'pdf-level@1', verdict: 'fixed', pages: [turn] });
+    const fixed = await proxy.request('http://api.test/v1/page-fixes/drive/1LinkedDriveFile_x');
+    expect(fixed.status).toBe(200);
+    expect(await fixed.json()).toEqual({ sha256: linked, encoder: 'pdf-level@1', verdict: 'fixed', reason: null, pages: [turn], readingCopy: null });
+    expect(await (await proxy.request(`http://api.test/v1/files/${linked}`)).json()).toMatchObject({ url: null, pageFix: { verdict: 'fixed', pages: [turn] } });
+
+    // An open scan RebbeHub serves, with its reading copy: the reader opens the copy.
+    const open = 'f'.repeat(64);
+    await registerFile(catalog.db, { sha256: open, bytes: 100, mime: 'application/pdf', source: 'mafteiach', licence: 'unknown', fileClass: 'sichos-kodesh-hanacha', url: 'https://drive.google.com/file/d/1OpenSichosKodesh/view', held: true });
+    await recordDerivation(catalog.db, { src: open, profile: 'reading-copy', sha256: '9'.repeat(64), bytes: 90, mime: 'application/pdf', encoder: 'pdf-fix@1' });
+    await recordPageFix(catalog.db, { sha256: open, encoder: 'pdf-fix@1', verdict: 'fixed', pages: [turn] });
+    expect(await (await proxy.request('http://api.test/v1/page-fixes/drive/1OpenSichosKodesh')).json()).toMatchObject({ verdict: 'fixed', readingCopy: `http://api.test/objects/${'9'.repeat(64)}` });
+
+    // Nothing known, or nothing measured: not found.
+    expect((await proxy.request('http://api.test/v1/page-fixes/drive/1NeverSeenBefore')).status).toBe(404);
+    expect((await proxy.request('http://api.test/v1/page-fixes/drive/short')).status).toBe(404);
+  });
+
+  it('serves the published manifests, and nothing else from the bucket', async () => {
+    const manifest = JSON.stringify({ format: 'rebbehub-reading-copies', files: [] });
+    const files = {
+      async get(key: string) {
+        return key === 'manifests/reading-copies/sichos-kodesh.json' ? { body: new Blob([manifest]).stream(), size: manifest.length } : null;
+      },
+    };
+    const proxy = createApp({ catalog, files });
+    const found = await proxy.request('http://api.test/manifests/reading-copies/sichos-kodesh.json');
+    expect(found.status).toBe(200);
+    expect(await found.json()).toEqual({ format: 'rebbehub-reading-copies', files: [] });
+    expect((await proxy.request('http://api.test/manifests/reading-copies/other.json')).status).toBe(404);
+    expect((await proxy.request('http://api.test/manifests/..%2Fobjects/x.json')).status).toBe(404);
   });
 
   it('reads Range headers', () => {

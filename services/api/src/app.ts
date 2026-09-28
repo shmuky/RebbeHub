@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, createWebhook, deleteWebhook, fixLine, fixParagraph, getFile, listWebhooks, recordingTranscript, scanText, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, getDerivations, getFile, getPageFix, listWebhooks, recordingTranscript, scanText, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
@@ -311,7 +311,37 @@ export function createApp(options: ApiOptions): Hono {
     if (!file) throw new CatalogError('not-found', 'no such file');
     const base = options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
     const served = mayServe(file.rights_state) && file.storage_tier === 'public' && base;
-    return c.json({ sha256, bytes: file.bytes, mime: file.mime, rights: file.rights_state, credit: file.credit, url: served ? `${base}/objects/${sha256}` : null });
+    // What was made from it (a scan's reading copy), served under the same rights.
+    const derivations = (await getDerivations(catalog.db, sha256)).map((d) => ({ profile: d.profile, sha256: d.sha256, bytes: d.bytes, encoder: d.encoder, url: served ? `${base}/objects/${d.sha256}` : null }));
+    return c.json({ sha256, bytes: file.bytes, mime: file.mime, rights: file.rights_state, credit: file.credit, url: served ? `${base}/objects/${sha256}` : null, derivations, pageFix: await pageFixOf(sha256) });
+  });
+
+  /** A file's page fix (docs/operations.md): measurements, open whatever the file's rights. */
+  async function pageFixOf(sha256: string) {
+    const fix = await getPageFix(catalog.db, sha256);
+    return fix ? { encoder: fix.encoder, verdict: fix.verdict, reason: fix.reason, pages: fix.pages } : null;
+  }
+
+  // What a PDF on Google Drive needs to read straight, by its Drive id: the site's reader draws the file through
+  // it, or opens the file's reading copy when RebbeHub serves one.
+  app.get('/v1/page-fixes/drive/:id{[\\w-]{10,}}', async (c) => {
+    const sha256 = await fileFromDrive(catalog.db, c.req.param('id'));
+    const fix = sha256 ? await pageFixOf(sha256) : null;
+    if (!sha256 || !fix) throw new CatalogError('not-found', 'no page fix for this file');
+    const file = (await getFile(catalog.db, sha256))!;
+    const base = options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
+    const copy = (await getDerivations(catalog.db, sha256)).find((d) => d.profile === 'reading-copy');
+    const served = mayServe(file.rights_state) && file.storage_tier === 'public' && base;
+    return c.json({ sha256, ...fix, readingCopy: copy && served ? `${base}/objects/${copy.sha256}` : null }, 200, { 'Cache-Control': 'public, max-age=300' });
+  });
+
+  // Published manifests (the Sichos Kodesh scans' reading copies…): facts about files - hashes, sizes, page
+  // measurements - open like the rest of the catalog. Every import reads them back into the catalog.
+  app.get('/manifests/:name{[a-z0-9-]+/[a-z0-9-]+\\.json}', async (c) => {
+    if (!options.files) throw new CatalogError('not-found', 'no such manifest');
+    const object = await options.files.get(`manifests/${c.req.param('name')}`);
+    if (!object) throw new CatalogError('not-found', 'no such manifest');
+    return c.body(object.body, 200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
   });
 
   // The media proxy: a file's bytes, only while its rights allow serving it (a takedown stops this at once).

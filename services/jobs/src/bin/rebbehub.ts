@@ -2,7 +2,25 @@
 import { parseArgs } from 'node:util';
 import { ocrCommand } from '../ocrCommand.js';
 import { transcribeCommand } from '../transcribeCommand.js';
-import { accountCommand, crawlLibraryCommand, dumpCommand, editionCommand, importCommand, keygenCommand, migrateCommand, mirrorCommand, rebuildableCommand, schemaCheckCommand, type Context } from '../commands.js';
+import {
+  accountCommand,
+  crawlLibraryCommand,
+  dumpCommand,
+  editionCommand,
+  importCommand,
+  keygenCommand,
+  migrateCommand,
+  mirrorCommand,
+  pageFixesMakeCommand,
+  pageFixesPublishCommand,
+  pageFixesRegisterCommand,
+  readingCopiesMakeCommand,
+  readingCopiesPublishCommand,
+  readingCopiesRegisterCommand,
+  rebuildableCommand,
+  schemaCheckCommand,
+  type Context,
+} from '../commands.js';
 
 const HELP = `rebbehub - RebbeHub's command line
 
@@ -26,6 +44,20 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 machine transcripts, with sync, of recordings that have
                                                 none (Whisper on Workers AI: CLOUDFLARE_ACCOUNT_ID and
                                                 CLOUDFLARE_AI_TOKEN); --linked also those heard elsewhere
+  rebbehub reading-copies make --from <Sichos-Kodesh checkout> --work <folder> [--shard 0/4] [--limit <n>]
+                  [--archive <objects.json>] [--source-bucket sichos-kodesh-archive] [--bucket rebbehub-public]
+  rebbehub reading-copies publish --from <Sichos-Kodesh checkout> --work <folder> [--bucket rebbehub-public]
+                                                the Sichos Kodesh scans' reading copies, into R2
+                                                (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
+  rebbehub reading-copies register [--manifest <url or file>]
+                                                records the published ones in the catalog
+  rebbehub page-fixes make --work <folder> [--shard 0/4] [--limit <n>]
+                                                measures the Otzros library's PDFs (read from Drive, not
+                                                kept): which pages lean, and the turn that levels each
+  rebbehub page-fixes publish --work <folder> [--bucket rebbehub-public]
+                                                the manifest, into R2 (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
+  rebbehub page-fixes register [--manifest <url or file>]
+                                                records the published ones in the catalog
 
   --database <url or folder>   Postgres URL, or a PGlite folder
                                (default: $DATABASE_URL, else .data/pglite)
@@ -53,6 +85,12 @@ const { values, positionals } = parseArgs({
     out: { type: 'string' },
     key: { type: 'string' },
     guard: { type: 'boolean' },
+    work: { type: 'string' },
+    shard: { type: 'string' },
+    archive: { type: 'string' },
+    'source-bucket': { type: 'string' },
+    bucket: { type: 'string' },
+    manifest: { type: 'string' },
     scan: { type: 'string' },
     recording: { type: 'string' },
     linked: { type: 'boolean' },
@@ -108,6 +146,31 @@ try {
       break;
     case 'keygen':
       await keygenCommand(ctx, { out: need(values.out, 'out') });
+      break;
+    case 'reading-copies':
+      if (rest[0] === 'make') {
+        await readingCopiesMakeCommand(ctx, {
+          from: need(values.from, 'from'),
+          work: need(values.work, 'work'),
+          shard: values.shard,
+          limit: number(values.limit),
+          archive: values.archive,
+          sourceBucket: values['source-bucket'],
+          bucket: values.bucket,
+        });
+      } else if (rest[0] === 'publish') {
+        await readingCopiesPublishCommand(ctx, { from: need(values.from, 'from'), work: need(values.work, 'work'), bucket: values.bucket });
+      } else if (rest[0] === 'register') {
+        await readingCopiesRegisterCommand(ctx, { manifest: values.manifest });
+      } else {
+        throw new Error('reading-copies make|publish|register');
+      }
+      break;
+    case 'page-fixes':
+      if (rest[0] === 'make') await pageFixesMakeCommand(ctx, { work: need(values.work, 'work'), shard: values.shard, limit: number(values.limit) });
+      else if (rest[0] === 'publish') await pageFixesPublishCommand(ctx, { work: need(values.work, 'work'), bucket: values.bucket });
+      else if (rest[0] === 'register') await pageFixesRegisterCommand(ctx, { manifest: values.manifest });
+      else throw new Error('page-fixes make|publish|register');
       break;
     default:
       console.log(HELP);

@@ -290,6 +290,8 @@ const STRINGS = {
   add: { he: 'הוספה', en: 'Add' },
   readScan: { he: 'קריאה', en: 'Read' },
   openOriginal: { he: 'פתיחת הקובץ המקורי', en: 'Open the original file' },
+  showAsScanned: { he: 'הצגה כפי שנסרק', en: 'Show as scanned' },
+  showStraightened: { he: 'הצגה מיושרת', en: 'Show straightened' },
   readerFailed: { he: 'לא הצלחנו לפתוח את הקובץ כאן. אפשר לפתוח אותו ישירות:', en: 'The file could not be opened here. It can be opened directly:' },
   close: { he: 'סגירה', en: 'Close' },
   back: { he: 'חזרה', en: 'Back' },

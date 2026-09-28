@@ -90,16 +90,25 @@ export const RIGHTS_BY_SOURCE: Partial<Record<CatalogSourceId, RightsState>> = {
 };
 
 /** The kind of file, where the plan sets a default of its own. */
-export type FileClass = 'teshura-scan' | 'hanacha' | 'publisher-scan' | 'recording' | 'other';
+export type FileClass = 'teshura-scan' | 'hanacha' | 'sichos-kodesh-hanacha' | 'publisher-scan' | 'recording' | 'other';
 
 /**
  * Defaults by kind of file: hanachos and publisher scans are linked, and a
  * copy preserved; teshuros, usually printed for free distribution, are
  * served with credit (with a fast family-request path to take one down).
+ *
+ * The old typewritten Sichos Kodesh hanachos (5710-5741) are open: the
+ * chozrim wrote them after each farbrengen under no organisation (5710-5726
+ * mostly R' Yoel Kahn), and the typewritten set was printed privately in
+ * 1985 by two yeshiva students from his archive and private collections of
+ * notes. Nobody holds rights in them (a steward's decision, 2026-09). The
+ * re-typed edition published since 1998 is a separate work: a publisher
+ * scan.
  */
 export const RIGHTS_BY_CLASS: Partial<Record<FileClass, RightsState>> = {
   'teshura-scan': 'credit',
   hanacha: 'link',
+  'sichos-kodesh-hanacha': 'open',
   'publisher-scan': 'link',
 };
 

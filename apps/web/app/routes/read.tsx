@@ -1,11 +1,13 @@
 import { Loader2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { data, Link, useNavigate } from 'react-router';
 import type { Route } from './+types/read';
+import type { PageFixInfo, RebbeHubApi } from '../lib/api.js';
 import { siteOf } from '../lib/context.server.js';
 import { langFrom, t } from '../lib/i18n.js';
 import { pageMeta } from '../lib/seo.js';
 import { useLang } from '../lib/useLang.js';
+import { fixesByPage } from '../reader/pageFix.js';
 
 /**
  * Reading a PDF in the site itself: a hanacha, a scan, the scan behind a
@@ -19,9 +21,14 @@ import { useLang } from '../lib/useLang.js';
  *
  * Only files RebbeHub serves, or the Sichos-Kodesh media proxy links to,
  * are opened here.
+ *
+ * A scan RebbeHub has measured opens straightened (its page fix): its
+ * reading copy when RebbeHub serves one, otherwise the file itself with its
+ * leaning pages drawn turned level. "As scanned" shows it as it is.
  */
 
-const ALLOWED_HOSTS = ['sichos-kodesh-media-proxy.shmuky.workers.dev', 'api.rebbehub.org', 'files.rebbehub.org'];
+const MEDIA_PROXY_HOST = 'sichos-kodesh-media-proxy.shmuky.workers.dev';
+const ALLOWED_HOSTS = [MEDIA_PROXY_HOST, 'api.rebbehub.org', 'files.rebbehub.org'];
 
 function allowed(src: string, apiBase: string): boolean {
   try {
@@ -33,12 +40,28 @@ function allowed(src: string, apiBase: string): boolean {
   }
 }
 
-export function loader({ request, context }: Route.LoaderArgs) {
+/** What a PDF on Drive (through the media proxy) needs to read straight; reading goes on without it if the API cannot say. */
+async function pageFixFor(api: RebbeHubApi, src: string): Promise<{ readingCopy: string | null; pages: PageFixInfo['pages'] } | null> {
+  const url = new URL(src);
+  const id = /^\/drive\/([\w-]{10,})$/.exec(url.pathname)?.[1];
+  if (url.hostname !== MEDIA_PROXY_HOST || !id) return null;
+  try {
+    const fix = await api.pageFix(id);
+    if (fix?.verdict !== 'fixed') return null;
+    if (fix.readingCopy && allowed(fix.readingCopy, api.baseUrl)) return { readingCopy: fix.readingCopy, pages: [] };
+    return fixesByPage(fix.pages).size ? { readingCopy: null, pages: fix.pages } : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function loader({ request, context }: Route.LoaderArgs) {
   const { siteUrl, api } = siteOf(context);
   const url = new URL(request.url);
   const src = url.searchParams.get('src') ?? '';
   if (!allowed(src, api.baseUrl)) throw data('not found', { status: 404 });
   return {
+    fix: await pageFixFor(api, src),
     lang: langFrom(request),
     siteUrl,
     src,
@@ -65,8 +88,12 @@ export function readHref(doc: { url: string; title: string; sub?: string; page?:
 type LoadState = { status: 'loading'; percent: number | null } | { status: 'ready' } | { status: 'error' };
 
 export default function Read({ loaderData }: Route.ComponentProps) {
-  const { src, title, sub, page } = loaderData;
+  const { src, title, sub, page, fix } = loaderData;
   const lang = useLang();
+  // Straightened unless the reader asks to see the scan as it is.
+  const [straight, setStraight] = useState(true);
+  const shown = fix?.readingCopy && straight ? fix.readingCopy : src;
+  const fixes = useMemo(() => (fix && !fix.readingCopy && straight ? fixesByPage(fix.pages) : undefined), [fix, straight]);
   const navigate = useNavigate();
   const pages = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<LoadState>({ status: 'loading', percent: null });
@@ -91,14 +118,14 @@ export default function Read({ loaderData }: Route.ComponentProps) {
       try {
         // pdf.js loads only here, in the browser, when something is read.
         const { loadPdfDocument, renderPdfPages } = await import('../reader/renderPdf.js');
-        const loading = loadPdfDocument(src, ({ loaded, total }) => {
+        const loading = loadPdfDocument(shown, ({ loaded, total }) => {
           if (!cancelled) setState({ status: 'loading', percent: total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : null });
         });
         task = loading;
         const doc = await loading.promise;
         if (cancelled || !pages.current) return;
         pages.current.innerHTML = '';
-        await renderPdfPages(doc, pages.current, () => cancelled, (now) => !cancelled && setZoomed(now));
+        await renderPdfPages(doc, pages.current, () => cancelled, (now) => !cancelled && setZoomed(now), fixes);
         if (cancelled) return;
         // The page asked for: every page's box has its final height by now.
         if (page > 1) pages.current.children[Math.min(page, doc.numPages) - 1]?.scrollIntoView({ block: 'start' });
@@ -111,7 +138,7 @@ export default function Read({ loaderData }: Route.ComponentProps) {
       cancelled = true;
       void task?.destroy();
     };
-  }, [src, page]);
+  }, [shown, page, fixes]);
 
   return (
     <div className={zoomed ? 'pdf-viewer-screen zoomed' : 'pdf-viewer-screen'}>
@@ -121,6 +148,11 @@ export default function Read({ loaderData }: Route.ComponentProps) {
         </button>
         <h1>{title}</h1>
         {sub ? <p className="subtitle">{sub}</p> : null}
+        {fix ? (
+          <button type="button" className="link-button reader-straighten" aria-pressed={!straight} onClick={() => setStraight(!straight)}>
+            {t(lang, straight ? 'showAsScanned' : 'showStraightened')}
+          </button>
+        ) : null}
       </header>
       <div className="pdf-viewer-status">
         {state.status === 'loading' ? (

@@ -1,8 +1,10 @@
 // Taken from Sichos-Kodesh (apps/web/src/pdf/renderPdf.ts), so both read PDFs the same way; keep them in step.
+// RebbeHub's own addition: pages drawn through their page fixes (./pageFix.ts).
 // The polyfill must run before pdf.js is touched (see polyfills.ts).
 import './polyfills.js';
 import * as pdfjsLib from 'pdfjs-dist';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
+import { canvasClip, canvasTransform, type Matrix, type PageFix } from './pageFix.js';
 import { attachPdfZoom } from './pdfPageZoom.js';
 import type { ZoomablePage } from './pdfPageZoom.js';
 // Vite's `?url` import gives the worker script a fetchable URL in the
@@ -184,6 +186,8 @@ export async function renderPdfPages(
   container: HTMLElement,
   isCancelled: () => boolean,
   onZoomChange?: (zoomed: boolean) => void,
+  /** Pages to draw through their page fix (turned level, or placed and cut as a reading copy), by page number. */
+  fixes?: ReadonlyMap<number, PageFix>,
 ): Promise<void> {
   const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
   const containerWidth = container.clientWidth || 400;
@@ -235,7 +239,9 @@ export async function renderPdfPages(
     canvas.style.height = '100%';
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    const renderTask = page.render({ canvas, viewport });
+    const fix = fixes?.get(index + 1);
+    const viewportMatrix = viewport.transform as Matrix;
+    const renderTask = page.render({ canvas, viewport, ...(fix ? { transform: canvasTransform(viewportMatrix, fix.transform as Matrix) } : {}) });
     activeRenderTasks[index] = renderTask;
     try {
       await renderTask.promise;
@@ -250,6 +256,7 @@ export async function renderPdfPages(
       if (activeRenderTasks[index] === renderTask) activeRenderTasks[index] = null;
     }
     if (isCancelled() || renderGeneration[index] !== generation) return;
+    if (fix?.clip) paintOutside(ctx, canvasClip(viewportMatrix, fix.clip), canvas.width, canvas.height);
     entry.wrapper.replaceChildren(canvas);
   }
 
@@ -393,4 +400,16 @@ export async function renderPdfPages(
   pages.forEach(({ wrapper }) => observer.observe(wrapper));
 
   await renderInto(0);
+}
+
+/** Paints the page's white over everything outside `[x, y, width, height]`: the cut of a reading copy's placing. */
+function paintOutside(ctx: CanvasRenderingContext2D, [x, y, w, h]: [number, number, number, number], width: number, height: number): void {
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, Math.max(0, y));
+  ctx.fillRect(0, y + h, width, Math.max(0, height - y - h));
+  ctx.fillRect(0, y, Math.max(0, x), h);
+  ctx.fillRect(x + w, y, Math.max(0, width - x - w), h);
+  ctx.restore();
 }
