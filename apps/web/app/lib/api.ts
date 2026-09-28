@@ -114,6 +114,21 @@ export class RebbeHubApi {
     return this.get<{ items: Entity[]; next: string | null }>(`/v1/entities/${encodeURIComponent(id)}/children`, { field, type, ...options });
   }
 
+  /** How many items point at each item through a field (`work` + `unit`: each work's units). */
+  async refCounts(field: string, type?: string): Promise<Record<string, number>> {
+    return (await this.get<{ counts: Record<string, number> }>('/v1/refcounts', { field, type })).counts;
+  }
+
+  /** A work's volumes, with how many units each holds. */
+  async workOutline(id: string) {
+    return (await this.get<{ parts: Array<{ value: string; label: { he: string; en?: string } | null; units: number }> }>(`/v1/works/${encodeURIComponent(id)}/outline`)).parts;
+  }
+
+  /** The units of one volume of a work. */
+  async workPart(id: string, part: string) {
+    return (await this.get<{ items: Entity[] }>(`/v1/works/${encodeURIComponent(id)}/parts/${encodeURIComponent(part)}`)).items;
+  }
+
   async backlinks(id: string, options: { field?: string; type?: string } = {}) {
     return (await this.get<{ backlinks: Backlink[] }>(`/v1/entities/${encodeURIComponent(id)}/backlinks`, options)).backlinks;
   }

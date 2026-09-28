@@ -183,6 +183,18 @@ export function createApp(options: ApiOptions): Hono {
     return c.json({ items: await catalog.events({ within, day: list(day), dates: list(dates), limit: intParam(c.req.query('limit'), 'limit') }) });
   });
 
+  // How many items point at each item through a field: `?field=work&type=unit` counts each work's units.
+  app.get('/v1/refcounts', async (c) => {
+    const field = c.req.query('field');
+    if (!field || !/^[a-zA-Z]+$/.test(field)) throw new HttpError(400, 'give field (work, authors, event...)');
+    const type = c.req.query('type');
+    return c.json({ counts: await catalog.refCounts(field, type as EntityType | undefined) });
+  });
+
+  // A work's volumes (its top-level parts) with how many units each holds, and one volume's units.
+  app.get('/v1/works/:id/outline', async (c) => c.json({ parts: await catalog.workOutline(entityId(c.req.param('id'))) }));
+  app.get('/v1/works/:id/parts/:part', async (c) => c.json({ items: await catalog.workPart(entityId(c.req.param('id')), c.req.param('part'), intParam(c.req.query('limit'), 'limit')) }));
+
   app.get('/v1/stats', async (c) => c.json({ head: await catalog.head(), counts: await catalog.counts() }));
 
   app.get('/v1/files/:sha256', async (c) => {

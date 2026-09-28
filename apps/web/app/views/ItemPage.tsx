@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import type { LocalName } from '@rebbehub/model';
 import { AudioPlayer } from '../components/AudioPlayer.js';
 import { EventPage } from './EventPage.js';
+import { AuthorPage, SetPage, WorkPage } from './LibraryPages.js';
 import { ItemLink, ItemList } from '../components/ItemLink.js';
 import { ScanViewer } from '../components/ScanViewer.js';
 import { TextView } from '../components/TextView.js';
@@ -15,18 +16,6 @@ import { useLang } from '../lib/useLang.js';
 
 type D = Record<string, any>;
 
-const GENRES: Record<string, { he: string; en: string }> = {
-  chassidus: { he: 'חסידות', en: 'Chassidus' },
-  maamarim: { he: 'מאמרים', en: 'Maamarim' },
-  sichos: { he: 'שיחות', en: 'Sichos' },
-  igros: { he: 'אגרות', en: 'Letters' },
-  halacha: { he: 'הלכה', en: 'Halacha' },
-  siddur: { he: 'סידור', en: 'Siddur' },
-  minhagim: { he: 'מנהגים', en: 'Minhagim' },
-  history: { he: 'תולדות', en: 'History' },
-  diaries: { he: 'יומנים', en: 'Diaries' },
-  recordings: { he: 'הקלטות', en: 'Recordings' },
-};
 
 const PUBLICATION_KINDS: Record<string, { he: string; en: string }> = {
   'book-volume': { he: 'כרך', en: 'Volume' },
@@ -38,11 +27,6 @@ const PUBLICATION_KINDS: Record<string, { he: string; en: string }> = {
   other: { he: 'הוצאה', en: 'Publication' },
 };
 
-const POLICIES: Record<string, { he: string; en: string }> = {
-  open: { he: 'פתוח', en: 'Open' },
-  moderated: { he: 'בפיקוח', en: 'Moderated' },
-  locked: { he: 'נעול', en: 'Locked' },
-};
 
 function Refs({ ids, view }: { ids: unknown; view: ItemView }) {
   const list = (Array.isArray(ids) ? ids : ids ? [ids] : []).map((id) => view.refs[id as string]).filter((e): e is Entity => e !== undefined);
@@ -99,108 +83,6 @@ function Crumbs({ items }: { items: Array<{ label: string; to?: string }> }) {
         <li key={i}>{c.to ? <Link to={c.to}>{c.label}</Link> : c.label}</li>
       ))}
     </ol>
-  );
-}
-
-function SetPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang: Lang }) {
-  const d = entity.data as D;
-  const members = view.lists.members ?? [];
-  const byType = new Map<string, Entity[]>();
-  for (const m of members) byType.set(m.type, [...(byType.get(m.type) ?? []), m]);
-  return (
-    <>
-      <Crumbs items={[{ label: t(lang, 'sets'), to: href('/sets', lang) }]} />
-      <h1>{nameOf(d.name, lang)}</h1>
-      {d.description ? <p className="subtitle">{nameOf(d.description, lang)}</p> : null}
-      <dl className="facts">
-        <dt>{t(lang, 'policy')}</dt>
-        <dd>{POLICIES[d.policy]?.[lang] ?? d.policy}</dd>
-        <dt>{t(lang, 'keepers')}</dt>
-        <dd>{d.keepers?.length ? d.keepers.join(', ') : t(lang, 'noKeepers')}</dd>
-      </dl>
-      {[...byType.entries()].map(([type, items]) => (
-        <section key={type}>
-          <h2>
-            {typeName(type, lang)} <span className="card-meta">({items.length})</span>
-          </h2>
-          <ItemList items={items} />
-        </section>
-      ))}
-    </>
-  );
-}
-
-/** A work's units grouped under the parts of its table of contents. */
-function Contents({ units, lang }: { units: Entity[]; lang: Lang }) {
-  const groups: Array<{ key: string; label: string; units: Entity[] }> = [];
-  for (const unit of units) {
-    const steps = ((unit.data as D).position ?? []) as Array<{ value: string; label?: LocalName }>;
-    const parents = steps.slice(0, -1);
-    const key = parents.map((s) => s.value).join('/');
-    const label = parents.map((s) => nameOf(s.label, lang) || s.value).join(' · ');
-    const last = groups[groups.length - 1];
-    if (last && last.key === key) last.units.push(unit);
-    else groups.push({ key, label, units: [unit] });
-  }
-  return (
-    <>
-      {groups.map((g, i) => (
-        <div className="contents-group" key={`${g.key}-${i}`}>
-          {g.label ? <h3>{g.label}</h3> : null}
-          <ItemList items={g.units} meta={(u) => ((u.data as D).date ? dateLabel((u.data as D).date, lang, { civil: false }) : null)} />
-        </div>
-      ))}
-    </>
-  );
-}
-
-function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang: Lang }) {
-  const d = entity.data as D;
-  const units = view.lists.units ?? [];
-  return (
-    <>
-      <Crumbs items={[...((d.sets ?? []) as string[]).map((id) => view.refs[id]).filter(Boolean).map((s) => ({ label: labelOf(s!, lang), to: href(itemPath(s!), lang) }))]} />
-      <p className="kicker">{GENRES[d.genre]?.[lang] ?? d.genre}</p>
-      <h1>{nameOf(d.title, lang)}</h1>
-      {lang === 'en' && d.title?.en ? (
-        <p className="subtitle" lang="he">
-          {d.title.he}
-        </p>
-      ) : null}
-      {d.authors?.length ? (
-        <p>
-          {t(lang, 'by')} <Refs ids={d.authors} view={view} />
-        </p>
-      ) : null}
-      {d.description ? <p>{nameOf(d.description, lang)}</p> : null}
-      {d.sourceCopies?.length ? (
-        <section>
-          <h2>{t(lang, 'sources')}</h2>
-          <Copies copies={d.sourceCopies} lang={lang} />
-        </section>
-      ) : null}
-      {view.lists.publications?.length ? (
-        <section>
-          <h2>{t(lang, 'publications')}</h2>
-          <ItemList items={view.lists.publications} />
-        </section>
-      ) : null}
-      {units.length ? (
-        <section>
-          <h2>{t(lang, 'contents')}</h2>
-          <Contents units={units} lang={lang} />
-          <div className="pager">
-            {view.next ? (
-              <Link className="button secondary" to={href(itemPath(entity), lang, { after: view.next })}>
-                {t(lang, 'more')}
-              </Link>
-            ) : (
-              <span />
-            )}
-          </div>
-        </section>
-      ) : null}
-    </>
   );
 }
 
@@ -406,27 +288,6 @@ function RecordingPage({ entity, view, lang }: { entity: Entity; view: ItemView;
       {d.event && view.refs[d.event] ? <Crumbs items={[{ label: labelOf(view.refs[d.event]!, lang), to: href(itemPath(view.refs[d.event]!), lang) }]} /> : null}
       <h1>{nameOf(d.title, lang)}</h1>
       <AudioPlayer recordings={[entity]} sources={{ [entity.id]: view.files[entity.id]?.url ?? null }} />
-    </>
-  );
-}
-
-function AuthorPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang: Lang }) {
-  const d = entity.data as D;
-  return (
-    <>
-      <p className="kicker">{typeName('author', lang)}</p>
-      <h1>{nameOf(d.name, lang)}</h1>
-      {d.born || d.passed ? (
-        <p className="subtitle">
-          {[d.born ? dateLabel(d.born, lang, { civil: false }) : '', d.passed ? dateLabel(d.passed, lang, { civil: false }) : ''].join(' – ')}
-        </p>
-      ) : null}
-      {view.lists.works?.length ? (
-        <section>
-          <h2>{t(lang, 'works')}</h2>
-          <ItemList items={view.lists.works} meta={(w) => GENRES[(w.data as D).genre]?.[lang] ?? null} />
-        </section>
-      ) : null}
     </>
   );
 }

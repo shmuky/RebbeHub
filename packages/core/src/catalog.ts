@@ -351,6 +351,51 @@ export class Catalog {
     return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data!, recordings: r.recordings }));
   }
 
+  /**
+   * How many items on main point at each item through a field: the units of
+   * each work (`work`, `unit`), the works of each author. For a library
+   * that shows how much each thing holds without fetching it all.
+   */
+  async refCounts(field: string, type?: EntityType): Promise<Record<string, number>> {
+    const params: unknown[] = [field];
+    const typed = type ? `AND f.type = $${params.push(type)}` : '';
+    const { rows } = await this.db.query<{ id: string; n: number }>(
+      `SELECT x.to_id AS id, count(*)::int AS n FROM entity_ref x JOIN entity f ON f.id = x.from_id AND NOT f.deleted AND f.main_rev IS NOT NULL
+       WHERE x.field = $1 ${typed} GROUP BY x.to_id`,
+      params,
+    );
+    return Object.fromEntries(rows.map((r) => [r.id, r.n]));
+  }
+
+  /**
+   * A work's outline: its top-level parts (volumes, sections) in order,
+   * with each one's name and how many units it holds. A work of one level
+   * has one part per unit.
+   */
+  async workOutline(work: EntityId): Promise<Array<{ value: string; label: Json | null; units: number }>> {
+    const { rows } = await this.db.query<{ value: string; label: Json | null; units: number }>(
+      `SELECT r.data->'position'->0->>'value' AS value,
+              (array_agg(r.data->'position'->0->'label' ORDER BY r.data->>'order' COLLATE "C"))[1] AS label,
+              count(*)::int AS units
+       FROM entity_ref x JOIN entity e ON e.id = x.from_id AND e.type = 'unit' AND NOT e.deleted JOIN revision r ON r.id = e.main_rev
+       WHERE x.to_id = $1 AND x.field = 'work'
+       GROUP BY 1 ORDER BY min(r.data->>'order' COLLATE "C")`,
+      [work],
+    );
+    return rows;
+  }
+
+  /** The units of one top-level part of a work (a volume), in order. */
+  async workPart(work: EntityId, part: string, limit = 1000): Promise<EntityView[]> {
+    const { rows } = await this.db.query<RevisionRow>(
+      `SELECT r.* FROM entity_ref x JOIN entity e ON e.id = x.from_id AND e.type = 'unit' AND NOT e.deleted JOIN revision r ON r.id = e.main_rev
+       WHERE x.to_id = $1 AND x.field = 'work' AND r.data->'position'->0->>'value' = $2
+       ORDER BY r.data->>'order' COLLATE "C" LIMIT ${Math.min(Math.max(limit, 1), 2000)}`,
+      [work, part],
+    );
+    return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }));
+  }
+
   /** How many items of each type main holds. */
   async counts(): Promise<Record<string, number>> {
     const { rows } = await this.db.query<{ type: string; n: number }>('SELECT type, count(*)::int AS n FROM entity WHERE main_rev IS NOT NULL AND NOT deleted GROUP BY type');

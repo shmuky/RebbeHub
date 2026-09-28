@@ -1364,3 +1364,313 @@ details.report summary {
 .unchecked {
   color: var(--machine);
 }
+
+/* ------------------------------------------------------------------ library */
+
+.library-search {
+  margin: 4px 0 8px;
+}
+
+.rebbeim {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  list-style: none;
+  margin: 0 -20px;
+  padding: 2px 20px 6px;
+}
+
+.rebbeim::-webkit-scrollbar,
+.books:not(.grid)::-webkit-scrollbar {
+  display: none;
+}
+
+.rebbe {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 72px;
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.25;
+}
+
+.portrait {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 700;
+  flex: none;
+}
+
+.shelves {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.shelf {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 96px;
+  height: 100%;
+  padding: 14px;
+  border-radius: 16px;
+  color: var(--fg);
+  text-decoration: none;
+  background: color-mix(in srgb, var(--shelf) 13%, var(--bg));
+  border-inline-start: 4px solid var(--shelf);
+}
+
+.shelf:hover {
+  background: color-mix(in srgb, var(--shelf) 20%, var(--bg));
+}
+
+.shelf b {
+  font-size: 1.0625rem;
+}
+
+.shelf small {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.books {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  list-style: none;
+  margin: 0 -20px;
+  padding: 2px 20px 8px;
+}
+
+.books.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 16px 12px;
+  overflow: visible;
+  margin: 0;
+  padding: 0;
+}
+
+.book {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100px;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.books.grid .book {
+  width: auto;
+}
+
+.cover {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  aspect-ratio: 5 / 7;
+  padding: 10px 10px 12px;
+  border-radius: 4px 10px 10px 4px;
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  line-height: 1.2;
+  box-shadow:
+    inset 7px 0 0 rgb(0 0 0 / 0.16),
+    0 2px 6px rgb(0 0 0 / 0.12);
+  overflow: hidden;
+}
+
+html[dir='rtl'] .cover {
+  border-radius: 10px 4px 4px 10px;
+  box-shadow:
+    inset -7px 0 0 rgb(0 0 0 / 0.16),
+    0 2px 6px rgb(0 0 0 / 0.12);
+}
+
+.cover::after {
+  content: '';
+  position: absolute;
+  inset-inline: 10px;
+  top: 12px;
+  height: 2px;
+  background: rgb(255 255 255 / 0.35);
+  border-radius: 2px;
+}
+
+.cover-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.book:hover .cover {
+  filter: brightness(1.08);
+}
+
+.book-meta {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.book.large {
+  width: 116px;
+  flex: none;
+}
+
+/* A sefer's or a shelf's header: its cover beside its name. */
+.item-hero {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin: 8px 0 12px;
+}
+
+.item-hero .cover {
+  width: 104px;
+  flex: none;
+  font-size: 1rem;
+}
+
+.item-hero h1 {
+  margin-bottom: 4px;
+}
+
+.item-hero .portrait {
+  width: 84px;
+  height: 84px;
+  font-size: 30px;
+}
+
+/* Tabs within a page, GitHub-style: contents, printings, history. */
+.page-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  list-style: none;
+  margin: 14px -20px 8px;
+  padding: 0 20px 4px;
+}
+
+.page-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.page-tabs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--fg);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.page-tabs a[aria-current='page'] {
+  background: var(--fg);
+  color: var(--bg);
+}
+
+.page-tabs .count {
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.volumes {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.volume {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+a.volume:hover {
+  background: var(--card-hover);
+}
+
+.volume small {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.8125rem;
+}
+
+.callout {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px;
+  margin: 14px 0;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--tone, #9a6b00) 13%, var(--bg));
+}
+
+.callout b {
+  display: block;
+}
+
+.callout p {
+  margin: 2px 0 8px;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.callout .button {
+  min-height: 34px;
+  padding: 4px 14px;
+  font-size: 0.8125rem;
+  background: var(--tone, #9a6b00);
+  color: #fff;
+}
+
+.callout-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  color: var(--tone, #9a6b00);
+}

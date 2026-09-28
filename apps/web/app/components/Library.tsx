@@ -1,0 +1,95 @@
+import { Link } from 'react-router';
+import type { LocalName } from '@rebbehub/model';
+import type { Entity } from '../lib/api.js';
+import { nameOf, type Lang } from '../lib/i18n.js';
+import { href, itemPath } from '../lib/links.js';
+
+/**
+ * The library's pieces: a book as a cover coloured by its shelf, a Rebbe as
+ * a portrait circle, a shelf as a tinted tile. Colours are the accents of
+ * Sichos-Kodesh's app, one per kind of sefer, so a shelf and its books match.
+ */
+
+export const GENRE_COLOURS: Record<string, string> = {
+  chassidus: '#16744a',
+  maamarim: '#23466e',
+  sichos: '#7e5800',
+  igros: '#8c2a3c',
+  halacha: '#0f6e6e',
+  siddur: '#5b3f99',
+  minhagim: '#6b4f2a',
+  history: '#4d5a52',
+  diaries: '#45536b',
+  recordings: '#0f6e6e',
+  farbrengens: '#16744a',
+};
+
+export const colourOf = (genre: string | undefined) => GENRE_COLOURS[genre ?? ''] ?? '#4d5a52';
+
+/** The Rebbeim in their order: the Baal Shem Tov and the Maggid, then the seven Rebbeim of Chabad. */
+export function rebbeOrder(author: Entity): number {
+  const d = author.data as { slug?: string; rebbe?: number };
+  if (d.rebbe) return d.rebbe;
+  if (d.slug === 'baal-shem-tov') return -2;
+  if (d.slug === 'maggid') return -1;
+  return 99;
+}
+
+const PORTRAIT_COLOURS = ['#23466e', '#5b3f99', '#8c2a3c', '#0f6e6e', '#7e5800', '#16744a', '#45536b', '#6b4f2a', '#16744a'];
+
+/** What each is called for short, as chassidim say it, for his portrait. */
+const SHORT_NAMES: Record<string, { he: string; en: string }> = {
+  'baal-shem-tov': { he: 'בעש״ט', en: 'BeShT' },
+  maggid: { he: 'המגיד', en: 'Maggid' },
+  'alter-rebbe': { he: 'אדה״ז', en: 'AR' },
+  'mitteler-rebbe': { he: 'אדה״א', en: 'MR' },
+  'tzemach-tzedek': { he: 'צ״צ', en: 'TzTz' },
+  'rebbe-maharash': { he: 'מהר״ש', en: 'Maharash' },
+  'rebbe-rashab': { he: 'רש״ב', en: 'Rashab' },
+  'frierdiker-rebbe': { he: 'ריי״צ', en: 'Rayatz' },
+  'the-rebbe': { he: 'הרבי', en: 'Rebbe' },
+};
+
+export function RebbePortrait({ author, index, lang = 'he', size = 62 }: { author: Entity; index: number; lang?: Lang; size?: number }) {
+  const d = author.data as { name?: LocalName; slug?: string };
+  const short = SHORT_NAMES[d.slug ?? '']?.[lang] ?? nameOf(d.name, lang).charAt(0);
+  return (
+    <span className="portrait" style={{ background: PORTRAIT_COLOURS[index % PORTRAIT_COLOURS.length], width: size, height: size, fontSize: short.length > 3 ? size / 4.4 : size / 3.4 }} aria-hidden="true">
+      {short}
+    </span>
+  );
+}
+
+/** A book's own shade of its shelf's colour, fixed by its id, so a shelf of one kind is not a wall of one colour. */
+export function coverColour(work: Pick<Entity, 'id' | 'data'>): string {
+  let hash = 0;
+  for (const ch of work.id) hash = (hash * 31 + ch.charCodeAt(0)) % 997;
+  const shade = (hash % 5) * 7 - 12; // -12% (lighter) to +16% (darker)
+  const base = colourOf((work.data as { genre?: string }).genre);
+  return shade < 0 ? `color-mix(in srgb, ${base}, white ${-shade}%)` : `color-mix(in srgb, ${base}, black ${shade}%)`;
+}
+
+export function BookCover({ work, lang, meta, size = 'medium' }: { work: Entity; lang: Lang; meta?: string; size?: 'medium' | 'large' }) {
+  const d = work.data as { title?: LocalName; genre?: string };
+  return (
+    <Link to={href(itemPath(work), lang)} className={`book ${size}`}>
+      <span className="cover" style={{ background: coverColour(work) }}>
+        <span className="cover-title">{nameOf(d.title, lang)}</span>
+      </span>
+      {meta ? <span className="book-meta">{meta}</span> : null}
+    </Link>
+  );
+}
+
+/** Covers in a row that scrolls sideways, or in a grid. */
+export function Books({ works, lang, meta, grid }: { works: Entity[]; lang: Lang; meta?: (w: Entity) => string | undefined; grid?: boolean }) {
+  return (
+    <ul className={grid ? 'books grid' : 'books'}>
+      {works.map((w) => (
+        <li key={w.id}>
+          <BookCover work={w} lang={lang} meta={meta?.(w)} />
+        </li>
+      ))}
+    </ul>
+  );
+}
