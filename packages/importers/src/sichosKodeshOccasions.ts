@@ -70,6 +70,10 @@ export function occasionDate(hebrewDate: string): { date: string; order: number;
   return { date, order, path: `/events/${hebrewDate.toLowerCase()}` };
 }
 
+/** The exact file on Google Drive, as mafteiach links it. */
+export const driveOrigin = (pdf: Pick<CatalogPdf, 'driveFileId' | 'resourceKey'>) =>
+  `https://drive.google.com/file/d/${encodeURIComponent(pdf.driveFileId)}/view${pdf.resourceKey ? `?resourcekey=${encodeURIComponent(pdf.resourceKey)}` : ''}`;
+
 export const audioUrl = (file: string, proxy = SICHOS_KODESH_MEDIA_PROXY) => `${proxy}/jem-audio/${encodeURIComponent(file)}`;
 
 export const pdfUrl = (pdf: Pick<CatalogPdf, 'driveFileId' | 'resourceKey'>, proxy = SICHOS_KODESH_MEDIA_PROXY) =>
@@ -119,7 +123,7 @@ export function sichosKodeshOccasionsImporter(
         const record = index.get(entry.occasionId);
         const drive = (driveFileId: string, url: string) => pdfUrl({ driveFileId, resourceKey: new URL(url).searchParams.get('resourcekey') ?? undefined }, proxy);
         const links: EventLink[] = [
-          ...entry.pdfs.map((pdf) => ({ kind: LINK_KINDS[pdf.section] ?? 'other', label: localName(pdf.label), url: pdfUrl(pdf, proxy), source: 'mafteiach' as const })),
+          ...entry.pdfs.map((pdf) => ({ kind: LINK_KINDS[pdf.section] ?? 'other', label: localName(pdf.label), url: pdfUrl(pdf, proxy), source: 'mafteiach' as const, origin: driveOrigin(pdf) })),
           ...(record ? mafteiachLinks(record, new Set(entry.pdfs.map((p) => p.driveFileId)), drive) : []),
         ].sort((a, b) => LINK_ORDER.indexOf(a.kind) - LINK_ORDER.indexOf(b.kind));
         const body = record ? mafteiachBody(record) : null;

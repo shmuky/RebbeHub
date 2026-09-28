@@ -1,10 +1,10 @@
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Catalog } from '@rebbehub/core';
 import { connectPostgres, one, type Db } from '@rebbehub/db';
 import { openPGlite } from '@rebbehub/db/pglite';
-import { readMafteiachCrawl, readSichosKodeshOccasions, readSichosKodeshWorks, runImport, sichosKodeshOccasionsImporter, sichosKodeshWorksImporter, type Importer } from '@rebbehub/importers';
+import { OTZROS_FOLDER, chabadLibraryImporter, driveLibraryImporter, listDriveFolder, crawlChabadLibrary, libraryWorks, readChabadLibrary, readMafteiachCrawl, readSichosKodeshOccasions, readSichosKodeshWorks, runImport, sichosKodeshOccasionsImporter, sichosKodeshWorksImporter, type Importer } from '@rebbehub/importers';
 import { clearMirror, directorySink, exportCommits, exportSnapshot, generateKeyPair, writeDump, type KeyPair } from '@rebbehub/mirror';
 import { BUILTIN_SCHEMAS, SchemaRegistry } from '@rebbehub/model';
 import { commitAll, git } from './git.js';
@@ -115,9 +115,33 @@ export const IMPORTERS: Record<string, (from: string) => Importer> = {
   'sichos-kodesh-works': (from) =>
     sichosKodeshWorksImporter(() => readSichosKodeshWorks(from, { texts: !process.env.REBBEHUB_NO_TEXTS, api: process.env.REBBEHUB_API_URL, log: (line) => console.log(line) })),
   // With MAFTEIACH_DATA (a crawl of mafteiach.app by Sichos-Kodesh's packages/mafteiach-index), every link and content outline the index has.
+  // Otzros HaRebbe's Drive library of seforim, listed from Drive at run time (`--from` is not used).
+  otzros: () => driveLibraryImporter(() => listDriveFolder(OTZROS_FOLDER, { log: (line) => console.log(line) })),
+  // With CHABADLIBRARY_TREE (the contents `rebbehub crawl-library` gathered), a page for every chapter in the library.
+  chabadlibrary: (from) => {
+    if (!process.env.CHABADLIBRARY_TREE) throw new Error('CHABADLIBRARY_TREE is not set: run rebbehub crawl-library first');
+    return chabadLibraryImporter(() => readChabadLibrary(from, process.env.CHABADLIBRARY_TREE!));
+  },
   'sichos-kodesh-occasions': (from) =>
-    sichosKodeshOccasionsImporter(() => readSichosKodeshOccasions(from), { mafteiach: process.env.MAFTEIACH_DATA ? () => readMafteiachCrawl(process.env.MAFTEIACH_DATA!) : undefined }),
+    sichosKodeshOccasionsImporter(() => readSichosKodeshOccasions(from), { mafteiach: process.env.MAFTEIACH_DATA && existsSync(process.env.MAFTEIACH_DATA) ? () => readMafteiachCrawl(process.env.MAFTEIACH_DATA!) : undefined }),
 };
+
+/**
+ * Crawls chabadlibrary.org's contents for every work of Sichos-Kodesh's
+ * registry in the library, into `out`, continuing an earlier crawl there,
+ * for `minutes` at most (the importer takes what is known so far).
+ */
+export async function crawlLibraryCommand(ctx: Context, input: { from: string; out: string; minutes?: number }): Promise<void> {
+  const dir = input.from.endsWith('works') ? input.from : join(input.from, 'apps/mobile/src/catalog/data/works');
+  const index = JSON.parse(await readFile(join(dir, 'works.json'), 'utf8'));
+  // A work Sichos-Kodesh has chapters for keeps those; its contents in the library are not needed.
+  const withContents = new Set((await readdir(join(dir, 'contents'))).filter((n) => n.endsWith('.json')).map((n) => n.slice(0, -5)));
+  const roots = libraryWorks(index, withContents).map((w) => w.root);
+  const tree = existsSync(input.out) ? JSON.parse(await readFile(input.out, 'utf8')) : { nodes: {} };
+  const save = async (t: unknown) => writeFile(input.out, JSON.stringify(t));
+  const deadline = input.minutes ? Date.now() + input.minutes * 60_000 : undefined;
+  await crawlChabadLibrary(roots, tree, { deadline, log: ctx.log, save });
+}
 
 export async function importCommand(ctx: Context, input: { source: string; from: string; approveAs?: string; dryRun?: boolean; chunkSize?: number }): Promise<void> {
   const make = IMPORTERS[input.source];

@@ -41,6 +41,7 @@ export const SOURCE_NAMES: Record<string, { he: string; en: string }> = {
   hebrewbooks: { he: 'היברו בוקס', en: 'HebrewBooks' },
   chabadlibrary: { he: 'ספריית חב״ד', en: 'Chabad Library' },
   mafteiach: { he: 'מפתח', en: 'Mafteiach' },
+  other: { he: 'מקור', en: 'Source' },
   jem: { he: 'JEM', en: 'JEM' },
   'igros-app': { he: 'אגרות קודש', en: 'Igros Kodesh app' },
   kehot: { he: 'קה״ת', en: 'Kehot' },

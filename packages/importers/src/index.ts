@@ -13,3 +13,5 @@ export {
 export { htmlToWikitext, sourceFooter } from './htmlToWikitext.js';
 export { REBBEHUB_API, textUrl, fetchTexts } from './sichosKodeshTexts.js';
 export { MAFTEIACH, driveFileId, mafteiachBody, mafteiachLinks, mafteiachPage, readMafteiachCrawl, type MafteiachRecord } from './mafteiachIndex.js';
+export { CHABAD_LIBRARY, chabadLibraryImporter, crawlChabadLibrary, libraryWorks, readChabadLibrary, type LibraryTree } from './chabadLibrary.js';
+export { OTZROS_FOLDER, OTZROS_SET, driveLibraryImporter, driveViewUrl, listDriveFolder, parseFolderView, type DriveFolder } from './driveLibrary.js';

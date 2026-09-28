@@ -2986,3 +2986,12 @@ body.embedded {
   grid-column: 2;
   opacity: 0.7;
 }
+
+/* Under each document: its exact file at the source (EventPage). */
+.doc-origin {
+  display: block;
+  margin-block-start: 4px;
+  font-size: 0.8rem;
+  text-align: center;
+  opacity: 0.75;
+}
