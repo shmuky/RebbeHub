@@ -1,0 +1,21 @@
+{
+  "name": "@rebbehub/jobs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RebbeHub's job runner and command line: migrations, importers, the git mirror export, catalog editions and their signed dumps. Later the queue workers (hashing, fingerprints, transcodes, OCR, sync) live here too.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "bin": {
+    "rebbehub": "./dist/bin/rebbehub.js"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@rebbehub/core": "^0.1.0",
+    "@rebbehub/db": "^0.1.0",
+    "@rebbehub/importers": "^0.1.0",
+    "@rebbehub/mirror": "^0.1.0",
+    "@rebbehub/model": "^0.1.0"
+  }
+}

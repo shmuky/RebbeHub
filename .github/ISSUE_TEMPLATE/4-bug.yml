@@ -1,0 +1,21 @@
+name: Bug in the software
+description: The site, API, importers or tools do something wrong.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can we see it happen?
+      description: Steps, a link, the API call, or the command you ran.
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: Browser and device, or Node version and operating system.

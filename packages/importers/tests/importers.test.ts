@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Catalog } from '@rebbehub/core';
 import { idForKey, readSichosKodeshWorks, runImport, sichosKodeshWorksImporter, type SichosKodeshWorksInput } from '@rebbehub/importers';
+import { toSichosKodeshRelease } from '@rebbehub/mirror';
 import { freshCatalog } from '../../core/tests/helpers.js';
 
 /** A tiny stand-in for Sichos-Kodesh's data/works, in its format. */
@@ -110,5 +111,26 @@ describe.skipIf(!checkout || !existsSync(checkout))('a Sichos-Kodesh checkout', 
     const units = data.contents.reduce((n, c) => n + c.units.length, 0);
     expect(result.created).toBeGreaterThan(data.index.works.length + units * 0.99);
     expect(await catalog.resolvePath('/likkutei-sichos')).not.toBeNull();
+
+    // And back: the release RebbeHub builds for Sichos-Kodesh gives it the same authors, works and contents.
+    const all = [];
+    for (let after: string | undefined; ; ) {
+      const page = await catalog.snapshot(await catalog.head(), { after: after as never, limit: 10_000 });
+      if (page.length === 0) break;
+      all.push(...page);
+      after = page[page.length - 1]!.id;
+    }
+    const release = toSichosKodeshRelease(all, { tag: 'test', commit: 0 });
+    expect(release.authors).toEqual(expect.arrayContaining(data.index.authors));
+    const withoutRights = (w: (typeof data.index.works)[number]) => {
+      const { units: _units, textBytes: _bytes, ...rest } = w as typeof w & { units?: number; textBytes?: number };
+      return { ...rest, sources: rest.sources.map(({ rights: _rights, ...s }) => s) };
+    };
+    expect(release.works).toEqual(expect.arrayContaining(data.index.works.map(withoutRights)));
+    for (const c of data.contents) {
+      const imported = release.imported.find((i) => i.workId === c.workId)!;
+      expect(imported.contents).toEqual(c.contents);
+      expect(imported.units.map((u) => u.id).sort()).toEqual(c.units.map((u) => u.id).sort());
+    }
   }, 600_000);
 });

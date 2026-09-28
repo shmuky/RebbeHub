@@ -1,0 +1,40 @@
+name: Something is wrong in the catalog
+description: A wrong date or name, a missing page, a bad scan, audio cut off, a duplicate. One sentence is enough.
+title: "[Report] "
+labels: ["report", "catalog"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping. Tell us what is wrong in your own words - you do not need to know anything about how RebbeHub works.
+        (Once the RebbeHub site is live, the "Report a problem" button on every page does the same without a GitHub account.)
+  - type: input
+    id: where
+    attributes:
+      label: Where is it?
+      description: A link to the page, its id (rh-…), or the name of the sefer, farbrengen or recording.
+      placeholder: "Likkutei Sichos vol. 12, Bereishis 3 - or rh-7k2m9q4d"
+    validations:
+      required: true
+  - type: dropdown
+    id: reason
+    attributes:
+      label: What kind of problem?
+      options:
+        - A fact is wrong (date, name, place, title)
+        - A page is missing or out of order
+        - The scan is bad
+        - The audio is cut off or wrong
+        - The text has mistakes
+        - It is listed twice
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What is wrong, and what should it be?
+      description: If you know a source for the right answer (a printing, a page), please say which.
+      placeholder: "It says 11 Shvat; the farbrengen was on 10 Shvat 5742 (see Hisvaaduyos 5742 vol. 2 p. 780)."
+    validations:
+      required: true
