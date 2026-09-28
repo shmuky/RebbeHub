@@ -1925,3 +1925,418 @@ a.volume:hover {
 .year-pills .pill svg {
   color: var(--accent);
 }
+
+/* ==================================================================
+ * The print look: a sefer and a library rather than an app. Serif
+ * headings on thin rules, ink on paper, seforim in dark cloth with gold
+ * lettering, lists instead of tinted boxes, and colour kept for what
+ * can be pressed. These rules come last and set the tone for all above.
+ * ================================================================== */
+
+:root {
+  --bg: #fbf9f4;
+  --bg-elevated: #fffefb;
+  --fg: #1c1b18;
+  --muted: #6b675f;
+  --border: #e3ded3;
+  --card: #f4f0e7;
+  --card-hover: #eee8dc;
+  --accent: #1d5c3f;
+  --accent-soft: #e7efe9;
+  --gold: #b08a3e;
+  --radius: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #12110f;
+    --bg-elevated: #191816;
+    --fg: #ece8df;
+    --muted: #a39e93;
+    --border: #2c2a26;
+    --card: #1e1c19;
+    --card-hover: #26241f;
+    --accent: #6fbf92;
+    --accent-soft: #1d2a22;
+    --gold: #d2b06a;
+  }
+}
+
+h1,
+.home-parsha,
+.event-hero h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* Section headings: a serif title on a thin rule, its link small beside it. */
+.section-header,
+html[lang='he'] .section-header {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--fg);
+  margin: 36px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-header a {
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* Fewer shapes: squarer corners, lines instead of fills. */
+.search-box input {
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.search-box button,
+button,
+.button {
+  border-radius: var(--radius);
+}
+
+.play-button,
+.round-play {
+  border-radius: 50%;
+}
+
+.pill {
+  border-radius: var(--radius);
+  background: transparent;
+  border: 1px solid var(--border);
+  font-weight: 500;
+}
+
+a.pill:hover {
+  background: var(--card);
+}
+
+.pill.on {
+  background: var(--fg);
+  border-color: var(--fg);
+  color: var(--bg);
+}
+
+.lang-switch {
+  border-radius: var(--radius);
+}
+
+.brand-mark {
+  border-radius: 4px;
+  background: var(--fg);
+  color: var(--bg);
+}
+
+/* Tabs: the active one in ink, marked by a short rule, no capsule. */
+.tab-icon {
+  border-radius: 0;
+  width: auto;
+}
+
+.tab.active .tab-icon {
+  background: transparent;
+  color: var(--accent);
+}
+
+.tab.active {
+  color: var(--accent);
+}
+
+/* The week: a list under its heading, not tinted cards. */
+.week-cards {
+  gap: 0;
+}
+
+.week-card {
+  border-radius: 0;
+  background: transparent;
+  padding: 12px 0;
+}
+
+.week-card + .week-card {
+  border-top: 1px solid var(--border);
+}
+
+.week-card-title {
+  font-family: var(--font-display);
+  font-size: 1.1875rem;
+}
+
+.week-card .pill {
+  background: transparent;
+}
+
+.year-chip {
+  border-radius: var(--radius);
+  background: transparent;
+  border: 1px solid var(--border);
+  font-family: var(--font-display);
+  min-width: 64px;
+  padding: 8px 10px;
+}
+
+.year-chip.on {
+  background: var(--fg);
+  border-color: var(--fg);
+  color: var(--bg);
+}
+
+/* What needs help: sentences with a link, no boxes or bars. */
+.needs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.needs li {
+  padding: 12px 0;
+  line-height: 1.5;
+}
+
+.needs li + li {
+  border-top: 1px solid var(--border);
+}
+
+.needs b {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+}
+
+.needs a {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.in-catalog {
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.in-catalog a {
+  color: var(--fg);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.in-catalog a:hover {
+  text-decoration: underline;
+}
+
+.feed .who,
+.feed .who.bot {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--font-display);
+}
+
+/* A plain note: a lead in bold and a line of text, set off by rules. */
+.note {
+  margin: 28px 0;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.note b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+}
+
+.note p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+/* The library: seforim as dark cloth with gold lettering and a gold frame. */
+.cover,
+html[dir='rtl'] .cover {
+  border-radius: 2px 4px 4px 2px;
+  color: #e9d7a6;
+  font-size: 0.875rem;
+  padding: 14px 12px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-shadow:
+    inset 0 0 0 1px rgb(0 0 0 / 0.2),
+    0 1px 2px rgb(0 0 0 / 0.25);
+}
+
+html[dir='rtl'] .cover {
+  border-radius: 4px 2px 2px 4px;
+}
+
+/* The gold rule tooled a little in from the edge. */
+.cover::after {
+  display: block;
+  inset: 6px;
+  height: auto;
+  background: none;
+  border: 1px solid rgb(233 215 166 / 0.6);
+  border-radius: 1px;
+}
+
+.item-hero .cover {
+  font-size: 1rem;
+}
+
+.portrait {
+  background: #f1ead9 !important;
+  color: #3b2f1c;
+  box-shadow: inset 0 0 0 1px var(--gold);
+}
+
+.rebbe {
+  font-weight: 500;
+}
+
+.shelves {
+  gap: 0 20px;
+}
+
+.shelf {
+  min-height: 0;
+  padding: 12px 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  gap: 2px;
+}
+
+.shelf:hover {
+  background: transparent;
+}
+
+.shelf:hover b {
+  color: var(--accent);
+}
+
+.shelf b {
+  font-family: var(--font-display);
+  font-size: 1.1875rem;
+}
+
+.page-tabs {
+  gap: 18px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+
+.page-tabs a {
+  border-radius: 0;
+  background: transparent;
+  padding: 8px 0;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+}
+
+.page-tabs a[aria-current='page'] {
+  background: transparent;
+  color: var(--fg);
+  border-bottom-color: var(--fg);
+}
+
+.volume {
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 12px 0;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+}
+
+a.volume:hover {
+  background: transparent;
+  color: var(--accent);
+}
+
+/* A farbrengen: a printed heading, not a banner. */
+.event-hero {
+  margin: 4px 0 18px;
+  padding: 0 0 14px;
+  border-radius: 0;
+  background: none;
+  color: var(--fg);
+  border-bottom: 1px solid var(--border);
+}
+
+.event-hero h1 {
+  font-size: 2.25rem;
+  margin: 2px 0 2px;
+}
+
+.event-hero-kicker {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.event-hero-date {
+  opacity: 1;
+  font-size: 1.0625rem;
+}
+
+.event-hero-chips {
+  gap: 0;
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.event-hero-chips li {
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  font-weight: 400;
+  font-size: 0.875rem;
+}
+
+.event-hero-chips li + li::before {
+  content: '·';
+  margin-inline: 8px;
+}
+
+.event-hero-chips svg {
+  display: none;
+}
+
+.listen-card {
+  border-radius: var(--radius);
+  padding: 2px 16px 8px;
+}
+
+.doc-page {
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+}
+
+.neighbors a {
+  border-radius: var(--radius);
+  background: transparent;
+  border: 1px solid var(--border);
+}
+
+.card-list {
+  border-radius: var(--radius);
+}
+
+.row-icon {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.player-bar {
+  border-radius: 10px;
+}

@@ -75,7 +75,7 @@ describe('the public site', () => {
     expect(page.html).toContain('<html lang="he" dir="rtl">');
     expect(page.html).toContain('class="home-parsha"');
     expect(page.html).toContain('התוועדויות'); // the farbrengens tab
-    expect(page.html).toContain('class="tasks"'); // what the community can help with
+    expect(page.html).toContain('class="needs"'); // what the community can help with
     expect(page.html).toContain('href="/help"');
   });
 

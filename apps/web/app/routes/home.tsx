@@ -1,5 +1,5 @@
 import { dateKeyToHDate, toHebrewNumeral } from '@rebbehub/hebrew';
-import { Bot, FileText, Flag, Headphones, ScrollText } from 'lucide-react';
+import { Bot, FileText } from 'lucide-react';
 import { Link } from 'react-router';
 import type { Route } from './+types/home';
 import { EventRows, PlayEventButton, eventData, hanachaOf, type EventItem } from '../components/EventRow.js';
@@ -123,30 +123,6 @@ function WeekCard({ event, lang }: { event: EventItem; lang: Lang }) {
   );
 }
 
-/** One thing the catalog lacks, with how far along it is and where to help. */
-function Task({ icon, tone, title, done, total, note, action, to }: { icon: React.ReactNode; tone: string; title: string; done?: number; total?: number; note: string; action: string; to: string }) {
-  const percent = done !== undefined && total ? Math.round((done / total) * 100) : null;
-  return (
-    <li className="callout task" style={{ ['--tone' as string]: tone }}>
-      <span className="callout-icon" aria-hidden="true">
-        {icon}
-      </span>
-      <div>
-        <b>{title}</b>
-        {percent !== null ? (
-          <span className="progress" role="img" aria-label={`${percent}%`}>
-            <i style={{ width: `${percent}%` }} />
-          </span>
-        ) : null}
-        <p>{note}</p>
-        <Link className="button" to={to}>
-          {action}
-        </Link>
-      </div>
-    </li>
-  );
-}
-
 export default function Home({ loaderData }: Route.ComponentProps) {
   const { lang, week, year, isKvius, yearEvents, years, today, community, counts } = loaderData;
   const headline = week.parsha ? `${t(lang, 'parshas')} ${week.parsha}` : (week.holidays[0] ?? week.todayLabel);
@@ -204,39 +180,27 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           <span>{t(lang, 'buildingTogether')}</span>
           <Link to={href('/help', lang)}>{t(lang, 'howToHelp')}</Link>
         </h2>
-        <ul className="tasks">
+        <ul className="needs">
           {gaps.eventsWithoutRecordings ? (
-            <Task
-              icon={<Headphones size={20} />}
-              tone="#9a6b00"
-              title={`${num(gaps.eventsWithoutRecordings, lang)} ${t(lang, 'taskRecordings')}`}
-              done={withRecordings}
-              total={gaps.events}
-              note={`${num(withRecordings, lang)} ${t(lang, 'outOf')} ${num(gaps.events, lang)} ${t(lang, 'alreadyLinked')}`}
-              action={t(lang, 'helpLink')}
-              to={href('/help', lang, { focus: 'recordings' })}
-            />
+            <li>
+              <b>{num(gaps.eventsWithoutRecordings, lang)}</b> {t(lang, 'taskRecordings')} ({num(withRecordings, lang)} {t(lang, 'outOf')} {num(gaps.events, lang)} {t(lang, 'alreadyLinked')}).{' '}
+              <Link to={href('/help', lang)}>{t(lang, 'helpLink')}</Link>
+            </li>
           ) : null}
           {gaps.eventsWithoutTexts ? (
-            <Task
-              icon={<ScrollText size={20} />}
-              tone="#16744a"
-              title={`${num(gaps.eventsWithoutTexts, lang)} ${t(lang, 'taskTexts')}`}
-              done={gaps.events - gaps.eventsWithoutTexts}
-              total={gaps.events}
-              note={t(lang, 'taskTextsNote')}
-              action={t(lang, 'helpFind')}
-              to={href('/help', lang, { focus: 'texts' })}
-            />
+            <li>
+              <b>{num(gaps.eventsWithoutTexts, lang)}</b> {t(lang, 'taskTexts')}. {t(lang, 'taskTextsNote')}{' '}
+              <Link to={href('/help', lang)}>{t(lang, 'helpFind')}</Link>
+            </li>
           ) : null}
-          <Task
-            icon={<Flag size={20} />}
-            tone="#8c2a3c"
-            title={community.openReports ? `${num(community.openReports, lang)} ${t(lang, 'reportsWaiting')}` : t(lang, 'noReportsWaiting')}
-            note={t(lang, 'reportHint')}
-            action={t(lang, 'howToReport')}
-            to={href('/help', lang)}
-          />
+          <li>
+            {community.openReports ? (
+              <>
+                <b>{num(community.openReports, lang)}</b> {t(lang, 'reportsWaiting')}.{' '}
+              </>
+            ) : null}
+            {t(lang, 'reportHint')}
+          </li>
         </ul>
       </section>
 
@@ -272,26 +236,20 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
       <section>
         <h2 className="section-header">{t(lang, 'inCatalog')}</h2>
-        <ul className="stat-tiles">
-          <li>
-            <Link to={href('/sets', lang)}>
-              <b>{num(counts.work ?? 0, lang)}</b>
-              <span>{t(lang, 'seforim')}</span>
-            </Link>
-          </li>
-          <li>
-            <Link to={href('/calendar', lang)}>
-              <b>{num(counts.event ?? 0, lang)}</b>
-              <span>{t(lang, 'farbrengensCount')}</span>
-            </Link>
-          </li>
-          <li>
-            <Link to={href('/calendar', lang)}>
-              <b>{num(counts.recording ?? 0, lang)}</b>
-              <span>{t(lang, 'recordingParts')}</span>
-            </Link>
-          </li>
-        </ul>
+        <p className="in-catalog">
+          <Link to={href('/sets', lang)}>
+            {num(counts.work ?? 0, lang)} {t(lang, 'seforim')}
+          </Link>
+          {' · '}
+          <Link to={href('/calendar', lang)}>
+            {num(counts.event ?? 0, lang)} {t(lang, 'farbrengensCount')}
+          </Link>
+          {' · '}
+          <Link to={href('/calendar', lang)}>
+            {num(counts.recording ?? 0, lang)} {t(lang, 'recordingParts')}
+          </Link>
+          {counts.unit ? ` · ${num(counts.unit, lang)} ${t(lang, 'unitsShort')}` : ''}
+        </p>
       </section>
     </>
   );

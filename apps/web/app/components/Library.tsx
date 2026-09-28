@@ -6,22 +6,22 @@ import { href, itemPath } from '../lib/links.js';
 
 /**
  * The library's pieces: a book as a cover coloured by its shelf, a Rebbe as
- * a portrait circle, a shelf as a tinted tile. Colours are the accents of
- * Sichos-Kodesh's app, one per kind of sefer, so a shelf and its books match.
+ * a portrait circle, a shelf as a line on the page. Covers are dark cloth,
+ * one colour per kind of sefer, lettered in gold as seforim are.
  */
 
 export const GENRE_COLOURS: Record<string, string> = {
-  chassidus: '#16744a',
-  maamarim: '#23466e',
-  sichos: '#7e5800',
-  igros: '#8c2a3c',
-  halacha: '#0f6e6e',
-  siddur: '#5b3f99',
-  minhagim: '#6b4f2a',
-  history: '#4d5a52',
-  diaries: '#45536b',
-  recordings: '#0f6e6e',
-  farbrengens: '#16744a',
+  chassidus: '#1d3d2e',
+  maamarim: '#1f2f4a',
+  sichos: '#4a3322',
+  igros: '#5e1f26',
+  halacha: '#1e3f41',
+  siddur: '#3a2a4d',
+  minhagim: '#50391f',
+  history: '#33352f',
+  diaries: '#2b3444',
+  recordings: '#1e3f41',
+  farbrengens: '#1d3d2e',
 };
 
 export const colourOf = (genre: string | undefined) => GENRE_COLOURS[genre ?? ''] ?? '#4d5a52';

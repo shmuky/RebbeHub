@@ -1,4 +1,3 @@
-import { Code2, Flag, Headphones, KeyRound, ScrollText } from 'lucide-react';
 import type { Route } from './+types/help';
 import { EventRows, eventData, type EventItem } from '../components/EventRow.js';
 import { siteOf } from '../lib/context.server.js';
@@ -55,10 +54,7 @@ export default function Help({ loaderData }: Route.ComponentProps) {
       <h1>{t(lang, 'tabHelp')}</h1>
       <p className="subtitle">{t(lang, 'helpIntro')}</p>
 
-      <section className="callout" style={{ ['--tone' as string]: '#8c2a3c' }}>
-        <span className="callout-icon" aria-hidden="true">
-          <Flag size={20} />
-        </span>
+      <section className="note">
         <div>
           <b>{t(lang, 'helpReportTitle')}</b>
           <p>{t(lang, 'helpReportText')}</p>
@@ -68,7 +64,7 @@ export default function Help({ loaderData }: Route.ComponentProps) {
       <section id="recordings">
         <h2 className="section-header">
           <span>
-            <Headphones size={14} aria-hidden="true" /> {t(lang, 'helpRecordingsTitle')}
+            {t(lang, 'helpRecordingsTitle')}
           </span>
           <span>{num(gaps.eventsWithoutRecordings)}</span>
         </h2>
@@ -79,7 +75,7 @@ export default function Help({ loaderData }: Route.ComponentProps) {
       <section id="texts">
         <h2 className="section-header">
           <span>
-            <ScrollText size={14} aria-hidden="true" /> {t(lang, 'helpTextsTitle')}
+            {t(lang, 'helpTextsTitle')}
           </span>
           <span>{num(gaps.eventsWithoutTexts)}</span>
         </h2>
@@ -87,26 +83,20 @@ export default function Help({ loaderData }: Route.ComponentProps) {
         <Some events={noText as EventItem[]} />
       </section>
 
-      <section className="callout" style={{ ['--tone' as string]: '#23466e' }}>
-        <span className="callout-icon" aria-hidden="true">
-          <KeyRound size={20} />
-        </span>
+      <section className="note">
         <div>
           <b>{t(lang, 'helpSoonTitle')}</b>
           <p>{t(lang, 'helpSoonText')}</p>
         </div>
       </section>
 
-      <section className="callout" style={{ ['--tone' as string]: '#16744a' }}>
-        <span className="callout-icon" aria-hidden="true">
-          <Code2 size={20} />
-        </span>
+      <section className="note">
         <div>
           <b>{t(lang, 'helpCodeTitle')}</b>
           <p>{t(lang, 'helpCodeText')}</p>
-          <a className="button" href="https://github.com/shmuky/RebbeHub/blob/main/CONTRIBUTING.md">
-            GitHub
-          </a>
+          <p>
+            <a href="https://github.com/shmuky/RebbeHub/blob/main/CONTRIBUTING.md">GitHub</a>
+          </p>
         </div>
       </section>
     </>

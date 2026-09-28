@@ -1,8 +1,8 @@
-import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, History, Library as LibraryIcon, Lightbulb } from 'lucide-react';
+import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, History } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router';
 import type { LocalName } from '@rebbehub/model';
 import { ItemList } from '../components/ItemLink.js';
-import { Books, RebbePortrait, colourOf, coverColour } from '../components/Library.js';
+import { Books, RebbePortrait, coverColour } from '../components/Library.js';
 import type { Entity } from '../lib/api.js';
 import { dateLabel } from '../lib/dates.js';
 import { kindName, languageName, nameOf, t, type Lang } from '../lib/i18n.js';
@@ -45,17 +45,11 @@ function Crumbs({ items }: { items: Array<{ label: string; to?: string }> }) {
 /** "Know something we don't?" - the report form at the foot of every page takes it, no account needed. */
 function HelpCallout({ lang, title, text }: { lang: Lang; title: string; text: string }) {
   return (
-    <aside className="callout" style={{ ['--tone' as string]: '#9a6b00' }}>
-      <span className="callout-icon" aria-hidden="true">
-        <Lightbulb size={20} />
-      </span>
-      <div>
-        <b>{title}</b>
-        <p>{text}</p>
-        <a className="button" href="#report">
-          {t(lang, 'tellUs')}
-        </a>
-      </div>
+    <aside className="note">
+      <b>{title}</b>
+      <p>
+        {text} <a href="#report">{t(lang, 'tellUs')}</a>
+      </p>
     </aside>
   );
 }
@@ -65,15 +59,11 @@ export function SetPage({ entity, view, lang }: { entity: Entity; view: ItemView
   const members = view.lists.members ?? [];
   const works = members.filter((m) => m.type === 'work');
   const others = members.filter((m) => m.type !== 'work');
-  const genre = (works[0]?.data as D | undefined)?.genre;
   const counts = view.counts ?? {};
   return (
     <>
       <Crumbs items={[{ label: t(lang, 'tabLibrary'), to: href('/sets', lang) }]} />
       <div className="item-hero">
-        <span className="callout-icon" style={{ width: 56, height: 56, borderRadius: 16, color: colourOf(genre), background: `color-mix(in srgb, ${colourOf(genre)} 14%, var(--bg))` }} aria-hidden="true">
-          <LibraryIcon size={26} />
-        </span>
         <div>
           <h1>{nameOf(d.name, lang)}</h1>
           <p className="subtitle">
