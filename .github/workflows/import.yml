@@ -1,0 +1,89 @@
+name: Import the catalog (manual)
+
+# Fills the live catalog from Sichos-Kodesh, and brings it up to date when
+# run again: the importer changes only what the source changed and never
+# overwrites what people have fixed. RebbeHub keeps no copy of
+# Sichos-Kodesh's content, so this reads a fresh checkout of it each run.
+#
+# Needs two repository secrets (Settings -> Secrets and variables ->
+# Actions): DATABASE_URL, the same direct Neon connection string the
+# rebbehub-api build has, and SICHOS_KODESH_TOKEN, a fine-grained token
+# that can only read shmuky/Sichos-Kodesh's contents. See docs/deploy.md.
+on:
+  workflow_dispatch:
+    inputs:
+      steward:
+        description: The steward who approves the import (created if missing)
+        default: shmuly
+        required: true
+      steward_name:
+        description: The steward's display name
+        default: Shmuly
+        required: true
+      dry_run:
+        description: Only report what would change
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Never two imports into the same database at once.
+concurrency:
+  group: import-production
+  cancel-in-progress: false
+
+jobs:
+  import:
+    name: Import from Sichos-Kodesh
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SICHOS_KODESH_TOKEN: ${{ secrets.SICHOS_KODESH_TOKEN }}
+    steps:
+      - name: Check the import is configured
+        run: |
+          missing=""
+          for name in DATABASE_URL SICHOS_KODESH_TOKEN; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Add the repository secrets$missing (see docs/deploy.md)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: shmuky/Sichos-Kodesh
+          token: ${{ secrets.SICHOS_KODESH_TOKEN }}
+          path: .sichos-kodesh
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+
+      - name: Migrate the database
+        run: npm run rebbehub -- migrate
+      - name: Make sure the steward exists
+        if: ${{ !inputs.dry_run }}
+        env:
+          STEWARD: ${{ inputs.steward }}
+          STEWARD_NAME: ${{ inputs.steward_name }}
+        run: npm run rebbehub -- account --id "$STEWARD" --name "$STEWARD_NAME" --steward
+      - name: Import
+        env:
+          STEWARD: ${{ inputs.steward }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            npm run rebbehub -- import sichos-kodesh-works --from .sichos-kodesh --dry-run
+          else
+            npm run rebbehub -- import sichos-kodesh-works --from .sichos-kodesh --approve-as "$STEWARD"
+          fi
