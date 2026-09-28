@@ -2512,3 +2512,30 @@ a.volume:hover {
   color: inherit;
   font: inherit;
 }
+
+/* Follow: a quiet button at the head of an item's page. */
+.item-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -8px;
+}
+
+.follow-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.875rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.follow-button.is-on {
+  border-color: var(--accent);
+  color: var(--accent);
+}

@@ -454,6 +454,14 @@ export function createApp(options: ApiOptions): Hono {
     return c.json({ suggestion: await catalog.restore(entityId(c.req.param('id')), input.rev, by) }, 201);
   });
 
+  // What the person asking follows, the items themselves (for their names), and what changed in them lately.
+  app.get('/v1/follows', async (c) => {
+    const by = await signedIn(c);
+    const follows = await catalog.follows(by);
+    const items = await Promise.all(follows.filter((f) => f.kind === 'entity' || f.kind === 'set').map((f) => catalog.get(f.id as EntityId)));
+    return c.json({ follows, items: await redact(items.filter((i): i is EntityView => i !== null)), feed: await catalog.followFeed(by, intParam(c.req.query('limit'), 'limit') ?? 20) });
+  });
+
   app.post('/v1/follows', async (c) => {
     const by = await signedIn(c);
     const input = await body<{ kind?: 'entity' | 'set' | 'project' | 'changeset'; id?: string; on?: boolean }>(c);

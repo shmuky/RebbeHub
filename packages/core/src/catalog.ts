@@ -1107,6 +1107,41 @@ export class Catalog {
     }
   }
 
+  /** What a person follows: items and sets, newest first. */
+  async follows(accountId: string): Promise<Array<{ kind: 'entity' | 'set' | 'project' | 'changeset'; id: string; since: string }>> {
+    const { rows } = await this.db.query<{ target_kind: 'entity' | 'set' | 'project' | 'changeset'; target_id: string; created_at: Date | string }>(
+      'SELECT target_kind, target_id, created_at FROM follow WHERE account_id = $1 ORDER BY created_at DESC',
+      [accountId],
+    );
+    return rows.map((r) => ({ kind: r.target_kind, id: r.target_id, since: new Date(r.created_at).toISOString() }));
+  }
+
+  /**
+   * What changed lately in what a person follows: the item itself, and what
+   * belongs to it (a sefer's sichos, a farbrengen's recordings, a set's
+   * items). One line per merge, with how many of the followed things it
+   * changed; changes from before they followed are left out.
+   */
+  async followFeed(accountId: string, limit = 20): Promise<Array<{ seq: number; at: string; message: string; authorName: string; authorIsBot: boolean; entityId: string; changes: number }>> {
+    const { rows } = await this.db.query<{ seq: string; at: Date | string; message: string; author_name: string; author_is_bot: boolean; entity_id: string; changes: number }>(
+      `WITH targets AS (SELECT target_id, created_at FROM follow WHERE account_id = $1 AND target_kind IN ('entity', 'set')),
+            touched AS (
+              SELECT cc.commit_seq, cc.entity_id, t.created_at FROM commit_change cc JOIN targets t ON t.target_id = cc.entity_id
+              UNION
+              SELECT cc.commit_seq, cc.entity_id, t.created_at FROM entity_ref r JOIN targets t ON t.target_id = r.to_id
+                JOIN commit_change cc ON cc.entity_id = r.from_id
+              WHERE r.field IN ('work', 'event', 'sets')
+            )
+       SELECT c.seq, c.at, c.message, a.display_name AS author_name, a.is_bot AS author_is_bot, min(x.entity_id) AS entity_id, count(*)::int AS changes
+       FROM touched x JOIN commit c ON c.seq = x.commit_seq JOIN changeset cs ON cs.id = c.changeset_id JOIN account a ON a.id = cs.author
+       WHERE c.at >= x.created_at
+       GROUP BY c.seq, c.at, c.message, a.display_name, a.is_bot
+       ORDER BY c.seq DESC LIMIT ${Math.min(Math.max(limit, 1), 100)}`,
+      [accountId],
+    );
+    return rows.map((r) => ({ seq: Number(r.seq), at: new Date(r.at).toISOString(), message: r.message, authorName: r.author_name, authorIsBot: r.author_is_bot, entityId: r.entity_id, changes: r.changes }));
+  }
+
   /** Who is told when this item changes: its own followers and those of its sets. */
   async followersOfEntity(id: EntityId): Promise<string[]> {
     const main = await this.targetRev(this.db, null, id);

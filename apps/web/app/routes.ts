@@ -14,6 +14,7 @@ export default [
   route('_/auth/*', 'routes/auth.ts'),
   // Suggestions and their review, passed through the same way.
   route('_/suggestions/*', 'routes/suggestions.ts'),
+  route('_/follows', 'routes/follows.ts'),
   route('review', 'routes/review.tsx'),
   route('signin', 'routes/signin.tsx'),
   route('account', 'routes/account.tsx'),

@@ -1,5 +1,6 @@
 import { data, redirect } from 'react-router';
 import type { Route } from './+types/item';
+import { FollowButton } from '../components/FollowButton.js';
 import { ReportForm, type ReportResult } from '../components/ReportForm.js';
 import { SuggestFix, canSuggestFix } from '../components/SuggestFix.js';
 import { ItemPage } from '../views/ItemPage.js';
@@ -100,9 +101,17 @@ export function meta({ loaderData }: Route.MetaArgs) {
   });
 }
 
+/** What people follow: sets, sefarim and their sichos, farbrengens, the Rebbeim and other people, printings. */
+const FOLLOWABLE = new Set(['set', 'work', 'unit', 'event', 'person', 'publication']);
+
 export default function Item({ loaderData }: Route.ComponentProps) {
   return (
     <>
+      {FOLLOWABLE.has(loaderData.entity.type) ? (
+        <div className="item-actions">
+          <FollowButton entity={loaderData.entity} lang={loaderData.lang} />
+        </div>
+      ) : null}
       <ItemPage entity={loaderData.entity} view={loaderData.view} />
       {canSuggestFix(loaderData.entity) ? <SuggestFix entity={loaderData.entity} lang={loaderData.lang} /> : null}
       <ReportForm entityId={loaderData.entity.id} />

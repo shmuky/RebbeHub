@@ -5,7 +5,10 @@ import type { Route } from './+types/account';
 import { langFrom, t } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
+import { labelOf } from '../lib/labels.js';
+import { itemPath } from '../lib/links.js';
 import { refreshAccount, useAccount, useGoogleSignIn } from '../lib/useAccount.js';
+import { setFollow, useFollows } from '../lib/useFollows.js';
 import { useLang } from '../lib/useLang.js';
 
 /** A person's own page: their name (which they can change), their passkeys (and adding one), their Google account, and signing out. Filled in by the browser; the page itself is the same for everyone. */
@@ -22,6 +25,7 @@ export default function Account() {
   const lang = useLang();
   const account = useAccount();
   const google = useGoogleSignIn();
+  const follows = useFollows(Boolean(account));
   const [leaving, setLeaving] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -166,6 +170,50 @@ export default function Account() {
           ) : null}
         </section>
       ) : null}
+
+      <section>
+        <h2 className="section-header">{t(lang, 'yourFollows')}</h2>
+        {follows && follows.items.length === 0 ? <p className="row-sub">{t(lang, 'followsEmpty')}</p> : null}
+        <ul className="rows">
+          {follows?.items.map((item) => (
+            <li key={item.id} className="row">
+              <span className="row-main">
+                <Link className="row-title" to={href(itemPath(item), lang)}>
+                  {labelOf(item, lang)}
+                </Link>
+              </span>
+              <button type="button" className="link-button" onClick={() => void setFollow(item, false)}>
+                {t(lang, 'unfollow')}
+              </button>
+            </li>
+          ))}
+        </ul>
+        {follows && follows.items.length > 0 ? (
+          <>
+            <h3 className="subsection">{t(lang, 'followFeed')}</h3>
+            {follows.feed.length === 0 ? <p className="row-sub">{t(lang, 'followFeedEmpty')}</p> : null}
+            <ul className="rows">
+              {follows.feed.map((f) => (
+                <li key={f.seq} className="row">
+                  <span className="row-main">
+                    <Link className="row-title" to={href(`/${f.entityId}`, lang)}>
+                      {f.message}
+                    </Link>
+                    <span className="row-sub" suppressHydrationWarning>
+                      {(() => {
+                        const item = follows.items.find((i) => i.id === f.entityId);
+                        return item ? `${labelOf(item, lang)} · ` : '';
+                      })()}
+                      {f.authorName} · {when(f.at)}
+                      {f.changes > 1 ? ` · ${f.changes.toLocaleString(lang === 'he' ? 'he-IL' : 'en-US')} ${t(lang, 'changesCount')}` : ''}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+      </section>
 
       <p>
         <Link to={href('/review', lang)}>{t(lang, 'yourSuggestions')}</Link>

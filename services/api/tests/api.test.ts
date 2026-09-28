@@ -232,3 +232,26 @@ describe('suggesting a fix in one step', () => {
     expect((await call('POST', '/v1/suggestions/quick', { as: 'chaim', body: { entityId: 'rh-zzzzzzzz', data: {} } })).status).toBe(404);
   });
 });
+
+describe('following', () => {
+  it('lists what a person follows, and the changes to it since they followed', async () => {
+    expect((await call('GET', '/v1/follows')).status).toBe(401);
+    await call('POST', '/v1/follows', { as: 'chaim', body: { kind: 'entity', id: event } });
+    const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'חיבור' }, slug: 'w', authors: [], genre: 'sichos', levels: ['sicha'], sets: [set] });
+    await call('POST', '/v1/follows', { as: 'chaim', body: { kind: 'entity', id: work } });
+
+    const fixed = await call('POST', '/v1/suggestions/quick', { as: 'mendy', body: { entityId: event, data: { ...yudShvat(set), date: '5742-05-11' }, title: 'Wrong date' } });
+    await call('POST', `/v1/suggestions/${fixed.body.id}/approve`, { as: 'keeper' });
+    // A sicha added to the followed sefer shows too.
+    await add(catalog, 'mendy', 'keeper', 'unit', { work, position: [{ level: 'sicha', value: '1' }], order: 'V', label: { he: 'א' } });
+
+    const mine = (await call('GET', '/v1/follows', { as: 'chaim' })).body;
+    expect(mine.follows.map((f: { id: string }) => f.id).sort()).toEqual([event, work].sort());
+    expect(mine.items).toHaveLength(2);
+    expect(mine.feed.map((f: { message: string }) => f.message)).toEqual(['Add unit', 'Wrong date']);
+    expect(mine.feed[1]).toMatchObject({ entityId: event, authorName: 'Mendy', changes: 1 });
+
+    await call('POST', '/v1/follows', { as: 'chaim', body: { kind: 'entity', id: event, on: false } });
+    expect((await call('GET', '/v1/follows', { as: 'chaim' })).body.follows).toHaveLength(1);
+  });
+});

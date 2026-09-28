@@ -44,9 +44,11 @@ and rate limits, all over the API). Signing in with a passkey or with
 Google is built ([accounts](accounts.md); Google shows once its keys are
 set). *Suggest a fix* is on farbrengen pages (name and date), and
 `/review` lists what waits for review, before and after in words, with
-*Approve* and *Send back* for the set's keepers. Still to come: Suggest a
-fix on the other kinds of page, signing in by email link, notifications
-for follows, the reviewer's AI summary.
+*Approve* and *Send back* for the set's keepers; every kind of page has
+it now. *Follow* is on every sefer, sicha, farbrengen, set and person,
+and the account page lists what someone follows and what changed in it
+(a sefer's sichos included). Still to come: signing in by email link,
+notifications by email, the reviewer's AI summary.
 
 ## Phases 3-6
 
