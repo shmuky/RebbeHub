@@ -54,8 +54,8 @@ Sichos-Kodesh release and a signed `manifest.json`; upload it to R2.
 - Local: `npm run dev:api` (PGlite, or `DATABASE_URL`). `DEV_ACCOUNT=me`
   signs every request in as `me` - for local testing only; refused unless
   the server listens on localhost.
-- Cloudflare Workers: `services/api/wrangler.toml`, with a Hyperdrive
-  binding to Neon and the secrets `REPORT_SALT` and `TURNSTILE_SECRET`.
+- Cloudflare Workers: deployed on every merge to `main`; see
+  [deploy.md](deploy.md).
 
 ## The site
 
@@ -64,9 +64,8 @@ Sichos-Kodesh release and a signed `manifest.json`; upload it to R2.
 - Local: `npm run dev:web` (Vite, http://localhost:5173) with the API
   running; `REBBEHUB_API_URL` and `SITE_URL` override the defaults.
 - Node: `npm run build:web`, then `npm start -w @rebbehub/web` (port 3000).
-- Cloudflare Workers: `apps/web/wrangler.toml` - static assets from
-  `build/client`, `API_URL` and `SITE_URL` as vars, and optionally a
-  service binding to the API Worker.
+- Cloudflare Workers: deployed with the API on every merge to `main`; see
+  [deploy.md](deploy.md).
 
 Pages are cached for a minute and served stale for ten while they
 refresh. The language is in the address (`?lang=en`), never a cookie, so a

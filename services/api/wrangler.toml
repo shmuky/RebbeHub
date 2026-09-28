@@ -1,10 +1,22 @@
-# The API on Cloudflare Workers. Fill in the Hyperdrive id (it points at
-# Neon) before deploying; secrets are set with `wrangler secret put`.
+# The API on Cloudflare Workers. Deployed by .github/workflows/deploy.yml,
+# which fills in the Hyperdrive id (found or created by name) before
+# deploying; see docs/deploy.md.
 name = "rebbehub-api"
 main = "src/worker.ts"
 compatibility_date = "2026-09-01"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = true
 
+[observability]
+enabled = true
+
+# Postgres on Neon, pooled by Hyperdrive (config name: rebbehub).
 [[hyperdrive]]
 binding = "HYPERDRIVE"
-id = "<hyperdrive-id>"
+id = "HYPERDRIVE_ID"
+
+# File bytes that may be served. The preservation bucket has no binding here on purpose:
+# nothing in it is ever served.
+[[r2_buckets]]
+binding = "FILES_PUBLIC"
+bucket_name = "rebbehub-public"

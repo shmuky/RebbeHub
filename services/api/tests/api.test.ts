@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Hono } from 'hono';
 import type { EntityId } from '@rebbehub/model';
-import { createApp } from '../src/app.js';
+import { registerFile, setRights } from '@rebbehub/core';
+import { createApp, parseRange } from '../src/app.js';
 import { add, freshCatalog, yudShvat } from '../../../packages/core/tests/helpers.js';
 
 let app: Hono;
@@ -68,6 +69,43 @@ describe('browsing', () => {
 
     expect((await call('GET', `/v1/entities/batch?ids=${later},rh-zzzzzzzz,${event}`)).body.items.map((i: { id: string }) => i.id)).toEqual([later, event]);
     expect((await call('GET', '/v1/stats')).body.counts).toMatchObject({ event: 3, unit: 2, work: 1, set: 1 });
+  });
+});
+
+describe('the media proxy', () => {
+  it('serves a file\'s bytes, and ranges of them, only while its rights allow', async () => {
+    const bytes = new TextEncoder().encode('0123456789');
+    const sha256 = 'c'.repeat(64);
+    await registerFile(catalog.db, { sha256, bytes: bytes.length, mime: 'audio/mpeg', source: 'contribution', licence: 'cc0', held: true });
+    const files = {
+      async get(key: string, range?: { offset: number; length?: number }) {
+        if (key !== `objects/${sha256}`) return null;
+        const part = range ? bytes.slice(range.offset, range.length === undefined ? undefined : range.offset + range.length) : bytes;
+        return { body: new Blob([part]).stream(), size: bytes.length };
+      },
+    };
+    const proxy = createApp({ catalog, files });
+    const whole = await proxy.request(`http://api.test/objects/${sha256}`);
+    expect(whole.status).toBe(200);
+    expect(await whole.text()).toBe('0123456789');
+    const part = await proxy.request(`http://api.test/objects/${sha256}`, { headers: { Range: 'bytes=2-4' } });
+    expect(part.status).toBe(206);
+    expect(part.headers.get('content-range')).toBe('bytes 2-4/10');
+    expect(await part.text()).toBe('234');
+    expect((await proxy.request(`http://api.test/objects/${sha256}`, { headers: { Range: 'bytes=20-' } })).status).toBe(416);
+    expect(await (await proxy.request(`http://api.test/v1/files/${sha256}`)).json()).toMatchObject({ url: `http://api.test/objects/${sha256}` });
+
+    await setRights(catalog.db, 'shmuly', sha256, 'preserved', 'takedown');
+    expect((await proxy.request(`http://api.test/objects/${sha256}`)).status).toBe(404);
+    expect(await (await proxy.request(`http://api.test/v1/files/${sha256}`)).json()).toMatchObject({ url: null });
+  });
+
+  it('reads Range headers', () => {
+    expect(parseRange('bytes=0-99')).toEqual({ offset: 0, length: 100 });
+    expect(parseRange('bytes=100-')).toEqual({ offset: 100 });
+    expect(parseRange('bytes=-10', 50)).toEqual({ offset: 40, length: 10 });
+    expect(parseRange('bytes=1-2,5-6')).toBeNull();
+    expect(parseRange(undefined)).toBeNull();
   });
 });
 

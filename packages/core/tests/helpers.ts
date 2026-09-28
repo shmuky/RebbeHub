@@ -1,4 +1,5 @@
-import { connectPostgres, openPGlite, type Db } from '@rebbehub/db';
+import { connectPostgres, type Db } from '@rebbehub/db';
+import { openPGlite } from '@rebbehub/db/pglite';
 import { Catalog, type Json } from '@rebbehub/core';
 import type { EntityId } from '@rebbehub/model';
 

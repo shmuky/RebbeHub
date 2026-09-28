@@ -23,12 +23,14 @@
     "dev:api": "tsx services/api/src/node.ts",
     "rebbehub": "tsx services/jobs/src/bin/rebbehub.ts",
     "dev:web": "npm run dev -w @rebbehub/web",
-    "build:web": "npm run build -w @rebbehub/web"
+    "build:web": "npm run build -w @rebbehub/web",
+    "cloudflare:setup": "scripts/cloudflare-setup.sh"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
     "tsx": "^4.19.2",
     "typescript": "~6.0.2",
-    "vitest": "^3.2.0"
+    "vitest": "^3.2.0",
+    "wrangler": "^4.142.0"
   }
 }

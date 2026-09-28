@@ -69,7 +69,8 @@ npm run dev:web                    # http://localhost:5173 (reads the API above)
 ```
 
 Set `DATABASE_URL=postgres://…` to use a Postgres server instead. See
-[docs/operations.md](docs/operations.md) for the mirror, editions and dumps.
+[docs/operations.md](docs/operations.md) for the mirror, editions and dumps,
+and [docs/deploy.md](docs/deploy.md) for going live on Cloudflare.
 
 ## Licences
 

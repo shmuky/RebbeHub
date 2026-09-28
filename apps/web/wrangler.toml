@@ -1,17 +1,24 @@
-# The public site on Cloudflare Workers. Build first: `npm run build -w @rebbehub/web`.
+# The public site on Cloudflare Workers. Deployed by .github/workflows/deploy.yml
+# after `npm run build:web`; see docs/deploy.md.
 name = "rebbehub-web"
 main = "server/worker.ts"
 compatibility_date = "2026-09-01"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = true
 
+[observability]
+enabled = true
+
+# build/client is served as static files before the Worker runs.
 [assets]
 directory = "build/client"
 
-[vars]
-API_URL = "https://api.rebbehub.org"
-SITE_URL = "https://rebbehub.org"
+# The API, reached inside Cloudflare without a public round trip; the host in API_URL is then only a label.
+[[services]]
+binding = "API"
+service = "rebbehub-api"
 
-# Reach the API without leaving Cloudflare, when both run there:
-# [[services]]
-# binding = "API"
-# service = "rebbehub-api"
+[vars]
+API_URL = "https://rebbehub-api.internal"
+# The site's public address, for canonical links and sitemaps: set by the deploy workflow from the SITE_URL variable.
+SITE_URL = "https://rebbehub-web.workers.dev"

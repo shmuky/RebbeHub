@@ -13,3 +13,7 @@ out/
 # signing keys never live in the repository
 *.key
 *.secret.json
+# wrangler local state and secrets
+.wrangler/
+.dev.vars
+wrangler.local.toml
