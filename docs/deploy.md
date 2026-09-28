@@ -18,21 +18,21 @@ always ahead of the code that uses it - for builds of `main` only. Cloudflare
 also builds every other branch as a preview; those skip the migration, so
 unmerged code never changes the live database.
 
-Previews need their own command (**Settings → Build → Preview command**),
-since Cloudflare's default runs at the repository root, where there is no
-Wrangler config. `versions upload` uploads a preview version without
-touching the live one:
+**Preview builds are off** (in each project: **Settings → Build → Branch
+control → Builds for non-production branches**). Every pull request is
+already tested by the GitHub checks, and only `main` goes live. If they are
+ever turned back on, each project needs a Preview command pointing at its
+own config, with a workaround for a Cloudflare bug that makes preview
+uploads fail with "The name in your wrangler.toml file must match the name
+of your Worker"
+([cloudflare/workers-sdk#15682](https://github.com/cloudflare/workers-sdk/issues/15682)):
 
 | Worker | Preview command |
 | --- | --- |
 | `rebbehub-api` | `env -u WRANGLER_CI_MATCH_TAG npx wrangler versions upload -c services/api/wrangler.toml` |
 | `rebbehub-web` | `env -u WRANGLER_CI_MATCH_TAG npx wrangler versions upload -c apps/web/wrangler.toml` |
 
-`env -u WRANGLER_CI_MATCH_TAG` works around a Cloudflare bug: preview builds
-are given a Worker tag that belongs to no Worker, so every upload fails with
-"The name in your wrangler.toml file must match the name of your Worker"
-([cloudflare/workers-sdk#15682](https://github.com/cloudflare/workers-sdk/issues/15682)).
-The `-c` config still names the Worker. Drop the prefix once that is fixed.
+(Not `wrangler preview`: it needs a separate `[previews]` configuration.)
 
 ## One-time setup
 
