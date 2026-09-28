@@ -33,8 +33,27 @@ async function withCatalog<T>(ctx: Context, fn: (catalog: Catalog) => Promise<T>
   }
 }
 
+/**
+ * The branch whose builds may change the production database. Cloudflare's
+ * builds also build every other branch as a preview, and a preview must
+ * never migrate the database for code that has not been merged.
+ */
+export const PRODUCTION_BRANCH = 'main';
+
+/** Why this build must not migrate, or null when it may. */
+export function migrationSkipReason(env: Record<string, string | undefined> = process.env): string | null {
+  const branch = env.WORKERS_CI_BRANCH;
+  if (env.WORKERS_CI && branch && branch !== PRODUCTION_BRANCH) return `a preview build of branch ${branch}; only builds of ${PRODUCTION_BRANCH} migrate the database`;
+  return null;
+}
+
 /** Creates or updates the schema and seeds the built-in schemas. */
 export async function migrateCommand(ctx: Context): Promise<void> {
+  const skip = migrationSkipReason();
+  if (skip) {
+    ctx.log(`not migrating: ${skip}`);
+    return;
+  }
   await withCatalog(ctx, async (catalog) => ctx.log(`database ready; main is at commit ${await catalog.head()}`));
 }
 

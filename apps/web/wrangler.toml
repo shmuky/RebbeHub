@@ -13,13 +13,13 @@ enabled = true
 [assets]
 directory = "build/client"
 
-# The API, reached inside Cloudflare without a public round trip; the host in API_URL is then only a label.
+# The API, reached inside Cloudflare without a public round trip through this binding (API_URL is its
+# public address, used only when the binding is absent).
 [[services]]
 binding = "API"
 service = "rebbehub-api"
 
 [vars]
-API_URL = "https://rebbehub-api.internal"
-# The site's public address, for canonical links and sitemaps. Replace with the real address once known
-# (the workers.dev one, later the site's own domain).
-SITE_URL = "https://rebbehub-web.workers.dev"
+API_URL = "https://api.rebbehub.org"
+# The site's public address, for canonical links and sitemaps.
+SITE_URL = "https://rebbehub.org"
