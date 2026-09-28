@@ -166,6 +166,7 @@ const STRINGS = {
   newAccountHint: { he: 'כבר יש לכם חשבון (למשל עם Google)? היכנסו איתו, ובדף החשבון הוסיפו מפתח גישה.', en: 'Already have an account (with Google, say)? Sign in with it, and add a passkey on your account page.' },
   accountNumber: { he: 'מספר חשבון:', en: 'Account number:' },
   steward: { he: 'מנהל/ת קטלוג', en: 'steward' },
+  googleTaken: { he: 'חשבון ה-Google הזה כבר מחובר לחשבון אחר ב-RebbeHub, ולכן לא חובר לכאן. אם שניהם שלכם, כתבו לנו ונאחד אותם.', en: 'That Google account already belongs to another RebbeHub account, so it was not linked here. If both are yours, tell us and we will merge them.' },
   yourAccount: { he: 'החשבון שלי', en: 'Your account' },
   notSignedIn: { he: 'לא נכנסתם עדיין.', en: 'You are not signed in.' },
   accountIntro: { he: 'בחשבון הזה תציעו תיקונים, תעקבו אחרי ספרים ותצטרפו לפרויקטים.', en: 'With this account you will suggest fixes, follow sefarim and join projects.' },

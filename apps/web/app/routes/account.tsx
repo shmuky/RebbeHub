@@ -1,6 +1,6 @@
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import type { Route } from './+types/account';
 import { langFrom, t } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
@@ -25,7 +25,9 @@ export default function Account() {
   const [leaving, setLeaving] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [params] = useSearchParams();
+  // Coming back from linking a Google account that is already another account's.
+  const [error, setError] = useState<string | null>(params.get('error') === 'google-taken' ? t(lang, 'googleTaken') : null);
   const when = (iso: string) => new Intl.DateTimeFormat(lang === 'he' ? 'he-IL' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso));
 
   async function post<T>(path: string, body: unknown = {}): Promise<T> {

@@ -243,6 +243,17 @@ describe('Google sign-in', () => {
     expect(me.googleAccounts).toHaveLength(1);
   });
 
+  it('never switches a signed-in person to the account their Google account already belongs to', async () => {
+    const first = await viaGoogle();
+    const other = await register('Someone', 'cred-9');
+    claims = {};
+    const linking = await viaGoogle({ cookie: other.cookie });
+    expect(linking.location).toBe('/account?error=google-taken');
+    expect(linking.cookie).toBeUndefined();
+    expect((await call('GET', '/v1/auth/me', { cookie: other.cookie })).body.googleAccounts).toEqual([]);
+    expect((await call('GET', '/v1/auth/me', { cookie: first.cookie })).body.googleAccounts).toHaveLength(1);
+  });
+
   it('refuses a code Google does not know, a token for another site or nonce, and a browser that did not start here', async () => {
     expect((await viaGoogle({ code: 'bad-code' })).location).toBe('/signin?error=google-failed');
     claims = { aud: 'someone-else' };

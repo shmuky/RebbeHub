@@ -363,10 +363,12 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
     const email = claims.email && claims.email_verified !== false ? claims.email : null;
 
     // Known: sign in as its person. New, while signed in: add it to this account. New otherwise: a new account, named as on Google.
+    const token = readSession(c);
+    const current = token ? await sessionPerson(db, token) : null;
     let person = await googleSignedIn(db, claims.sub, email);
+    // Linking a Google account that is already another account's never switches accounts behind the person's back.
+    if (person && current && person.id !== current.id) return c.redirect('/account?error=google-taken', 302);
     if (!person) {
-      const token = readSession(c);
-      const current = token ? await sessionPerson(db, token) : null;
       person = current ?? (await createPerson(db, cleanDisplayName(claims.name) ?? cleanDisplayName(email?.split('@')[0]) ?? 'Reader'));
       await linkGoogle(db, claims.sub, person.id, email);
     }
