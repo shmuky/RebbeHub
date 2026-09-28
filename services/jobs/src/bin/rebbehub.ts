@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
-import { accountCommand, dumpCommand, editionCommand, importCommand, keygenCommand, migrateCommand, mirrorCommand, schemaCheckCommand, type Context } from '../commands.js';
+import { accountCommand, dumpCommand, editionCommand, importCommand, isEmptyCommand, keygenCommand, migrateCommand, mirrorCommand, schemaCheckCommand, type Context } from '../commands.js';
 
 const HELP = `rebbehub - RebbeHub's command line
 
   rebbehub migrate                              create or update the database
   rebbehub schema-check                         check the built-in schemas
+  rebbehub is-empty                             prints empty or not-empty (the catalog)
   rebbehub account --id <id> --name <name> [--steward] [--bot]
   rebbehub import sichos-kodesh-works --from <Sichos-Kodesh checkout>
                   [--approve-as <steward>] [--dry-run] [--chunk <n>]
@@ -56,6 +57,9 @@ try {
   switch (values.help ? 'help' : command) {
     case 'migrate':
       await migrateCommand(ctx);
+      break;
+    case 'is-empty':
+      await isEmptyCommand(ctx);
       break;
     case 'schema-check':
       await schemaCheckCommand(ctx);
