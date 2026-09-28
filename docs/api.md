@@ -25,6 +25,29 @@ needs a signed-in session, from the site's own pages.
 - `/objects/<sha256>`: a file's bytes, while its rights let it be served.
 - `/manifests/<name>/<name>.json`: the published manifests of reading
   copies and page fixes.
+- `GET /v1/mirrors`, `/v1/editions`, `/v1/editions/<tag>/manifest.json`,
+  `/v1/editions/<tag>/SHA256SUMS`, `/dumps/<tag>/<name>`: the git mirror,
+  every catalog edition's dumps with their sha256, and the keys they are
+  signed with ([mirrors](mirrors.md)).
+
+## Translations
+
+A unit's translation is a text of its own (`kind: translation`) with its
+`language`, `credit` and `licence` (none: the translator's own, CC BY-SA).
+`POST /v1/units/<id>/translations` with `{ language, credit, licence?,
+translationOf?, content, machine? }` sends one for review, a blank line
+between paragraphs; `machine` names the tool when a machine made it, and
+its paragraphs are marked so until a person checks each.
+`POST /v1/translations/fix` with `{ segment, content }` suggests a fix to
+one paragraph. Only licences that let RebbeHub keep a copy are taken
+(public domain, CC0, CC BY, CC BY-NC); see [rights](rights.md).
+
+## Where you stopped
+
+`GET /v1/places`, `PUT /v1/places`, `DELETE /v1/places?kind=&key=`: where
+the signed-in person stopped reading (a PDF's page) and listening (a
+farbrengen's part and moment), the latest 60, so every device reopens
+there. Personal: never cached, never exported.
 
 ## Webhooks
 

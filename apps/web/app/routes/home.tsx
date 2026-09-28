@@ -2,6 +2,7 @@ import { dateKeyToHDate, toHebrewNumeral } from '@rebbehub/hebrew';
 import { Bot, FileText } from 'lucide-react';
 import { Link } from 'react-router';
 import type { Route } from './+types/home';
+import { ContinueRow } from '../components/ContinueRow.js';
 import { EventRows, PlayEventButton, eventData, hanachaOf, type EventItem } from '../components/EventRow.js';
 import { YearStrip } from '../components/YearStrip.js';
 import { siteOf } from '../lib/context.server.js';
@@ -13,7 +14,8 @@ import { pageMeta } from '../lib/seo.js';
 import { kviusYears, thisWeek } from '../lib/week.js';
 
 /**
- * The home page is the community's: it opens on the week you are in (as
+ * The home page is the community's: after "continue where you stopped"
+ * (yours alone, drawn in the browser), it opens on the week you are in (as
  * Sichos-Kodesh's app does: today's parsha, this week's farbrengens in a
  * year whose calendar falls like this one, the years that have them), then
  * what the catalog still lacks that anyone can help with, what people and
@@ -129,6 +131,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       <p className="home-date">{week.todayLabel}</p>
       <h1 className="home-parsha">{headline}</h1>
       {week.parsha && week.holidays.length ? <p className="home-holiday">{week.holidays.join(' · ')}</p> : null}
+
+      {/* What you were reading and hearing, drawn in the browser: this page is the same for everyone. */}
+      <ContinueRow lang={lang} />
 
       {year ? (
         <section>

@@ -36,7 +36,15 @@ interface Env {
   /** Google sign-in's client (secrets); without both, sign-in is by passkey alone. */
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  /** Mirrors (docs/mirrors.md), all public values in [vars]: where the git mirror is cloned from (several, comma separated), */
+  CATALOG_GIT_URL?: string;
+  /** the release keys' public halves (base64, comma separated), */
+  RELEASE_PUBLIC_KEYS?: string;
+  /** and where dumps are served when not this Worker's /dumps. */
+  DUMPS_BASE_URL?: string;
 }
+
+const list = (value: string | undefined) => (value ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 
 function r2Writer(bucket: R2Bucket) {
   return { put: async (key: string, bytes: ArrayBuffer, mime: string) => void (await bucket.put(key, bytes, { httpMetadata: { contentType: mime } })) };
@@ -72,6 +80,7 @@ export default {
       files: env.FILES_PUBLIC ? r2Store(env.FILES_PUBLIC) : undefined,
       texts: env.FILES_PUBLIC ? { store: r2Store(env.FILES_PUBLIC), writer: r2Writer(env.FILES_PUBLIC), from: env.SK_ARCHIVE ? r2Store(env.SK_ARCHIVE) : undefined } : undefined,
       uploads: env.FILES_PUBLIC && env.FILES_PRESERVATION ? { public: r2Writer(env.FILES_PUBLIC), preservation: r2Writer(env.FILES_PRESERVATION) } : undefined,
+      mirrors: { gitUrls: list(env.CATALOG_GIT_URL), publicKeys: list(env.RELEASE_PUBLIC_KEYS), dumpsBaseUrl: env.DUMPS_BASE_URL || undefined },
       auth: env.SITE_URL ? authFor(env.SITE_URL, { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }) : undefined,
     });
     try {

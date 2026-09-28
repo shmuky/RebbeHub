@@ -494,6 +494,35 @@ a.pill:hover {
   border-top: 1px solid var(--border);
 }
 
+/* "Continue where you stopped" (components/ContinueRow.tsx): a row, its play button, and a quiet remove. */
+.continue-rows > li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.continue-rows .row {
+  flex: 1;
+  min-width: 0;
+}
+
+.continue-rows .row-icon {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.continue-rows .icon-link {
+  border: 0;
+  background: none;
+  padding: 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.continue-rows .icon-link:hover {
+  color: var(--fg);
+}
+
 .row {
   display: flex;
   align-items: center;
@@ -1242,6 +1271,73 @@ html[lang='en'] .text-body[lang='he'] {
 .segment.machine {
   border-inline-start: 3px dotted var(--machine);
   padding-inline-start: 12px;
+}
+
+/* Download and mirror (routes/mirrors.tsx): each edition's files with their sizes and checksums. */
+.mirrors pre {
+  overflow-x: auto;
+  padding: 12px;
+  background: var(--card);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.mirrors .editions > li {
+  padding: 8px 0 12px;
+}
+
+.mirrors .editions h3 {
+  margin: 0 0 6px;
+  font-size: 1.1rem;
+}
+
+.checksums {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.checksums td {
+  padding: 4px 8px 4px 0;
+  vertical-align: top;
+  border-top: 1px solid var(--border);
+}
+
+.checksums code {
+  word-break: break-all;
+  color: var(--muted);
+}
+
+/* A translation (components/Translations.tsx): its languages as plain links, its credit, and "Fix" per paragraph. */
+.text-languages {
+  margin: -4px 0 8px;
+}
+
+.text-credit {
+  margin: 0 0 12px;
+}
+
+.segment-fix {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.segment-editing {
+  display: block;
+  margin-top: 8px;
+}
+
+.segment-editing textarea {
+  width: 100%;
+  font: inherit;
+}
+
+.segment-editing .actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 /* Media */
@@ -2824,6 +2920,36 @@ body.embedded {
 
 .pdf-page canvas {
   display: block;
+}
+
+/* The pages' colours (reader/look.ts, from Sichos-Kodesh's pdfCssFilter): dark pages, sepia or grey paper,
+   stronger contrast. Only the page is drawn through it; dark pages sit on black while they draw. */
+.pdf-viewer-screen .pdf-page canvas {
+  filter: var(--pdf-filter, none);
+}
+
+.pdf-viewer-screen.pdf-dark .pdf-page {
+  background: #000;
+}
+
+.reader-look {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  margin: 6px 0;
+}
+
+.reader-look select {
+  margin-inline-start: 4px;
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elevated);
+}
+
+.reader-resumed {
+  margin: 4px 0 8px;
 }
 
 .pdf-loading {

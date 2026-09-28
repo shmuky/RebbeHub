@@ -8,6 +8,7 @@ import { PageBody } from '../components/PageBody.js';
 import { PageTabs } from '../components/PageTabs.js';
 import { ScanViewer } from '../components/ScanViewer.js';
 import { TextView } from '../components/TextView.js';
+import { UnitTexts } from '../components/Translations.js';
 import type { Entity } from '../lib/api.js';
 import { dateLabel, yearLabel } from '../lib/dates.js';
 import { kindName, languageName, nameOf, t, typeName, type Lang } from '../lib/i18n.js';
@@ -122,14 +123,8 @@ function UnitPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang
           </>
         ) : null}
       </dl>
-      {(view.lists.texts ?? []).map((text) => (
-        <section key={text.id}>
-          <h2>
-            {t(lang, 'text')} <span className="card-meta">({languageName((text.data as D).language, lang)})</span>
-          </h2>
-          <TextView segments={view.segments[text.id] ?? []} language={(text.data as D).language} withheld={(view.segments[text.id] ?? []).some((s) => s.withheld) ? 'withheld' : undefined} />
-        </section>
-      ))}
+      {/* Its words, one language at a time, with its translations and "Add a translation". */}
+      <UnitTexts unit={entity} texts={view.lists.texts ?? []} segments={view.segments} lang={lang} />
       {/* The chapter's own words come first; where they and other copies are from, after. */}
       <PageBody entity={entity} lang={lang} />
       {(d.editions ?? [])
@@ -324,7 +319,8 @@ function TextPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang
     <>
       {unit ? <Crumbs items={[{ label: labelOf(unit, lang), to: href(itemPath(unit), lang) }]} /> : null}
       <h1>{unit ? labelOf(unit, lang) : typeName('text', lang)}</h1>
-      <TextView segments={segments} language={d.language} withheld={segments.some((s) => s.withheld) ? 'withheld' : undefined} />
+      {d.kind === 'translation' && d.credit ? <p className="row-sub text-credit">{d.credit}</p> : null}
+      <TextView segments={segments} language={d.language} withheld={segments.some((s) => s.withheld) ? 'withheld' : undefined} fixable={d.kind === 'translation'} translation={d.kind === 'translation'} />
     </>
   );
 }

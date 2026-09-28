@@ -6,6 +6,8 @@ import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
 import { adminRoutes } from './admin.js';
 import { uploadRoutes, type UploadOptions } from './uploads.js';
 import { OPENAPI } from './openapi.js';
+import { mirrorRoutes, type MirrorOptions } from './mirrors.js';
+import { readingRoutes } from './reading.js';
 
 /**
  * The RebbeHub API. Reading needs nothing; reporting a problem needs no
@@ -34,6 +36,8 @@ export interface ApiOptions {
   files?: FileStore;
   /** Where the texts of seforim are kept (`texts/<sha256>` in the public bucket), and where they are first copied from: Sichos-Kodesh's published archive. */
   texts?: { store: FileStore; writer: { put(key: string, bytes: ArrayBuffer, mime: string): Promise<void> }; from?: FileStore };
+  /** Where the catalog is mirrored, and the keys its editions are signed with (mirrors.ts). */
+  mirrors?: MirrorOptions;
   version?: string;
 }
 
@@ -136,6 +140,10 @@ export function createApp(options: ApiOptions): Hono {
   if (options.auth) authRoutes(app, catalog, options.auth);
   adminRoutes(app, catalog, signedIn);
   uploadRoutes(app, catalog, signedIn, options.uploads);
+  readingRoutes(app, catalog, signedIn, (status, message) => {
+    throw new HttpError(status, message);
+  });
+  mirrorRoutes(app, catalog, { mirrors: options.mirrors, files: options.files });
 
   app.get('/', (c) => c.redirect('/v1'));
   app.get('/openapi.json', (c) => c.json(OPENAPI));
@@ -485,8 +493,6 @@ export function createApp(options: ApiOptions): Hono {
     if (!parsed.ok) return c.json({ ok: false, reason: parsed.reason }, 422);
     return c.json({ ok: true, key: parsed.key, he: describeDateKey(parsed.key, 'he'), en: describeDateKey(parsed.key, 'en') });
   });
-
-  app.get('/v1/editions', async (c) => c.json({ editions: await catalog.editions() }));
 
   app.get('/v1/commits', async (c) => {
     const since = intParam(c.req.query('since'), 'since') ?? 0;

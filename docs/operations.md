@@ -44,11 +44,14 @@ result to the public `rebbehub/catalog` repository.
 ```sh
 rebbehub keygen --out release-key.json        # once; keep it secret, publish the public key
 rebbehub edition --by shmuly                  # tags main as e.g. 2026.40
-rebbehub dump --tag 2026.40 --out dumps/2026.40 --key release-key.json
+rebbehub dump --tag 2026.40 --out dumps/2026.40 --key release-key.json --upload
 ```
 
 The dump folder holds the SQLite database, the JSON Lines file, the
-Sichos-Kodesh release and a signed `manifest.json`; upload it to R2.
+Sichos-Kodesh release and a signed `manifest.json`; `--upload` puts them
+in the public bucket at `dumps/<tag>/`, where the API serves them at
+`/dumps/<tag>/<name>` and lists them, with their sha256, on
+`/v1/editions` and `/mirrors`. How others keep a copy: [mirrors](mirrors.md).
 
 ## The Sichos Kodesh scans and their reading copies
 

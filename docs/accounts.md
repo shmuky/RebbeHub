@@ -98,3 +98,8 @@ rebuild the catalog and replace every table in `public`
 signing in is not adding to the catalog, and a person's catalog account
 (`public.account`, which their suggestions point at) is made again from
 `auth.person` whenever they are signed in.
+
+Where a signed-in person stopped reading and listening is kept there too
+(`auth.reading_place`, migration 0014: the latest 60, a PDF's page or a
+farbrengen's moment), so a rebuild of the catalog never loses it; it is
+never part of the exports.

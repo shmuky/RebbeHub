@@ -56,6 +56,11 @@ const app = createApp({
   filesBaseUrl: process.env.FILES_BASE_URL,
   files: publicFolder,
   uploads: filesDir ? { public: folder('public'), preservation: folder('preservation') } : undefined,
+  mirrors: {
+    gitUrls: (process.env.CATALOG_GIT_URL ?? '').split(',').filter(Boolean),
+    publicKeys: (process.env.RELEASE_PUBLIC_KEYS ?? '').split(',').filter(Boolean),
+    dumpsBaseUrl: process.env.DUMPS_BASE_URL || undefined,
+  },
 });
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port, hostname });

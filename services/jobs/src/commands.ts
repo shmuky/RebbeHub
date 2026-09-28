@@ -8,6 +8,7 @@ import { OTZROS_FOLDER, chabadLibraryImporter, driveLibraryImporter, listDriveFo
 import { clearMirror, directorySink, exportCommits, exportSnapshot, generateKeyPair, writeDump, type KeyPair } from '@rebbehub/mirror';
 import { BUILTIN_SCHEMAS, SchemaRegistry } from '@rebbehub/model';
 import { commitAll, git } from './git.js';
+import { pullMirror } from './mirrorPull.js';
 import { collectPageFixes, loadPageFixes, makePageFixes, OTZROS_COLLECTION, otzrosPdfs, pageFixesKey, pageFixesUrl, registerPageFixes } from './pageFixes.js';
 import { ARCHIVE_OBJECTS_URL, archivePdfs, collectManifest, loadManifest, makeReadingCopies, MANIFEST_KEY, MANIFEST_URL, R2Store, registerReadingCopies, sichosKodeshScans } from './readingCopies.js';
 
@@ -200,15 +201,32 @@ export async function editionCommand(ctx: Context, input: { by: string; tag?: st
   });
 }
 
-export async function dumpCommand(ctx: Context, input: { tag: string; out: string; keyFile?: string }): Promise<void> {
+export async function dumpCommand(ctx: Context, input: { tag: string; out: string; keyFile?: string; upload?: boolean; bucket?: string }): Promise<void> {
+  // Checked first, so a long dump never ends in "cannot upload".
+  const store = input.upload ? r2(input.bucket ?? 'rebbehub-public') : null;
   await withCatalog(ctx, async (catalog) => {
     const edition = (await catalog.editions()).find((e) => e.tag === input.tag);
     if (!edition) throw new Error(`no catalog edition ${input.tag}; tag one first`);
     const key = input.keyFile ? (JSON.parse(await readFile(input.keyFile, 'utf8')) as KeyPair) : undefined;
     const manifest = await writeDump(catalog, input.out, { tag: input.tag, at: edition.commit_seq, key });
+    // Uploaded before the manifest is recorded: an edition lists its dumps only once mirrors can fetch them.
+    if (store) {
+      for (const file of [...manifest.files.map((f) => f.name), 'manifest.json']) {
+        const mime = file.endsWith('.gz') ? 'application/gzip' : file.endsWith('.json') ? 'application/json' : 'application/vnd.sqlite3';
+        await store.put(`dumps/${input.tag}/${file}`, new Uint8Array(await readFile(join(input.out, file))), mime);
+        ctx.log(`uploaded dumps/${input.tag}/${file}`);
+      }
+    }
     await catalog.setEditionManifest(input.tag, manifest);
-    ctx.log(`dumps of ${input.tag} in ${input.out}${key ? `, signed with key ${key.keyId}` : ' (unsigned: give --key to sign)'}`);
+    ctx.log(`dumps of ${input.tag} in ${input.out}${key ? `, signed with key ${key.keyId}` : ' (unsigned: give --key to sign)'}${store ? ', and in R2 for /dumps' : ''}`);
   });
+}
+
+/** Keeps a mirror's copy of every edition's dumps, checked (mirrorPull.ts; docs/mirrors.md). */
+export async function mirrorPullCommand(ctx: Context, input: { api?: string; out: string; keys?: string[]; tag?: string; allowUnsigned?: boolean }): Promise<void> {
+  const result = await pullMirror({ api: input.api ?? 'https://api.rebbehub.org', out: input.out, keys: input.keys, tag: input.tag, allowUnsigned: input.allowUnsigned, log: ctx.log });
+  ctx.log(`pulled ${result.pulled.length}, already here ${result.kept.length}, failed ${result.failed.length}`);
+  if (result.failed.length) throw new Error(`not kept: ${result.failed.map((f) => `${f.tag} (${f.reason})`).join('; ')}`);
 }
 
 export async function keygenCommand(ctx: Context, input: { out: string }): Promise<void> {

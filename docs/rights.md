@@ -51,6 +51,22 @@ reads (`services/api/src/uploads.ts`). A file already known is not taken
 twice: the uploader is shown where it is. The file joins the catalog
 through a suggestion, reviewed like any other.
 
+## Translations
+
+"Add a translation" on a unit's page takes the words themselves, so it
+takes only what may be copied, and says whose it is:
+
+| The translator says | Licence | Served |
+| --- | --- | --- |
+| Mine, I translated it | none (community text, CC BY-SA) | yes, credited to them |
+| Public domain | public domain | yes |
+| CC0 / CC BY / CC BY-NC | as given | yes, with the credit given (Sefaria's are CC BY-NC) |
+
+A publisher's all-rights-reserved translation (Kehot's, a site's terms)
+is never pasted in: it is listed as a copy elsewhere, a link. A machine
+translation says which tool made it and is marked as machine text,
+paragraph by paragraph, until a person checks each one.
+
 ## Changing it
 
 Only stewards change a file's state (`setRights`), and every change is in
