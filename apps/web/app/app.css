@@ -1798,3 +1798,130 @@ a.volume:hover {
   color: var(--muted);
   font-size: 0.75rem;
 }
+
+/* ------------------------------------------------------------------ farbrengen page */
+
+.event-hero {
+  margin: 8px 0 14px;
+  padding: 18px 18px 16px;
+  border-radius: 22px;
+  background: linear-gradient(160deg, #16744a, #0f5236);
+  color: #fff;
+}
+
+.event-hero h1 {
+  font-size: 2rem;
+  margin: 2px 0 4px;
+}
+
+.event-hero-kicker {
+  margin: 0;
+  font-size: 0.8125rem;
+  opacity: 0.8;
+}
+
+.event-hero-date {
+  margin: 0;
+  opacity: 0.92;
+}
+
+.event-hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.event-hero-chips li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.16);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.listen-card {
+  padding: 4px 16px 8px;
+  border-radius: 18px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.listen-card .playlist-header {
+  margin-top: 12px;
+}
+
+.listen-card .part {
+  margin-inline: -8px;
+  width: calc(100% + 16px);
+}
+
+.docs {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  list-style: none;
+  margin: 0 -20px;
+  padding: 2px 20px 8px;
+}
+
+.docs::-webkit-scrollbar {
+  display: none;
+}
+
+.doc {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 132px;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.doc-page {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  height: 168px;
+  padding: 14px 12px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.06);
+}
+
+.doc-page i {
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  background: #dcd8cf;
+}
+
+.doc-page i:nth-child(3n) {
+  width: 68%;
+}
+
+.doc:hover .doc-page {
+  border-color: var(--accent);
+}
+
+.doc b {
+  font-size: 0.875rem;
+  line-height: 1.3;
+}
+
+.doc small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.year-pills .pill svg {
+  color: var(--accent);
+}

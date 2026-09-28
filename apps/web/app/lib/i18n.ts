@@ -96,6 +96,8 @@ const STRINGS = {
   helpCodeTitle: { he: 'כותבים קוד?', en: 'Write code?' },
   helpCodeText: { he: 'הקוד פתוח. יבואנים חדשים, תיקוני באגים ושיפורים מתקבלים בברכה.', en: 'The code is open. New importers, bug fixes and improvements are welcome.' },
   addedItems: { he: 'הוסיף', en: 'added' },
+  farbrengen: { he: 'התוועדות', en: 'Farbrengen' },
+  allParts: { he: 'כל החלקים', en: 'All parts' },
   tellUs: { he: 'לספר לנו', en: 'Tell us' },
   missingSefer: { he: 'חסר כאן ספר?', en: 'A sefer missing here?' },
   missingSeferText: { he: 'ספרו לנו עליו, וכל מי שמחפש ימצא אותו.', en: 'Tell us about it, and everyone who looks will find it.' },
