@@ -1,0 +1,22 @@
+{
+  "include": ["app", "server", ".react-router/types/**/*", "react-router.config.ts", "vite.config.ts"],
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "types": ["node", "vite/client"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "rootDirs": [".", "./.react-router/types"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": true,
+    "paths": {
+      "@rebbehub/hebrew": ["../../packages/hebrew/src/index.ts"],
+      "@rebbehub/model": ["../../packages/model/src/index.ts"]
+    }
+  }
+}

@@ -7,13 +7,34 @@
     "noEmit": true,
     "rootDir": ".",
     "paths": {
-      "@rebbehub/hebrew": ["./packages/hebrew/src/index.ts"],
-      "@rebbehub/model": ["./packages/model/src/index.ts"],
-      "@rebbehub/db": ["./packages/db/src/index.ts"],
-      "@rebbehub/core": ["./packages/core/src/index.ts"],
-      "@rebbehub/mirror": ["./packages/mirror/src/index.ts"],
-      "@rebbehub/importers": ["./packages/importers/src/index.ts"]
-    }
+      "@rebbehub/hebrew": [
+        "./packages/hebrew/src/index.ts"
+      ],
+      "@rebbehub/model": [
+        "./packages/model/src/index.ts"
+      ],
+      "@rebbehub/db": [
+        "./packages/db/src/index.ts"
+      ],
+      "@rebbehub/core": [
+        "./packages/core/src/index.ts"
+      ],
+      "@rebbehub/mirror": [
+        "./packages/mirror/src/index.ts"
+      ],
+      "@rebbehub/importers": [
+        "./packages/importers/src/index.ts"
+      ]
+    },
+    "lib": [
+      "ES2022",
+      "DOM"
+    ]
   },
-  "include": ["packages/*/tests", "services/*/tests", "vitest.config.ts"]
+  "include": [
+    "packages/*/tests",
+    "services/*/tests",
+    "apps/*/tests",
+    "vitest.config.ts"
+  ]
 }

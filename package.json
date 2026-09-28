@@ -9,18 +9,21 @@
   },
   "workspaces": [
     "packages/*",
-    "services/*"
+    "services/*",
+    "apps/*"
   ],
   "scripts": {
     "build": "tsc -b",
-    "typecheck": "tsc -b && tsc -p tsconfig.tests.json",
+    "typecheck": "tsc -b && tsc -p tsconfig.tests.json && npm run typecheck -w @rebbehub/web",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run typecheck && npm test && npm run catalog:check",
+    "check": "npm run typecheck && npm run build:web && npm test && npm run catalog:check",
     "catalog:check": "tsx services/jobs/src/bin/rebbehub.ts schema-check",
     "db:migrate": "tsx services/jobs/src/bin/rebbehub.ts migrate",
     "dev:api": "tsx services/api/src/node.ts",
-    "rebbehub": "tsx services/jobs/src/bin/rebbehub.ts"
+    "rebbehub": "tsx services/jobs/src/bin/rebbehub.ts",
+    "dev:web": "npm run dev -w @rebbehub/web",
+    "build:web": "npm run build -w @rebbehub/web"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

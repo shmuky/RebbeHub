@@ -56,3 +56,18 @@ Sichos-Kodesh release and a signed `manifest.json`; upload it to R2.
   the server listens on localhost.
 - Cloudflare Workers: `services/api/wrangler.toml`, with a Hyperdrive
   binding to Neon and the secrets `REPORT_SALT` and `TURNSTILE_SECRET`.
+
+## The site
+
+`apps/web` reads the catalog only through the API, like any other client.
+
+- Local: `npm run dev:web` (Vite, http://localhost:5173) with the API
+  running; `REBBEHUB_API_URL` and `SITE_URL` override the defaults.
+- Node: `npm run build:web`, then `npm start -w @rebbehub/web` (port 3000).
+- Cloudflare Workers: `apps/web/wrangler.toml` - static assets from
+  `build/client`, `API_URL` and `SITE_URL` as vars, and optionally a
+  service binding to the API Worker.
+
+Pages are cached for a minute and served stale for ten while they
+refresh. The language is in the address (`?lang=en`), never a cookie, so a
+cached page is always in the right language.

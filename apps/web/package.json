@@ -1,0 +1,32 @@
+{
+  "name": "@rebbehub/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RebbeHub's public site: sets, the events calendar, item, publication and event pages, search, the audio player and scan viewer, permanent links, SEO. React Router 7 with server rendering, Hebrew first.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "react-router dev",
+    "build": "react-router build",
+    "start": "tsx server/node.ts",
+    "typecheck": "react-router typegen && tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@hebcal/core": "^6.9.2",
+    "@hono/node-server": "^1.19.0",
+    "@react-router/node": "^7.18.3",
+    "@rebbehub/hebrew": "^0.1.0",
+    "@rebbehub/model": "^0.1.0",
+    "hono": "^4.9.0",
+    "isbot": "^5.1.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "react-router": "^7.18.3"
+  },
+  "devDependencies": {
+    "@react-router/dev": "^7.18.3",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "vite": "^8.0.0"
+  }
+}

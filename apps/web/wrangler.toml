@@ -1,0 +1,17 @@
+# The public site on Cloudflare Workers. Build first: `npm run build -w @rebbehub/web`.
+name = "rebbehub-web"
+main = "server/worker.ts"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "build/client"
+
+[vars]
+API_URL = "https://api.rebbehub.org"
+SITE_URL = "https://rebbehub.org"
+
+# Reach the API without leaving Cloudflare, when both run there:
+# [[services]]
+# binding = "API"
+# service = "rebbehub-api"

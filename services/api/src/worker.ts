@@ -12,6 +12,8 @@ interface Env {
   HYPERDRIVE: { connectionString: string };
   REPORT_SALT?: string;
   TURNSTILE_SECRET?: string;
+  /** The media proxy in front of the public R2 bucket. */
+  FILES_BASE_URL?: string;
 }
 
 export default {
@@ -20,6 +22,7 @@ export default {
     const app = createApp({
       catalog: new Catalog(db),
       reportSalt: env.REPORT_SALT,
+      filesBaseUrl: env.FILES_BASE_URL,
       verifyCaptcha: env.TURNSTILE_SECRET ? turnstileVerifier(env.TURNSTILE_SECRET) : undefined,
     });
     try {
