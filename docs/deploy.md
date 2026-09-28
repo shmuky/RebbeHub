@@ -25,8 +25,14 @@ touching the live one:
 
 | Worker | Preview command |
 | --- | --- |
-| `rebbehub-api` | `npx wrangler versions upload -c services/api/wrangler.toml` |
-| `rebbehub-web` | `npx wrangler versions upload -c apps/web/wrangler.toml` |
+| `rebbehub-api` | `env -u WRANGLER_CI_MATCH_TAG npx wrangler versions upload -c services/api/wrangler.toml` |
+| `rebbehub-web` | `env -u WRANGLER_CI_MATCH_TAG npx wrangler versions upload -c apps/web/wrangler.toml` |
+
+`env -u WRANGLER_CI_MATCH_TAG` works around a Cloudflare bug: preview builds
+are given a Worker tag that belongs to no Worker, so every upload fails with
+"The name in your wrangler.toml file must match the name of your Worker"
+([cloudflare/workers-sdk#15682](https://github.com/cloudflare/workers-sdk/issues/15682)).
+The `-c` config still names the Worker. Drop the prefix once that is fixed.
 
 ## One-time setup
 
