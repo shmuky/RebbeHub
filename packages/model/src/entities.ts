@@ -295,11 +295,11 @@ export interface EventData extends CommonFields {
 }
 
 /** What an event's document is: the edited text, the unedited hanacha, a maamar, the Rebbe's glosses, additions. */
-export type EventLinkKind = 'mugah' | 'bilti-mugah' | 'maamar' | 'hagahos' | 'hosofos' | 'other';
+export type EventLinkKind = 'mugah' | 'bilti-mugah' | 'maamar' | 'hagahos' | 'hosofos' | 'english' | 'audio' | 'video' | 'other';
 
-export const EVENT_LINK_KINDS: readonly EventLinkKind[] = ['mugah', 'bilti-mugah', 'maamar', 'hagahos', 'hosofos', 'other'];
+export const EVENT_LINK_KINDS: readonly EventLinkKind[] = ['mugah', 'bilti-mugah', 'maamar', 'hagahos', 'hosofos', 'english', 'audio', 'video', 'other'];
 
-/** One document of an event, where it is read (a PDF of a hanacha, through a proxy). */
+/** One document or recording of an event, where it is: a PDF of a hanacha (through a proxy), a book on HebrewBooks, a video on YouTube or JEM. */
 export interface EventLink {
   kind: EventLinkKind;
   label: LocalName;

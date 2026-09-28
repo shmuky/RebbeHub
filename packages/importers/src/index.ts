@@ -12,3 +12,4 @@ export {
 } from './sichosKodeshOccasions.js';
 export { htmlToWikitext, sourceFooter } from './htmlToWikitext.js';
 export { REBBEHUB_API, textUrl, fetchTexts } from './sichosKodeshTexts.js';
+export { MAFTEIACH, driveFileId, mafteiachBody, mafteiachLinks, mafteiachPage, readMafteiachCrawl, type MafteiachRecord } from './mafteiachIndex.js';
