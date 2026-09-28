@@ -6,6 +6,7 @@ interface BodySource {
   source: string;
   via?: string;
   url?: string;
+  copy?: string;
   licence?: string;
   credit?: string;
   importedAt?: string;
@@ -29,6 +30,14 @@ export function PageBody({ entity, lang }: { entity: Pick<Entity, 'data'>; lang:
               {' · '}
               <a href={s.url} target="_blank" rel="noopener">
                 {t(lang, 'atTheSource')}
+              </a>
+            </>
+          ) : null}
+          {s.copy ? (
+            <>
+              {' · '}
+              <a href={s.copy} target="_blank" rel="noopener">
+                {t(lang, 'keptCopy')}
               </a>
             </>
           ) : null}

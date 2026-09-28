@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { joinPath, orderKeys, slugify, type Genre, type LocalName } from '@rebbehub/model';
 import { htmlToWikitext, sourceFooter } from './htmlToWikitext.js';
 import { ref, type ImportRecord, type Importer } from './importer.js';
-import { fetchTexts } from './sichosKodeshTexts.js';
+import { fetchTexts, textUrl } from './sichosKodeshTexts.js';
 
 /**
  * The works Sichos-Kodesh already knows (its catalog schema 3, as its
@@ -64,6 +64,8 @@ export interface SichosKodeshWorksInput {
   contents: CatalogWorkContents[];
   /** The texts of the units, by sha256, as HTML (sichosKodeshTexts.ts); without them the pages carry no words. */
   texts?: Map<string, string>;
+  /** The API that keeps the texts; each page links to its copy there. */
+  api?: string;
 }
 
 /** How each source's texts reached Sichos-Kodesh: the index its record names. */
@@ -77,7 +79,7 @@ const RIGHTS: Record<string, 'open' | 'credit' | 'link' | 'preserved'> = { ship:
  * any other (a translation) under a heading of its own; and the record of
  * where the first came from.
  */
-function bodyOf(unit: CatalogWorkContents['units'][number], sources: CatalogWorkSource[], texts: Map<string, string> | undefined): { body: string; bodySource: Record<string, string> } | null {
+function bodyOf(unit: CatalogWorkContents['units'][number], sources: CatalogWorkSource[], texts: Map<string, string> | undefined, api?: string): { body: string; bodySource: Record<string, string> } | null {
   if (!texts) return null;
   const found = unit.editions
     .map((e) => ({ source: sources[e.source], html: e.sha256 ? texts.get(e.sha256) : undefined, sha256: e.sha256 }))
@@ -90,6 +92,7 @@ function bodyOf(unit: CatalogWorkContents['units'][number], sources: CatalogWork
   const footer = sourceFooter(first!.html);
   const bodySource: Record<string, string> = { source: first!.source.source, via: VIA[first!.source.source] ?? first!.source.source, sourceId: unit.ref ?? unit.id };
   if (footer.url) bodySource.url = footer.url;
+  bodySource.copy = textUrl(first!.sha256, api);
   const licence = footer.licence ?? first!.source.licence;
   if (licence) bodySource.licence = licence;
   const credit = first!.source.credit ?? footer.version;
@@ -101,7 +104,7 @@ function bodyOf(unit: CatalogWorkContents['units'][number], sources: CatalogWork
 /**
  * Reads the works from a Sichos-Kodesh checkout (or any folder laid out
  * like its data/works), and with `texts`, the words of every unit whose
- * rights let it ship, from Sichos-Kodesh's pack API.
+ * rights let it ship, from the copies RebbeHub keeps (sichosKodeshTexts.ts).
  */
 export async function readSichosKodeshWorks(root: string, options: { texts?: boolean; api?: string; log?: (line: string) => void } = {}): Promise<SichosKodeshWorksInput> {
   const dir = root.endsWith('works') ? root : join(root, 'apps/mobile/src/catalog/data/works');
@@ -121,10 +124,10 @@ export async function readSichosKodeshWorks(root: string, options: { texts?: boo
       }).map((e) => e.sha256!),
     ),
   );
-  return { index, contents, texts: await fetchTexts(hashes, { base: options.api, log: options.log }) };
+  return { index, contents, api: options.api, texts: await fetchTexts(hashes, { base: options.api, log: options.log }) };
 }
 
-function* unitRecords(work: CatalogWorksIndex['works'][number], contents: CatalogWorkContents, texts?: Map<string, string>): Generator<ImportRecord> {
+function* unitRecords(work: CatalogWorksIndex['works'][number], contents: CatalogWorkContents, texts?: Map<string, string>, api?: string): Generator<ImportRecord> {
   const units = new Map(contents.units.map((u) => [u.id, u]));
   const placed: Array<{ unitId: string; position: Array<{ level: string; value: string; label?: LocalName }> }> = [];
   const walk = (entries: CatalogContentsEntry[], trail: Array<{ level: string; value: string; label?: LocalName }>) => {
@@ -151,7 +154,7 @@ function* unitRecords(work: CatalogWorksIndex['works'][number], contents: Catalo
         order: orders[i]!,
         label,
         externalIds: { 'sichos-kodesh-unit': unit.id },
-        ...(bodyOf(unit, work.sources, texts) ?? {}),
+        ...(bodyOf(unit, work.sources, texts, api) ?? {}),
         editions: unit.editions
           .map((e) => work.sources[e.source])
           .filter((s): s is CatalogWorkSource => s !== undefined)
@@ -172,7 +175,7 @@ export function sichosKodeshWorksImporter(input: SichosKodeshWorksInput | (() =>
     id: 'sichos-kodesh-works',
     bot: { id: 'bot:sichos-kodesh-works', displayName: 'Sichos-Kodesh works importer' },
     async *records() {
-      const { index, contents, texts } = typeof input === 'function' ? await input() : input;
+      const { index, contents, texts, api } = typeof input === 'function' ? await input() : input;
       const genres = [...new Set(index.works.map((w) => w.genre))].sort() as Genre[];
       for (const genre of genres) {
         yield { key: `rebbehub-set:${genre}`, type: 'set', path: `/sets/${genre}`, data: { name: GENRE_NAMES[genre] ?? { he: genre, en: genre }, slug: genre, policy: 'moderated', keepers: [] } };
@@ -210,7 +213,7 @@ export function sichosKodeshWorksImporter(input: SichosKodeshWorksInput | (() =>
       const works = new Map(index.works.map((w) => [w.id, w]));
       for (const c of contents) {
         const work = works.get(c.workId);
-        if (work) yield* unitRecords(work, c, texts);
+        if (work) yield* unitRecords(work, c, texts, api);
       }
     },
   };

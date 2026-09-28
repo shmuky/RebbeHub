@@ -290,24 +290,29 @@ describe('the Missing board and projects', () => {
 });
 
 describe('the wiki model', () => {
-  it("serves Sichos-Kodesh's published texts to its importer, and nothing else from that archive", async () => {
+  it('keeps its own copy of each text: copied once from Sichos-Kodesh, checked by hash, then served from RebbeHub', async () => {
+    const { createHash } = await import('node:crypto');
     const article = '<article><h1>א</h1><p>טקסט</p></article>';
-    const objects: Record<string, string> = { ['a'.repeat(64)]: article, ['b'.repeat(64)]: '%PDF-1.4' };
-    const archive = {
+    const sha = createHash('sha256').update(article).digest('hex');
+    const store = (objects: Map<string, Uint8Array>) => ({
       async get(key: string) {
-        const text = objects[key.replace('objects/', '')];
-        return text === undefined ? null : { body: new Response(text).body!, size: text.length };
+        const bytes = objects.get(key);
+        return bytes ? { body: new Response(bytes as BodyInit).body!, size: bytes.length } : null;
       },
-    };
-    const withArchive = createApp({ catalog, sichosKodeshArchive: archive });
-    const ok = await withArchive.request(`/v1/sichos-kodesh/texts/${'a'.repeat(64)}`);
-    expect(ok.status).toBe(200);
-    expect(ok.headers.get('content-type')).toContain('text/html');
-    expect(await ok.text()).toBe(article);
-    expect((await withArchive.request(`/v1/sichos-kodesh/texts/${'b'.repeat(64)}`)).status).toBe(404);
-    expect((await withArchive.request(`/v1/sichos-kodesh/texts/${'c'.repeat(64)}`)).status).toBe(404);
-    expect((await withArchive.request('/v1/sichos-kodesh/texts/nope')).status).toBe(404);
-    expect((await app.request(`/v1/sichos-kodesh/texts/${'a'.repeat(64)}`)).status).toBe(404);
+    });
+    const archive = new Map([[`objects/${sha}`, new TextEncoder().encode(article)], [`objects/${'b'.repeat(64)}`, new TextEncoder().encode(article)]]);
+    const own = new Map<string, Uint8Array>();
+    const withTexts = createApp({ catalog, texts: { store: store(own), writer: { put: async (key, bytes) => void own.set(key, new Uint8Array(bytes)) }, from: store(archive) } });
+    const first = await withTexts.request(`/v1/texts/${sha}`);
+    expect(first.status).toBe(200);
+    expect(first.headers.get('content-security-policy')).toBe('sandbox');
+    expect(await first.text()).toBe(article);
+    expect(own.has(`texts/${sha}`)).toBe(true);
+    archive.clear();
+    expect(await (await withTexts.request(`/v1/texts/${sha}`)).text()).toBe(article); // RebbeHub's own copy now
+    expect((await withTexts.request(`/v1/texts/${'b'.repeat(64)}`)).status).toBe(404); // bytes that are not their name
+    expect((await withTexts.request('/v1/texts/nope')).status).toBe(404);
+    expect((await app.request(`/v1/texts/${sha}`)).status).toBe(404);
   });
 
   it('keeps a page body in wikitext with where it came from, and edits it through a suggestion', async () => {

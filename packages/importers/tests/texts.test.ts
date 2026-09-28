@@ -21,7 +21,7 @@ describe('the texts of the seforim', () => {
     }) as typeof fetch;
     const texts = await fetchTexts(['a'.repeat(64), 'b'.repeat(64), 'a'.repeat(64), 'not-a-hash'], { base: 'https://api.test', fetch: fake, pauseMs: 1 });
     expect([...texts.keys()].sort()).toEqual(['a'.repeat(64), 'b'.repeat(64)]);
-    expect(asked.filter((u) => u.endsWith('a'.repeat(64)))).toEqual([`https://api.test/v1/sichos-kodesh/texts/${'a'.repeat(64)}`]);
+    expect(asked.filter((u) => u.endsWith('a'.repeat(64)))).toEqual([`https://api.test/v1/texts/${'a'.repeat(64)}`]);
     expect(asked.filter((u) => u.endsWith('b'.repeat(64)))).toHaveLength(2);
     const down = (async () => new Response('', { status: 503 })) as typeof fetch;
     await expect(fetchTexts(['c'.repeat(64)], { base: 'https://api.test', fetch: down, pauseMs: 1 })).rejects.toThrow(/answered 503/);

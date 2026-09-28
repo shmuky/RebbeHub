@@ -94,6 +94,7 @@ const COMMON: Record<string, JsonSchema> = {
       via: str({ maxLength: 100 }),
       sourceId: str({ maxLength: 500 }),
       url: ref('url'),
+      copy: ref('url'),
       licence: str({ maxLength: 100 }),
       credit: str({ maxLength: 500 }),
       rights: { enum: ['open', 'credit', 'link', 'preserved'] },

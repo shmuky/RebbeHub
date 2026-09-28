@@ -32,8 +32,8 @@ export interface ApiOptions {
   uploads?: UploadOptions;
   /** The public bucket's bytes (R2 on Workers). With it, this API serves `/objects/<sha256>` itself, for files whose rights allow. */
   files?: FileStore;
-  /** Sichos-Kodesh's published archive (its R2 bucket `sichos-kodesh-archive`), read for the texts its importer puts on pages. */
-  sichosKodeshArchive?: FileStore;
+  /** Where the texts of seforim are kept (`texts/<sha256>` in the public bucket), and where they are first copied from: Sichos-Kodesh's published archive. */
+  texts?: { store: FileStore; writer: { put(key: string, bytes: ArrayBuffer, mime: string): Promise<void> }; from?: FileStore };
   version?: string;
 }
 
@@ -344,16 +344,38 @@ export function createApp(options: ApiOptions): Hono {
     return c.body(object.body, 200, headers);
   });
 
-  // A text Sichos-Kodesh publishes (one chapter or letter, an HTML <article>), for the importer that puts it on its page
-  // (packages/importers/src/sichosKodeshTexts.ts). Only its archive's texts are served here: nothing else, nothing big.
-  app.get('/v1/sichos-kodesh/texts/:sha256', async (c) => {
+  // A text of a sefer as its source gave it (one chapter or letter, an HTML <article>), kept on RebbeHub's own storage
+  // (`texts/<sha256>` in the public bucket). The first time it is asked for, it is copied from Sichos-Kodesh's published
+  // archive, checked against its hash, and kept; after that RebbeHub serves its own copy. Pages link to it, and the
+  // works importer reads it for their words (packages/importers/src/sichosKodeshTexts.ts).
+  app.get('/v1/texts/:sha256', async (c) => {
     const sha256 = c.req.param('sha256');
-    if (!options.sichosKodeshArchive || !/^[0-9a-f]{64}$/.test(sha256)) throw new CatalogError('not-found', 'no such text');
-    const object = await options.sichosKodeshArchive.get(`objects/${sha256}`);
-    if (!object || object.size > 4_000_000) throw new CatalogError('not-found', 'no such text');
-    const text = await new Response(object.body).text();
-    if (!/^\s*<article[\s>]/i.test(text)) throw new CatalogError('not-found', 'no such text');
-    return c.body(text, 200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=31536000, immutable' });
+    const kept = options.texts;
+    if (!kept || !/^[0-9a-f]{64}$/.test(sha256)) throw new CatalogError('not-found', 'no such text');
+    const key = `texts/${sha256}`;
+    let text: string | null = null;
+    const own = await kept.store.get(key);
+    if (own) text = await new Response(own.body).text();
+    else if (kept.from) {
+      const object = await kept.from.get(`objects/${sha256}`);
+      if (object && object.size <= 4_000_000) {
+        const bytes = await new Response(object.body).arrayBuffer();
+        const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
+        const candidate = new TextDecoder().decode(bytes);
+        if (digest === sha256 && /^\s*<article[\s>]/i.test(candidate)) {
+          await kept.writer.put(key, bytes, 'text/html; charset=utf-8');
+          text = candidate;
+        }
+      }
+    }
+    if (text === null) throw new CatalogError('not-found', 'no such text');
+    return c.body(text, 200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      // Someone else's HTML: shown as a document, never run on this origin.
+      'Content-Security-Policy': 'sandbox',
+      'X-Content-Type-Options': 'nosniff',
+    });
   });
 
   app.get('/v1/entities/:id', async (c) => {

@@ -294,6 +294,7 @@ const STRINGS = {
   tabEdit: { he: 'עריכה', en: 'Edit' },
   importedFrom: { he: 'יובא מ:', en: 'Imported from' },
   atTheSource: { he: 'במקור', en: 'at the source' },
+  keptCopy: { he: 'העותק השמור ב־RebbeHub', en: 'the copy kept on RebbeHub' },
   talkIntro: { he: 'כאן מדברים על הדף: שאלות, מקורות, מה צריך לתקן. כל אחד קורא; כדי לכתוב צריך להיכנס.', en: 'This is where the page is talked about: questions, sources, what needs fixing. Anyone reads; to write, sign in.' },
   talkEmpty: { he: 'עוד אין כאן שיחה.', en: 'No conversation here yet.' },
   talkNew: { he: 'נושא חדש', en: 'New topic' },

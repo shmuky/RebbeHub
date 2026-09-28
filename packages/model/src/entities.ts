@@ -130,6 +130,8 @@ export interface BodySource {
   via?: string;
   sourceId?: string;
   url?: string;
+  /** RebbeHub's own copy of the text as the source gave it (`/v1/texts/<sha256>`), kept on RebbeHub's storage. */
+  copy?: string;
   licence?: string;
   credit?: string;
   /** What may be done with the words (docs/rights.md): shown and exported when `open` or `credit`, withheld otherwise. */

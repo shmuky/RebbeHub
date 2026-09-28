@@ -3,9 +3,10 @@
  * letter's text is an HTML file in its published archive (the R2 bucket
  * `sichos-kodesh-archive`, `objects/<sha256>`), and its works catalog says
  * which file each unit's edition is. Only texts its rights gate lets ship
- * are published. RebbeHub reads them at import time, one by one, through
- * its own API (`/v1/sichos-kodesh/texts/<sha256>`, services/api), which
- * binds that bucket; it keeps no copy in the repository.
+ * are published. RebbeHub keeps its own copy of each on its own storage:
+ * its API (`/v1/texts/<sha256>`, services/api) copies a text from that
+ * archive the first time it is asked for, and serves its copy after. The
+ * importer reads them there; the repository keeps none.
  *
  * (Sichos-Kodesh's pack API can also hand a work's texts over as one pack,
  * but building a big pack, the Igros' 11,060 letters, runs past a Worker's
@@ -13,6 +14,11 @@
  */
 
 export const REBBEHUB_API = 'https://api.rebbehub.org';
+
+/** Where RebbeHub keeps a text: the address its page links to as "the copy kept on RebbeHub". */
+export function textUrl(sha256: string, base = REBBEHUB_API): string {
+  return `${base.replace(/\/$/, '')}/v1/texts/${sha256}`;
+}
 
 /**
  * The texts with these hashes, as HTML, fetched a few at a time. A text
@@ -23,7 +29,7 @@ export async function fetchTexts(
   hashes: Iterable<string>,
   options: { base?: string; fetch?: typeof fetch; log?: (line: string) => void; concurrency?: number; pauseMs?: number } = {},
 ): Promise<Map<string, string>> {
-  const base = (options.base ?? REBBEHUB_API).replace(/\/$/, '');
+  const base = options.base ?? REBBEHUB_API;
   const get = options.fetch ?? fetch;
   const queue = [...new Set(hashes)].filter((h) => /^[0-9a-f]{64}$/.test(h));
   const texts = new Map<string, string>();
@@ -32,7 +38,7 @@ export async function fetchTexts(
   const one = async (sha: string) => {
     for (let attempt = 1; ; attempt++) {
       try {
-        const response = await get(`${base}/v1/sichos-kodesh/texts/${sha}`);
+        const response = await get(textUrl(sha, base));
         if (!response.ok) throw new Error(`answered ${response.status}`);
         texts.set(sha, await response.text());
         return;
