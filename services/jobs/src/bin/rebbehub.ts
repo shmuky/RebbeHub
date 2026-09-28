@@ -4,7 +4,9 @@ import { ocrCommand } from '../ocrCommand.js';
 import { transcribeCommand } from '../transcribeCommand.js';
 import {
   accountCommand,
+  archiveGapsCommand,
   crawlLibraryCommand,
+  crawlSefariaCommand,
   dumpCommand,
   editionCommand,
   importCommand,
@@ -29,10 +31,16 @@ const HELP = `rebbehub - RebbeHub's command line
   rebbehub rebuildable [--guard]                prints rebuildable when importers made everything;
                                                 --guard prints SQL that fails otherwise
   rebbehub account --id <id> --name <name> [--steward] [--bot]
-  rebbehub import sichos-kodesh-works|sichos-kodesh-occasions|otzros|chabadlibrary --from <Sichos-Kodesh checkout>
-                  [--approve-as <steward>] [--dry-run] [--chunk <n>]
+  rebbehub import <importer> --from <Sichos-Kodesh checkout> [--approve-as <steward>] [--dry-run] [--chunk <n>]
+                                                sichos-kodesh-works, sichos-kodesh-occasions, otzros, hebrewbooks;
+                                                chabadlibrary (CHABADLIBRARY_TREE), jem (JEM_DB), sefaria (SEFARIA_DATA),
+                                                igros (IGROS_DATA), archive (SK_ARCHIVE_DB): see docs/importers.md
   rebbehub crawl-library --from <Sichos-Kodesh checkout> --out <tree.json> [--minutes <n>]
                                                 chabadlibrary.org's contents, continuing an earlier crawl
+  rebbehub crawl-sefaria --from <Sichos-Kodesh checkout> --out <folder> [--cache <folder>] [--keep] [--only <title>]
+                                                Sefaria's Chabad books Sichos-Kodesh does not publish; --keep stores
+                                                their texts in R2 (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
+  rebbehub archive-gaps --db <index.sqlite>     the files Sichos-Kodesh's archive could not get, onto the Missing board
   rebbehub mirror --dir <folder> [--git] [--full] [--limit <n>]
   rebbehub edition --by <steward> [--tag 2026.40] [--notes <text>]
   rebbehub dump --tag <tag> --out <folder> [--key <key.json>]
@@ -96,6 +104,10 @@ const { values, positionals } = parseArgs({
     linked: { type: 'boolean' },
     files: { type: 'string' },
     minutes: { type: 'string' },
+    cache: { type: 'string' },
+    keep: { type: 'boolean' },
+    only: { type: 'string', multiple: true },
+    db: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
   },
 });
@@ -128,6 +140,12 @@ try {
       break;
     case 'crawl-library':
       await crawlLibraryCommand(ctx, { from: need(values.from, 'from'), out: need(values.out, 'out'), minutes: number(values.minutes) });
+      break;
+    case 'crawl-sefaria':
+      await crawlSefariaCommand(ctx, { from: need(values.from, 'from'), out: need(values.out, 'out'), cache: values.cache, keep: values.keep, only: values.only, bucket: values.bucket });
+      break;
+    case 'archive-gaps':
+      await archiveGapsCommand(ctx, { db: need(values.db, 'db') });
       break;
     case 'ocr':
       await ocrCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), scan: values.scan, limit: number(values.limit), files: values.files });

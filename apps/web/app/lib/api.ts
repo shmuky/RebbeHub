@@ -85,6 +85,22 @@ export interface ScanText {
 }
 
 /** A project working through a gap, with its progress. */
+/** A file Sichos-Kodesh's archive wants and upstream would not give. */
+export interface ArchiveGap {
+  collection: string;
+  item_id: string;
+  kind: string;
+  role: string;
+  source: string;
+  url: string;
+  label: string | null;
+  hebrew_date: string | null;
+  status: 'unresolved' | 'error';
+  http_status: number | null;
+  checked_at: string | null;
+  entity: Entity | null;
+}
+
 export interface Project {
   id: number;
   slug: string;
@@ -201,6 +217,11 @@ export class RebbeHubApi {
   /** The Missing board: farbrengens without recordings or texts (of a year), or sefarim without a scan. */
   missing(kind: 'recordings' | 'texts' | 'scans', options: { within?: string; limit?: number } = {}) {
     return this.get<{ kind: string; total: number; items: Entity[] }>('/v1/missing', { kind, within: options.within, limit: options.limit });
+  }
+
+  /** The files Sichos-Kodesh's archive could not get from upstream, each with its item when RebbeHub has it. */
+  missingFiles(options: { limit?: number } = {}) {
+    return this.get<{ kind: 'files'; total: number; items: ArchiveGap[] }>('/v1/missing', { kind: 'files', limit: options.limit });
   }
 
   projects() {

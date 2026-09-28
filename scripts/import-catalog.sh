@@ -24,12 +24,22 @@ live=$DATABASE_URL
 rebbehub() { npm run --silent rebbehub -- "$@"; }
 import_into() {
   DATABASE_URL=$1 rebbehub account --id "$steward" --name "$steward_name" --steward
-  importers="sichos-kodesh-works sichos-kodesh-occasions otzros"
+  importers="sichos-kodesh-works sichos-kodesh-occasions otzros hebrewbooks"
   # A page per chapter of the Chabad Library, once its contents are crawled (import.yml).
   if [ -n "${CHABADLIBRARY_TREE:-}" ] && [ -f "$CHABADLIBRARY_TREE" ]; then importers="$importers chabadlibrary"; fi
+  # JEM's recordings, once its catalog is crawled (import.yml), after the farbrengens they join.
+  if [ -n "${JEM_DB:-}" ] && [ -f "$JEM_DB" ]; then importers="$importers jem"; fi
+  # Sefaria's Chabad books Sichos-Kodesh does not publish, once `rebbehub crawl-sefaria` has read them.
+  if [ -n "${SEFARIA_DATA:-}" ] && [ -f "$SEFARIA_DATA/crawl.json" ]; then importers="$importers sefaria"; fi
+  # The letters' dates, where a build of the Igros app's files is given (never in CI: the files are Shmuly's).
+  if [ -n "${IGROS_DATA:-}" ] && [ -d "$IGROS_DATA/igros" ]; then importers="$importers igros"; fi
+  # Sichos-Kodesh's archive history, last: it adds to the items the others made. Given a copy of its index.
+  if [ -n "${SK_ARCHIVE_DB:-}" ] && [ -f "$SK_ARCHIVE_DB" ]; then importers="$importers archive"; fi
   for importer in $importers; do
     DATABASE_URL=$1 rebbehub import "$importer" --from "$from" --approve-as "$steward"
   done
+  # The files the archive could not get, onto the Missing board.
+  if [ -n "${SK_ARCHIVE_DB:-}" ] && [ -f "$SK_ARCHIVE_DB" ]; then DATABASE_URL=$1 rebbehub archive-gaps --db "$SK_ARCHIVE_DB"; fi
   # The Sichos Kodesh scans and their reading copies (docs/operations.md), from the published manifest.
   DATABASE_URL=$1 rebbehub reading-copies register
   DATABASE_URL=$1 rebbehub page-fixes register

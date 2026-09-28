@@ -17,7 +17,7 @@ stands. ✅ built and tested · 🟡 partly · ⬜ not yet.
 | The catalog engine: suggestions, checks, review, three-way merge, history, revert, projects, reports, trust | ✅ | `packages/core` |
 | Importers as bot commits: the works Sichos-Kodesh knows (82 works, their units) | ✅ | `packages/importers` - verified on the real checkout |
 | Importers: farbrengens with their recordings and hanachos (3,330 farbrengens 5710-5752, 6,454 recording parts), from the catalog Sichos-Kodesh's app is built from | ✅ | `packages/importers/src/sichosKodeshOccasions.ts` |
-| Importers: JEM's whole tree, Igros (11,059 letters), Sefaria texts, HebrewBooks (~1,450 books), chabadlibrary.org tree, archive history | ⬜ | next; each is a new `Importer` over its Sichos-Kodesh indexer (see below) |
+| Importers: JEM's whole tree, Igros (11,059 letters), Sefaria texts, HebrewBooks (~1,450 books), chabadlibrary.org tree, archive history | ✅ | each a new `Importer` over its Sichos-Kodesh indexer (see below, and [importers](importers.md)); igros and archive run when Shmuly's files are given |
 
 ## Phase 1 - Read
 
@@ -82,16 +82,17 @@ notifications by email, the reviewer's AI summary.
 - Still to come: IIIF page images, uploaded OCR, comparing printings,
   word-level sync, semantic search, translations, mirrors.
 
-## Importers still to write
+## Importers
 
 Each reads the output of the matching Sichos-Kodesh indexer from a
-checkout, as `sichos-kodesh-works` does, and yields keyed records:
+checkout, as `sichos-kodesh-works` does, and yields keyed records. How to
+run each, and what it needs, is in [importers](importers.md).
 
-| Importer | Reads | Yields |
-| --- | --- | --- |
-| `mafteiach` | `packages/mafteiach-index` | events (farbrengens, with occasion ids), units of the collections the phone browses, their PDF editions |
-| `jem` | `packages/jem-index` | recordings with their JEM links, video links |
-| `igros` | `packages/igros-index` | 11,059 letter units with dates (text withheld per rights) |
-| `sefaria` | `packages/sefaria-index` | texts and segments, CC BY-NC with credit |
-| `hebrewbooks` | `packages/hebrewbooks-index` | publications with HebrewBooks ids, link-only scans |
-| `archive` | `services/archive` SQLite | history as bot commits; `wanted` becomes the Missing board |
+| Importer | Reads | Yields | |
+| --- | --- | --- | --- |
+| `mafteiach` | `packages/mafteiach-index` | events (farbrengens, with occasion ids), units of the collections the phone browses, their PDF editions | |
+| `jem` | `packages/jem-index` (`JEM_DB`) | recordings with their JEM links, added to the farbrengens already imported where they match; the rest as JEM events. jem-index has no video links yet | ✅ |
+| `igros` | the Igros app's build (`IGROS_DATA`) | dates for the 11,059 letters the works importer brings; the Maanos stay out | ✅ needs Shmuly's files |
+| `sefaria` | Sefaria's API (`rebbehub crawl-sefaria`) | Chabad books Sichos-Kodesh does not publish, a page per chapter, CC BY-NC with credit, kept on RebbeHub's storage by sha256 | ✅ keeping needs `CLOUDFLARE_API_TOKEN` |
+| `hebrewbooks` | `packages/hebrewbooks-index` shelf | publications with HebrewBooks ids, link-only scans | ✅ |
+| `archive` | `services/archive` SQLite (`SK_ARCHIVE_DB`) | history as bot commits; `wanted` files it could not get go on the Missing board's Files lost tab | ✅ needs a copy of the index |

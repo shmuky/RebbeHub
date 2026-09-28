@@ -222,7 +222,14 @@ export function createApp(options: ApiOptions): Hono {
       const { total, items } = await catalog.worksWithoutScans(limit);
       return c.json({ kind, total, items: await redact(items) });
     }
-    if (kind !== 'recordings' && kind !== 'texts') throw new HttpError(400, 'kind is recordings, texts or scans');
+    // Files Sichos-Kodesh's archive wants and upstream would not give (a Drive link gone, a recording the CDN lost).
+    if (kind === 'files') {
+      const { total, items } = await catalog.archiveGaps(limit);
+      const entities = await redact(items.flatMap((g) => (g.entity ? [g.entity] : [])));
+      const byId = new Map(entities.map((e) => [e.id, e]));
+      return c.json({ kind, total, items: items.map((g) => ({ ...g, entity: g.entity ? (byId.get(g.entity.id) ?? null) : null })) });
+    }
+    if (kind !== 'recordings' && kind !== 'texts') throw new HttpError(400, 'kind is recordings, texts, scans or files');
     if (within && !/^\d{4}(-(0[1-9]|1[0-2]|06A|06B))?$/.test(within)) throw new HttpError(400, 'within is a year (5745) or a month (5745-05)');
     const all = await catalog.events({ within, missing: kind, limit: 2000 });
     return c.json({ kind, within: within ?? null, total: all.length, items: await redact(all.slice(0, limit)) });
