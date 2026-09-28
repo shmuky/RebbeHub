@@ -81,8 +81,22 @@ In **rebbehub-api → Settings → Variables and Secrets**:
 
 ### 6. Fill the catalog
 
-The database starts with the built-in schemas only. From a computer with
-this repository and a Sichos-Kodesh checkout:
+The database starts with the built-in schemas only. The **Import the
+catalog (manual)** workflow fills it from Sichos-Kodesh, and brings it up
+to date when run again. Cloudflare's build cannot do this: it has the
+database address but cannot read the private Sichos-Kodesh repository.
+
+1. In **GitHub → Settings → Secrets and variables → Actions**, add two
+   repository secrets:
+   - `DATABASE_URL`: the direct connection string from step 1 (the same
+     one the `rebbehub-api` build has);
+   - `SICHOS_KODESH_TOKEN`: a
+     [fine-grained token](https://github.com/settings/personal-access-tokens/new)
+     with access to `shmuky/Sichos-Kodesh` only and **Contents: Read-only**.
+2. **Actions → Import the catalog (manual) → Run workflow**. It takes a
+   few minutes; the log ends with how many items it created.
+
+Or, from a computer with this repository and a Sichos-Kodesh checkout:
 
 ```sh
 export DATABASE_URL='postgresql://…'   # the direct connection string
