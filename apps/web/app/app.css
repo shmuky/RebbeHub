@@ -1069,6 +1069,13 @@ body:has(.player-bar) {
   background: var(--bg-elevated);
 }
 
+.search-box button {
+  width: 48px;
+  min-height: 48px;
+  padding: 0;
+  flex: none;
+}
+
 .search-hints {
   color: var(--muted);
   font-size: 0.875rem;

@@ -3,11 +3,12 @@ import { FileText } from 'lucide-react';
 import { Link } from 'react-router';
 import type { Route } from './+types/home';
 import { EventRows, PlayEventButton, eventData, hanachaOf, type EventItem } from '../components/EventRow.js';
+import { YearStrip } from '../components/YearStrip.js';
 import { siteOf } from '../lib/context.server.js';
 import { dateLabel, yearLabel } from '../lib/dates.js';
 import { langFrom, nameOf, t, type Lang } from '../lib/i18n.js';
 import { labelOf } from '../lib/labels.js';
-import { href, itemPath } from '../lib/links.js';
+import { href, itemPath, setPath } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
 import { kviusYears, thisWeek } from '../lib/week.js';
 
@@ -128,18 +129,16 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       {years.length ? (
         <section>
           <h2 className="section-header">{t(lang, 'everyYear')}</h2>
-          <ul className="year-strip">
+          <YearStrip>
             {years.map(({ year: y, count }) => (
               <li key={y}>
                 <Link className={y === year ? 'year-chip on' : 'year-chip'} to={href('/', lang, { year: String(y) })} preventScrollReset aria-current={y === year ? 'true' : undefined}>
                   {lang === 'he' ? toHebrewNumeral(y).replace(/^ה/, '') : y}
-                  <small>
-                    {count} {t(lang, 'farbrengensCount')}
-                  </small>
+                  <small aria-label={`${count} ${t(lang, 'farbrengensCount')}`}>{count}</small>
                 </Link>
               </li>
             ))}
-          </ul>
+          </YearStrip>
         </section>
       ) : null}
 
@@ -155,7 +154,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <ul className="cards">
           {sets.map((set) => (
             <li key={set.id}>
-              <Link className="card" to={href(itemPath(set), lang)}>
+              <Link className="card" to={href(setPath(set), lang)}>
                 <span className="card-title">{labelOf(set, lang)}</span>
               </Link>
             </li>

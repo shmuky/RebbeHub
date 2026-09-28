@@ -69,12 +69,13 @@ const get = async (path: string) => {
 };
 
 describe('the public site', () => {
-  it('renders the home page in Hebrew, right to left, with counts and sets', async () => {
+  it('renders the home page in Hebrew, right to left, with the week, the tabs and the library', async () => {
     const page = await get('/');
     expect(page.status).toBe(200);
     expect(page.html).toContain('<html lang="he" dir="rtl">');
-    expect(page.html).toContain('התוועדויות');
-    expect(page.html).toMatch(/<strong>1<\/strong>חיבורים/);
+    expect(page.html).toContain('class="home-parsha"');
+    expect(page.html).toContain('התוועדויות'); // the farbrengens tab
+    expect(page.html).toContain(`href="/farbrengens"`); // the sets, in the library
   });
 
   it('renders the same pages in English at ?lang=en, with both languages linked for search engines', async () => {
@@ -109,7 +110,9 @@ describe('the public site', () => {
   it('shows an event with its date, recordings (served, with video at the moment) and what was said', async () => {
     const page = await get('/events/5742-05-10');
     expect(page.html).toContain('התוועדות לדוגמה');
-    expect(page.html).toContain(`src="https://files.rebbehub.test/objects/${'a'.repeat(64)}"`);
+    // The parts play in the site's player; the served file is its source.
+    expect(page.html).toContain('class="part-list"');
+    expect(page.html).toContain(`https://files.rebbehub.test/objects/${'a'.repeat(64)}`);
     expect(page.html).toContain('https://www.youtube.com/watch?v=x&amp;t=60');
     expect(page.html).toContain('1:02:03');
     expect(page.html).toContain('href="/sample/1/1"');
@@ -137,7 +140,9 @@ describe('the public site', () => {
     const year = await get('/calendar/5742');
     expect(year.html).toContain('שבט');
     expect(year.html).toContain('href="/events/5742-05-10"');
-    const leap = await get('/calendar/5741');
+    // A leap year has Adar II; a year lists the months it has farbrengens in.
+    const leap = await get('/calendar/5741/06B');
+    expect(leap.status).toBe(200);
     expect(leap.html).toContain('אדר ב׳');
     expect((await get('/calendar/5742/05')).html).toContain('התוועדות לדוגמה');
     expect((await get('/calendar/5742/06B')).status).toBe(404); // 5742 is not a leap year

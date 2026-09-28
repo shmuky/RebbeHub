@@ -1,8 +1,9 @@
-import { ChevronLeft, ChevronRight, Clock, FileText, Pause, Play, PenLine } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, FileText, Pause, PenLine, Play, Video } from 'lucide-react';
 import { Link } from 'react-router';
 import { dateKeyToHDate } from '@rebbehub/hebrew';
 import type { LocalName } from '@rebbehub/model';
 import { EventRows, eventData, type EventItem } from '../components/EventRow.js';
+import { ItemList } from '../components/ItemLink.js';
 import type { Entity } from '../lib/api.js';
 import { dateLabel, yearLabel } from '../lib/dates.js';
 import { nameOf, t, type Lang } from '../lib/i18n.js';
@@ -83,6 +84,7 @@ function Recordings({ entity, recordings, sources, lang }: { entity: Entity; rec
   const tracks = tracksOf(entity, recordings, lang, sources);
   if (!tracks.length) return null;
   const mine = player.current !== null && tracks.some((tr) => tr.id === player.current!.id);
+  const videos = recordings.flatMap((r) => (r.data as unknown as { videos?: Array<{ url: string; startMs?: number }> }).videos ?? []);
   return (
     <section id="listen">
       <div className="playlist-header">
@@ -111,8 +113,29 @@ function Recordings({ entity, recordings, sources, lang }: { entity: Entity; rec
           );
         })}
       </ol>
+      {videos.length ? (
+        <ul className="pills" style={{ marginTop: 12 }}>
+          {videos.map((v, i) => (
+            <li key={i}>
+              <a className="pill" href={videoAt(v.url, v.startMs)} target="_blank" rel="noopener">
+                <Video size={14} aria-hidden="true" />
+                {t(lang, 'video')}
+                {v.startMs ? ` ${clock(v.startMs / 1000)}` : ''}
+              </a>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   );
+}
+
+/** A video link that opens at the event's moment, where the provider allows it. */
+function videoAt(url: string, startMs?: number): string {
+  if (!startMs) return url;
+  const seconds = Math.floor(startMs / 1000);
+  if (/youtube\.com|youtu\.be/.test(url)) return `${url}${url.includes('?') ? '&' : '?'}t=${seconds}`;
+  return `${url}#t=${seconds}`;
 }
 
 function Neighbor({ event, lang, which }: { event: EventItem | undefined; lang: Lang; which: 'previous' | 'next' }) {
@@ -179,6 +202,13 @@ export function EventPage({ entity, view, lang }: { entity: Entity; view: ItemVi
 
       <Recordings entity={entity} recordings={recordings} sources={sources} lang={lang} />
       {links.length ? <Texts links={links} lang={lang} /> : null}
+
+      {view.lists.units?.length ? (
+        <section>
+          <h2 className="section-header">{t(lang, 'saidThere')}</h2>
+          <ItemList items={view.lists.units} />
+        </section>
+      ) : null}
 
       {view.lists.otherYears?.length ? (
         <section>

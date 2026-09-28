@@ -12,6 +12,9 @@ export function href(path: string, lang: Lang, params: Record<string, string | u
 /** Where an item lives: its readable path, or its permanent id. */
 export const itemPath = (item: { id: string; path: string | null }) => item.path ?? `/${item.id}`;
 
+/** Where a set is browsed: the farbrengens by year on their own tab, any other set on its page. */
+export const setPath = (set: { id: string; path: string | null }) => (set.path === '/sets/farbrengens' ? '/calendar' : itemPath(set));
+
 /**
  * Where a source's copy is read or heard, when RebbeHub links rather than
  * holds it. Unknown sources and ids give no link rather than a wrong one.

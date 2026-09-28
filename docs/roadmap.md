@@ -16,7 +16,8 @@ stands. ✅ built and tested · 🟡 partly · ⬜ not yet.
 | Hebrew dates, numerals, normalisation (`packages/hebrew`) | ✅ | `packages/hebrew` |
 | The catalog engine: suggestions, checks, review, three-way merge, history, revert, projects, reports, trust | ✅ | `packages/core` |
 | Importers as bot commits: the works Sichos-Kodesh knows (82 works, their units) | ✅ | `packages/importers` - verified on the real checkout |
-| Importers: mafteiach (farbrengens), JEM, Igros (11,059 letters), Sefaria texts, HebrewBooks (~1,450 books), chabadlibrary.org tree, archive history | ⬜ | next; each is a new `Importer` over its Sichos-Kodesh indexer (see below) |
+| Importers: farbrengens with their recordings and hanachos (3,330 farbrengens 5710-5752, 6,454 recording parts), from the catalog Sichos-Kodesh's app is built from | ✅ | `packages/importers/src/sichosKodeshOccasions.ts` |
+| Importers: JEM's whole tree, Igros (11,059 letters), Sefaria texts, HebrewBooks (~1,450 books), chabadlibrary.org tree, archive history | ⬜ | next; each is a new `Importer` over its Sichos-Kodesh indexer (see below) |
 
 ## Phase 1 - Read
 
@@ -29,6 +30,7 @@ stands. ✅ built and tested · 🟡 partly · ⬜ not yet.
 | First dump (signed SQLite + JSON Lines; Sichos-Kodesh release) | ✅ | `rebbehub edition`, `rebbehub dump` |
 | Parquet dump | ⬜ | with the first public edition |
 | Public site: sets, events calendar, item and publication pages, search, permanent links | ✅ | `apps/web` (React Router 7, server-rendered; Node or Workers) |
+| The site as Sichos-Kodesh's app works: this week first (today's parsha, the kvius year, every year), farbrengen pages, one player across pages, smart search by parsha, chag, date and year | ✅ | `apps/web/app/routes/home.tsx`, `views/EventPage.tsx`, `player/`, `lib/smartSearch.ts` |
 | Audio player (recordings by part, video links at the moment) | ✅ | `apps/web/app/components/AudioPlayer.tsx`; words highlighted as spoken come with sync (phase 5) |
 | Scan viewer (served scans in the browser's PDF viewer by page; link-only scans at their source) | 🟡 | `ScanViewer.tsx`; IIIF and page images come with uploads (phase 3) |
 | SEO: canonical and hreflang links, schema.org data, sitemaps, robots.txt | ✅ | `apps/web/app/lib/seo.ts`, `/sitemap.xml` |
