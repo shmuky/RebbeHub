@@ -157,7 +157,8 @@ export function sessionAuthenticator(catalog: Catalog, auth: AuthOptions) {
     const person = await sessionPerson(catalog.db, token);
     if (!person) return null;
     await catalog.createAccount({ id: person.id, displayName: person.displayName });
-    if (person.steward) await catalog.db.query('UPDATE account SET is_steward = TRUE WHERE id = $1 AND NOT is_steward', [person.id]);
+    // The person's steward mark is the one that counts; their catalog account follows it.
+    await catalog.db.query('UPDATE account SET is_steward = $2 WHERE id = $1 AND is_steward <> $2', [person.id, Boolean(person.steward)]);
     return person.id;
   };
 }

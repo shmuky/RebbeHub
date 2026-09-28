@@ -1,14 +1,14 @@
-import type { Route } from './+types/suggestions';
+import type { Route } from './+types/admin-pass';
 import { siteOf } from '../lib/context.server.js';
 import { passThrough } from '../lib/pass.server.js';
 
-/** Suggestions and their review, from the site's own pages: /_/suggestions/* to the API's /v1/suggestions/*. Only these addresses pass. */
-const ALLOWED = /^(quick|\d+|\d+\/(approve|send-back|withdraw))?$/;
+/** The stewards' page, from the site's own pages: /_/admin/people… to /v1/admin/people…, /_/reports… to /v1/reports…. Only these addresses pass. */
+const ALLOWED = /^(admin\/people(\/u-[0-9a-z]+\/(role|suspend))?|reports(\/\d+\/close)?)$/;
 
 async function pass({ request, params, context }: Route.LoaderArgs | Route.ActionArgs) {
   const path = params['*'] ?? '';
   if (!ALLOWED.test(path)) return new Response('Not found', { status: 404 });
-  return passThrough(siteOf(context).api, request, `/v1/suggestions${path ? `/${path}` : ''}`);
+  return passThrough(siteOf(context).api, request, `/v1/${path}`);
 }
 
 export const loader = pass;

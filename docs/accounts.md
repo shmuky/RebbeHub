@@ -64,6 +64,19 @@ as a redirect URI on the client.
   migration 0005) and copied to their catalog account whenever they are
   signed in, so a rebuild of the catalog never takes it away.
 
+## Stewards and platform admins
+
+`/admin` is the stewards' page: everyone with an account, and the
+reports readers sent.
+
+- **Stewards** see people, suspend and restore accounts (a suspended
+  account suggests nothing), and resolve or dismiss reports. Reports are
+  read only by stewards and, for their set, its keepers.
+- **Platform admins** are stewards who also appoint and remove stewards
+  and admins, and see the Google email of each account. No steward can
+  suspend or demote an admin, and an admin never removes their own admin
+  (`auth.person.admin`, migration 0006).
+
 ## Sessions
 
 - The site passes `/_/auth/*` through to the API's `/v1/auth/*`, so the

@@ -143,6 +143,42 @@ describe('passkey sign-in', () => {
     expect((await call('GET', '/v1/auth/me', { cookie: created.cookie })).body.person.steward).toBe(true);
   });
 
+  it("lets an admin appoint stewards, and stewards see people and reports, but not appoint", async () => {
+    const admin = await register('Admin', 'cred-a');
+    await catalog.db.query('UPDATE auth.person SET admin = TRUE WHERE id = $1', [admin.body.person.id]);
+    const other = await register('Mendy', 'cred-m');
+    const third = await register('Chaim', 'cred-c');
+    const id = other.body.person.id;
+
+    // Not yet a steward: nothing here, and no reports.
+    expect((await call('GET', '/v1/admin/people', { cookie: other.cookie })).status).toBe(403);
+    expect((await call('GET', '/v1/reports', { cookie: other.cookie })).status).toBe(403);
+
+    const people = (await call('GET', '/v1/admin/people', { cookie: admin.cookie })).body;
+    expect(people.me.admin).toBe(true);
+    expect(people.people.map((p: { displayName: string }) => p.displayName)).toEqual(['Chaim', 'Mendy', 'Admin']);
+    expect((await call('GET', '/v1/admin/people?q=men', { cookie: admin.cookie })).body.people).toHaveLength(1);
+
+    expect((await call('POST', `/v1/admin/people/${id}/role`, { cookie: admin.cookie, body: { steward: true } })).status).toBe(200);
+    expect((await catalog.account(id))?.is_steward).toBe(true);
+    expect((await call('GET', '/v1/auth/me', { cookie: other.cookie })).body.person.steward).toBe(true);
+    expect((await call('GET', '/v1/reports', { cookie: other.cookie })).status).toBe(200);
+
+    // A steward sees people and suspends, but appoints no one, and never touches an admin.
+    expect((await call('GET', '/v1/admin/people', { cookie: other.cookie })).body.me.admin).toBe(false);
+    expect((await call('POST', `/v1/admin/people/${third.body.person.id}/role`, { cookie: other.cookie, body: { steward: true } })).status).toBe(403);
+    expect((await call('POST', `/v1/admin/people/${admin.body.person.id}/suspend`, { cookie: other.cookie, body: { on: true } })).status).toBe(403);
+    expect((await call('POST', `/v1/admin/people/${third.body.person.id}/suspend`, { cookie: other.cookie, body: { on: true } })).status).toBe(200);
+    expect((await catalog.account(third.body.person.id))?.suspended_at).not.toBeNull();
+    expect((await call('POST', '/v1/suggestions', { body: { title: 'x' }, cookie: third.cookie })).status).toBe(403);
+
+    // An admin keeps their own admin; removing a steward takes it from the catalog account too.
+    expect((await call('POST', `/v1/admin/people/${admin.body.person.id}/role`, { cookie: admin.cookie, body: { admin: false } })).status).toBe(400);
+    await call('POST', `/v1/admin/people/${id}/role`, { cookie: admin.cookie, body: { steward: false } });
+    expect((await catalog.account(id))?.is_steward).toBe(false);
+    expect((await call('GET', '/v1/auth/me', { cookie: other.cookie })).body.person.steward).toBeUndefined();
+  });
+
   it('changes the name a person goes by', async () => {
     const { cookie } = await register('Mendy');
     expect((await call('POST', '/v1/auth/name', { body: { name: 'Menachem Mendel' } })).status).toBe(401);

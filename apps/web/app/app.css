@@ -2539,3 +2539,46 @@ a.volume:hover {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* The stewards' page. */
+.admin-search {
+  width: 100%;
+  padding: 10px 12px;
+  margin: 8px 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+}
+
+.admin-person,
+.admin-report {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.admin-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-block;
+  margin-inline-start: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.badge.is-warn {
+  border-color: #b3261e;
+  color: #b3261e;
+}

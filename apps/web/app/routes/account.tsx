@@ -114,7 +114,7 @@ export default function Account() {
       <p className="subtitle">{t(lang, 'accountIntro')}</p>
       <p className="row-sub">
         {t(lang, 'accountNumber')} <span dir="ltr">{account.person.id}</span>
-        {account.person.steward ? ` · ${t(lang, 'steward')}` : ''}
+        {account.person.admin ? ` · ${t(lang, 'roleAdmin')}` : account.person.steward ? ` · ${t(lang, 'steward')}` : ''}
       </p>
 
       {error ? (
@@ -217,6 +217,12 @@ export default function Account() {
 
       <p>
         <Link to={href('/review', lang)}>{t(lang, 'yourSuggestions')}</Link>
+        {account.person.steward ? (
+          <>
+            {' · '}
+            <Link to={href('/admin', lang)}>{t(lang, 'adminTitle')}</Link>
+          </>
+        ) : null}
       </p>
 
       <section className="note">

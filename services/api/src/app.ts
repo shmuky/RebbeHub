@@ -3,6 +3,7 @@ import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, getFile, ty
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
+import { adminRoutes } from './admin.js';
 import { OPENAPI } from './openapi.js';
 
 /**
@@ -67,7 +68,7 @@ const STATUS_BY_CODE: Record<CatalogError['code'], 400 | 401 | 403 | 404 | 409 |
   conflict: 409,
 };
 
-class HttpError extends Error {
+export class HttpError extends Error {
   constructor(
     readonly status: 400 | 401 | 403 | 404 | 409 | 422 | 429,
     message: string,
@@ -128,6 +129,7 @@ export function createApp(options: ApiOptions): Hono {
   });
 
   if (options.auth) authRoutes(app, catalog, options.auth);
+  adminRoutes(app, catalog, signedIn);
 
   app.get('/', (c) => c.redirect('/v1'));
   app.get('/openapi.json', (c) => c.json(OPENAPI));
@@ -331,12 +333,19 @@ export function createApp(options: ApiOptions): Hono {
     return c.json({ id }, 201);
   });
 
+  // Reports are private: stewards read them all, a set's keepers read their set's.
   app.get('/v1/reports', async (c) => {
-    await signedIn(c);
+    const by = await signedIn(c);
     const set = c.req.query('set');
     const status = c.req.query('status');
     if (status && !['open', 'resolved', 'dismissed'].includes(status)) throw new HttpError(400, 'status is open, resolved or dismissed');
-    return c.json({ reports: await catalog.reports({ set: set ? entityId(set) : undefined, status: status as 'open' | undefined }) });
+    const account = await catalog.account(by);
+    const keeps = set ? ((((await catalog.get(entityId(set)))?.data ?? {}) as { keepers?: string[] }).keepers ?? []).includes(by) : false;
+    if (!account?.is_steward && !keeps) throw new HttpError(403, "reports are read by stewards and the set's keepers");
+    const reports = (await catalog.reports({ set: set ? entityId(set) : undefined, status: status as 'open' | undefined })) as Array<{ entity_id: string | null; reporter_hash?: unknown }>;
+    // With the item each is about, for its name; never who (or which address) sent it.
+    const items = await redact((await Promise.all([...new Set(reports.map((r) => r.entity_id).filter((id): id is string => Boolean(id)))].map((id) => catalog.get(id as EntityId)))).filter((i): i is EntityView => i !== null));
+    return c.json({ reports: reports.map(({ reporter_hash: _hidden, ...r }) => r), items });
   });
 
   app.post('/v1/reports/:id/close', async (c) => {
