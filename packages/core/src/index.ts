@@ -33,4 +33,4 @@ export {
   type Person,
   type StoredPasskey,
 } from './auth.js';
-export { fixLine, scanText, type ScanTextPage } from './text.js';
+export { fixLine, fixParagraph, recordingTranscript, scanText, type ScanTextPage, type TranscriptView } from './text.js';

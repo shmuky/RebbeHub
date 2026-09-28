@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, fixLine, getFile, scanText, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, fixLine, fixParagraph, getFile, recordingTranscript, scanText, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
@@ -282,6 +282,22 @@ export function createApp(options: ApiOptions): Hono {
     const input = await body<{ page?: number; line?: string; text?: string }>(c);
     if (typeof input.page !== 'number' || !input.line || typeof input.text !== 'string') throw new HttpError(400, 'give page, line and text');
     return c.json(await fixLine(catalog, by, { scan, page: input.page, line: input.line, text: input.text }), 201);
+  });
+
+  // A recording's transcript, paragraph by paragraph with where each is heard; machine paragraphs are marked until checked.
+  app.get('/v1/recordings/:id/transcript', async (c) => {
+    const transcript = await recordingTranscript(catalog, entityId(c.req.param('id')));
+    if (!transcript) throw new CatalogError('not-found', 'this recording has no transcript yet');
+    return c.json(transcript);
+  });
+
+  app.post('/v1/recordings/:id/transcript/fix', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ segment?: string; content?: string }>(c);
+    if (!input.segment || typeof input.content !== 'string') throw new HttpError(400, 'give segment and content');
+    const transcript = await recordingTranscript(catalog, entityId(c.req.param('id')));
+    if (!transcript?.paragraphs.some((p) => p.id === input.segment)) throw new CatalogError('not-found', 'no such paragraph in this transcript');
+    return c.json(await fixParagraph(catalog, by, { segment: input.segment as EntityId, content: input.content }), 201);
   });
 
   app.get('/v1/stats', async (c) => c.json({ head: await catalog.head(), counts: await catalog.counts() }));

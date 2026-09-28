@@ -107,3 +107,62 @@ export async function fixLine(catalog: Catalog, by: string, input: { scan: Entit
   });
   return catalog.submit(suggestion.id, by);
 }
+
+export interface TranscriptView {
+  recording: EntityId;
+  text: EntityId;
+  language: string;
+  /** Its paragraphs in order, each with where it is heard, and whether a person has checked it. */
+  paragraphs: Array<{ id: EntityId; content: string; startMs: number | null; endMs: number | null; checked: boolean; by: string | null }>;
+}
+
+/** A recording's transcript with its sync, paragraph by paragraph; null when it has none. */
+export async function recordingTranscript(catalog: Catalog, recording: EntityId): Promise<TranscriptView | null> {
+  const text = await one<{ id: EntityId; language: string }>(
+    catalog.db,
+    `SELECT t.id, tr.data->>'language' AS language FROM entity_ref x JOIN entity t ON t.id = x.from_id AND t.type = 'text' AND NOT t.deleted
+     JOIN revision tr ON tr.id = t.main_rev WHERE x.to_id = $1 AND x.field = 'recording' AND tr.data->>'kind' = 'transcript' ORDER BY t.id LIMIT 1`,
+    [recording],
+  );
+  if (!text) return null;
+  const { rows } = await catalog.db.query<{ id: EntityId; content: string; proofread: number; origin: { by?: string; checked?: boolean } | null; order: string; start_ms: string | null; end_ms: string | null }>(
+    `SELECT s.id, sr.data->>'content' AS content, (sr.data->>'proofread')::int AS proofread, sr.data->'origin' AS origin, sr.data->>'order' AS "order",
+            (SELECT spr.data->>'startMs' FROM entity_ref y JOIN entity sp ON sp.id = y.from_id AND sp.type = 'alignment-span' AND NOT sp.deleted
+              JOIN revision spr ON spr.id = sp.main_rev WHERE y.to_id = s.id AND y.field = 'segment' LIMIT 1) AS start_ms,
+            (SELECT spr.data->>'endMs' FROM entity_ref y JOIN entity sp ON sp.id = y.from_id AND sp.type = 'alignment-span' AND NOT sp.deleted
+              JOIN revision spr ON spr.id = sp.main_rev WHERE y.to_id = s.id AND y.field = 'segment' LIMIT 1) AS end_ms
+     FROM entity_ref x JOIN entity s ON s.id = x.from_id AND s.type = 'segment' AND NOT s.deleted
+     JOIN revision sr ON sr.id = s.main_rev WHERE x.to_id = $1 AND x.field = 'text'`,
+    [text.id],
+  );
+  rows.sort((a, b) => (a.order < b.order ? -1 : a.order > b.order ? 1 : 0));
+  return {
+    recording,
+    text: text.id,
+    language: text.language,
+    paragraphs: rows.map((r) => ({
+      id: r.id,
+      content: r.content,
+      startMs: r.start_ms === null ? null : Number(r.start_ms),
+      endMs: r.end_ms === null ? null : Number(r.end_ms),
+      checked: r.proofread > 0 || Boolean(r.origin?.checked),
+      by: r.origin?.by ?? null,
+    })),
+  };
+}
+
+/** Fixes a paragraph of a transcript as a suggestion: its words as the person heard them, marked checked. */
+export async function fixParagraph(catalog: Catalog, by: string, input: { segment: EntityId; content: string }): Promise<ChangesetRow> {
+  const content = input.content.replace(/\s+/g, ' ').trim();
+  if (!content || content.length > 20_000) throw invalid('a paragraph of 1 to 20,000 characters');
+  const segment = await catalog.get(input.segment);
+  if (!segment || segment.type !== 'segment') throw notFound(`paragraph ${input.segment}`);
+  const data = segment.data as Record<string, unknown> & { origin?: Record<string, unknown> };
+  const suggestion = await catalog.createChangeset(by, { title: 'תיקון תמלול' });
+  await catalog.putRevision(suggestion.id, by, {
+    id: segment.id,
+    type: 'segment',
+    data: { ...data, content, proofread: 1, ...(data.origin ? { origin: { ...data.origin, checked: true } } : {}) } as Json,
+  });
+  return catalog.submit(suggestion.id, by);
+}
