@@ -182,7 +182,7 @@ export const BUILTIN_SCHEMAS: Record<EntityType, JsonSchema> = {
       slug: str({ pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' }),
       authors: arrayOf(ref('entityId'), { uniqueItems: true }),
       genre: enumOf(GENRES),
-      levels: arrayOf(str({ pattern: '^[a-z][a-z0-9-]*$' }), { minItems: 1 }),
+      levels: arrayOf(str({ pattern: '^[a-z][a-z0-9-]*$' })),
       sourceCopies: arrayOf(workSource),
       description: ref('localName'),
     },

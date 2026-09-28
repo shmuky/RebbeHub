@@ -20,6 +20,7 @@
  *   file, file_source, derivation      bytes, by sha256, with rights
  *   catalog_edition  a dated, tagged commit (a release) and its dumps
  *   entity_ref       main's links between entities, for backlinks and sets
+ *   entity_external_id  main's ids from other systems, for duplicate checks
  *   path_redirect    old paths that still lead to their entity
  */
 export const up = /* sql */ `
@@ -267,6 +268,15 @@ CREATE TABLE entity_ref (
   PRIMARY KEY (from_id, field, to_id)
 );
 CREATE INDEX entity_ref_to ON entity_ref (to_id, field);
+
+-- main's external ids (a mafteiach occasion, a HebrewBooks book), for spotting the same thing twice
+CREATE TABLE entity_external_id (
+  entity_id TEXT NOT NULL REFERENCES entity (id),
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  PRIMARY KEY (entity_id, key)
+);
+CREATE INDEX entity_external_id_value ON entity_external_id (key, value);
 
 CREATE TABLE path_redirect (
   path TEXT PRIMARY KEY,

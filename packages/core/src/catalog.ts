@@ -298,6 +298,16 @@ export class Catalog {
     return rows;
   }
 
+  /** The latest version of an item that `author` proposed and that was merged: what a bot last said about it. */
+  async lastMergedBy(id: EntityId, author: string): Promise<RevisionRow | null> {
+    return one<RevisionRow>(
+      this.db,
+      `SELECT r.* FROM revision r JOIN changeset c ON c.id = r.changeset_id
+       WHERE r.entity_id = $1 AND r.author = $2 AND c.status = 'merged' AND r.merge_rev IS NULL ORDER BY r.id DESC LIMIT 1`,
+      [id, author],
+    );
+  }
+
   /** Every merged change to an item, newest first. */
   async history(id: EntityId): Promise<HistoryEntry[]> {
     const { rows } = await this.db.query<HistoryEntry>(
@@ -688,7 +698,12 @@ export class Catalog {
     }
     if (path !== null) await tx.query('DELETE FROM path_redirect WHERE path = $1', [path]);
     await tx.query('DELETE FROM entity_ref WHERE from_id = $1', [id]);
+    await tx.query('DELETE FROM entity_external_id WHERE entity_id = $1', [id]);
     if (!deleted) {
+      const externalIds = (data as { externalIds?: Record<string, string> }).externalIds ?? {};
+      for (const [key, value] of Object.entries(externalIds)) {
+        if (typeof value === 'string') await tx.query('INSERT INTO entity_external_id (entity_id, key, value) VALUES ($1, $2, $3)', [id, key, value]);
+      }
       const seen = new Set<string>();
       for (const ref of referencesOf(type, data)) {
         const key = `${ref.field}\u0000${ref.id}`;
@@ -1060,7 +1075,7 @@ export class Catalog {
       for (const [key, value] of Object.entries(externalIds)) {
         const dup = await one<{ id: string }>(
           tx,
-          "SELECT e.id FROM entity e JOIN revision r ON r.id = e.main_rev WHERE NOT e.deleted AND e.type = $1 AND e.id <> $2 AND r.data->'externalIds'->>$3 = $4 LIMIT 1",
+          'SELECT e.id FROM entity_external_id x JOIN entity e ON e.id = x.entity_id WHERE x.key = $3 AND x.value = $4 AND e.type = $1 AND e.id <> $2 AND NOT e.deleted LIMIT 1',
           [p.type, id, key, value],
         );
         if (dup) checks.push({ check: 'duplicates', status: 'warn', entityId: id, message: `${dup.id} has the same ${key} (${value}): the same item twice?` });

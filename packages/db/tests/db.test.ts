@@ -19,6 +19,7 @@ describe('migrations', () => {
       'commit_change',
       'derivation',
       'entity',
+      'entity_external_id',
       'entity_ref',
       'file',
       'file_source',

@@ -1,0 +1,23 @@
+{
+  "name": "@rebbehub/importers",
+  "version": "0.1.0",
+  "description": "RebbeHub's bot contributors: importers that seed the catalog and keep it in sync through suggestions like anyone else, without overwriting what people have fixed. First: the works Sichos-Kodesh already knows.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@rebbehub/core": "^0.1.0",
+    "@rebbehub/model": "^0.1.0"
+  }
+}

@@ -208,7 +208,7 @@ export interface WorkData extends CommonFields {
   slug: string;
   authors: EntityId[];
   genre: Genre;
-  /** Its structure, outermost first: `['volume', 'parsha', 'sicha']`. */
+  /** Its structure, outermost first: `['volume', 'parsha', 'sicha']`; empty until its units are known. */
   levels: string[];
   sourceCopies?: WorkSourceData[];
   description?: LocalName;
