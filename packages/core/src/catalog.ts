@@ -2,6 +2,7 @@ import { migrate, one, type Db } from '@rebbehub/db';
 import { validateDateKey } from '@rebbehub/hebrew';
 import {
   BUILTIN_SCHEMAS,
+  BUILTIN_SCHEMA_VERSION,
   ENTITY_LABELS,
   SchemaRegistry,
   contentHash,
@@ -198,12 +199,22 @@ export class Catalog {
   /** Migrates the database and, on an empty catalog, seeds the built-in schemas as `schema` items (commit 1). */
   async init(): Promise<void> {
     await migrate(this.db);
-    const seeded = await one<{ n: number }>(this.db, "SELECT count(*)::int AS n FROM entity WHERE type = 'schema'");
-    if (seeded && seeded.n > 0) return;
-    const cs = await this.createChangeset('system', { title: 'Built-in schemas', kind: 'import' });
-    for (const [type, jsonSchema] of Object.entries(BUILTIN_SCHEMAS)) {
-      const data: SchemaData = { entityType: type, label: ENTITY_LABELS[type as EntityType], jsonSchema, version: 1 };
+    // The schema items as main has them, and which of them are older than the built-in ones.
+    const { rows } = await this.db.query<{ type: string; version: number }>(
+      "SELECT r.data->>'entityType' AS type, (r.data->>'version')::int AS version FROM entity e JOIN revision r ON r.id = e.main_rev WHERE e.type = 'schema' AND NOT e.deleted",
+    );
+    const have = new Map(rows.map((r) => [r.type, r.version]));
+    const stale = Object.keys(BUILTIN_SCHEMAS).filter((type) => (have.get(type) ?? 0) < BUILTIN_SCHEMA_VERSION);
+    if (stale.length === 0) return;
+    const cs = await this.createChangeset('system', { title: have.size ? `Built-in schemas, version ${BUILTIN_SCHEMA_VERSION}` : 'Built-in schemas', kind: 'import' });
+    for (const type of stale) {
+      const data: SchemaData = { entityType: type, label: ENTITY_LABELS[type as EntityType], jsonSchema: BUILTIN_SCHEMAS[type as EntityType], version: BUILTIN_SCHEMA_VERSION };
       await this.putRevision(cs.id, 'system', { id: await idFromSeed('schema', type), type: 'schema', data: data as unknown as Json, path: `/schemas/${type}` });
+    }
+    // Schemas already the same as the built-in ones change nothing: then there is nothing to merge.
+    if ((await this.proposals(cs.id)).length === 0) {
+      await this.db.query("UPDATE changeset SET status = 'withdrawn', closed_at = now() WHERE id = $1", [cs.id]);
+      return;
     }
     await this.submit(cs.id, 'system');
     await this.merge(cs.id, 'system');
@@ -745,6 +756,39 @@ export class Catalog {
       body,
     ]);
     return row!.id;
+  }
+
+  /**
+   * A talk page (the plan's wiki model: every page has one): the comments
+   * on a page, a suggestion, a report or a project, oldest first, with
+   * their authors' names and what each answers. Hidden ones show only that
+   * they were hidden.
+   */
+  async talk(target: { kind: 'changeset' | 'report' | 'entity' | 'project'; id: string }): Promise<Array<{ id: number; parent: number | null; author: string; authorName: string; body: string | null; at: string; hidden: boolean }>> {
+    const { rows } = await this.db.query<{ id: number | string; parent_id: number | string | null; author: string; author_name: string | null; body: string; created_at: Date | string; hidden_at: Date | string | null }>(
+      `SELECT c.id, c.parent_id, c.author, a.display_name AS author_name, c.body, c.created_at, c.hidden_at
+       FROM comment c LEFT JOIN account a ON a.id = c.author WHERE c.target_kind = $1 AND c.target_id = $2 ORDER BY c.created_at, c.id`,
+      [target.kind, target.id],
+    );
+    return rows.map((r) => ({
+      id: Number(r.id),
+      parent: r.parent_id === null ? null : Number(r.parent_id),
+      author: r.author,
+      authorName: r.author_name ?? r.author,
+      body: r.hidden_at ? null : r.body,
+      at: new Date(r.created_at).toISOString(),
+      hidden: r.hidden_at !== null,
+    }));
+  }
+
+  /** Hides a comment (a steward, or its author): its words go, the thread stays whole. */
+  async hideComment(id: number, by: string): Promise<void> {
+    const actor = await this.requireAccount(by);
+    const row = await one<{ author: string }>(this.db, 'SELECT author FROM comment WHERE id = $1', [id]);
+    if (!row) throw notFound(`comment ${id}`);
+    if (row.author !== by && !actor.is_steward) throw forbidden('a comment is hidden by its author or a steward');
+    await this.db.query('UPDATE comment SET hidden_at = now() WHERE id = $1 AND hidden_at IS NULL', [id]);
+    await this.audit(this.db, by, 'comment.hide', 'comment', String(id));
   }
 
   /**

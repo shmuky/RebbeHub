@@ -8,6 +8,9 @@ export default [
   route('about', 'routes/about.tsx'),
   route('help', 'routes/help.tsx'),
   route('history/:id', 'routes/history.tsx'),
+  // Every page's talk page and its editing, beside its history (the wiki model).
+  route('talk/:id', 'routes/talk.tsx'),
+  route('edit/:id', 'routes/edit.tsx'),
   // A farbrengen's recordings as the player's queue, for play buttons on lists. `_` is never in an item's path.
   route('_/tracks/:id', 'routes/tracks.ts'),
   // Sign-in, passed through to the API's /v1/auth/* so the session cookie is the site's own.

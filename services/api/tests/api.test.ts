@@ -288,3 +288,52 @@ describe('the Missing board and projects', () => {
     expect((await call('GET', '/v1/projects/recordings-5742')).body).toMatchObject({ project: { status: 'closed' }, next: [] });
   });
 });
+
+describe('the wiki model', () => {
+  it("serves Sichos-Kodesh's published texts to its importer, and nothing else from that archive", async () => {
+    const article = '<article><h1>א</h1><p>טקסט</p></article>';
+    const objects: Record<string, string> = { ['a'.repeat(64)]: article, ['b'.repeat(64)]: '%PDF-1.4' };
+    const archive = {
+      async get(key: string) {
+        const text = objects[key.replace('objects/', '')];
+        return text === undefined ? null : { body: new Response(text).body!, size: text.length };
+      },
+    };
+    const withArchive = createApp({ catalog, sichosKodeshArchive: archive });
+    const ok = await withArchive.request(`/v1/sichos-kodesh/texts/${'a'.repeat(64)}`);
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get('content-type')).toContain('text/html');
+    expect(await ok.text()).toBe(article);
+    expect((await withArchive.request(`/v1/sichos-kodesh/texts/${'b'.repeat(64)}`)).status).toBe(404);
+    expect((await withArchive.request(`/v1/sichos-kodesh/texts/${'c'.repeat(64)}`)).status).toBe(404);
+    expect((await withArchive.request('/v1/sichos-kodesh/texts/nope')).status).toBe(404);
+    expect((await app.request(`/v1/sichos-kodesh/texts/${'a'.repeat(64)}`)).status).toBe(404);
+  });
+
+  it('keeps a page body in wikitext with where it came from, and edits it through a suggestion', async () => {
+    const withBody = { ...yudShvat(set), body: "== תוכן ==\n'''שיחה א'''", bodySource: { source: 'other', via: 'mafteiach-index', url: 'https://www.mafteiach.app/', licence: 'facts-and-links' } };
+    const sent = await call('POST', '/v1/suggestions/quick', { as: 'chaim', body: { entityId: event, data: withBody, title: 'Add the outline' } });
+    expect(sent.status).toBe(201);
+    await call('POST', `/v1/suggestions/${sent.body.id}/approve`, { as: 'keeper' });
+    expect((await call('GET', `/v1/entities/${event}`)).body.data).toMatchObject({ body: "== תוכן ==\n'''שיחה א'''", bodySource: { via: 'mafteiach-index' } });
+    // What is not in the schema is still refused.
+    const bad = await call('POST', '/v1/suggestions/quick', { as: 'chaim', body: { entityId: event, data: { ...withBody, bodySource: { via: 'x' } } } });
+    expect(bad.body.status === 'open' ? bad.body.checks.some((c: { status: string }) => c.status === 'fail') : bad.status >= 400).toBe(true);
+  });
+
+  it('has a talk page for every page: read by all, written when signed in, answered in threads, hidden by its author', async () => {
+    expect((await call('POST', `/v1/entities/${event}/talk`, { body: { body: 'שאלה' } })).status).toBe(401);
+    const first = await call('POST', `/v1/entities/${event}/talk`, { as: 'chaim', body: { body: 'האם התאריך נכון?' } });
+    expect(first.status).toBe(201);
+    await call('POST', `/v1/entities/${event}/talk`, { as: 'mendy', body: { body: 'כן, לפי ההקלטה', parent: first.body.id } });
+    expect((await call('POST', `/v1/entities/${event}/talk`, { as: 'mendy', body: { body: 'x', parent: 99999 } })).status).toBe(400);
+    const talk = (await call('GET', `/v1/entities/${event}/talk`)).body.talk;
+    expect(talk).toMatchObject([
+      { authorName: 'Chaim', body: 'האם התאריך נכון?', parent: null },
+      { authorName: 'Mendy', parent: first.body.id },
+    ]);
+    expect((await call('POST', `/v1/comments/${first.body.id}/hide`, { as: 'mendy' })).status).toBe(403);
+    await call('POST', `/v1/comments/${first.body.id}/hide`, { as: 'chaim' });
+    expect((await call('GET', `/v1/entities/${event}/talk`)).body.talk[0]).toMatchObject({ hidden: true, body: null });
+  });
+});

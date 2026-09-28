@@ -4,6 +4,8 @@ import { AudioPlayer } from '../components/AudioPlayer.js';
 import { EventPage } from './EventPage.js';
 import { AuthorPage, SetPage, WorkPage } from './LibraryPages.js';
 import { ItemLink, ItemList } from '../components/ItemLink.js';
+import { PageBody } from '../components/PageBody.js';
+import { PageTabs } from '../components/PageTabs.js';
 import { ScanViewer } from '../components/ScanViewer.js';
 import { TextView } from '../components/TextView.js';
 import type { Entity } from '../lib/api.js';
@@ -341,12 +343,13 @@ export function ItemPage({ entity, view }: { entity: Entity; view: ItemView }) {
   const pointing = view.backlinks.length;
   return (
     <article>
+      <PageTabs entity={entity} lang={lang} current="page" />
       <Page entity={entity} view={view} lang={lang} />
+      <PageBody entity={entity} lang={lang} />
       <div className="item-footer">
         <span>
           {t(lang, 'permanentLink')}: <Link to={href(`/${entity.id}`, lang)}><code>{entity.id}</code></Link>
         </span>
-        <Link to={href(`/history/${entity.id}`, lang)}>{t(lang, 'history')}</Link>
         {pointing > 0 ? (
           <span>
             {t(lang, 'pointsHere')}: {pointing}

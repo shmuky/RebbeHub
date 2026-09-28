@@ -32,6 +32,8 @@ export interface ApiOptions {
   uploads?: UploadOptions;
   /** The public bucket's bytes (R2 on Workers). With it, this API serves `/objects/<sha256>` itself, for files whose rights allow. */
   files?: FileStore;
+  /** Sichos-Kodesh's published archive (its R2 bucket `sichos-kodesh-archive`), read for the texts its importer puts on pages. */
+  sichosKodeshArchive?: FileStore;
   version?: string;
 }
 
@@ -342,6 +344,18 @@ export function createApp(options: ApiOptions): Hono {
     return c.body(object.body, 200, headers);
   });
 
+  // A text Sichos-Kodesh publishes (one chapter or letter, an HTML <article>), for the importer that puts it on its page
+  // (packages/importers/src/sichosKodeshTexts.ts). Only its archive's texts are served here: nothing else, nothing big.
+  app.get('/v1/sichos-kodesh/texts/:sha256', async (c) => {
+    const sha256 = c.req.param('sha256');
+    if (!options.sichosKodeshArchive || !/^[0-9a-f]{64}$/.test(sha256)) throw new CatalogError('not-found', 'no such text');
+    const object = await options.sichosKodeshArchive.get(`objects/${sha256}`);
+    if (!object || object.size > 4_000_000) throw new CatalogError('not-found', 'no such text');
+    const text = await new Response(object.body).text();
+    if (!/^\s*<article[\s>]/i.test(text)) throw new CatalogError('not-found', 'no such text');
+    return c.body(text, 200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=31536000, immutable' });
+  });
+
   app.get('/v1/entities/:id', async (c) => {
     const id = entityId(c.req.param('id'));
     const at = intParam(c.req.query('at'), 'at');
@@ -357,6 +371,29 @@ export function createApp(options: ApiOptions): Hono {
     const current = await catalog.get(id);
     const withheld = current ? Boolean(((await redact([current]))[0] as { withheld?: string }).withheld) : false;
     return c.json({ history: withheld ? history.map((h) => ({ ...h, changes: [] })) : history });
+  });
+
+  // The page's talk page: the conversation about it, open to read; writing needs a signed-in account.
+  app.get('/v1/entities/:id/talk', async (c) => c.json({ talk: await catalog.talk({ kind: 'entity', id: entityId(c.req.param('id')) }) }));
+
+  app.post('/v1/entities/:id/talk', async (c) => {
+    const by = await signedIn(c);
+    const id = entityId(c.req.param('id'));
+    if (!(await catalog.get(id))) throw new CatalogError('not-found', `${id} not found`);
+    const input = await body<{ body?: string; parent?: number }>(c);
+    const text = (input.body ?? '').trim();
+    if (!text || text.length > 10_000) throw new HttpError(400, 'a comment of 1 to 10,000 characters');
+    if (input.parent !== undefined) {
+      const thread = await catalog.talk({ kind: 'entity', id });
+      if (!thread.some((t) => t.id === input.parent)) throw new HttpError(400, 'that comment is not on this page');
+    }
+    return c.json({ id: await catalog.comment(by, { kind: 'entity', id }, text, input.parent) }, 201);
+  });
+
+  app.post('/v1/comments/:id/hide', async (c) => {
+    const by = await signedIn(c);
+    await catalog.hideComment(intParam(c.req.param('id'), 'id')!, by);
+    return c.json({ ok: true });
   });
 
   app.get('/v1/entities/:id/backlinks', async (c) => {

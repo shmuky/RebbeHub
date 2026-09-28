@@ -49,6 +49,17 @@ export interface FileInfo {
   url: string | null;
 }
 
+/** One comment on a talk page. */
+export interface TalkComment {
+  id: number;
+  parent: number | null;
+  author: string;
+  authorName: string;
+  body: string | null;
+  at: string;
+  hidden: boolean;
+}
+
 /** One page of a scan's text, as GET /v1/scans/:id/text gives it. */
 export interface ScanText {
   scan: string;
@@ -236,6 +247,11 @@ export class RebbeHubApi {
   /** One page of a scan's text; null when the scan has not been read, or its text is withheld. */
   scanText(scan: string, page: number) {
     return this.maybe(this.get<ScanText>(`/v1/scans/${encodeURIComponent(scan)}/text`, { page }));
+  }
+
+  /** A page's talk page: the conversation about it. */
+  talk(id: string) {
+    return this.get<{ talk: TalkComment[] }>(`/v1/entities/${encodeURIComponent(id)}/talk`);
   }
 
   file(sha256: string) {

@@ -1,6 +1,6 @@
 import type { Catalog, EntityView } from './catalog.js';
 import { getFile } from './files.js';
-import { RIGHTS_BY_LICENCE, mayExport, type EntityId, type Licence, type ScanData, type TextData, type TextLayerData } from '@rebbehub/model';
+import { RIGHTS_BY_LICENCE, mayExport, type EntityId, type Licence, type RightsState, type ScanData, type TextData, type TextLayerData } from '@rebbehub/model';
 
 /**
  * What may leave RebbeHub - served by the API or put in the open exports. Catalog facts always do
@@ -28,6 +28,11 @@ export class ExportGate {
    * words, a withheld OCR page its lines, and either says why.
    */
   async redact<T extends EntityView>(view: T): Promise<T & { withheld?: string }> {
+    // A page's body keeps the rights of where it was imported from.
+    const body = view.data as { body?: string; bodySource?: { rights?: RightsState; licence?: string } } | null;
+    if (body?.body && body.bodySource?.rights && !mayExport(body.bodySource.rights)) {
+      return { ...view, withheld: `its source's terms (${body.bodySource.licence ?? body.bodySource.rights}) do not allow copies`, data: { ...(view.data as object), body: '' } as T['data'] };
+    }
     if (view.type === 'segment') {
       const reason = await this.textWithheld((view.data as { text: EntityId }).text);
       if (reason) return { ...view, withheld: reason, data: { ...(view.data as object), content: '' } as T['data'] };

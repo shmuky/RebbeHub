@@ -110,7 +110,10 @@ export async function accountCommand(ctx: Context, input: { id: string; name: st
 
 /** The importers `rebbehub import` runs, each reading a Sichos-Kodesh checkout. */
 export const IMPORTERS: Record<string, (from: string) => Importer> = {
-  'sichos-kodesh-works': (from) => sichosKodeshWorksImporter(() => readSichosKodeshWorks(from)),
+  // With the words of every unit whose rights let it ship, from Sichos-Kodesh's published archive through
+  // RebbeHub's API (REBBEHUB_API_URL, default the live one; REBBEHUB_NO_TEXTS=1 leaves them out).
+  'sichos-kodesh-works': (from) =>
+    sichosKodeshWorksImporter(() => readSichosKodeshWorks(from, { texts: !process.env.REBBEHUB_NO_TEXTS, api: process.env.REBBEHUB_API_URL, log: (line) => console.log(line) })),
   'sichos-kodesh-occasions': (from) => sichosKodeshOccasionsImporter(() => readSichosKodeshOccasions(from)),
 };
 

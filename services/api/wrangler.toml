@@ -26,6 +26,12 @@ bucket_name = "rebbehub-public"
 binding = "FILES_PRESERVATION"
 bucket_name = "rebbehub-preservation"
 
+# Sichos-Kodesh's published archive, read only: the texts of its seforim, which the
+# works importer puts on their pages (GET /v1/sichos-kodesh/texts/<sha256>).
+[[r2_buckets]]
+binding = "SK_ARCHIVE"
+bucket_name = "sichos-kodesh-archive"
+
 # Webhooks are delivered every five minutes (src/worker.ts, scheduled).
 [triggers]
 crons = ["*/5 * * * *"]

@@ -25,6 +25,8 @@ interface Env {
   FILES_PUBLIC?: R2Bucket;
   /** Uploaded bytes whose rights do not let them be served. Written, never read: nothing here is served. */
   FILES_PRESERVATION?: R2Bucket;
+  /** Sichos-Kodesh's published archive: the texts its importer reads (read only). */
+  SK_ARCHIVE?: R2Bucket;
   REPORT_SALT?: string;
   TURNSTILE_SECRET?: string;
   /** Where files are served from, when not this Worker (a separate media domain). */
@@ -68,6 +70,7 @@ export default {
       verifyCaptcha: env.TURNSTILE_SECRET ? turnstileVerifier(env.TURNSTILE_SECRET) : undefined,
       filesBaseUrl: env.FILES_BASE_URL,
       files: env.FILES_PUBLIC ? r2Store(env.FILES_PUBLIC) : undefined,
+      sichosKodeshArchive: env.SK_ARCHIVE ? r2Store(env.SK_ARCHIVE) : undefined,
       uploads: env.FILES_PUBLIC && env.FILES_PRESERVATION ? { public: r2Writer(env.FILES_PUBLIC), preservation: r2Writer(env.FILES_PRESERVATION) } : undefined,
       auth: env.SITE_URL ? authFor(env.SITE_URL, { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }) : undefined,
     });
