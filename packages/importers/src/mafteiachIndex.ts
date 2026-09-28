@@ -94,10 +94,10 @@ const SECTIONS: Array<[keyof MafteiachRecord['detail'], EventLinkKind]> = [
 export function mafteiachLinks(record: MafteiachRecord, known: Set<string>, drive: (fileId: string, url: string) => string): EventLink[] {
   const out: EventLink[] = [];
   const seen = new Set<string>();
-  const add = (kind: EventLinkKind, label: string, url: string) => {
+  const add = (kind: EventLinkKind, label: string, url: string, origin?: string) => {
     if (seen.has(url)) return;
     seen.add(url);
-    out.push({ kind, label: { he: label.slice(0, 500) }, url, source: 'mafteiach' });
+    out.push({ kind, label: { he: label.slice(0, 500) }, url, source: 'mafteiach', ...(origin && origin !== url ? { origin } : {}) });
   };
   for (const [section, kind] of SECTIONS) {
     for (const link of (record.detail[section] as LinkSection | undefined)?.links ?? []) {
@@ -106,7 +106,7 @@ export function mafteiachLinks(record: MafteiachRecord, known: Set<string>, driv
       if (!/^https?:\/\//.test(url)) continue;
       const fileId = driveFileId(url);
       if (fileId && known.has(fileId)) continue;
-      add(kind, label, fileId ? drive(fileId, url) : url);
+      add(kind, label, fileId ? drive(fileId, url) : url, url);
     }
   }
   for (const id of record.detail.video?.youtubeIds ?? []) {

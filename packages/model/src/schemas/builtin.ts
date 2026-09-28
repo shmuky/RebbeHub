@@ -169,9 +169,9 @@ const fractionalOrder = str({ pattern: '^[0-9A-Za-z]+$', maxLength: 64 });
  * The built-in schemas' own version. A catalog whose schema items are
  * older takes the new ones at start-up (Catalog.init), as one system
  * change in the history. 2: every page's `body` (wikitext) and `bodySource`.
- * 3: an event's English, audio and video links.
+ * 3: an event's English, audio and video links. 4: each link's exact file at its source (`origin`).
  */
-export const BUILTIN_SCHEMA_VERSION = 3;
+export const BUILTIN_SCHEMA_VERSION = 4;
 
 export const BUILTIN_SCHEMAS: Record<EntityType, JsonSchema> = {
   set: entitySchema(
@@ -242,7 +242,7 @@ export const BUILTIN_SCHEMAS: Record<EntityType, JsonSchema> = {
       order: int({ minimum: 0 }),
       links: arrayOf({
         type: 'object',
-        properties: { kind: enumOf(EVENT_LINK_KINDS), label: ref('localName'), url: ref('url'), source: ref('catalogSourceId') },
+        properties: { kind: enumOf(EVENT_LINK_KINDS), label: ref('localName'), url: ref('url'), source: ref('catalogSourceId'), origin: ref('url') },
         required: ['kind', 'label', 'url'],
         additionalProperties: false,
       }),

@@ -57,7 +57,7 @@ export const GENRE_NAMES: Record<Genre, LocalName> = {
 /** First path segments the site keeps for itself; a work with one of these names lives under /works/. */
 const RESERVED = new Set(['events', 'sets', 'authors', 'people', 'places', 'topics', 'search', 'schemas', 'api', 'projects', 'suggestions', 'reports', 'history', 'teshuros', 'about', 'works', 'sources']);
 
-const workPath = (id: string) => (RESERVED.has(id) ? `/works/${id}` : `/${id}`);
+export const workPath = (id: string) => (RESERVED.has(id) ? `/works/${id}` : `/${id}`);
 
 export interface SichosKodeshWorksInput {
   index: CatalogWorksIndex;

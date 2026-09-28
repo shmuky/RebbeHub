@@ -95,11 +95,31 @@ jobs:
           path: .mafteiach/.cache
           key: mafteiach-${{ steps.month.outputs.month }}
       - name: Crawl the mafteiach index
+        continue-on-error: true
         run: |
           cp -r .sichos-kodesh/packages/mafteiach-index .mafteiach-crawler
           cd .mafteiach-crawler
           npm install --no-save --no-package-lock --no-audit --no-fund cheerio@^1.2.0 tsx@^4
           npx tsx bin/crawl.ts --out ../.mafteiach/data --cache ../.mafteiach/.cache --delay-ms 700
+
+      # chabadlibrary.org's contents (titles and ids only), a page per chapter linking to it
+      # (packages/importers/src/chabadLibrary.ts). The whole library takes hours to read politely,
+      # so each run reads for up to 90 minutes and continues from where the last one stopped.
+      - uses: actions/cache/restore@v4
+        with:
+          path: .chabadlibrary
+          key: chabadlibrary-${{ github.run_id }}
+          restore-keys: chabadlibrary-
+      - name: Crawl the Chabad Library's contents
+        continue-on-error: true
+        run: |
+          mkdir -p .chabadlibrary
+          npm run --silent rebbehub -- crawl-library --from .sichos-kodesh --out .chabadlibrary/tree.json --minutes 90
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: .chabadlibrary
+          key: chabadlibrary-${{ github.run_id }}
 
       - name: Import
         env:
@@ -108,10 +128,11 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           BUILD_DATABASE_URL: postgres://rebbehub:rebbehub@localhost:5432/build
           MAFTEIACH_DATA: .mafteiach/data
+          CHABADLIBRARY_TREE: .chabadlibrary/tree.json
         run: |
           if [ "$DRY_RUN" = "true" ]; then
             npm run rebbehub -- migrate
-            for importer in sichos-kodesh-works sichos-kodesh-occasions; do
+            for importer in sichos-kodesh-works sichos-kodesh-occasions otzros chabadlibrary; do
               npm run rebbehub -- import "$importer" --from .sichos-kodesh --dry-run
             done
           else

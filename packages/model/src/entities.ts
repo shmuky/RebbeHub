@@ -305,6 +305,8 @@ export interface EventLink {
   label: LocalName;
   url: string;
   source?: CatalogSourceId;
+  /** The exact file at its source (a Google Drive file), when `url` reads it through a proxy. */
+  origin?: string;
 }
 
 // ---------------------------------------------------------------- print

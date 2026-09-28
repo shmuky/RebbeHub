@@ -2,7 +2,7 @@
 import { parseArgs } from 'node:util';
 import { ocrCommand } from '../ocrCommand.js';
 import { transcribeCommand } from '../transcribeCommand.js';
-import { accountCommand, dumpCommand, editionCommand, importCommand, keygenCommand, migrateCommand, mirrorCommand, rebuildableCommand, schemaCheckCommand, type Context } from '../commands.js';
+import { accountCommand, crawlLibraryCommand, dumpCommand, editionCommand, importCommand, keygenCommand, migrateCommand, mirrorCommand, rebuildableCommand, schemaCheckCommand, type Context } from '../commands.js';
 
 const HELP = `rebbehub - RebbeHub's command line
 
@@ -11,8 +11,10 @@ const HELP = `rebbehub - RebbeHub's command line
   rebbehub rebuildable [--guard]                prints rebuildable when importers made everything;
                                                 --guard prints SQL that fails otherwise
   rebbehub account --id <id> --name <name> [--steward] [--bot]
-  rebbehub import sichos-kodesh-works|sichos-kodesh-occasions --from <Sichos-Kodesh checkout>
+  rebbehub import sichos-kodesh-works|sichos-kodesh-occasions|otzros|chabadlibrary --from <Sichos-Kodesh checkout>
                   [--approve-as <steward>] [--dry-run] [--chunk <n>]
+  rebbehub crawl-library --from <Sichos-Kodesh checkout> --out <tree.json> [--minutes <n>]
+                                                chabadlibrary.org's contents, continuing an earlier crawl
   rebbehub mirror --dir <folder> [--git] [--full] [--limit <n>]
   rebbehub edition --by <steward> [--tag 2026.40] [--notes <text>]
   rebbehub dump --tag <tag> --out <folder> [--key <key.json>]
@@ -55,6 +57,7 @@ const { values, positionals } = parseArgs({
     recording: { type: 'string' },
     linked: { type: 'boolean' },
     files: { type: 'string' },
+    minutes: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
   },
 });
@@ -84,6 +87,9 @@ try {
       break;
     case 'import':
       await importCommand(ctx, { source: need(rest[0], 'source'), from: need(values.from, 'from'), approveAs: values['approve-as'], dryRun: values['dry-run'], chunkSize: number(values.chunk) });
+      break;
+    case 'crawl-library':
+      await crawlLibraryCommand(ctx, { from: need(values.from, 'from'), out: need(values.out, 'out'), minutes: number(values.minutes) });
       break;
     case 'ocr':
       await ocrCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), scan: values.scan, limit: number(values.limit), files: values.files });

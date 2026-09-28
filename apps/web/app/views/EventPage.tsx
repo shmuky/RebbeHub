@@ -29,6 +29,7 @@ interface EventLink {
   kind: string;
   label: LocalName;
   url: string;
+  origin?: string;
 }
 
 /** `התוועדות · יום חמישי` */
@@ -51,7 +52,7 @@ const KIND_KEYS = {
 } as const;
 
 /** PDFs the site's own reader opens (read.tsx lets only these hosts in). */
-const readable = (url: string) => /^https:\/\/(sichos-kodesh-media-proxy\.shmuky\.workers\.dev|api\.rebbehub\.org|files\.rebbehub\.org)\//.test(url);
+export const readable = (url: string) => /^https:\/\/(sichos-kodesh-media-proxy\.shmuky\.workers\.dev|api\.rebbehub\.org|files\.rebbehub\.org)\//.test(url);
 
 /** A YouTube video's id, when the link is one. */
 function youtubeId(url: string): string | null {
@@ -133,6 +134,11 @@ function Texts({ links, lang, subtitle }: { links: EventLink[]; lang: Lang; subt
               <b>{nameOf(l.label, lang)}</b>
               <small>{t(lang, KIND_KEYS[l.kind as keyof typeof KIND_KEYS] ?? 'kind_other')}</small>
             </Link>
+            {l.origin ? (
+              <a className="doc-origin" href={l.origin} target="_blank" rel="noopener nofollow">
+                {t(lang, 'atTheSource')}
+              </a>
+            ) : null}
           </li>
         ))}
       </ul>

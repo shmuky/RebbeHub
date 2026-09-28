@@ -15,6 +15,8 @@ import type { ItemView } from '../lib/itemData.server.js';
 import { labelOf } from '../lib/labels.js';
 import { href, itemPath, SOURCE_NAMES, sourceUrl } from '../lib/links.js';
 import { useLang } from '../lib/useLang.js';
+import { readHref } from '../routes/read.js';
+import { readable } from './EventPage.js';
 
 type D = Record<string, any>;
 
@@ -128,10 +130,23 @@ function UnitPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang
           <TextView segments={view.segments[text.id] ?? []} language={(text.data as D).language} withheld={(view.segments[text.id] ?? []).some((s) => s.withheld) ? 'withheld' : undefined} />
         </section>
       ))}
+      {/* The chapter's own words come first; where they and other copies are from, after. */}
+      <PageBody entity={entity} lang={lang} />
+      {(d.editions ?? [])
+        .filter((e: { kind: string; url?: string }) => (e.kind === 'pdf' || e.kind === 'scan') && e.url && readable(e.url))
+        .slice(0, 1)
+        .map((e: { url: string }) => (
+          // A PDF the site's own reader opens; its exact file at the source is listed under the copies below.
+          <p key={e.url}>
+            <Link className="button" to={readHref({ url: e.url, title: nameOf(d.label, lang), sub: work ? labelOf(work, lang) : undefined }, lang)}>
+              {t(lang, 'readScan')}
+            </Link>
+          </p>
+        ))}
       {d.editions?.length ? (
         <section>
           <h2>{t(lang, 'editions')}</h2>
-          <Copies copies={d.editions} lang={lang} />
+          <Copies copies={d.editions.filter((e: { url?: string }) => !(e.url && readable(e.url)))} lang={lang} />
         </section>
       ) : null}
       {view.lists.printedIn?.length ? (
@@ -345,7 +360,7 @@ export function ItemPage({ entity, view }: { entity: Entity; view: ItemView }) {
     <article>
       <PageTabs entity={entity} lang={lang} current="page" />
       <Page entity={entity} view={view} lang={lang} />
-      <PageBody entity={entity} lang={lang} />
+      {entity.type === 'unit' ? null : <PageBody entity={entity} lang={lang} />}
       <div className="item-footer">
         <span>
           {t(lang, 'permanentLink')}: <Link to={href(`/${entity.id}`, lang)}><code>{entity.id}</code></Link>
