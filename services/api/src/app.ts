@@ -370,7 +370,34 @@ export function createApp(options: ApiOptions): Hono {
       const withheld = (await hide(entry.type, entry.entityId, entry.after)) ?? (await hide(entry.type, entry.entityId, entry.before));
       if (withheld) Object.assign(entry, { before: null, after: null, changes: [], conflicts: [], withheld });
     }
-    return c.json(view);
+    // Names instead of ids, and whether the person asking may approve it (to show the buttons or not).
+    const names = async (ids: string[]) => Object.fromEntries(await Promise.all([...new Set(ids)].map(async (id) => [id, (await catalog.account(id))?.display_name ?? id])));
+    const viewer = (await authenticate?.(c)) ?? null;
+    const mayApprove = viewer && view.changeset.status === 'open' ? await catalog.mayApprove(view.changeset.id, viewer) : { ok: false as const, reason: viewer ? `this suggestion is ${view.changeset.status}` : 'sign in to review' };
+    return c.json({
+      ...view,
+      names: await names([view.changeset.author, ...(view.reviews as Array<{ reviewer: string }>).map((r) => r.reviewer)]),
+      mayApprove: mayApprove.ok,
+      mayApproveReason: mayApprove.ok ? null : mayApprove.reason,
+      mine: viewer === view.changeset.author,
+    });
+  });
+
+  /**
+   * "Suggest a fix" in one step: a new version of one item, with a few
+   * words on why, sent for review. What the site's fix form sends.
+   */
+  app.post('/v1/suggestions/quick', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ entityId?: string; data?: Json; title?: string; note?: string }>(c);
+    if (!input.entityId || !isEntityId(input.entityId)) throw new HttpError(400, 'say which item this fixes (entityId)');
+    if (!input.data || typeof input.data !== 'object') throw new HttpError(400, "give the item's new data");
+    const entity = await catalog.get(input.entityId as EntityId);
+    if (!entity || entity.data === null) throw new HttpError(404, `no item ${input.entityId}`);
+    const title = (input.title ?? '').trim().slice(0, 200) || 'A fix';
+    const suggestion = await catalog.createChangeset(by, { title, description: input.note?.trim().slice(0, 2000) || undefined });
+    await catalog.putRevision(suggestion.id, by, { id: entity.id, type: entity.type, data: input.data });
+    return c.json(await catalog.submit(suggestion.id, by), 201);
   });
 
   app.post('/v1/suggestions', async (c) => {

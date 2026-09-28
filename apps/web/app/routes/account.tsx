@@ -161,6 +161,10 @@ export default function Account() {
         </section>
       ) : null}
 
+      <p>
+        <Link to={href('/review', lang)}>{t(lang, 'yourSuggestions')}</Link>
+      </p>
+
       <section className="note">
         <b>{t(lang, 'comingForAccounts')}</b>
         <p>{t(lang, 'comingForAccountsText')}</p>

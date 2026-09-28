@@ -1,6 +1,7 @@
 import { data, redirect } from 'react-router';
 import type { Route } from './+types/item';
 import { ReportForm, type ReportResult } from '../components/ReportForm.js';
+import { SuggestFix } from '../components/SuggestFix.js';
 import { ItemPage } from '../views/ItemPage.js';
 import { ApiError } from '../lib/api.js';
 import { siteOf } from '../lib/context.server.js';
@@ -103,6 +104,7 @@ export default function Item({ loaderData }: Route.ComponentProps) {
   return (
     <>
       <ItemPage entity={loaderData.entity} view={loaderData.view} />
+      {loaderData.entity.type === 'event' ? <SuggestFix entity={loaderData.entity} lang={loaderData.lang} /> : null}
       <ReportForm entityId={loaderData.entity.id} />
     </>
   );

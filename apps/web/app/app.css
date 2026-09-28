@@ -2406,3 +2406,109 @@ a.volume:hover {
   cursor: pointer;
   vertical-align: middle;
 }
+
+/* ------------------------------------------------------------------ suggest a fix, review */
+
+.date-fields {
+  display: flex;
+  gap: 8px;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.date-fields legend {
+  font-size: 0.875rem;
+  margin-bottom: 4px;
+}
+
+.date-fields select,
+.date-fields input {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+}
+
+.suggestion {
+  border-top: 1px solid var(--border);
+  padding: 20px 0;
+  display: grid;
+  gap: 10px;
+}
+
+.suggestion.is-focused {
+  border-top: 2px solid var(--accent);
+}
+
+.suggestion-title {
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+.suggestion-item {
+  display: grid;
+  gap: 6px;
+}
+
+.changes {
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.changes th {
+  text-align: start;
+  font-weight: 600;
+  padding: 4px 0;
+  padding-inline-end: 12px;
+  white-space: nowrap;
+}
+
+.changes td {
+  padding: 4px 6px;
+}
+
+.changes .was {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.changes .now {
+  font-weight: 600;
+}
+
+.suggestion-note {
+  margin: 0;
+  padding-inline-start: 12px;
+  border-inline-start: 3px solid var(--border);
+  color: var(--muted);
+}
+
+.checks {
+  margin: 0;
+  padding-inline-start: 18px;
+  font-size: 0.875rem;
+}
+
+.checks .fail {
+  color: #b3261e;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.actions.send-back textarea {
+  flex: 1 1 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+}

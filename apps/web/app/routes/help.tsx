@@ -2,15 +2,18 @@ import type { Route } from './+types/help';
 import { EventRows, eventData, type EventItem } from '../components/EventRow.js';
 import { siteOf } from '../lib/context.server.js';
 import { dateLabel } from '../lib/dates.js';
+import { Link } from 'react-router';
 import { langFrom, t } from '../lib/i18n.js';
+import { href } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
 import { thisWeek } from '../lib/week.js';
 
 /**
  * How anyone helps build RebbeHub, and what needs help now: this week's
  * farbrengens that have no recording linked yet, the farbrengens with no
- * hanacha, reporting a mistake from any page (no account needed), and the
- * code. Suggesting a fix directly comes with sign-in.
+ * hanacha, reporting a mistake from any page (no account needed),
+ * suggesting a fix (signed in) and the suggestions waiting for review, and
+ * the code.
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { api, siteUrl } = siteOf(context);
@@ -21,7 +24,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     api.events({ missing: 'texts', limit: 200 }),
     api.community(1),
   ]);
-  return { lang, siteUrl, noRecording, noText, gaps: community.gaps, openReports: community.openReports };
+  return { lang, siteUrl, noRecording, noText, gaps: community.gaps, openReports: community.openReports, openSuggestions: community.openSuggestions };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -30,7 +33,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
 }
 
 export default function Help({ loaderData }: Route.ComponentProps) {
-  const { lang, noRecording, noText, gaps } = loaderData;
+  const { lang, noRecording, noText, gaps, openSuggestions } = loaderData;
   /** The first few, and the rest behind "more". */
   const Some = ({ events }: { events: EventItem[] }) => {
     const sub = (e: EventItem) => dateLabel(eventData(e).date, lang, { civil: false });
@@ -85,8 +88,13 @@ export default function Help({ loaderData }: Route.ComponentProps) {
 
       <section className="note">
         <div>
-          <b>{t(lang, 'helpSoonTitle')}</b>
-          <p>{t(lang, 'helpSoonText')}</p>
+          <b>{t(lang, 'helpSuggestTitle')}</b>
+          <p>{t(lang, 'helpSuggestText')}</p>
+          <p>
+            <Link to={href('/review', lang)}>
+              {t(lang, 'reviewTitle')} ({num(openSuggestions)})
+            </Link>
+          </p>
         </div>
       </section>
 
