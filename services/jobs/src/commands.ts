@@ -16,6 +16,8 @@ export interface Context {
 }
 
 export async function openDatabase(database?: string): Promise<Db> {
+  // On a build server (CI is set there), a missing DATABASE_URL is a mistake, never a cue to use a local database.
+  if (!database && !process.env.DATABASE_URL && process.env.CI) throw new Error('DATABASE_URL is not set: add it to this build as a secret (docs/deploy.md)');
   const target = database ?? process.env.DATABASE_URL ?? '.data/pglite';
   return /^postgres(ql)?:\/\//.test(target) ? connectPostgres(target) : openPGlite(target);
 }

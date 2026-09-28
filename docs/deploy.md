@@ -4,92 +4,79 @@ RebbeHub runs as two Cloudflare Workers - `rebbehub-api` (the API and the
 media proxy) and `rebbehub-web` (the site) - on a Postgres database at
 Neon, reached through Cloudflare Hyperdrive, with files in R2.
 
-Every merge to `main` deploys automatically (`.github/workflows/deploy.yml`):
+Cloudflare builds and deploys both from this repository on every push to
+`main` (Workers Builds). No API token is kept anywhere: Cloudflare reads
+the repository through its GitHub app.
 
-1. the database is migrated;
-2. `scripts/cloudflare-setup.sh` makes sure the R2 buckets
-   (`rebbehub-public`, `rebbehub-preservation`) and the Hyperdrive config
-   (`rebbehub`) exist, creating any that are missing;
-3. the API is deployed, then the site, which reaches the API through a
-   service binding.
+| Worker | Build command | Deploy command |
+| --- | --- | --- |
+| `rebbehub-api` | `npm run build && npm run rebbehub -- migrate` | `npx wrangler deploy -c services/api/wrangler.toml` |
+| `rebbehub-web` | `npm run build && npm run build:web` | `npx wrangler deploy -c apps/web/wrangler.toml` |
 
-Until the secrets below are set, the workflow warns and deploys nothing.
-You can also run it by hand: **Actions → Deploy → Run workflow**.
+The API's build migrates the database before its deploy, so the schema is
+always ahead of the code that uses it.
 
 ## One-time setup
 
-### 1. A Postgres database (Neon)
+### 1. The database (Neon)
 
-Create a project at [neon.tech](https://neon.tech) and copy its
-**connection string** - the direct one, not the pooled one, since
-Hyperdrive does the pooling. It looks like
-`postgresql://user:password@ep-….neon.tech/neondb?sslmode=require`.
+Use the **direct** connection string (Vercel's Neon integration calls it
+`DATABASE_URL_UNPOOLED`; its host has no `-pooler`), since Hyperdrive does
+the pooling.
 
-### 2. Cloudflare
+### 2. Storage and the connection (Cloudflare dashboard)
 
-- **R2**: open R2 once in the dashboard and enable it (Cloudflare asks
-  once per account, even on the free tier).
-- **Workers subdomain**: open Workers & Pages once; the first time, it asks
-  you to choose your `*.workers.dev` subdomain.
-- **Account ID**: shown on the right of the account's home page.
-- **API token**: My Profile → API Tokens → Create Token → *Create Custom
-  Token*, for your account only, with:
+- **R2 → Create bucket**: `rebbehub-public`, then `rebbehub-preservation`.
+- **Hyperdrive → Create → public database**: name `rebbehub`, the
+  connection string from step 1. Its id is in `services/api/wrangler.toml`
+  (`a06ec525…`); if you ever make a new one, put its id there.
 
-  | Scope | Permission | Access |
-  | --- | --- | --- |
-  | Account | Workers Scripts | Edit |
-  | Account | Workers R2 Storage | Edit |
-  | Account | Hyperdrive | Edit |
-  | Account | Account Settings | Read |
+### 3. The two Workers (Workers & Pages → Create → Import a repository)
 
-  Add *Zone → Workers Routes → Edit* (and *DNS → Edit*) for your domain
-  later, when you attach one.
+Create `rebbehub-api` first: the site binds to it. For each, pick
+`shmuky/RebbeHub`, leave the root directory at the repository root, and set:
 
-### 3. GitHub secrets
+- **Project name**: exactly `rebbehub-api` / `rebbehub-web` (it must match
+  the `name` in its `wrangler.toml`);
+- **Build command** and **Deploy command**: from the table above;
+- **Build variables**:
+  - `NODE_VERSION` = `22` (both);
+  - `DATABASE_URL` = the connection string from step 1, as a **secret**
+    (`rebbehub-api` only - its build migrates the database).
 
-In the repository: **Settings → Secrets and variables → Actions**. The
-token goes here and only here - never into a file, an issue or a chat.
+### 4. The site's address
 
-| Secret | Value |
-| --- | --- |
-| `CLOUDFLARE_API_TOKEN` | the token from step 2 |
-| `CLOUDFLARE_ACCOUNT_ID` | the account id from step 2 |
-| `DATABASE_URL` | the Neon connection string from step 1 |
-| `REPORT_SALT` | any long random string (`openssl rand -hex 32`); hashes reporters' addresses for rate limits |
-| `TURNSTILE_SECRET` | optional: a [Turnstile](https://developers.cloudflare.com/turnstile/) secret, for a captcha on anonymous reports |
+When both are live, the site is at
+`https://rebbehub-web.<your-subdomain>.workers.dev` and the API at
+`https://rebbehub-api.<your-subdomain>.workers.dev/v1`. Put the site's
+address in `SITE_URL` in `apps/web/wrangler.toml` (it makes canonical
+links and sitemaps), and merge.
 
-And one **variable** (the *Variables* tab), once you know the site's address:
+### 5. Optional secrets for the API
 
-| Variable | Value |
-| --- | --- |
-| `SITE_URL` | the site's public address, e.g. `https://rebbehub-web.<your-subdomain>.workers.dev`, later your own domain; used for canonical links and sitemaps |
+In **rebbehub-api → Settings → Variables and Secrets**:
 
-### 4. First deploy
+- `REPORT_SALT` - any long random string (`openssl rand -hex 32`); hashes
+  reporters' addresses for rate limits;
+- `TURNSTILE_SECRET` - a [Turnstile](https://developers.cloudflare.com/turnstile/)
+  secret, for a captcha on anonymous reports.
 
-Run **Actions → Deploy → Run workflow**. When it is green:
-
-- the API answers at `https://rebbehub-api.<your-subdomain>.workers.dev/v1`;
-- the site is at `https://rebbehub-web.<your-subdomain>.workers.dev`.
-
-Set `SITE_URL` to the site's address and run it once more.
-
-### 5. Fill the catalog
+### 6. Fill the catalog
 
 The database starts with the built-in schemas only. From a computer with
 this repository and a Sichos-Kodesh checkout:
 
 ```sh
-export DATABASE_URL='postgresql://…'   # the same Neon connection string
+export DATABASE_URL='postgresql://…'   # the direct connection string
 npm run rebbehub -- account --id shmuly --name "Shmuly" --steward
 npm run rebbehub -- import sichos-kodesh-works --from ../Sichos-Kodesh --approve-as shmuly
 ```
 
 ## A domain of your own
 
-In the dashboard: **Workers & Pages → rebbehub-web → Settings → Domains &
-Routes → Add → Custom domain** (e.g. `rebbehub.org`), and the same for
-`rebbehub-api` (e.g. `api.rebbehub.org`). Then set `SITE_URL` to the new
-address and deploy again.
+**Workers & Pages → rebbehub-web → Settings → Domains & Routes → Add →
+Custom domain** (e.g. `rebbehub.org`), and the same for `rebbehub-api`
+(e.g. `api.rebbehub.org`). Then update `SITE_URL` and merge.
 
 ## Files
 
@@ -98,14 +85,23 @@ Files that may be served live in `rebbehub-public` under
 their rights allow, so a takedown stops serving a file at once. Nothing
 binds `rebbehub-preservation`: what is kept there is never served.
 
+## Deploying by hand (fallback)
+
+`.github/workflows/deploy.yml` does the same deploy from GitHub Actions,
+run by hand (**Actions → Deploy (manual) → Run workflow**), for when
+Cloudflare's builds are unavailable. It needs repository secrets
+`CLOUDFLARE_API_TOKEN` (a custom token with Workers Scripts Edit, Workers
+R2 Storage Edit, Hyperdrive Edit and Account Settings Read),
+`CLOUDFLARE_ACCOUNT_ID` and `DATABASE_URL`, and optionally `REPORT_SALT`
+and `TURNSTILE_SECRET`.
+
 ## Running the Workers locally
 
 ```sh
 # the API, in the Workers runtime, against a local Postgres
 cd services/api
-sed 's/HYPERDRIVE_ID/0123456789abcdef0123456789abcdef/' wrangler.toml > wrangler.local.toml
 CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=postgres://localhost/rebbehub \
-  npx wrangler dev -c wrangler.local.toml --port 8788
+  npx wrangler dev --port 8788
 
 # the site, bound to it (after npm run build:web)
 cd apps/web && npx wrangler dev --port 8789

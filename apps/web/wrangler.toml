@@ -1,5 +1,5 @@
-# The public site on Cloudflare Workers. Deployed by .github/workflows/deploy.yml
-# after `npm run build:web`; see docs/deploy.md.
+# The public site on Cloudflare Workers, built and deployed by Cloudflare
+# (Workers Builds) on every push to main; see docs/deploy.md.
 name = "rebbehub-web"
 main = "server/worker.ts"
 compatibility_date = "2026-09-01"
@@ -20,5 +20,6 @@ service = "rebbehub-api"
 
 [vars]
 API_URL = "https://rebbehub-api.internal"
-# The site's public address, for canonical links and sitemaps: set by the deploy workflow from the SITE_URL variable.
+# The site's public address, for canonical links and sitemaps. Replace with the real address once known
+# (the workers.dev one, later the site's own domain).
 SITE_URL = "https://rebbehub-web.workers.dev"

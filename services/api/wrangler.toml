@@ -1,6 +1,5 @@
-# The API on Cloudflare Workers. Deployed by .github/workflows/deploy.yml,
-# which fills in the Hyperdrive id (found or created by name) before
-# deploying; see docs/deploy.md.
+# The API on Cloudflare Workers, built and deployed by Cloudflare (Workers
+# Builds) on every push to main; see docs/deploy.md.
 name = "rebbehub-api"
 main = "src/worker.ts"
 compatibility_date = "2026-09-01"
@@ -10,10 +9,11 @@ workers_dev = true
 [observability]
 enabled = true
 
-# Postgres on Neon, pooled by Hyperdrive (config name: rebbehub).
+# Postgres on Neon, pooled by Hyperdrive. The id names the config; it is not a secret
+# (the connection string lives only in Cloudflare).
 [[hyperdrive]]
 binding = "HYPERDRIVE"
-id = "HYPERDRIVE_ID"
+id = "a06ec525cf9442f484f60ce9d38f0d39"
 
 # File bytes that may be served. The preservation bucket has no binding here on purpose:
 # nothing in it is ever served.
