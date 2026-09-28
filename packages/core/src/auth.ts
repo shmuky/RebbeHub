@@ -75,7 +75,9 @@ export async function getPerson(db: Db, id: string): Promise<Person | null> {
 }
 
 /** Keeps a challenge for one ceremony; it is answered once, within a few minutes. */
-export async function saveChallenge(db: Db, challenge: string, purpose: 'register' | 'sign-in'): Promise<string> {
+export type ChallengePurpose = 'register' | 'sign-in' | 'google';
+
+export async function saveChallenge(db: Db, challenge: string, purpose: ChallengePurpose): Promise<string> {
   const id = base64url(randomBytes(16));
   await db.query(`INSERT INTO auth.challenge (id, challenge, purpose, expires_at) VALUES ($1, $2, $3, now() + interval '${CHALLENGE_MINUTES} minutes')`, [id, challenge, purpose]);
   // Old ones go as new ones come.
@@ -84,7 +86,7 @@ export async function saveChallenge(db: Db, challenge: string, purpose: 'registe
 }
 
 /** Takes a challenge back, once: it is deleted whether or not it is still valid. */
-export async function takeChallenge(db: Db, id: string, purpose: 'register' | 'sign-in'): Promise<string | null> {
+export async function takeChallenge(db: Db, id: string, purpose: ChallengePurpose): Promise<string | null> {
   const row = await one<{ challenge: string; fresh: boolean }>(db, 'DELETE FROM auth.challenge WHERE id = $1 AND purpose = $2 RETURNING challenge, expires_at > now() AS fresh', [id, purpose]);
   return row?.fresh ? row.challenge : null;
 }
@@ -122,6 +124,27 @@ export async function passkeysOf(db: Db, personId: string): Promise<Array<{ cred
     createdAt: new Date(r.created_at).toISOString(),
     lastUsedAt: r.last_used_at ? new Date(r.last_used_at).toISOString() : null,
   }));
+}
+
+/** The person a Google account (by Google's `sub`) belongs to; each sign-in notes when, and the email as it is now. */
+export async function googleSignedIn(db: Db, sub: string, email: string | null): Promise<Person | null> {
+  const row = await one<{ id: string; display_name: string }>(
+    db,
+    `UPDATE auth.google_account g SET last_used_at = now(), email = $2
+     FROM auth.person p WHERE g.sub = $1 AND p.id = g.person_id
+     RETURNING p.id, p.display_name`,
+    [sub, email],
+  );
+  return row ? { id: row.id, displayName: row.display_name } : null;
+}
+
+export async function linkGoogle(db: Db, sub: string, personId: string, email: string | null): Promise<void> {
+  await db.query('INSERT INTO auth.google_account (sub, person_id, email, last_used_at) VALUES ($1, $2, $3, now())', [sub, personId, email]);
+}
+
+export async function googleAccountsOf(db: Db, personId: string): Promise<Array<{ email: string | null; createdAt: string }>> {
+  const { rows } = await db.query<{ email: string | null; created_at: Date | string }>('SELECT email, created_at FROM auth.google_account WHERE person_id = $1 ORDER BY created_at', [personId]);
+  return rows.map((r) => ({ email: r.email, createdAt: new Date(r.created_at).toISOString() }));
 }
 
 /** Signs a person in: a new session, whose token the caller hands to the browser. */

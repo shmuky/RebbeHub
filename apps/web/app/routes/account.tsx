@@ -4,10 +4,10 @@ import type { Route } from './+types/account';
 import { langFrom, t } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
-import { refreshAccount, useAccount } from '../lib/useAccount.js';
+import { refreshAccount, useAccount, useGoogleSignIn } from '../lib/useAccount.js';
 import { useLang } from '../lib/useLang.js';
 
-/** A person's own page: their name, their passkeys, and signing out. Filled in by the browser; the page itself is the same for everyone. */
+/** A person's own page: their name, their passkeys and Google accounts, and signing out. Filled in by the browser; the page itself is the same for everyone. */
 export function loader({ request }: Route.LoaderArgs) {
   return { lang: langFrom(request), siteUrl: new URL(request.url).origin };
 }
@@ -20,6 +20,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
 export default function Account() {
   const lang = useLang();
   const account = useAccount();
+  const google = useGoogleSignIn();
   const [leaving, setLeaving] = useState(false);
   const when = (iso: string) => new Intl.DateTimeFormat(lang === 'he' ? 'he-IL' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso));
 
@@ -61,6 +62,31 @@ export default function Account() {
           ))}
         </ul>
       </section>
+
+      {google || account.googleAccounts.length ? (
+        <section>
+          <h2 className="section-header">{t(lang, 'yourGoogle')}</h2>
+          <ul className="rows">
+            {account.googleAccounts.map((g) => (
+              <li key={g.createdAt} className="row">
+                <span className="row-main">
+                  <span className="row-title" dir="ltr">
+                    {g.email ?? 'Google'}
+                  </span>
+                  <span className="row-sub">
+                    {t(lang, 'linkedOn')} {when(g.createdAt)}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {google ? (
+            <p>
+              <a href="/_/auth/google/start?return=%2Faccount">{t(lang, 'addGoogle')}</a> <span className="row-sub">{t(lang, 'addGoogleText')}</span>
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="note">
         <b>{t(lang, 'comingForAccounts')}</b>
