@@ -1,17 +1,18 @@
-import { CalendarRange, House, Library, Search } from 'lucide-react';
+import { CalendarRange, HandHeart, House, Library, Search } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 import { t, type Lang } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
 
 /**
- * The four tabs, as in Sichos-Kodesh's app: this week, the farbrengens by
- * year, the library of sets and works, and search. A bar at the foot of a
+ * The five tabs: this week, the farbrengens by year, the library of sets
+ * and works, how to help, and search. A bar at the foot of a
  * phone's screen; a rail at the side of a wide one.
  */
 const TABS = [
   { key: 'tabWeek', to: '/', icon: House },
   { key: 'tabFarbrengens', to: '/calendar', icon: CalendarRange },
   { key: 'tabLibrary', to: '/sets', icon: Library },
+  { key: 'tabHelp', to: '/help', icon: HandHeart },
   { key: 'search', to: '/search', icon: Search },
 ] as const;
 
@@ -20,6 +21,9 @@ function tabOf(pathname: string): string {
   if (pathname === '/') return '/';
   if (pathname.startsWith('/calendar') || pathname.startsWith('/events')) return '/calendar';
   if (pathname.startsWith('/search')) return '/search';
+  if (pathname.startsWith('/help')) return '/help';
+  // A person's own pages belong to no tab.
+  if (pathname.startsWith('/signin') || pathname.startsWith('/account')) return '';
   return '/sets';
 }
 

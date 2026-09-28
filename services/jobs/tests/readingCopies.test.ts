@@ -101,7 +101,7 @@ describe('the Sichos Kodesh reading copies', () => {
 
   it('keeps a catalog rebuildable when only the import registered its files', async () => {
     const { db, catalog } = await freshCatalog();
-    await db.exec('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
+    await db.exec('DROP SCHEMA IF EXISTS auth CASCADE; DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
     await catalog.init();
     const original = await scannedPdf(0.8);
     await registerReadingCopies(db, { format: 'rebbehub-reading-copies', formatVersion: 1, encoder: 'pdf-fix@1', madeAt: '', files: [{ driveFileId: 'd', label: 'שיחו"ק', where: '5736/1', sha256: sha256(original), bytes: original.length }] });

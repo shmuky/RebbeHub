@@ -1,5 +1,5 @@
 import { dateKeyToHDate, toHebrewNumeral } from '@rebbehub/hebrew';
-import { FileText } from 'lucide-react';
+import { Bot, FileText } from 'lucide-react';
 import { Link } from 'react-router';
 import type { Route } from './+types/home';
 import { EventRows, PlayEventButton, eventData, hanachaOf, type EventItem } from '../components/EventRow.js';
@@ -7,23 +7,23 @@ import { YearStrip } from '../components/YearStrip.js';
 import { siteOf } from '../lib/context.server.js';
 import { dateLabel, yearLabel } from '../lib/dates.js';
 import { langFrom, nameOf, t, type Lang } from '../lib/i18n.js';
-import { labelOf } from '../lib/labels.js';
-import { href, itemPath, setPath } from '../lib/links.js';
+import { href, itemPath } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
 import { kviusYears, thisWeek } from '../lib/week.js';
 
 /**
- * The home page opens on the week you are in, as Sichos-Kodesh's app does:
- * today's date and parsha, this week's farbrengens in a year whose calendar
- * falls like this one (or any year you pick), the years that have
- * farbrengens this week, and what was said on this day over the years.
+ * The home page is the community's: it opens on the week you are in (as
+ * Sichos-Kodesh's app does: today's parsha, this week's farbrengens in a
+ * year whose calendar falls like this one, the years that have them), then
+ * what the catalog still lacks that anyone can help with, what people and
+ * importers have added lately, and how much is here.
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { api, siteUrl } = siteOf(context);
   const lang = langFrom(request);
   const week = thisWeek(lang);
   const matching = kviusYears(Number(week.today.slice(0, 4)));
-  const [weekEvents, sets] = await Promise.all([api.events({ day: week.dayTokens, limit: 2000 }), api.list({ type: 'set', limit: 100 })]);
+  const [weekEvents, community, stats] = await Promise.all([api.events({ day: week.dayTokens, limit: 2000 }), api.community(6), api.stats()]);
 
   const byYear = new Map<number, EventItem[]>();
   for (const e of weekEvents) {
@@ -46,7 +46,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     yearEvents: year ? (byYear.get(year) ?? []) : [],
     years: [...byYear.entries()].map(([y, list]) => ({ year: y, count: list.length })).sort((a, b) => b.year - a.year),
     today,
-    sets: sets.items.filter((s) => !(s.data as { parent?: string }).parent),
+    community,
+    counts: stats.counts,
   };
 }
 
@@ -65,6 +66,13 @@ export function meta({ loaderData }: Route.MetaArgs) {
 
 const WEEKDAYS_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 const WEEKDAYS_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Shabbos'];
+/** The importers by what they bring, in the page's language. */
+const BOT_NAMES: Record<string, { he: string; en: string }> = {
+  'bot:sichos-kodesh-works': { he: 'יבואן הספרים', en: 'The sefarim importer' },
+  'bot:sichos-kodesh-occasions': { he: 'יבואן ההתוועדויות', en: 'The farbrengens importer' },
+};
+
+const num = (n: number, lang: Lang) => n.toLocaleString(lang === 'he' ? 'he-IL' : 'en-US');
 
 /** `יום שלישי · י״ט כסלו` */
 function dayAndDate(date: string | undefined, lang: Lang): string {
@@ -75,6 +83,22 @@ function dayAndDate(date: string | undefined, lang: Lang): string {
   const day = lang === 'he' ? `יום ${WEEKDAYS_HE[h.getDay()]}` : WEEKDAYS_EN[h.getDay()];
   // The year is said once, in the section's heading.
   return `${day} · ${label.replace(/\s\S+$/, '')}`;
+}
+
+/** `לפני 3 שעות`, `yesterday`. */
+function ago(iso: string, lang: Lang): string {
+  const seconds = (Date.parse(iso) - Date.now()) / 1000;
+  const fmt = new Intl.RelativeTimeFormat(lang === 'he' ? 'he' : 'en', { numeric: 'auto' });
+  const steps: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ['year', 31_536_000],
+    ['month', 2_592_000],
+    ['week', 604_800],
+    ['day', 86_400],
+    ['hour', 3_600],
+    ['minute', 60],
+  ];
+  for (const [unit, size] of steps) if (Math.abs(seconds) >= size) return fmt.format(Math.round(seconds / size), unit);
+  return fmt.format(0, 'minute');
 }
 
 function WeekCard({ event, lang }: { event: EventItem; lang: Lang }) {
@@ -100,8 +124,10 @@ function WeekCard({ event, lang }: { event: EventItem; lang: Lang }) {
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { lang, week, year, isKvius, yearEvents, years, today, sets } = loaderData;
+  const { lang, week, year, isKvius, yearEvents, years, today, community, counts } = loaderData;
   const headline = week.parsha ? `${t(lang, 'parshas')} ${week.parsha}` : (week.holidays[0] ?? week.todayLabel);
+  const { gaps } = community;
+  const withRecordings = gaps.events - gaps.eventsWithoutRecordings;
   return (
     <>
       <p className="home-date">{week.todayLabel}</p>
@@ -111,7 +137,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       {year ? (
         <section>
           <h2 className="section-header">
-            {t(lang, 'thisWeekIn')} {yearLabel(year, lang)}
+            <span>
+              {t(lang, 'thisWeekIn')} {yearLabel(year, lang)}
+            </span>
+            <Link to={href('/calendar', lang)}>{t(lang, 'allFarbrengens')}</Link>
           </h2>
           {yearEvents.length ? (
             <ul className="week-cards">
@@ -122,7 +151,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           ) : (
             <p className="subtitle">{t(lang, 'noFarbrengensThisWeek')}</p>
           )}
-          {isKvius ? <p className="row-sub" style={{ marginTop: 8 }}>{t(lang, 'kviusNote')}</p> : null}
+          {isKvius ? (
+            <p className="row-sub" style={{ marginTop: 8 }}>
+              {t(lang, 'kviusNote')}
+            </p>
+          ) : null}
         </section>
       ) : null}
 
@@ -142,24 +175,82 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </section>
       ) : null}
 
+      <section>
+        <h2 className="section-header">
+          <span>{t(lang, 'buildingTogether')}</span>
+          <Link to={href('/help', lang)}>{t(lang, 'howToHelp')}</Link>
+        </h2>
+        <ul className="needs">
+          {gaps.eventsWithoutRecordings ? (
+            <li>
+              <b>{num(gaps.eventsWithoutRecordings, lang)}</b> {t(lang, 'taskRecordings')} ({num(withRecordings, lang)} {t(lang, 'outOf')} {num(gaps.events, lang)} {t(lang, 'alreadyLinked')}).{' '}
+              <Link to={href('/help', lang)}>{t(lang, 'helpLink')}</Link>
+            </li>
+          ) : null}
+          {gaps.eventsWithoutTexts ? (
+            <li>
+              <b>{num(gaps.eventsWithoutTexts, lang)}</b> {t(lang, 'taskTexts')}. {t(lang, 'taskTextsNote')}{' '}
+              <Link to={href('/help', lang)}>{t(lang, 'helpFind')}</Link>
+            </li>
+          ) : null}
+          <li>
+            {community.openReports ? (
+              <>
+                <b>{num(community.openReports, lang)}</b> {t(lang, 'reportsWaiting')}.{' '}
+              </>
+            ) : null}
+            {t(lang, 'reportHint')}
+          </li>
+        </ul>
+      </section>
+
+      {community.recent.length ? (
+        <section>
+          <h2 className="section-header">{t(lang, 'whatsNew')}</h2>
+          <ul className="feed">
+            {community.recent.map((c) => (
+              <li key={c.seq}>
+                <span className={c.authorIsBot ? 'who bot' : 'who'} aria-hidden="true">
+                  {c.authorIsBot ? <Bot size={16} /> : c.authorName.charAt(0)}
+                </span>
+                <div>
+                  <b>{c.authorIsBot ? (BOT_NAMES[c.author]?.[lang] ?? c.authorName) : c.authorName}</b> ·{' '}
+                  {c.authorIsBot && c.message.startsWith('Import from') ? `${t(lang, 'addedItems')} ${num(c.changes, lang)} ${t(lang, 'unitsShort')}` : c.message}
+                  {/* "2 hours ago" is said again by the browser, a moment later than the server said it. */}
+                  <small suppressHydrationWarning>
+                    {num(c.changes, lang)} {t(lang, 'changes')} · {ago(c.at, lang)}
+                    {c.mergedByName && c.mergedBy !== c.author ? ` · ${t(lang, 'approvedBy')} ${c.mergedByName}` : ''}
+                  </small>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {today.length ? (
         <section>
           <h2 className="section-header">{t(lang, 'todayEveryYear')}</h2>
-          <EventRows events={today.slice(0, 8)} sub={(e) => yearLabel(Number(String(eventData(e).date).slice(0, 4)), lang)} />
+          <EventRows events={today.slice(0, 5)} sub={(e) => yearLabel(Number(String(eventData(e).date).slice(0, 4)), lang)} />
         </section>
       ) : null}
 
       <section>
-        <h2 className="section-header">{t(lang, 'tabLibrary')}</h2>
-        <ul className="cards">
-          {sets.map((set) => (
-            <li key={set.id}>
-              <Link className="card" to={href(setPath(set), lang)}>
-                <span className="card-title">{labelOf(set, lang)}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <h2 className="section-header">{t(lang, 'inCatalog')}</h2>
+        <p className="in-catalog">
+          <Link to={href('/sets', lang)}>
+            {num(counts.work ?? 0, lang)} {t(lang, 'seforim')}
+          </Link>
+          {' · '}
+          <Link to={href('/calendar', lang)}>
+            {num(counts.event ?? 0, lang)} {t(lang, 'farbrengensCount')}
+          </Link>
+          {' · '}
+          <Link to={href('/calendar', lang)}>
+            {num(counts.recording ?? 0, lang)} {t(lang, 'recordingParts')}
+          </Link>
+          {counts.unit ? ` · ${num(counts.unit, lang)} ${t(lang, 'unitsShort')}` : ''}
+        </p>
       </section>
     </>
   );

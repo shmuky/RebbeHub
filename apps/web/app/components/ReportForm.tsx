@@ -14,7 +14,7 @@ export function ReportForm({ entityId }: { entityId: string }) {
   const navigation = useNavigation();
   const busy = navigation.state === 'submitting';
   return (
-    <details className="report" open={result !== undefined}>
+    <details className="report" id="report" open={result !== undefined}>
       <summary>{t(lang, 'report')}</summary>
       {result?.reported ? (
         <p role="status">{t(lang, 'reportThanks')}</p>

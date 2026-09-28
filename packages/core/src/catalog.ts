@@ -320,7 +320,7 @@ export class Catalog {
    * (`05-10`, or several days for a week), or on exact dates. Each comes
    * with how many recordings it has, so a list can show which can be heard.
    */
-  async events(options: { within?: string; day?: string | string[]; dates?: string[]; limit?: number }): Promise<Array<EntityView & { recordings: number }>> {
+  async events(options: { within?: string; day?: string | string[]; dates?: string[]; missing?: 'recordings' | 'texts'; limit?: number }): Promise<Array<EntityView & { recordings: number }>> {
     const params: unknown[] = [];
     const where = ["e.type = 'event'", 'NOT e.deleted'];
     if (options.within !== undefined) {
@@ -341,6 +341,10 @@ export class Catalog {
       params.push(options.dates);
       where.push(`r.data->>'date' = ANY($${params.length}::text[])`);
     }
+    // What people can help add: events with no recording, or no text (hanacha) linked.
+    if (options.missing === 'recordings')
+      where.push("NOT EXISTS (SELECT 1 FROM entity_ref x JOIN entity f ON f.id = x.from_id AND f.type = 'recording' AND NOT f.deleted WHERE x.to_id = e.id AND x.field = 'event')");
+    if (options.missing === 'texts') where.push("coalesce(jsonb_array_length(r.data->'links'), 0) = 0");
     const { rows } = await this.db.query<RevisionRow & { recordings: number }>(
       `SELECT r.*, (SELECT count(*)::int FROM entity_ref x JOIN entity f ON f.id = x.from_id AND NOT f.deleted
                     WHERE x.to_id = e.id AND x.field = 'event' AND f.type = 'recording') AS recordings
@@ -349,6 +353,98 @@ export class Catalog {
       params,
     );
     return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data!, recordings: r.recordings }));
+  }
+
+  /**
+   * How many items on main point at each item through a field: the units of
+   * each work (`work`, `unit`), the works of each author. For a library
+   * that shows how much each thing holds without fetching it all.
+   */
+  async refCounts(field: string, type?: EntityType): Promise<Record<string, number>> {
+    const params: unknown[] = [field];
+    const typed = type ? `AND f.type = $${params.push(type)}` : '';
+    const { rows } = await this.db.query<{ id: string; n: number }>(
+      `SELECT x.to_id AS id, count(*)::int AS n FROM entity_ref x JOIN entity f ON f.id = x.from_id AND NOT f.deleted AND f.main_rev IS NOT NULL
+       WHERE x.field = $1 ${typed} GROUP BY x.to_id`,
+      params,
+    );
+    return Object.fromEntries(rows.map((r) => [r.id, r.n]));
+  }
+
+  /**
+   * A work's outline: its top-level parts (volumes, sections) in order,
+   * with each one's name and how many units it holds. A work of one level
+   * has one part per unit.
+   */
+  async workOutline(work: EntityId): Promise<Array<{ value: string; label: Json | null; units: number }>> {
+    const { rows } = await this.db.query<{ value: string; label: Json | null; units: number }>(
+      `SELECT r.data->'position'->0->>'value' AS value,
+              (array_agg(r.data->'position'->0->'label' ORDER BY r.data->>'order' COLLATE "C"))[1] AS label,
+              count(*)::int AS units
+       FROM entity_ref x JOIN entity e ON e.id = x.from_id AND e.type = 'unit' AND NOT e.deleted JOIN revision r ON r.id = e.main_rev
+       WHERE x.to_id = $1 AND x.field = 'work'
+       GROUP BY 1 ORDER BY min(r.data->>'order' COLLATE "C")`,
+      [work],
+    );
+    return rows;
+  }
+
+  /** The units of one top-level part of a work (a volume), in order. */
+  async workPart(work: EntityId, part: string, limit = 1000): Promise<EntityView[]> {
+    const { rows } = await this.db.query<RevisionRow>(
+      `SELECT r.* FROM entity_ref x JOIN entity e ON e.id = x.from_id AND e.type = 'unit' AND NOT e.deleted JOIN revision r ON r.id = e.main_rev
+       WHERE x.to_id = $1 AND x.field = 'work' AND r.data->'position'->0->>'value' = $2
+       ORDER BY r.data->>'order' COLLATE "C" LIMIT ${Math.min(Math.max(limit, 1), 2000)}`,
+      [work, part],
+    );
+    return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }));
+  }
+
+  /**
+   * The community's page in numbers: the latest merges (who suggested,
+   * who approved, how much changed), how many reports wait, how many
+   * people have suggested anything, and what the catalog still lacks that
+   * anyone could help with. Counts only: reports themselves stay private.
+   */
+  async community(limit = 8): Promise<{
+    recent: Array<{ seq: number; at: string; message: string; author: string; authorName: string; authorIsBot: boolean; mergedBy: string; mergedByName: string | null; changes: number }>;
+    openReports: number;
+    people: number;
+    gaps: { events: number; eventsWithoutRecordings: number; eventsWithoutTexts: number };
+  }> {
+    const [recent, reports, people, gaps] = await Promise.all([
+      this.db.query<{ seq: string; at: Date | string; message: string; author: string; author_name: string; author_is_bot: boolean; merged_by: string; merged_by_name: string | null; changes: number }>(
+        `SELECT c.seq, c.at, c.message, cs.author, a.display_name AS author_name, a.is_bot AS author_is_bot, c.merged_by, m.display_name AS merged_by_name,
+                (SELECT count(*)::int FROM commit_change cc WHERE cc.commit_seq = c.seq) AS changes
+         FROM commit c JOIN changeset cs ON cs.id = c.changeset_id JOIN account a ON a.id = cs.author LEFT JOIN account m ON m.id = c.merged_by
+         WHERE cs.author <> 'system' ORDER BY c.seq DESC LIMIT ${Math.min(Math.max(limit, 1), 50)}`,
+      ),
+      one<{ n: number }>(this.db, "SELECT count(*)::int AS n FROM report WHERE status = 'open'"),
+      one<{ n: number }>(this.db, "SELECT count(DISTINCT cs.author)::int AS n FROM changeset cs JOIN account a ON a.id = cs.author WHERE NOT a.is_bot AND cs.author <> 'system'"),
+      one<{ events: number; without_recordings: number; without_texts: number }>(
+        this.db,
+        `SELECT count(*)::int AS events,
+                count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM entity_ref x JOIN entity f ON f.id = x.from_id AND f.type = 'recording' AND NOT f.deleted WHERE x.to_id = e.id AND x.field = 'event'))::int AS without_recordings,
+                count(*) FILTER (WHERE coalesce(jsonb_array_length(r.data->'links'), 0) = 0)::int AS without_texts
+         FROM entity e JOIN revision r ON r.id = e.main_rev WHERE e.type = 'event' AND NOT e.deleted`,
+      ),
+    ]);
+    return {
+      recent: recent.rows.map((r) => ({
+        seq: Number(r.seq),
+        at: new Date(r.at).toISOString(),
+        message: r.message,
+        author: r.author,
+        authorName: r.author_name,
+        authorIsBot: r.author_is_bot,
+        mergedBy: r.merged_by,
+        mergedByName: r.merged_by_name,
+        changes: r.changes,
+      })),
+      openReports: reports?.n ?? 0,
+      people: people?.n ?? 0,
+      gaps: { events: gaps?.events ?? 0, eventsWithoutRecordings: gaps?.without_recordings ?? 0, eventsWithoutTexts: gaps?.without_texts ?? 0 },
+    };
   }
 
   /** How many items of each type main holds. */

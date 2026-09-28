@@ -74,6 +74,22 @@ export class RebbeHubApi {
     return (await response.json()) as T;
   }
 
+  /**
+   * Passes a browser's request through to the API as it is (sign-in):
+   * its method, body, cookie and Origin go, and the API's answer comes back
+   * whole, Set-Cookie and all.
+   */
+  async forward(path: string, request: Request): Promise<Response> {
+    const headers = new Headers({ accept: 'application/json' });
+    for (const name of ['content-type', 'cookie', 'origin', 'user-agent', 'x-forwarded-proto']) {
+      const value = request.headers.get(name);
+      if (value) headers.set(name, value);
+    }
+    if (!headers.has('x-forwarded-proto')) headers.set('x-forwarded-proto', new URL(request.url).protocol.replace(':', ''));
+    const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.text();
+    return this.fetcher(`${this.baseUrl}${path}`, { method: request.method, headers, body });
+  }
+
   /** Null when there is nothing there. */
   private async maybe<T>(promise: Promise<T>): Promise<T | null> {
     try {
@@ -114,6 +130,31 @@ export class RebbeHubApi {
     return this.get<{ items: Entity[]; next: string | null }>(`/v1/entities/${encodeURIComponent(id)}/children`, { field, type, ...options });
   }
 
+  /** The community page in numbers: the latest merges, reports waiting, people, and what the catalog lacks. */
+  community(limit?: number) {
+    return this.get<{
+      recent: Array<{ seq: number; at: string; message: string; author: string; authorName: string; authorIsBot: boolean; mergedBy: string; mergedByName: string | null; changes: number }>;
+      openReports: number;
+      people: number;
+      gaps: { events: number; eventsWithoutRecordings: number; eventsWithoutTexts: number };
+    }>('/v1/community', { limit });
+  }
+
+  /** How many items point at each item through a field (`work` + `unit`: each work's units). */
+  async refCounts(field: string, type?: string): Promise<Record<string, number>> {
+    return (await this.get<{ counts: Record<string, number> }>('/v1/refcounts', { field, type })).counts;
+  }
+
+  /** A work's volumes, with how many units each holds. */
+  async workOutline(id: string) {
+    return (await this.get<{ parts: Array<{ value: string; label: { he: string; en?: string } | null; units: number }> }>(`/v1/works/${encodeURIComponent(id)}/outline`)).parts;
+  }
+
+  /** The units of one volume of a work. */
+  async workPart(id: string, part: string) {
+    return (await this.get<{ items: Entity[] }>(`/v1/works/${encodeURIComponent(id)}/parts/${encodeURIComponent(part)}`)).items;
+  }
+
   async backlinks(id: string, options: { field?: string; type?: string } = {}) {
     return (await this.get<{ backlinks: Backlink[] }>(`/v1/entities/${encodeURIComponent(id)}/backlinks`, options)).backlinks;
   }
@@ -131,9 +172,9 @@ export class RebbeHubApi {
   }
 
   /** Events by date, each with how many recordings it has: within a year or month, on days of any year (`05-10`), or on exact dates. */
-  async events(options: { within?: string; day?: string | readonly string[]; dates?: readonly string[]; limit?: number }) {
+  async events(options: { within?: string; day?: string | readonly string[]; dates?: readonly string[]; missing?: 'recordings' | 'texts'; limit?: number }) {
     const list = (v: string | readonly string[] | undefined) => (v === undefined ? undefined : typeof v === 'string' ? v : v.join(','));
-    return (await this.get<{ items: Array<Entity & { recordings: number }> }>('/v1/events', { within: options.within, day: list(options.day), dates: list(options.dates), limit: options.limit })).items;
+    return (await this.get<{ items: Array<Entity & { recordings: number }> }>('/v1/events', { within: options.within, day: list(options.day), dates: list(options.dates), missing: options.missing, limit: options.limit })).items;
   }
 
   file(sha256: string) {

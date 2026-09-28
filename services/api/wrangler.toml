@@ -20,3 +20,7 @@ id = "a06ec525cf9442f484f60ce9d38f0d39"
 [[r2_buckets]]
 binding = "FILES_PUBLIC"
 bucket_name = "rebbehub-public"
+
+[vars]
+# The site people sign in on: passkeys are bound to its domain, and changes are taken only from its pages.
+SITE_URL = "https://rebbehub.org"

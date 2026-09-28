@@ -55,6 +55,7 @@ DO $$ DECLARE t text; BEGIN
   END LOOP;
 END $$;
 SQL
-  pg_dump --no-owner --no-privileges "$BUILD_DATABASE_URL"
+  # People's accounts, passkeys and sessions (the auth schema) are never the catalog's to replace.
+  pg_dump --no-owner --no-privileges --exclude-schema=auth "$BUILD_DATABASE_URL"
 } | psql "$live" --quiet --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --output /dev/null
 echo "Copied: the live catalog is the new build."

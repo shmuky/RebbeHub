@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { migrate } from '@rebbehub/db';
+import { MIGRATIONS, migrate } from '@rebbehub/db';
 import { openPGlite } from '@rebbehub/db/pglite';
 
 describe('migrations', () => {
   it('create the catalog schema once, and are idempotent', async () => {
     const db = await openPGlite();
-    expect(await migrate(db)).toEqual([1, 2]);
+    expect(await migrate(db)).toEqual(MIGRATIONS.map((m) => m.version));
     expect(await migrate(db)).toEqual([]);
+    // Sign-in is kept apart from the catalog (migration 0003).
+    const auth = await db.query<{ table_name: string }>("SELECT table_name FROM information_schema.tables WHERE table_schema = 'auth' ORDER BY table_name");
+    expect(auth.rows.map((r) => r.table_name)).toEqual(['challenge', 'passkey', 'person', 'session']);
     const { rows } = await db.query<{ table_name: string }>(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name NOT LIKE 'revision_%' ORDER BY table_name",
     );

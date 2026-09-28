@@ -5,3 +5,24 @@ export { getDerivations, getFile, recordDerivation, registerFile, setRights, sto
 export { diffData, resolveConflicts, threeWayMerge, UnresolvedConflictError, type Conflict, type FieldChange, type Json, type MergeResult, type Resolution } from './merge.js';
 export { LIVE_TYPES, STEWARD_TYPES, TRUST_THRESHOLD, canApprove, canSuggest, earnedTrust, mayGoLive, type Account, type SetInfo } from './permissions.js';
 export { searchTextOf, toTsQuery } from './searchText.js';
+export {
+  CHALLENGE_MINUTES,
+  SESSION_DAYS,
+  addPasskey,
+  base64url,
+  cleanDisplayName,
+  createPerson,
+  endSession,
+  findPasskey,
+  getPerson,
+  hashToken,
+  newPersonId,
+  passkeyUsed,
+  passkeysOf,
+  saveChallenge,
+  sessionPerson,
+  startSession,
+  takeChallenge,
+  type Person,
+  type StoredPasskey,
+} from './auth.js';

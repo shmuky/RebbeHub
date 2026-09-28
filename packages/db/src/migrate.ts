@@ -1,6 +1,7 @@
 import type { Db } from './db.js';
 import * as catalog from './migrations/0001_catalog.js';
 import * as derivationParams from './migrations/0002_derivation_params.js';
+import * as auth from './migrations/0003_auth.js';
 
 export interface Migration {
   version: number;
@@ -12,6 +13,7 @@ export interface Migration {
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: 'catalog', up: catalog.up },
   { version: 2, name: 'derivation params', up: derivationParams.up },
+  { version: 3, name: 'auth', up: auth.up },
 ];
 
 /** Applies the migrations `db` has not had yet, each in its own transaction. Returns the versions applied. */

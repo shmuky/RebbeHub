@@ -2,20 +2,22 @@ import { Hono, type Context } from 'hono';
 import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, getDerivations, getFile, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
+import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
 import { OPENAPI } from './openapi.js';
 
 /**
  * The RebbeHub API. Reading needs nothing; reporting a problem needs no
  * account (a captcha and a rate limit instead); suggesting and reviewing
- * need a signed-in account, which the deployment establishes through
- * `authenticate` (accounts and sign-in arrive in phase 2 - until then no
- * request is signed in and those routes answer 401).
+ * need a signed-in account: a passkey session (auth.ts) or, in tests,
+ * whatever `authenticate` says.
  */
 
 export interface ApiOptions {
   catalog: Catalog;
-  /** The account a request is signed in as, or null. */
+  /** The account a request is signed in as, or null. Unset, the passkey session cookie (with `auth`). */
   authenticate?: (c: Context) => Promise<string | null> | string | null;
+  /** Passkey sign-in: where the site is, which passkeys and sessions belong to. Unset, nobody can sign in. */
+  auth?: AuthOptions;
   /** Salt for hashing reporters' addresses (only the hash is kept, for rate limits). */
   reportSalt?: string;
   /** Verifies a report's captcha token (Cloudflare Turnstile); unset, reports need none. */
@@ -97,6 +99,7 @@ async function body<T>(c: Context): Promise<T> {
 export function createApp(options: ApiOptions): Hono {
   const { catalog } = options;
   const app = new Hono();
+  const authenticate = options.authenticate ?? (options.auth ? sessionAuthenticator(catalog, options.auth) : undefined);
 
   // Words whose rights forbid copies are never served, only listed.
   const redact = (views: EntityView[]): Promise<Array<EntityView & { withheld?: string }>> => {
@@ -105,7 +108,7 @@ export function createApp(options: ApiOptions): Hono {
   };
 
   const signedIn = async (c: Context): Promise<string> => {
-    const account = (await options.authenticate?.(c)) ?? null;
+    const account = (await authenticate?.(c)) ?? null;
     if (!account) throw new HttpError(401, 'sign in to do this');
     return account;
   };
@@ -123,6 +126,8 @@ export function createApp(options: ApiOptions): Hono {
     c.header('Access-Control-Allow-Origin', '*');
     c.header('X-Content-Type-Options', 'nosniff');
   });
+
+  if (options.auth) authRoutes(app, catalog, options.auth);
 
   app.get('/', (c) => c.redirect('/v1'));
   app.get('/openapi.json', (c) => c.json(OPENAPI));
@@ -178,10 +183,27 @@ export function createApp(options: ApiOptions): Hono {
     const within = c.req.query('within');
     const day = c.req.query('day');
     const dates = c.req.query('dates');
-    if (!within && !day && !dates) throw new HttpError(400, 'give within (5742 or 5742-05), day (05-10, or several: 05-10,05-11) or dates (5742-05-10,5743-05-10)');
+    if (!within && !day && !dates && !c.req.query('missing')) throw new HttpError(400, 'give within (5742 or 5742-05), day (05-10, or several: 05-10,05-11) or dates (5742-05-10,5743-05-10)');
     const list = (value: string | undefined) => (value === undefined ? undefined : value.split(',').filter(Boolean));
-    return c.json({ items: await catalog.events({ within, day: list(day), dates: list(dates), limit: intParam(c.req.query('limit'), 'limit') }) });
+    const missing = c.req.query('missing');
+    if (missing !== undefined && missing !== 'recordings' && missing !== 'texts') throw new HttpError(400, 'missing is recordings or texts');
+    return c.json({ items: await catalog.events({ within, day: list(day), dates: list(dates), missing, limit: intParam(c.req.query('limit'), 'limit') }) });
   });
+
+  // How many items point at each item through a field: `?field=work&type=unit` counts each work's units.
+  app.get('/v1/refcounts', async (c) => {
+    const field = c.req.query('field');
+    if (!field || !/^[a-zA-Z]+$/.test(field)) throw new HttpError(400, 'give field (work, authors, event...)');
+    const type = c.req.query('type');
+    return c.json({ counts: await catalog.refCounts(field, type as EntityType | undefined) });
+  });
+
+  // A work's volumes (its top-level parts) with how many units each holds, and one volume's units.
+  app.get('/v1/works/:id/outline', async (c) => c.json({ parts: await catalog.workOutline(entityId(c.req.param('id'))) }));
+  app.get('/v1/works/:id/parts/:part', async (c) => c.json({ items: await catalog.workPart(entityId(c.req.param('id')), c.req.param('part'), intParam(c.req.query('limit'), 'limit')) }));
+
+  // The community page in numbers: the latest merges, reports waiting (a count), people, and what the catalog lacks.
+  app.get('/v1/community', async (c) => c.json(await catalog.community(intParam(c.req.query('limit'), 'limit'))));
 
   app.get('/v1/stats', async (c) => c.json({ head: await catalog.head(), counts: await catalog.counts() }));
 
@@ -303,7 +325,7 @@ export function createApp(options: ApiOptions): Hono {
     const input = await body<{ entityId?: string; reason?: string; note?: string; captcha?: string }>(c);
     if (!input.reason || !REPORT_REASONS.includes(input.reason as ReportReason)) throw new HttpError(400, `reason must be one of ${REPORT_REASONS.join(', ')}`);
     const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim();
-    const account = (await options.authenticate?.(c)) ?? null;
+    const account = (await authenticate?.(c)) ?? null;
     if (!account && options.verifyCaptcha && !(await options.verifyCaptcha(input.captcha, ip))) throw new HttpError(403, 'the captcha was not solved');
     const reporterHash = ip ? await sha256Hex(`${options.reportSalt ?? 'rebbehub'}\u0000${ip}`) : undefined;
     if (reporterHash && !account) {
