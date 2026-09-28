@@ -32,6 +32,8 @@ export interface ApiOptions {
   uploads?: UploadOptions;
   /** The public bucket's bytes (R2 on Workers). With it, this API serves `/objects/<sha256>` itself, for files whose rights allow. */
   files?: FileStore;
+  /** Where the texts of seforim are kept (`texts/<sha256>` in the public bucket), and where they are first copied from: Sichos-Kodesh's published archive. */
+  texts?: { store: FileStore; writer: { put(key: string, bytes: ArrayBuffer, mime: string): Promise<void> }; from?: FileStore };
   version?: string;
 }
 
@@ -342,6 +344,40 @@ export function createApp(options: ApiOptions): Hono {
     return c.body(object.body, 200, headers);
   });
 
+  // A text of a sefer as its source gave it (one chapter or letter, an HTML <article>), kept on RebbeHub's own storage
+  // (`texts/<sha256>` in the public bucket). The first time it is asked for, it is copied from Sichos-Kodesh's published
+  // archive, checked against its hash, and kept; after that RebbeHub serves its own copy. Pages link to it, and the
+  // works importer reads it for their words (packages/importers/src/sichosKodeshTexts.ts).
+  app.get('/v1/texts/:sha256', async (c) => {
+    const sha256 = c.req.param('sha256');
+    const kept = options.texts;
+    if (!kept || !/^[0-9a-f]{64}$/.test(sha256)) throw new CatalogError('not-found', 'no such text');
+    const key = `texts/${sha256}`;
+    let text: string | null = null;
+    const own = await kept.store.get(key);
+    if (own) text = await new Response(own.body).text();
+    else if (kept.from) {
+      const object = await kept.from.get(`objects/${sha256}`);
+      if (object && object.size <= 4_000_000) {
+        const bytes = await new Response(object.body).arrayBuffer();
+        const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
+        const candidate = new TextDecoder().decode(bytes);
+        if (digest === sha256 && /^\s*<article[\s>]/i.test(candidate)) {
+          await kept.writer.put(key, bytes, 'text/html; charset=utf-8');
+          text = candidate;
+        }
+      }
+    }
+    if (text === null) throw new CatalogError('not-found', 'no such text');
+    return c.body(text, 200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      // Someone else's HTML: shown as a document, never run on this origin.
+      'Content-Security-Policy': 'sandbox',
+      'X-Content-Type-Options': 'nosniff',
+    });
+  });
+
   app.get('/v1/entities/:id', async (c) => {
     const id = entityId(c.req.param('id'));
     const at = intParam(c.req.query('at'), 'at');
@@ -357,6 +393,29 @@ export function createApp(options: ApiOptions): Hono {
     const current = await catalog.get(id);
     const withheld = current ? Boolean(((await redact([current]))[0] as { withheld?: string }).withheld) : false;
     return c.json({ history: withheld ? history.map((h) => ({ ...h, changes: [] })) : history });
+  });
+
+  // The page's talk page: the conversation about it, open to read; writing needs a signed-in account.
+  app.get('/v1/entities/:id/talk', async (c) => c.json({ talk: await catalog.talk({ kind: 'entity', id: entityId(c.req.param('id')) }) }));
+
+  app.post('/v1/entities/:id/talk', async (c) => {
+    const by = await signedIn(c);
+    const id = entityId(c.req.param('id'));
+    if (!(await catalog.get(id))) throw new CatalogError('not-found', `${id} not found`);
+    const input = await body<{ body?: string; parent?: number }>(c);
+    const text = (input.body ?? '').trim();
+    if (!text || text.length > 10_000) throw new HttpError(400, 'a comment of 1 to 10,000 characters');
+    if (input.parent !== undefined) {
+      const thread = await catalog.talk({ kind: 'entity', id });
+      if (!thread.some((t) => t.id === input.parent)) throw new HttpError(400, 'that comment is not on this page');
+    }
+    return c.json({ id: await catalog.comment(by, { kind: 'entity', id }, text, input.parent) }, 201);
+  });
+
+  app.post('/v1/comments/:id/hide', async (c) => {
+    const by = await signedIn(c);
+    await catalog.hideComment(intParam(c.req.param('id'), 'id')!, by);
+    return c.json({ ok: true });
   });
 
   app.get('/v1/entities/:id/backlinks', async (c) => {

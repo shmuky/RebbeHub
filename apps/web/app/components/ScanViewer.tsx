@@ -1,12 +1,15 @@
+import { BookOpen } from 'lucide-react';
 import { useState } from 'react';
 import type { FileInfo } from '../lib/api.js';
+import { Link } from 'react-router';
+import { readHref } from '../routes/read.js';
 import { t } from '../lib/i18n.js';
 import { useLang } from '../lib/useLang.js';
 
 /**
- * A scan, opened in the browser's own PDF viewer at a page. Scans RebbeHub
- * may not serve are linked at their source instead (plan section 8). IIIF
- * manifests and a page-image viewer come with uploads (phase 3).
+ * A scan, read in the site's own reader at a page (the recording keeps
+ * playing). Scans RebbeHub may not serve are linked at their source
+ * instead (plan section 8).
  */
 export function ScanViewer({ file, title, sourceLink, pageLabels, initialPage = 1 }: { file: FileInfo | null; title: string; sourceLink: string | null; pageLabels?: Array<{ pdfPage: number; printed: string }>; initialPage?: number }) {
   const lang = useLang();
@@ -35,7 +38,9 @@ export function ScanViewer({ file, title, sourceLink, pageLabels, initialPage = 
         onSubmit={(e) => {
           e.preventDefault();
           const value = Number(new FormData(e.currentTarget).get('page'));
-          if (Number.isInteger(value) && value > 0) setPage(value);
+          if (Number.isInteger(value) && value > 0) {
+            setPage(value);
+          }
         }}
       >
         <label>
@@ -51,7 +56,9 @@ export function ScanViewer({ file, title, sourceLink, pageLabels, initialPage = 
         </a>
         {file.credit ? <span className="card-meta">{`© ${file.credit}`}</span> : null}
       </form>
-      <iframe key={page} src={`${file.url}#page=${page}`} title={`${title} - ${t(lang, 'page')} ${page}`} loading="lazy" />
+      <Link className="button read-button" to={readHref({ url: file.url, title, page }, lang)}>
+        <BookOpen size={20} aria-hidden="true" /> {t(lang, 'readScan')} {page > 1 ? `(${t(lang, 'page')} ${page})` : ''}
+      </Link>
     </div>
   );
 }

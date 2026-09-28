@@ -1,2 +1,5 @@
 .react-router/
 build/
+public/pdf-wasm/
+public/pdf-cmaps/
+public/pdf-standard-fonts/

@@ -2782,3 +2782,168 @@ body.embedded {
 .embed-code textarea {
   width: 100%;
 }
+
+/* The reader (/read), as Sichos-Kodesh's PDF screen lays it out: pages
+   down a reading column, edge to edge while pinch-zoomed. */
+.pdf-viewer-screen {
+  max-width: 720px;
+  margin: 0 auto;
+  padding-bottom: 96px;
+}
+
+.pdf-viewer-screen.zoomed {
+  max-width: none;
+}
+
+.reader-head,
+.pdf-viewer-status {
+  padding: 0 4px;
+}
+
+.reader-head h1 {
+  font-size: 1.5rem;
+  margin: 8px 0 2px;
+}
+
+.pdf-pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  overflow-x: hidden;
+}
+
+.pdf-page {
+  flex-shrink: 0;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.18);
+  /* Only vertical panning is the browser's; a pinch or a sideways drag is the reader's (reader/pdfPageZoom.ts). */
+  touch-action: pan-y;
+}
+
+.pdf-page canvas {
+  display: block;
+}
+
+.pdf-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pdf-loading-spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.read-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The wiki model: a page's tabs, its words, its talk page and its editor. */
+.wiki-tabs {
+  margin-top: 0;
+}
+
+.page-body {
+  margin: 20px 0;
+}
+
+.wikitext {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  line-height: 1.9;
+}
+
+.wikitext h2,
+.wikitext h3,
+.wikitext h4 {
+  font-family: var(--font-display);
+  margin: 1.2em 0 0.4em;
+}
+
+.wikitext .ref {
+  font-size: 0.75em;
+}
+
+.wikitext-notes {
+  font-size: 0.875rem;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.body-source {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.talk {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+}
+
+.talk-replies {
+  margin-inline-start: 18px;
+  padding-inline-start: 12px;
+  border-inline-start: 2px solid var(--border);
+}
+
+.talk-comment {
+  padding: 8px 0;
+}
+
+.talk-comment .wikitext {
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.talk-actions {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+}
+
+.talk-composer,
+.wiki-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.talk-composer textarea,
+.wiki-source,
+.wiki-editor input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+}
+
+.wiki-source {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.wiki-preview {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  min-height: 200px;
+}
+
+.editor-tabs {
+  margin: 0;
+}

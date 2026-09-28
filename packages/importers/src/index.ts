@@ -10,3 +10,5 @@ export {
   sichosKodeshOccasionsImporter,
   type CatalogEntry,
 } from './sichosKodeshOccasions.js';
+export { htmlToWikitext, sourceFooter } from './htmlToWikitext.js';
+export { REBBEHUB_API, textUrl, fetchTexts } from './sichosKodeshTexts.js';

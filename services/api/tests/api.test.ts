@@ -288,3 +288,57 @@ describe('the Missing board and projects', () => {
     expect((await call('GET', '/v1/projects/recordings-5742')).body).toMatchObject({ project: { status: 'closed' }, next: [] });
   });
 });
+
+describe('the wiki model', () => {
+  it('keeps its own copy of each text: copied once from Sichos-Kodesh, checked by hash, then served from RebbeHub', async () => {
+    const { createHash } = await import('node:crypto');
+    const article = '<article><h1>א</h1><p>טקסט</p></article>';
+    const sha = createHash('sha256').update(article).digest('hex');
+    const store = (objects: Map<string, Uint8Array>) => ({
+      async get(key: string) {
+        const bytes = objects.get(key);
+        return bytes ? { body: new Response(bytes as BodyInit).body!, size: bytes.length } : null;
+      },
+    });
+    const archive = new Map([[`objects/${sha}`, new TextEncoder().encode(article)], [`objects/${'b'.repeat(64)}`, new TextEncoder().encode(article)]]);
+    const own = new Map<string, Uint8Array>();
+    const withTexts = createApp({ catalog, texts: { store: store(own), writer: { put: async (key, bytes) => void own.set(key, new Uint8Array(bytes)) }, from: store(archive) } });
+    const first = await withTexts.request(`/v1/texts/${sha}`);
+    expect(first.status).toBe(200);
+    expect(first.headers.get('content-security-policy')).toBe('sandbox');
+    expect(await first.text()).toBe(article);
+    expect(own.has(`texts/${sha}`)).toBe(true);
+    archive.clear();
+    expect(await (await withTexts.request(`/v1/texts/${sha}`)).text()).toBe(article); // RebbeHub's own copy now
+    expect((await withTexts.request(`/v1/texts/${'b'.repeat(64)}`)).status).toBe(404); // bytes that are not their name
+    expect((await withTexts.request('/v1/texts/nope')).status).toBe(404);
+    expect((await app.request(`/v1/texts/${sha}`)).status).toBe(404);
+  });
+
+  it('keeps a page body in wikitext with where it came from, and edits it through a suggestion', async () => {
+    const withBody = { ...yudShvat(set), body: "== תוכן ==\n'''שיחה א'''", bodySource: { source: 'other', via: 'mafteiach-index', url: 'https://www.mafteiach.app/', licence: 'facts-and-links' } };
+    const sent = await call('POST', '/v1/suggestions/quick', { as: 'chaim', body: { entityId: event, data: withBody, title: 'Add the outline' } });
+    expect(sent.status).toBe(201);
+    await call('POST', `/v1/suggestions/${sent.body.id}/approve`, { as: 'keeper' });
+    expect((await call('GET', `/v1/entities/${event}`)).body.data).toMatchObject({ body: "== תוכן ==\n'''שיחה א'''", bodySource: { via: 'mafteiach-index' } });
+    // What is not in the schema is still refused.
+    const bad = await call('POST', '/v1/suggestions/quick', { as: 'chaim', body: { entityId: event, data: { ...withBody, bodySource: { via: 'x' } } } });
+    expect(bad.body.status === 'open' ? bad.body.checks.some((c: { status: string }) => c.status === 'fail') : bad.status >= 400).toBe(true);
+  });
+
+  it('has a talk page for every page: read by all, written when signed in, answered in threads, hidden by its author', async () => {
+    expect((await call('POST', `/v1/entities/${event}/talk`, { body: { body: 'שאלה' } })).status).toBe(401);
+    const first = await call('POST', `/v1/entities/${event}/talk`, { as: 'chaim', body: { body: 'האם התאריך נכון?' } });
+    expect(first.status).toBe(201);
+    await call('POST', `/v1/entities/${event}/talk`, { as: 'mendy', body: { body: 'כן, לפי ההקלטה', parent: first.body.id } });
+    expect((await call('POST', `/v1/entities/${event}/talk`, { as: 'mendy', body: { body: 'x', parent: 99999 } })).status).toBe(400);
+    const talk = (await call('GET', `/v1/entities/${event}/talk`)).body.talk;
+    expect(talk).toMatchObject([
+      { authorName: 'Chaim', body: 'האם התאריך נכון?', parent: null },
+      { authorName: 'Mendy', parent: first.body.id },
+    ]);
+    expect((await call('POST', `/v1/comments/${first.body.id}/hide`, { as: 'mendy' })).status).toBe(403);
+    await call('POST', `/v1/comments/${first.body.id}/hide`, { as: 'chaim' });
+    expect((await call('GET', `/v1/entities/${event}/talk`)).body.talk[0]).toMatchObject({ hidden: true, body: null });
+  });
+});

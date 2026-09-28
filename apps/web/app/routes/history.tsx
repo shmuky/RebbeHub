@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { data, Link } from 'react-router';
 import type { Route } from './+types/history';
 import { ChangeTable } from '../components/ChangeTable.js';
+import { PageTabs } from '../components/PageTabs.js';
 import { siteOf } from '../lib/context.server.js';
 import { langFrom, t, type Lang } from '../lib/i18n.js';
 import { labelOf } from '../lib/labels.js';
@@ -68,11 +69,7 @@ export default function History({ loaderData }: Route.ComponentProps) {
   const when = (at: string) => new Intl.DateTimeFormat(lang === 'he' ? 'he-IL' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(at));
   return (
     <>
-      <ol className="breadcrumbs">
-        <li>
-          <Link to={href(itemPath(entity), lang)}>{labelOf(entity, lang)}</Link>
-        </li>
-      </ol>
+      <PageTabs entity={entity} lang={lang} current="history" />
       <h1>
         {t(lang, 'historyOf')} {labelOf(entity, lang)}
       </h1>

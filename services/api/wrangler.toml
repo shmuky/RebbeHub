@@ -26,6 +26,12 @@ bucket_name = "rebbehub-public"
 binding = "FILES_PRESERVATION"
 bucket_name = "rebbehub-preservation"
 
+# Sichos-Kodesh's published archive, read only: each sefer text is copied from it once,
+# checked against its hash, and kept in rebbehub-public (GET /v1/texts/<sha256>).
+[[r2_buckets]]
+binding = "SK_ARCHIVE"
+bucket_name = "sichos-kodesh-archive"
+
 # Webhooks are delivered every five minutes (src/worker.ts, scheduled).
 [triggers]
 crons = ["*/5 * * * *"]

@@ -7,6 +7,7 @@ import { labelOf } from '../lib/labels.js';
 import { href, itemPath } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
 import { useAccount } from '../lib/useAccount.js';
+import { readHref } from './read.js';
 
 /**
  * A scan's text, page by page (the plan, section 7: "Fix this line").
@@ -136,9 +137,7 @@ export default function Text({ loaderData }: Route.ComponentProps) {
       )}
       {fileUrl ? (
         <p>
-          <a href={`${fileUrl}#page=${page}`} target="_blank" rel="noreferrer">
-            {t(lang, 'openScanAtPage')}
-          </a>
+          <Link to={readHref({ url: fileUrl, title: publication ? labelOf(publication, lang) : t(lang, 'textOfScan'), page }, lang)}>{t(lang, 'openScanAtPage')}</Link>
         </p>
       ) : null}
     </>

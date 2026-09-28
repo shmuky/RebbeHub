@@ -124,7 +124,9 @@ describe('the public site', () => {
   it('shows a teshura with its simcha, its scan and what it reproduces', async () => {
     const page = await get('/teshuros/5784-cohen-levi');
     expect(page.html).toContain('כהן – לוי');
-    expect(page.html).toContain(`https://files.rebbehub.test/objects/${'b'.repeat(64)}#page=1`);
+    // Read in the site's own reader; the file itself one tap away.
+    expect(page.html).toContain(`href="https://files.rebbehub.test/objects/${'b'.repeat(64)}"`);
+    expect(page.html).toContain(`href="/read?src=https%3A%2F%2Ffiles.rebbehub.test%2Fobjects%2F${'b'.repeat(64)}`);
     expect(page.html).toContain('© The families');
     expect(page.html).toContain('3–8');
   });

@@ -5,6 +5,7 @@ import type { LocalName } from '@rebbehub/model';
 import { eventData, type EventItem } from '../components/EventRow.js';
 import { ItemList } from '../components/ItemLink.js';
 import { Transcripts } from '../components/Transcripts.js';
+import { readHref } from '../routes/read.js';
 import type { Entity } from '../lib/api.js';
 import { dateLabel, yearLabel } from '../lib/dates.js';
 import { nameOf, t, type Lang } from '../lib/i18n.js';
@@ -46,14 +47,15 @@ const KIND_KEYS = {
   other: 'kind_other',
 } as const;
 
-function Texts({ links, lang }: { links: EventLink[]; lang: Lang }) {
+/** Opens in the site's own reader (/read); the player keeps playing. */
+function Texts({ links, lang, subtitle }: { links: EventLink[]; lang: Lang; subtitle: string }) {
   return (
     <section>
       <h2 className="section-header">{t(lang, 'texts')}</h2>
       <ul className="docs">
         {links.map((l) => (
           <li key={l.url}>
-            <a className="doc" href={l.url} target="_blank" rel="noopener">
+            <Link className="doc" to={readHref({ url: l.url, title: nameOf(l.label, lang), sub: subtitle }, lang)}>
               <span className="doc-page" aria-hidden="true">
                 <FileText size={22} />
                 <i />
@@ -65,7 +67,7 @@ function Texts({ links, lang }: { links: EventLink[]; lang: Lang }) {
               </span>
               <b>{nameOf(l.label, lang)}</b>
               <small>{t(lang, KIND_KEYS[l.kind as keyof typeof KIND_KEYS] ?? 'kind_other')}</small>
-            </a>
+            </Link>
           </li>
         ))}
       </ul>
@@ -213,7 +215,7 @@ export function EventPage({ entity, view, lang }: { entity: Entity; view: ItemVi
 
       <Recordings entity={entity} recordings={recordings} sources={sources} lang={lang} />
       <Transcripts tracks={tracksOf(entity, recordings, lang, sources)} lang={lang} />
-      {links.length ? <Texts links={links} lang={lang} /> : null}
+      {links.length ? <Texts links={links} lang={lang} subtitle={[nameOf(d.title, lang), d.date ? dateLabel(d.date, lang, { civil: false }) : ''].filter(Boolean).join(' · ')} /> : null}
 
       {view.lists.units?.length ? (
         <section>
