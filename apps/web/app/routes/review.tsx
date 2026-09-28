@@ -57,7 +57,7 @@ async function call<T>(path: string, init?: { method: 'POST'; body: unknown }): 
   return json;
 }
 
-const FIELD_KEYS: Record<string, 'date' | 'nameHe' | 'nameEn' | 'dateEnd'> = { '/date': 'date', '/dateEnd': 'dateEnd', '/title/he': 'nameHe', '/title/en': 'nameEn', '/name/he': 'nameHe', '/name/en': 'nameEn' };
+const FIELD_KEYS: Record<string, 'date' | 'nameHe' | 'nameEn' | 'dateEnd'> = { '/date': 'date', '/dateEnd': 'dateEnd', '/title/he': 'nameHe', '/title/en': 'nameEn', '/name/he': 'nameHe', '/name/en': 'nameEn', '/label/he': 'nameHe', '/label/en': 'nameEn' };
 
 /** A field's name as people say it. */
 const fieldName = (path: string, lang: Lang) => (FIELD_KEYS[path] ? t(lang, FIELD_KEYS[path]!) : path.split('/').filter(Boolean).join(' › '));
