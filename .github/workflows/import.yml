@@ -185,7 +185,7 @@ jobs:
         run: |
           if [ "$DRY_RUN" = "true" ]; then
             npm run rebbehub -- migrate
-            for importer in sichos-kodesh-works sichos-kodesh-occasions otzros hebrewbooks chabadlibrary jem sefaria; do
+            for importer in rebbehub-sets sichos-kodesh-works sichos-kodesh-occasions otzros hebrewbooks chabadlibrary jem sefaria; do
               npm run rebbehub -- import "$importer" --from .sichos-kodesh --dry-run || echo "::warning::$importer could not run"
             done
           else

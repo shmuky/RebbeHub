@@ -72,3 +72,31 @@ published manifest (`/manifests/reading-copies/sichos-kodesh.json`) keys
 them by the catalog's `driveFileId`, so Sichos-Kodesh's apps can open a
 PDF's reading copy from `https://api.rebbehub.org/objects/<sha256>` and
 keep the original one tap away.
+
+## 5. What Sichos-Kodesh still needs from a release
+
+A release carries works only (section 3). The apps' own
+`packages/catalog/bin/build.ts` builds two more things, from
+`mafteiach.db` and `jem.db`, that a release does not carry yet:
+
+- **the farbrengens by year** (`<year>.json`, catalog schema 1): events
+  with their occasion ids, the parts of each, and the PDFs and
+  recordings of each part. RebbeHub has these as events, recordings and
+  scans once the `mafteiach` and `jem` importers are written;
+- **the library** (catalog schema 2): the collections the phone browses,
+  their units and their PDF editions, and the JEM collection.
+
+For the apps to build wholly from RebbeHub, a release would add, beside
+`works`:
+
+- `events` keyed by the phone's event ids, with dates as date keys;
+- for each event and unit, its files: `sha256`, rights state, address
+  (`/objects/<sha256>` when served, the source's link when not), page
+  count and, when made, the reading copy's `sha256`;
+- recordings with their JEM links and parts' times;
+- for teshuros, the credit line; a file a family asked to stop showing
+  is `preserved` and so never carries an address.
+
+Page images and IIIF manifests (`/manifests/iiif/<scan>.json`) are for
+the web and need nothing from the apps. Until those are in a release,
+Sichos-Kodesh keeps building its farbrengens and library as it does now.

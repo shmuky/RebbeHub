@@ -53,7 +53,7 @@ export {
   type TranscriptView,
   type WordTiming,
 } from './sync.js';
-export { comparePrintings, diffWords, printingText, printingsOf, type DiffRun, type Printing } from './compare.js';
+export { comparePrintings, diffWords, pdfPagesOf, printingText, printingsOf, type DiffRun, type Printing } from './compare.js';
 export { matchWords, wordKey, words, type Word } from './words.js';
 export { CLAIM_HOURS, claimNext, focusCounts, projectTodo, releaseClaim, type ProjectItem } from './projectWork.js';
 export { MAX_HOOKS_PER_ACCOUNT, createWebhook, deleteWebhook, deliverWebhooks, listWebhooks, type WebhookRow } from './webhooks.js';
@@ -83,3 +83,33 @@ export { CITATIONS_BOT, findCitations, proposeCitations, relationsOf, resolveCit
 export { catalogHealth, type CatalogHealth } from './health.js';
 export { MAX_PLACES, forgetPlace, listPlaces, savePlace, type PlaceKind, type ReadingPlace } from './places.js';
 export { MAX_TRANSLATION_PARAGRAPHS, TRANSLATION_LICENCES, addTranslation, fixTranslation, paragraphsOf, type NewTranslation } from './translations.js';
+export {
+  filePages,
+  getFingerprint,
+  itemsUsingFile,
+  pageImageCount,
+  recordAudioFingerprint,
+  recordPdfPages,
+  similarFiles,
+  similarRecordings,
+  similarScans,
+  type FilePageRow,
+  type FingerprintRow,
+  type PageRecord,
+  type SimilarFile,
+} from './scans.js';
+export {
+  TESHURA_RIGHTS,
+  TESHUROS_SET,
+  familyRequest,
+  familyRequests,
+  proposeUpload,
+  suggestContents,
+  teshuraCredit,
+  teshurosSetId,
+  yearsInText,
+  type ContentsInput,
+  type FamilyRequestInput,
+  type ProposalInput,
+  type UploadProposal,
+} from './print.js';

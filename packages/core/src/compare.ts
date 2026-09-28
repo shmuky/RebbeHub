@@ -81,6 +81,26 @@ async function titleOf(catalog: Catalog, id: EntityId | undefined): Promise<Loca
   return more ? Object.fromEntries(Object.entries(base).map(([k, v]) => [k, `${v} (${more})`])) as unknown as LocalName : base;
 }
 
+/** A scan's page label: the PDF page, and the number printed on it. */
+interface PageLabel {
+  pdfPage: number;
+  printed: string;
+}
+
+/**
+ * A contents map's pages as PDF pages of one scan. Maps say their pages as
+ * printed (what *Map pages* asks for by default) or of the PDF; printed
+ * numbers are found through the scan's page labels, and a scan without
+ * labels for them is left out rather than guessed at.
+ */
+export function pdfPagesOf(pages: { from: number; to: number; scheme: 'printed' | 'pdf' }, labels: PageLabel[] | undefined): { from: number; to: number } | null {
+  if (pages.scheme === 'pdf') return { from: pages.from, to: pages.to };
+  const pdfOf = (printed: number) => labels?.find((l) => l.printed.trim() === String(printed))?.pdfPage;
+  const from = pdfOf(pages.from);
+  const to = pdfOf(pages.to);
+  return from !== undefined && to !== undefined && to >= from ? { from, to } : null;
+}
+
 /** The printings of a unit that can be compared: its texts, and the scanned pages contents maps give it. */
 export async function printingsOf(catalog: Catalog, unit: EntityId): Promise<Printing[]> {
   const out: Printing[] = [];
@@ -103,12 +123,15 @@ export async function printingsOf(catalog: Catalog, unit: EntityId): Promise<Pri
   for (const ref of await catalog.backlinks(unit, { field: 'unit', type: 'contents-map' })) {
     const map = await catalog.get(ref.from);
     const d = map?.data as { publication: EntityId; pages: { from: number; to: number; scheme: 'printed' | 'pdf' } } | undefined;
-    if (!d || d.pages.scheme !== 'pdf') continue;
+    if (!d) continue;
     for (const s of await catalog.backlinks(d.publication, { field: 'publication', type: 'scan' })) {
       if (!(await scanServable(catalog, s.from))) continue;
-      const first = await scanText(catalog, s.from, d.pages.from).catch(() => null);
+      const scan = await catalog.get(s.from);
+      const range = pdfPagesOf(d.pages, (scan?.data as { pageLabels?: PageLabel[] } | undefined)?.pageLabels);
+      if (!range) continue;
+      const first = await scanText(catalog, s.from, range.from).catch(() => null);
       if (!first) continue;
-      out.push({ key: `scan:${s.from}:${d.pages.from}-${d.pages.to}`, label: (await titleOf(catalog, d.publication)) ?? { he: s.from }, publication: d.publication, kind: 'scan', checked: false });
+      out.push({ key: `scan:${s.from}:${range.from}-${range.to}`, label: (await titleOf(catalog, d.publication)) ?? { he: s.from }, publication: d.publication, kind: 'scan', checked: false });
     }
   }
   return out;

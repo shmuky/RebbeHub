@@ -1,6 +1,8 @@
 import { data, redirect } from 'react-router';
 import type { Route } from './+types/item';
+import { ContentsForm } from '../components/ContentsForm.js';
 import { EmbedCode } from '../components/EmbedCode.js';
+import { FamilyRequestForm, type FamilyRequestResult } from '../components/FamilyRequestForm.js';
 import { FollowButton } from '../components/FollowButton.js';
 import { ReportForm, type ReportResult } from '../components/ReportForm.js';
 import { SuggestFix, canSuggestFix } from '../components/SuggestFix.js';
@@ -44,11 +46,23 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   return { entity, view, lang, siteUrl };
 }
 
-export async function action({ request, context }: Route.ActionArgs): Promise<ReportResult> {
+export async function action({ request, context }: Route.ActionArgs): Promise<ReportResult | FamilyRequestResult> {
   const { api } = siteOf(context);
   const form = await request.formData();
-  if (form.get('intent') !== 'report') throw data('unknown action', { status: 400 });
   const forwardedFor = request.headers.get('cf-connecting-ip') ?? request.headers.get('x-forwarded-for') ?? undefined;
+  if (form.get('intent') === 'family-request') {
+    try {
+      await api.familyRequest(
+        String(form.get('teshura') ?? ''),
+        { relation: String(form.get('relation') ?? '').trim() || undefined, note: String(form.get('note') ?? '').trim() || undefined, contact: String(form.get('contact') ?? '').trim() || undefined },
+        forwardedFor,
+      );
+      return { familyRequested: true };
+    } catch (error) {
+      return { familyRequested: false, error: error instanceof ApiError ? error.message : 'the server did not answer' };
+    }
+  }
+  if (form.get('intent') !== 'report') throw data('unknown action', { status: 400 });
   try {
     await api.report(
       {
@@ -107,6 +121,10 @@ export function meta({ loaderData }: Route.MetaArgs) {
 const FOLLOWABLE = new Set(['set', 'work', 'unit', 'event', 'person', 'publication']);
 
 export default function Item({ loaderData }: Route.ComponentProps) {
+  const d = loaderData.entity.data as { kind?: string; slug?: string };
+  // The Teshuros set takes new teshuros; a teshura takes a family's request.
+  const teshuros = loaderData.entity.type === 'set' && d.slug === 'teshuros';
+  const teshura = loaderData.entity.type === 'publication' && d.kind === 'teshura';
   return (
     <>
       {FOLLOWABLE.has(loaderData.entity.type) ? (
@@ -116,8 +134,10 @@ export default function Item({ loaderData }: Route.ComponentProps) {
       ) : null}
       <ItemPage entity={loaderData.entity} view={loaderData.view} />
       {canSuggestFix(loaderData.entity) ? <SuggestFix entity={loaderData.entity} lang={loaderData.lang} /> : null}
-      {loaderData.entity.type === 'event' || loaderData.entity.type === 'work' ? <UploadForm entity={loaderData.entity} lang={loaderData.lang} /> : null}
+      {loaderData.entity.type === 'event' || loaderData.entity.type === 'work' || loaderData.entity.type === 'publication' || teshuros ? <UploadForm entity={loaderData.entity} lang={loaderData.lang} teshuros={teshuros} /> : null}
+      {loaderData.entity.type === 'publication' ? <ContentsForm publication={loaderData.entity} lang={loaderData.lang} /> : null}
       <ReportForm entityId={loaderData.entity.id} />
+      {teshura ? <FamilyRequestForm teshura={loaderData.entity.id} /> : null}
       {FOLLOWABLE.has(loaderData.entity.type) ? <EmbedCode entity={loaderData.entity} lang={loaderData.lang} siteUrl={loaderData.siteUrl} /> : null}
     </>
   );

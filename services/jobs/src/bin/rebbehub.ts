@@ -3,6 +3,7 @@ import { parseArgs } from 'node:util';
 import { checkLinksCommand, citationsCommand, embedCommand } from '../networkCommands.js';
 import { ocrCommand } from '../ocrCommand.js';
 import { alignCommand, transcribeCommand } from '../transcribeCommand.js';
+import { fingerprintsCommand, pageImagesCommand } from '../scanPagesCommand.js';
 import {
   accountCommand,
   archiveGapsCommand,
@@ -72,6 +73,14 @@ const HELP = `rebbehub - RebbeHub's command line
   rebbehub align --approve-as <steward> [--recording <id>] [--limit <n>] [--linked] [--files <url>]
                                                 word timings for transcripts that have none, and the
                                                 farbrengen's hanacha synced paragraph by paragraph
+  rebbehub page-images [--scan <id>] [--limit <n>] [--files <url>] [--bucket rebbehub-public]
+                                                page images and thumbnails of served scans that have
+                                                none (the IIIF manifests and the site's viewer show them),
+                                                into R2 (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
+  rebbehub fingerprints [--limit <n>] [--files <url>] [--preservation-bucket rebbehub-preservation]
+                                                page hashes and audio fingerprints of held files not
+                                                measured yet (recordings need ffmpeg), so the same scan
+                                                or recording uploaded again is found
   rebbehub reading-copies make --from <Sichos-Kodesh checkout> --work <folder> [--shard 0/4] [--limit <n>]
                   [--archive <objects.json>] [--source-bucket sichos-kodesh-archive] [--bucket rebbehub-public]
   rebbehub reading-copies publish --from <Sichos-Kodesh checkout> --work <folder> [--bucket rebbehub-public]
@@ -132,6 +141,7 @@ const { values, positionals } = parseArgs({
     keep: { type: 'boolean' },
     only: { type: 'string', multiple: true },
     db: { type: 'string' },
+    'preservation-bucket': { type: 'string' },
     help: { type: 'boolean', short: 'h' },
   },
 });
@@ -188,6 +198,12 @@ try {
       break;
     case 'check-links':
       await checkLinksCommand(ctx, { limit: number(values.limit) });
+      break;
+    case 'page-images':
+      await pageImagesCommand(ctx, { scan: values.scan, limit: number(values.limit), files: values.files, bucket: values.bucket });
+      break;
+    case 'fingerprints':
+      await fingerprintsCommand(ctx, { limit: number(values.limit), files: values.files, preservationBucket: values['preservation-bucket'] });
       break;
     case 'mirror':
       await mirrorCommand(ctx, { dir: need(values.dir, 'dir'), git: values.git, full: values.full, limit: number(values.limit) });

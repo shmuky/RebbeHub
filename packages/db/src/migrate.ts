@@ -10,6 +10,7 @@ import * as webhooks from './migrations/0008_webhooks.js';
 import * as archiveGaps from './migrations/0009_archive_gaps.js';
 import * as network from './migrations/0010_network.js';
 import * as emailNotifyAdvice from './migrations/0011_email_notify_advice.js';
+import * as scansAndTeshuros from './migrations/0012_scans_and_teshuros.js';
 import * as projectClaims from './migrations/0013_project_claims.js';
 import * as readingPlaces from './migrations/0014_reading_places.js';
 
@@ -32,6 +33,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 9, name: 'archive-gaps', up: archiveGaps.up },
   { version: 10, name: 'network', up: network.up },
   { version: 11, name: 'email-notify-advice', up: emailNotifyAdvice.up },
+  { version: 12, name: 'scans-and-teshuros', up: scansAndTeshuros.up },
   { version: 13, name: 'project-claims', up: projectClaims.up },
   { version: 14, name: 'reading-places', up: readingPlaces.up },
 ];

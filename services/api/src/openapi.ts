@@ -155,5 +155,69 @@ export const OPENAPI = {
     '/v1/suggestions/{id}/withdraw': { post: { summary: 'Withdraw your suggestion', security: signedIn, parameters: [numParam('id')], responses: ok('Withdrawn') } },
     '/v1/suggestions/{id}/revert': { post: { summary: 'Undo a merged suggestion', security: signedIn, parameters: [numParam('id')], responses: ok('The revert') } },
     '/v1/follows': { post: { summary: 'Follow or unfollow an item, set, project or suggestion', security: signedIn, responses: ok('Done') } },
+    '/v1/files/{sha256}/similar': {
+      get: {
+        summary: "Held files that look like this one (the same scan or recording in other bytes): a machine's guess from page hashes and audio fingerprints",
+        parameters: [{ name: 'sha256', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: ok('Similar files, with the items that use each'),
+      },
+    },
+    '/v1/scans/{id}/pages': { get: { summary: "A served scan's page images and thumbnails, and its IIIF manifest", parameters: [idParam], responses: ok('Pages') } },
+    '/manifests/iiif/{id}.json': { get: { summary: 'A served scan as a IIIF Presentation 3 manifest, for any IIIF viewer', parameters: [idParam], responses: ok('The manifest') } },
+    '/v1/uploads': {
+      post: {
+        summary: 'Add a recording to a farbrengen, or a scan: another scan of a printing, a new printing of a sefer, or a new teshura (the file is the body)',
+        security: signedIn,
+        parameters: [
+          { ...q('what', 'recording or scan'), required: true },
+          { ...q('for', 'The farbrengen, sefer, printing or Teshuros set it is added to'), required: true },
+          { ...q('rights', 'mine, free, public-domain or unsure'), required: true },
+          q('as', 'scan-of, printing or teshura'),
+          q('title', 'Its name'),
+          q('publication', 'For scan-of: the printing'),
+          q('publisher', 'For a printing'),
+          q('year', 'For a printing: a Hebrew or civil year'),
+          q('printing', 'For a printing: 1 for the first'),
+          q('families', 'For a teshura: its families, as printed'),
+          q('simcha', 'For a teshura: wedding, bar-mitzvah, and so on'),
+          q('date', "For a teshura: the simcha's date key"),
+        ],
+        responses: { '201': { description: 'Stored, and a suggestion sent for review' }, '200': { description: 'We already have this file: where it is' } },
+      },
+    },
+    '/v1/uploads/check': {
+      post: {
+        summary: 'Before an upload: whether we have it (its sha256, a few page hashes) and what it likely is',
+        security: signedIn,
+        requestBody: json({ type: 'object', required: ['for'], properties: { for: { type: 'string' }, sha256: { type: 'string' }, pageHashes: { type: 'array', items: { type: ['string', 'null'] } }, title: { type: 'string' } } }),
+        responses: ok("The guess, files already held that look like it, and the sefer's printings"),
+      },
+    },
+    '/v1/suggestions/contents-map': {
+      post: {
+        summary: 'Map pages of a publication to the unit they hold (an existing unit, a new one, or words)',
+        security: signedIn,
+        requestBody: json({
+          type: 'object',
+          required: ['publication', 'pages'],
+          properties: {
+            publication: { type: 'string' },
+            pages: { type: 'object', properties: { from: { type: 'integer' }, to: { type: 'integer' }, scheme: { enum: ['printed', 'pdf'] } } },
+            unit: { type: 'string' },
+            newUnit: { type: 'object', properties: { work: { type: 'string' }, label: { type: 'object' }, date: { type: 'string' } } },
+            label: { type: 'object' },
+          },
+        }),
+        responses: { '201': { description: 'The suggestion sent for review' } },
+      },
+    },
+    '/v1/teshuros/{id}/family-request': {
+      post: {
+        summary: "A family's request that a teshura not be shown (no account needed): its scans stop being served at once, and stewards review it",
+        parameters: [idParam],
+        requestBody: json({ type: 'object', properties: { relation: { type: 'string' }, note: { type: 'string' }, contact: { type: 'string' }, captcha: { type: 'string' } } }),
+        responses: { '201': { description: 'The report id and how many files were paused' }, '429': { description: 'Too many requests from one address' } },
+      },
+    },
   },
 } as const;

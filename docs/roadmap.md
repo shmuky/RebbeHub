@@ -32,7 +32,7 @@ stands. ✅ built and tested · 🟡 partly · ⬜ not yet.
 | Public site: sets, events calendar, item and publication pages, search, permanent links | ✅ | `apps/web` (React Router 7, server-rendered; Node or Workers) |
 | The site as Sichos-Kodesh's app works: this week first (today's parsha, the kvius year, every year), farbrengen pages, one player across pages, smart search by parsha, chag, date and year | ✅ | `apps/web/app/routes/home.tsx`, `views/EventPage.tsx`, `player/`, `lib/smartSearch.ts` |
 | Audio player (recordings by part, video links at the moment) | ✅ | `apps/web/app/components/AudioPlayer.tsx`; words highlighted as spoken in `Transcripts.tsx` |
-| Scan viewer (served scans in the browser's PDF viewer by page; link-only scans at their source) | 🟡 | `ScanViewer.tsx`; IIIF and page images come with uploads (phase 3) |
+| Scan viewer (served scans page by page from page images, with a strip of pages and a IIIF manifest; link-only scans at their source) | ✅ | `ScanViewer.tsx`, `rebbehub page-images`, `/manifests/iiif/<scan>.json` |
 | The reader (`/read`, Sichos-Kodesh's PDF reader): dark, sepia and grey pages, stronger contrast; reopens where you stopped, per device and on your account; "Continue where you stopped" on the home page; the player plays on from where you stopped | ✅ | `routes/read.tsx`, `reader/look.ts`, `lib/places.ts`, `components/ContinueRow.tsx`, `/v1/places` |
 | Installable app (PWA): manifest, icons, a service worker that keeps the app and every page read for offline use | ✅ | `public/manifest.webmanifest`, `public/sw.js`, `lib/pwa.ts` |
 | SEO: canonical and hreflang links, schema.org data, sitemaps, robots.txt | ✅ | `apps/web/app/lib/seo.ts`, `/sitemap.xml` |
@@ -133,8 +133,17 @@ are set.
   checks it. Machine sync is labelled until then.
 - **Sync and proofreading projects** ✅: the project page hands out the
   next recording to sync or page to proofread nobody holds, with progress.
-- Still to come: IIIF page images; letters reproduced in teshuros found
-  by text (cross-linking reads citations only).
+- **Page images, IIIF, printings and teshuros** ✅: `rebbehub page-images`
+  renders every served scan's pages and thumbnails as derivations, and
+  every served scan has a IIIF Presentation 3 manifest. An upload is
+  measured first (page hashes in the browser, `rebbehub fingerprints` for
+  recordings) and told "we already have this, here", or offered as
+  another scan of a printing, a new printing, or a new teshura. A sefer
+  lists its printings; *Map pages* marks what a teshura's pages hold,
+  through a suggestion; the Teshuros set defaults to credit, and a family
+  can ask for a teshura to stop being shown ([rights](rights.md)).
+- Still to come: letters reproduced in teshuros found by text
+  (cross-linking reads citations only).
 
 ## Importers
 

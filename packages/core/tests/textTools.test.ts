@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alignAroundLocks, alignParagraphs, alignWords, diffWords, heardWords, matchWords, parseAlto, parseHocr, parsePlainText, remapper, reseedLines, sniffOcrFormat, wordKey } from '@rebbehub/core';
+import { alignAroundLocks, alignParagraphs, alignWords, diffWords, heardWords, matchWords, parseAlto, parseHocr, parsePlainText, pdfPagesOf, remapper, reseedLines, sniffOcrFormat, wordKey } from '@rebbehub/core';
 
 describe('words, compared the Hebrew way', () => {
   it('treats niqqud, geresh, gershayim and final letters typed plain as the same word', () => {
@@ -42,6 +42,20 @@ describe('compare printings', () => {
       { op: 'added', text: 'ד' },
       { op: 'same', text: 'ג' },
     ]);
+  });
+});
+
+describe('contents maps as PDF pages', () => {
+  it('takes PDF ranges as they are, and finds printed ones through the page labels', () => {
+    const labels = [
+      { pdfPage: 3, printed: '1' },
+      { pdfPage: 4, printed: '2' },
+      { pdfPage: 5, printed: '3' },
+    ];
+    expect(pdfPagesOf({ from: 7, to: 9, scheme: 'pdf' }, undefined)).toEqual({ from: 7, to: 9 });
+    expect(pdfPagesOf({ from: 1, to: 3, scheme: 'printed' }, labels)).toEqual({ from: 3, to: 5 });
+    expect(pdfPagesOf({ from: 1, to: 9, scheme: 'printed' }, labels)).toBeNull();
+    expect(pdfPagesOf({ from: 1, to: 2, scheme: 'printed' }, undefined)).toBeNull();
   });
 });
 

@@ -56,6 +56,17 @@ needs a signed-in session, from the site's own pages.
 - `GET /v1/health`: coverage per year and set, pages nobody has checked,
   recordings not synced, links that do not answer, the oldest open
   suggestions.
+- `GET /v1/mirrors`, `/v1/editions`, `/v1/editions/<tag>/manifest.json`,
+  `/v1/editions/<tag>/SHA256SUMS`, `/dumps/<tag>/<name>`: the git mirror,
+  every catalog edition's dumps with their sha256, and the keys they are
+  signed with ([mirrors](mirrors.md)).
+- `/manifests/iiif/<scan>.json`: a served scan as a IIIF Presentation 3
+  manifest (right to left, page images, the PDF as its rendering, the
+  credit as its required statement), for any IIIF viewer.
+- `GET /v1/scans/<id>/pages`: a scan's pages, with their page images and
+  thumbnails.
+- `GET /v1/files/<sha256>/similar`: other files that look like this one
+  (the same pages, or the same recording), a machine guess.
 
 ## OAI-PMH for libraries
 
@@ -72,10 +83,6 @@ are `oai:rebbehub.org:rh-…`. Records are CC0.
 /oai?verb=ListRecords&metadataPrefix=oai_dc&from=2026-09-01
 /oai?verb=GetRecord&metadataPrefix=oai_dc&identifier=oai:rebbehub.org:rh-…
 ```
-- `GET /v1/mirrors`, `/v1/editions`, `/v1/editions/<tag>/manifest.json`,
-  `/v1/editions/<tag>/SHA256SUMS`, `/dumps/<tag>/<name>`: the git mirror,
-  every catalog edition's dumps with their sha256, and the keys they are
-  signed with ([mirrors](mirrors.md)).
 
 ## Translations
 
@@ -95,6 +102,20 @@ one paragraph. Only licences that let RebbeHub keep a copy are taken
 the signed-in person stopped reading (a PDF's page) and listening (a
 farbrengen's part and moment), the latest 60, so every device reopens
 there. Personal: never cached, never exported.
+
+## Adding
+
+With a signed-in session:
+
+- `POST /v1/uploads/check` (`{ sha256, pageHashes?, work?, publication? }`):
+  before an upload, whether RebbeHub has the file or one like it, and
+  whether it looks like another scan of a printing, a new printing or a
+  new teshura.
+- `POST /v1/suggestions/contents-map`: *Map pages*, what pages of a
+  publication hold, as a suggestion.
+- `POST /v1/teshuros/<id>/family-request` (no account, captcha as for
+  reports): a family asks that a teshura stop being shown
+  ([rights](rights.md)).
 
 ## Webhooks
 

@@ -4,6 +4,7 @@ import type { Route } from './+types/review';
 import { ChangeTable } from '../components/ChangeTable.js';
 import { langFrom, t, typeName, type Lang } from '../lib/i18n.js';
 import { labelOf } from '../lib/labels.js';
+import { st } from '../lib/scanStrings.js';
 import { href } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
 import { useAccount } from '../lib/useAccount.js';
@@ -46,7 +47,7 @@ interface Detail {
   entries: Array<{ entityId: string; type: string; before: unknown; after: unknown; changes: Array<{ path: string; before?: unknown; after?: unknown }>; conflicts: unknown[]; withheld?: string }>;
   reviews: Array<{ reviewer: string; verdict: 'approve' | 'send_back'; body: string | null; created_at: string }>;
   names: Record<string, string>;
-  files: Record<string, { url: string | null; mime: string; bytes: number; rights: string }>;
+  files: Record<string, { url: string | null; mime: string; bytes: number; rights: string; similar?: Array<{ kind: 'same' | 'shares'; matched?: number; of?: number; items: Array<{ id: string; type: string; path: string | null }> }> }>;
   mayApprove: boolean;
   mine: boolean;
   /** The reviewer's advice, written by a machine (null until one has been written). */
@@ -82,6 +83,18 @@ function NewItem({ type, data, files, lang }: { type: string; data: Record<strin
         </a>
       ) : null}
       {file && !file.url ? <p className="row-sub">{t(lang, 'filePrivate')}</p> : null}
+      {/* What the jobs found it looks like: a machine's guess, for the reviewer to check. */}
+      {file?.similar?.map((s, i) => (
+        <p key={i} className="row-sub unchecked">
+          {st(lang, 'machineLooksLike')}{' '}
+          {s.items.map((item) => (
+            <Link key={item.id} to={href(item.path ?? `/${item.id}`, lang)}>
+              {typeName(item.type, lang)}
+            </Link>
+          ))}
+          {s.of ? ` (${s.matched}/${s.of} ${st(lang, 'pagesAlike')})` : ''}
+        </p>
+      ))}
     </div>
   );
 }

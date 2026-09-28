@@ -1,10 +1,11 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, getDerivations, getFile, getPageFix, hanachaSync, listWebhooks, printingsOf, projectTodo, recordingTranscript, releaseClaim, requestTakedown, scanProgress, scanText, uploadOcr, type ChangesetStatus, type Embedder, type Mailer, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, getDerivations, getFile, getPageFix, hanachaSync, itemsUsingFile, listWebhooks, pageImageCount, printingsOf, projectTodo, recordingTranscript, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type Mailer, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
 import { adminRoutes } from './admin.js';
 import { uploadRoutes, type UploadOptions } from './uploads.js';
+import { scanRoutes } from './scans.js';
 import { OPENAPI } from './openapi.js';
 import { networkRoutes } from './network.js';
 import { oaiRoutes, type OaiOptions } from './oai.js';
@@ -40,6 +41,8 @@ export interface ApiOptions {
   texts?: { store: FileStore; writer: { put(key: string, bytes: ArrayBuffer, mime: string): Promise<void> }; from?: FileStore };
   /** Where the catalog is mirrored, and the keys its editions are signed with (mirrors.ts). */
   mirrors?: MirrorOptions;
+  /** The site's address (`https://rebbehub.org`), for links home from IIIF manifests. Unset, the passkeys' site, else rebbehub.org. */
+  siteUrl?: string;
   version?: string;
   /** Sends email (Resend): sign-in links, and a receipt to whoever asks for a takedown. Unset, no email is sent. */
   mailer?: Mailer;
@@ -154,6 +157,15 @@ export function createApp(options: ApiOptions): Hono {
     throw new HttpError(status, message);
   });
   mirrorRoutes(app, catalog, { mirrors: options.mirrors, files: options.files });
+  scanRoutes(app, catalog, {
+    filesBase: (c) => options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null),
+    siteUrl: options.siteUrl ?? options.auth?.origins[0] ?? 'https://rebbehub.org',
+    signedIn,
+    authenticate,
+    reportSalt: options.reportSalt,
+    verifyCaptcha: options.verifyCaptcha,
+    reportsPerHour: options.reportsPerHour,
+  });
 
   app.get('/', (c) => c.redirect('/v1'));
   app.get('/openapi.json', (c) => c.json(OPENAPI));
@@ -430,9 +442,11 @@ export function createApp(options: ApiOptions): Hono {
     if (!file) throw new CatalogError('not-found', 'no such file');
     const base = options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
     const served = mayServe(file.rights_state) && file.storage_tier === 'public' && base;
-    // What was made from it (a scan's reading copy), served under the same rights.
-    const derivations = (await getDerivations(catalog.db, sha256)).map((d) => ({ profile: d.profile, sha256: d.sha256, bytes: d.bytes, encoder: d.encoder, url: served ? `${base}/objects/${d.sha256}` : null }));
-    return c.json({ sha256, bytes: file.bytes, mime: file.mime, rights: file.rights_state, credit: file.credit, url: served ? `${base}/objects/${sha256}` : null, derivations, pageFix: await pageFixOf(sha256) });
+    // What was made from it (a scan's reading copy), served under the same rights; its page images are counted, and listed by its scan's pages.
+    const derivations = (await getDerivations(catalog.db, sha256))
+      .filter((d) => !/^(page-image|thumbnail)\//.test(d.profile))
+      .map((d) => ({ profile: d.profile, sha256: d.sha256, bytes: d.bytes, encoder: d.encoder, url: served ? `${base}/objects/${d.sha256}` : null }));
+    return c.json({ sha256, bytes: file.bytes, mime: file.mime, rights: file.rights_state, credit: file.credit, url: served ? `${base}/objects/${sha256}` : null, derivations, pageFix: await pageFixOf(sha256), pageImages: served ? await pageImageCount(catalog.db, sha256) : 0 });
   });
 
   /** A file's page fix (docs/operations.md): measurements, open whatever the file's rights. */
@@ -721,12 +735,14 @@ export function createApp(options: ApiOptions): Hono {
     const mayApprove = viewer && decidable ? await catalog.mayApprove(view.changeset.id, viewer) : { ok: false as const, reason: viewer ? `this suggestion is ${view.changeset.status}` : 'sign in to review' };
     // The files it adds, where each may be heard or read (null while its rights keep it private), so the reviewer checks it first.
     const base = options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
-    const files: Record<string, { url: string | null; mime: string; bytes: number; rights: string }> = {};
+    const files: Record<string, { url: string | null; mime: string; bytes: number; rights: string; similar: Array<{ kind: string; matched?: number; of?: number; items: Array<{ id: string; type: string; path: string | null }> }> }> = {};
     for (const entry of view.entries) {
       const sha = (entry.after as { file?: unknown } | null)?.file;
       if (typeof sha !== 'string' || files[sha]) continue;
       const file = await getFile(catalog.db, sha);
-      if (file) files[sha] = { url: base && mayServe(file.rights_state) && file.storage_tier === 'public' ? `${base}/objects/${sha}` : null, mime: file.mime, bytes: file.bytes, rights: file.rights_state };
+      // And what the jobs found it looks like: the same scan or recording already held (a machine's guess, shown as one).
+      const similar = await Promise.all((await similarFiles(catalog.db, sha)).map(async (s) => ({ kind: s.kind, matched: s.matched, of: s.of, items: (await itemsUsingFile(catalog.db, s.sha256)).map((i) => ({ id: i.id, type: i.type, path: i.path })) })));
+      if (file) files[sha] = { url: base && mayServe(file.rights_state) && file.storage_tier === 'public' ? `${base}/objects/${sha}` : null, mime: file.mime, bytes: file.bytes, rights: file.rights_state, similar };
     }
     return c.json({
       ...view,

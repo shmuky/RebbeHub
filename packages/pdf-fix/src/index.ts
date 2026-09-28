@@ -1,5 +1,5 @@
 export { analyzePage, findMarks, inkMask, isScanMark, measureAngle, MAX_ANGLE, type Box, type PageAnalysis, type PageBitmap } from './analyze.js';
-export { renderPages, type RenderedPage, type RenderOptions } from './render.js';
+export { PAGE_IMAGES_ENCODER, renderPageImages, renderPages, type EncodedImage, type PageImage, type PageImageOptions, type RenderedPage, type RenderOptions } from './render.js';
 export { checkFixed, fileScale, fixPdf, LEVEL_TOLERANCE, planPage, type CheckResult, type FixOptions, type FixReport, type PagePlan } from './fix.js';
 export { inspectPdf, SCAN_COVER, spread, type PdfKind } from './inspect.js';
 export { levelPdf, levelTransform, measureAngles, MIN_TURN, type LevelOptions, type LevelReport, type PageTurn } from './level.js';

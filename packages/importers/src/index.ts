@@ -42,3 +42,4 @@ export {
   type SefariaInput,
 } from './sefaria.js';
 export { archiveImporter, archiveSourceRef, archiveTarget, readArchiveIndex, type ArchiveCommit, type ArchiveGap, type ArchiveIndex, type ArchiveRef } from './archive.js';
+export { rebbehubSetsImporter } from './rebbehubSets.js';

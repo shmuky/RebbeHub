@@ -29,6 +29,7 @@ import {
   readSefariaCrawl,
   readSichosKodeshOccasions,
   readSichosKodeshWorks,
+  rebbehubSetsImporter,
   runImport,
   sefariaClient,
   sefariaImporter,
@@ -156,6 +157,8 @@ export const IMPORTERS: Record<string, (from: string) => Importer> = {
   'sichos-kodesh-works': (from) =>
     sichosKodeshWorksImporter(() => readSichosKodeshWorks(from, { texts: !process.env.REBBEHUB_NO_TEXTS, api: process.env.REBBEHUB_API_URL, log: (line) => console.log(line) })),
   // With MAFTEIACH_DATA (a crawl of mafteiach.app by Sichos-Kodesh's packages/mafteiach-index), every link and content outline the index has.
+  // The sets RebbeHub keeps itself (the Teshuros set); `--from` is not used.
+  'rebbehub-sets': () => rebbehubSetsImporter(),
   // Otzros HaRebbe's Drive library of seforim, listed from Drive at run time (`--from` is not used).
   otzros: () => driveLibraryImporter(() => listDriveFolder(OTZROS_FOLDER, { log: (line) => console.log(line) })),
   // With CHABADLIBRARY_TREE (the contents `rebbehub crawl-library` gathered), a page for every chapter in the library.

@@ -24,6 +24,8 @@ export default [
   // Where you stopped reading and listening, and translations sent for review.
   route('_/places', 'routes/places.ts'),
   route('_/translations/*', 'routes/translations-pass.ts'),
+  route('_/uploads/check', 'routes/uploads-check.ts'),
+  route('_/lookup', 'routes/lookup.ts'),
   route('_/steward/*', 'routes/admin-pass.ts'),
   route('admin', 'routes/admin.tsx'),
   route('review', 'routes/review.tsx'),

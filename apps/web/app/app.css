@@ -1393,6 +1393,95 @@ html[lang='en'] .text-body[lang='he'] {
   min-height: 40px;
 }
 
+/* A scan's page images: the page itself, then a strip of its pages. */
+.scan-page {
+  margin: 0;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+}
+
+.scan-page img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(85vh, 1100px);
+  object-fit: contain;
+}
+
+.scan-thumbs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  list-style: none;
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.scan-thumbs button {
+  display: block;
+  padding: 0;
+  min-height: 0;
+  width: 56px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  background: #fff;
+  color: var(--muted);
+}
+
+.scan-thumbs button[aria-current='page'] {
+  border-color: var(--accent);
+}
+
+.scan-thumbs img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* A sefer's printings, one to a row, with their facts in small type. */
+.printings td,
+.printings th {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.printings {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.printings th {
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.upload-guess {
+  margin: 0;
+  padding: 8px 12px;
+  border-inline-start: 3px solid var(--machine);
+  background: var(--bg);
+}
+
+.lookup-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.lookup-results button {
+  width: 100%;
+  text-align: start;
+  min-height: 0;
+  padding: 6px 10px;
+}
+
 /* Calendar */
 .months {
   display: grid;

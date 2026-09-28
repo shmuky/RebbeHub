@@ -201,6 +201,33 @@ turns, or the reading copy to open instead when RebbeHub serves one.
   recording or page nobody holds; a claim lapses after three hours
   (migration 0013).
 
+## Page images and fingerprints
+
+Every served scan is shown page by page from JPEG **page images** (1600px
+wide) with a strip of **thumbnails** (240px), and has a IIIF Presentation
+3 manifest at `/manifests/iiif/<scan>.json` built from them. Both are
+derivations of the scan's file (profiles `page-image/<n>` and
+`thumbnail/<n>`, encoder `page-images@1`), so they follow its rights and
+stop being served with it. Rendering a page also gives its page hash, so
+`page-images` measures the file for the upload check as it goes.
+
+```sh
+export CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=…   # R2 edit rights on rebbehub-public
+rebbehub page-images --limit 200                         # or --scan <id>
+rebbehub fingerprints --limit 500                        # needs ffmpeg for recordings
+```
+
+`fingerprints` measures held files nobody has measured yet: a PDF's page
+hashes (`dhash-256@1`, one per page) and a recording's fingerprint
+(`rh-audio@1`, decoded with ffmpeg on the jobs machine only). It reads
+served files from the files host; with `--preservation-bucket
+rebbehub-preservation` (and the R2 keys above) it measures kept files
+too. The upload check (`POST /v1/uploads/check`) and the review queue
+use them to say "we already have this" or "another scan of this
+printing". A rebuild import clears them with the rest of the database;
+run both commands again after one. They are machine output and are only
+ever shown as a guess.
+
 ## The API
 
 - Local: `npm run dev:api` (PGlite, or `DATABASE_URL`). `DEV_ACCOUNT=me`
