@@ -2632,3 +2632,28 @@ a.volume:hover {
 .new-item audio {
   width: 100%;
 }
+
+/* A project's progress. */
+.project-progress {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.progress-bar {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.progress-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.project-row .row-main {
+  width: 100%;
+}

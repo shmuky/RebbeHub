@@ -1,4 +1,4 @@
-export { Catalog, isoWeekTag, type ChangeEntry, type ChangesetKind, type ChangesetRow, type ChangesetStatus, type Check, type EntityView, type HistoryEntry, type NewRevision, type Proposal, type ReportReason, type RevisionRow } from './catalog.js';
+export { Catalog, isoWeekTag, type ChangeEntry, type ChangesetKind, type ChangesetRow, type ChangesetStatus, type Check, type EntityView, type HistoryEntry, type NewRevision, type ProjectFocus, type ProjectView, type Proposal, type ReportReason, type RevisionRow } from './catalog.js';
 export { CatalogError, type CatalogErrorCode } from './errors.js';
 export { ExportGate } from './gate.js';
 export { getFile, registerFile, setRights, storageTierFor, type FileRow, type NewFile } from './files.js';

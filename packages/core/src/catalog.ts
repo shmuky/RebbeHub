@@ -123,6 +123,29 @@ export interface NewRevision {
 
 export type ReportReason = 'wrong-fact' | 'missing-page' | 'bad-scan' | 'audio-problem' | 'wrong-text' | 'duplicate' | 'rights' | 'offensive' | 'other';
 
+/** What a project works through: the farbrengens (of a year or month) missing recordings or texts. */
+export interface ProjectFocus {
+  missing: 'recordings' | 'texts';
+  within?: string;
+}
+
+export interface ProjectView {
+  id: number;
+  slug: string;
+  name: string;
+  goal: string | null;
+  set: string | null;
+  keepers: string[];
+  status: 'open' | 'merged' | 'closed';
+  focus: ProjectFocus;
+  createdBy: string;
+  creatorName: string | null;
+  createdAt: string;
+  /** Farbrengens in its focus, and how many of them have what was missing. */
+  total: number;
+  done: number;
+}
+
 export interface HistoryEntry {
   commit: number;
   at: string;
@@ -1015,6 +1038,88 @@ export class Catalog {
       );
       await this.audit(tx, by, 'project.open', 'project', String(row!.id));
       return row!.id;
+    });
+  }
+
+  /**
+   * The Missing board's third list: sefarim with no printing and no scan
+   * of one, most-browsed first (by how many sichos they hold).
+   */
+  async worksWithoutScans(limit = 50): Promise<{ total: number; items: EntityView[] }> {
+    const without = `FROM entity e JOIN revision r ON r.id = e.main_rev
+       WHERE e.type = 'work' AND NOT e.deleted
+         AND NOT EXISTS (SELECT 1 FROM entity_ref p JOIN entity pe ON pe.id = p.from_id AND pe.type = 'publication' AND NOT pe.deleted WHERE p.to_id = e.id AND p.field = 'work')`;
+    const total = await one<{ n: number }>(this.db, `SELECT count(*)::int AS n ${without}`);
+    const { rows } = await this.db.query<RevisionRow>(
+      `SELECT r.* ${without}
+       ORDER BY (SELECT count(*) FROM entity_ref u WHERE u.to_id = e.id AND u.field = 'work') DESC, e.path LIMIT ${Math.min(Math.max(limit, 1), 200)}`,
+    );
+    return { total: total?.n ?? 0, items: rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! })) };
+  }
+
+  /**
+   * A project that works through a gap (migration 0007): opened by a
+   * steward or the set's keepers, with a name, a goal in words, and its
+   * focus: which farbrengens (a year) lack what (recordings or texts).
+   */
+  async openFocusProject(by: string, input: { slug: string; name: string; goal?: string; set?: EntityId; focus: ProjectFocus }): Promise<number> {
+    if (input.focus.missing !== 'recordings' && input.focus.missing !== 'texts') throw invalid('a project works through farbrengens missing recordings or texts');
+    if (input.focus.within !== undefined && !/^\d{4}(-(0[1-9]|1[0-2]|06A|06B))?$/.test(input.focus.within)) throw invalid('within is a year (5745) or a month (5745-05)');
+    const id = await this.createProject(by, input);
+    await this.db.query('UPDATE project SET focus = $2 WHERE id = $1', [id, JSON.stringify(input.focus)]);
+    return id;
+  }
+
+  /** Projects with their progress: how many of the farbrengens in their focus now have what was missing. */
+  async projects(options: { slug?: string; status?: 'open' | 'merged' | 'closed' } = {}): Promise<ProjectView[]> {
+    const params: unknown[] = [];
+    const where: string[] = ['focus IS NOT NULL'];
+    if (options.slug) where.push(`slug = $${params.push(options.slug)}`);
+    if (options.status) where.push(`status = $${params.push(options.status)}`);
+    const { rows } = await this.db.query<{ id: number; slug: string; name: string; goal: string | null; set_id: string | null; keepers: string[]; status: ProjectView['status']; focus: ProjectFocus; created_by: string; created_at: Date | string; creator: string | null }>(
+      `SELECT p.*, a.display_name AS creator FROM project p LEFT JOIN account a ON a.id = p.created_by WHERE ${where.join(' AND ')} ORDER BY p.created_at DESC`,
+      params,
+    );
+    return Promise.all(
+      rows.map(async (p) => {
+        const counts = await one<{ total: number; done: number }>(
+          this.db,
+          `SELECT count(*)::int AS total,
+                  count(*) FILTER (WHERE ${p.focus.missing === 'recordings'
+                    ? "EXISTS (SELECT 1 FROM entity_ref x JOIN entity f ON f.id = x.from_id AND f.type = 'recording' AND NOT f.deleted WHERE x.to_id = e.id AND x.field = 'event')"
+                    : "coalesce(jsonb_array_length(r.data->'links'), 0) > 0"})::int AS done
+           FROM entity e JOIN revision r ON r.id = e.main_rev
+           WHERE e.type = 'event' AND NOT e.deleted ${p.focus.within ? "AND r.data->>'date' LIKE $1 || '%'" : ''}`,
+          p.focus.within ? [p.focus.within] : [],
+        );
+        return {
+          id: Number(p.id),
+          slug: p.slug,
+          name: p.name,
+          goal: p.goal,
+          set: p.set_id,
+          keepers: p.keepers,
+          status: p.status,
+          focus: p.focus,
+          createdBy: p.created_by,
+          creatorName: p.creator,
+          createdAt: new Date(p.created_at).toISOString(),
+          total: counts?.total ?? 0,
+          done: counts?.done ?? 0,
+        };
+      }),
+    );
+  }
+
+  /** Closes a project (done, or given up): its keepers or a steward. */
+  async closeProject(projectId: number, by: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const actor = await this.requireAccount(by, tx);
+      const project = await one<{ keepers: string[]; status: string }>(tx, 'SELECT keepers, status FROM project WHERE id = $1', [projectId]);
+      if (!project) throw notFound(`project ${projectId}`);
+      if (!actor.is_steward && !project.keepers.includes(by)) throw forbidden("a project is closed by its keepers");
+      await tx.query("UPDATE project SET status = 'closed' WHERE id = $1 AND status = 'open'", [projectId]);
+      await this.audit(tx, by, 'project.close', 'project', String(projectId));
     });
   }
 

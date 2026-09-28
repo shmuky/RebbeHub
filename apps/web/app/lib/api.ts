@@ -49,6 +49,21 @@ export interface FileInfo {
   url: string | null;
 }
 
+/** A project working through a gap, with its progress. */
+export interface Project {
+  id: number;
+  slug: string;
+  name: string;
+  goal: string | null;
+  set: string | null;
+  status: 'open' | 'merged' | 'closed';
+  focus: { missing: 'recordings' | 'texts'; within?: string };
+  creatorName: string | null;
+  createdAt: string;
+  total: number;
+  done: number;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -148,6 +163,19 @@ export class RebbeHubApi {
   }
 
   /** The community page in numbers: the latest merges, reports waiting, people, and what the catalog lacks. */
+  /** The Missing board: farbrengens without recordings or texts (of a year), or sefarim without a scan. */
+  missing(kind: 'recordings' | 'texts' | 'scans', options: { within?: string; limit?: number } = {}) {
+    return this.get<{ kind: string; total: number; items: Entity[] }>('/v1/missing', { kind, within: options.within, limit: options.limit });
+  }
+
+  projects() {
+    return this.get<{ projects: Project[] }>('/v1/projects');
+  }
+
+  project(slug: string) {
+    return this.maybe(this.get<{ project: Project; next: Entity[] }>(`/v1/projects/${encodeURIComponent(slug)}`));
+  }
+
   community(limit?: number) {
     return this.get<{
       recent: Array<{ seq: number; at: string; message: string; author: string; authorName: string; authorIsBot: boolean; mergedBy: string; mergedByName: string | null; changes: number }>;

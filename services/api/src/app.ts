@@ -211,6 +211,53 @@ export function createApp(options: ApiOptions): Hono {
   // The community page in numbers: the latest merges, reports waiting (a count), people, and what the catalog lacks.
   app.get('/v1/community', async (c) => c.json(await catalog.community(intParam(c.req.query('limit'), 'limit'))));
 
+  // The Missing board (the plan, section 7): farbrengens without recordings or texts (of a year), sefarim without a scan.
+  app.get('/v1/missing', async (c) => {
+    const kind = c.req.query('kind');
+    const within = c.req.query('within') || undefined;
+    const limit = Math.min(intParam(c.req.query('limit'), 'limit') ?? 50, 500);
+    if (kind === 'scans') {
+      const { total, items } = await catalog.worksWithoutScans(limit);
+      return c.json({ kind, total, items: await redact(items) });
+    }
+    if (kind !== 'recordings' && kind !== 'texts') throw new HttpError(400, 'kind is recordings, texts or scans');
+    if (within && !/^\d{4}(-(0[1-9]|1[0-2]|06A|06B))?$/.test(within)) throw new HttpError(400, 'within is a year (5745) or a month (5745-05)');
+    const all = await catalog.events({ within, missing: kind, limit: 2000 });
+    return c.json({ kind, within: within ?? null, total: all.length, items: await redact(all.slice(0, limit)) });
+  });
+
+  // Projects that work through a gap, with their progress and what is next to do.
+  app.get('/v1/projects', async (c) => c.json({ projects: await catalog.projects({ status: (c.req.query('status') as 'open' | undefined) ?? undefined }) }));
+
+  app.get('/v1/projects/:slug', async (c) => {
+    const [project] = await catalog.projects({ slug: c.req.param('slug') });
+    if (!project) throw new CatalogError('not-found', 'no such project');
+    const next = project.status === 'open' ? await catalog.events({ within: project.focus.within, missing: project.focus.missing, limit: 30 }) : [];
+    return c.json({ project, next: await redact(next) });
+  });
+
+  app.post('/v1/projects', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ slug?: string; name?: string; goal?: string; set?: string; missing?: 'recordings' | 'texts'; within?: string }>(c);
+    if (!input.slug || !input.name?.trim()) throw new HttpError(400, 'a project needs a slug and a name');
+    const id = await catalog.openFocusProject(by, {
+      slug: input.slug,
+      name: input.name.trim().slice(0, 200),
+      goal: input.goal?.trim().slice(0, 2000) || undefined,
+      set: input.set ? entityId(input.set) : undefined,
+      focus: { missing: input.missing as 'recordings', ...(input.within ? { within: input.within } : {}) },
+    });
+    return c.json({ id, slug: input.slug }, 201);
+  });
+
+  app.post('/v1/projects/:slug/close', async (c) => {
+    const by = await signedIn(c);
+    const [project] = await catalog.projects({ slug: c.req.param('slug') });
+    if (!project) throw new CatalogError('not-found', 'no such project');
+    await catalog.closeProject(project.id, by);
+    return c.json({ ok: true });
+  });
+
   app.get('/v1/stats', async (c) => c.json({ head: await catalog.head(), counts: await catalog.counts() }));
 
   app.get('/v1/files/:sha256', async (c) => {

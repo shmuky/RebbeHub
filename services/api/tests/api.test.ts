@@ -260,3 +260,31 @@ describe('following', () => {
     expect((await call('GET', '/v1/follows', { as: 'chaim' })).body.follows).toHaveLength(1);
   });
 });
+
+describe('the Missing board and projects', () => {
+  it('lists what is missing, and a project works through it with its progress', async () => {
+    const other = await add(catalog, 'mendy', 'keeper', 'event', { kind: 'farbrengen', title: { he: 'ט״ו שבט' }, date: '5742-05-15', sets: [set] }, '/events/5742-05-15');
+    const missing = (await call('GET', '/v1/missing?kind=recordings&within=5742')).body;
+    expect(missing.total).toBe(2);
+    expect((await call('GET', '/v1/missing?kind=scans')).body.total).toBe(0);
+    expect((await call('GET', '/v1/missing?kind=spaceships')).status).toBe(400);
+
+    // A contributor opens no projects; the set's keeper does.
+    const input = { slug: 'recordings-5742', name: 'הקלטות תשמ״ב', goal: 'Every farbrengen of 5742 with its recording', set, missing: 'recordings', within: '5742' };
+    expect((await call('POST', '/v1/projects', { as: 'chaim', body: input })).status).toBe(403);
+    expect((await call('POST', '/v1/projects', { as: 'keeper', body: input })).status).toBe(201);
+
+    let project = (await call('GET', '/v1/projects/recordings-5742')).body;
+    expect(project.project).toMatchObject({ name: 'הקלטות תשמ״ב', total: 2, done: 0, status: 'open' });
+    expect(project.next).toHaveLength(2);
+
+    await add(catalog, 'mendy', 'keeper', 'recording', { event: other, title: { he: 'שיחה א׳' }, url: 'https://example.org/a.mp3', sets: [set] });
+    project = (await call('GET', '/v1/projects/recordings-5742')).body;
+    expect(project.project).toMatchObject({ total: 2, done: 1 });
+    expect(project.next.map((e: { id: string }) => e.id)).toEqual([event]);
+
+    expect((await call('GET', '/v1/projects')).body.projects).toHaveLength(1);
+    await call('POST', '/v1/projects/recordings-5742/close', { as: 'keeper' });
+    expect((await call('GET', '/v1/projects/recordings-5742')).body).toMatchObject({ project: { status: 'closed' }, next: [] });
+  });
+});

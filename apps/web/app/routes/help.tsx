@@ -64,6 +64,11 @@ export default function Help({ loaderData }: Route.ComponentProps) {
         </div>
       </section>
 
+      <p className="help-links">
+        <Link to={href('/missing', lang)}>{t(lang, 'missingTitle')}</Link> · <Link to={href('/projects', lang)}>{t(lang, 'projectsTitle')}</Link> ·{' '}
+        <Link to={href('/review', lang)}>{t(lang, 'reviewTitle')}</Link>
+      </p>
+
       <section id="recordings">
         <h2 className="section-header">
           <span>
