@@ -7,9 +7,11 @@ import { add, freshCatalog, yudShvat } from '../../../packages/core/tests/helper
 let app: Hono;
 let set: EntityId;
 let event: EntityId;
+let catalog: Awaited<ReturnType<typeof freshCatalog>>['catalog'];
 
 beforeEach(async () => {
   const fresh = await freshCatalog();
+  catalog = fresh.catalog;
   set = fresh.set;
   event = await add(fresh.catalog, 'mendy', 'keeper', 'event', yudShvat(set), '/events/5742-05-10');
   // Tests sign in with a header; a real deployment verifies a session.
@@ -44,6 +46,21 @@ describe('reading', () => {
     expect(await call('GET', '/v1/entities/rh-zzzzzzzz')).toMatchObject({ status: 404, body: { error: 'not-found' } });
     expect(await call('GET', '/v1/entities?type=spaceship')).toMatchObject({ status: 400 });
     expect(await call('GET', '/v1/nothing-here')).toMatchObject({ status: 404 });
+  });
+});
+
+describe('rights', () => {
+  it('never serves the words of a text whose source forbids copies', async () => {
+    const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'חיבור' }, slug: 'w', authors: [], genre: 'sichos', levels: ['sicha'], sets: [set] });
+    const unit = await add(catalog, 'mendy', 'keeper', 'unit', { work, position: [{ level: 'sicha', value: '1' }], order: 'V', label: { he: 'שיחה א' } });
+    const closed = await add(catalog, 'mendy', 'keeper', 'text', { kind: 'hanacha', unit, language: 'he', licence: 'site-terms' });
+    const segment = await add(catalog, 'mendy', 'keeper', 'segment', { text: closed, order: 'V', kind: 'paragraph', content: 'לא לפרסום', proofread: 0 });
+    const served = await call('GET', `/v1/entities/${segment}`);
+    expect(served.body).toMatchObject({ id: segment, data: { content: '' } });
+    expect(served.body.withheld).toMatch(/site-terms/);
+    expect(JSON.stringify((await call('GET', `/v1/revisions/${served.body.rev}`)).body)).not.toContain('לא לפרסום');
+    expect(JSON.stringify((await call('GET', '/v1/commits?since=0&limit=100')).body)).not.toContain('לא לפרסום');
+    expect(JSON.stringify((await call('GET', '/v1/entities?type=segment')).body)).not.toContain('לא לפרסום');
   });
 });
 

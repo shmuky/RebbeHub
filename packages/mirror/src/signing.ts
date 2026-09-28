@@ -55,7 +55,7 @@ export function signManifest<T extends { signature?: Signature }>(manifest: T, k
 
 export type VerifyResult = { ok: true; keyId: string } | { ok: false; reason: 'unsigned' | 'unknown-key' | 'bad-signature' | 'malformed' };
 
-export function verifyManifest(manifest: { signature?: Signature }, trusted: TrustedKeys): VerifyResult {
+export function verifyManifest<T extends { signature?: Signature }>(manifest: T, trusted: TrustedKeys): VerifyResult {
   const signature = manifest.signature;
   if (!signature) return { ok: false, reason: 'unsigned' };
   const publicKeyBase64 = trusted[signature.keyId];

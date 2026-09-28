@@ -79,7 +79,7 @@ describe('the git mirror', () => {
     const since = await catalog.head();
     await exportSnapshot(catalog, sink, since);
     const cs = await catalog.createChangeset('chaim', { title: 'Fix a word' });
-    await catalog.putRevision(cs.id, 'chaim', { id: ids.seg2, type: 'segment', data: { text: ids.text, order: 'k', kind: 'paragraph', content: 'באתי לגני אחותי כלה, לגנוני', proofread: 1 } });
+    await catalog.putRevision(cs.id, 'chaim', { id: ids.seg2, type: 'segment', data: { text: ids.text!, order: 'k', kind: 'paragraph', content: 'באתי לגני אחותי כלה, לגנוני', proofread: 1 } });
     await catalog.submit(cs.id, 'chaim');
     await catalog.merge(cs.id, 'keeper');
     const seen: string[] = [];
@@ -109,7 +109,7 @@ describe('dumps', () => {
     const { DatabaseSync } = await import('node:sqlite');
     const db = new DatabaseSync(join(dir, 'rebbehub-2026.40.sqlite'));
     expect(db.prepare("SELECT count(*) AS n FROM entity WHERE type = 'unit'").get()).toEqual({ n: 1 });
-    expect(db.prepare('SELECT reason FROM withheld WHERE id = ?').get(ids.secret)).toBeDefined();
+    expect(db.prepare('SELECT reason FROM withheld WHERE id = ?').get(ids.secret!)).toBeDefined();
     db.close();
 
     const release = JSON.parse(await readFile(join(dir, 'sichos-kodesh-2026.40.json'), 'utf8'));

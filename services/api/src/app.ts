@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, UnresolvedConflictError, type ChangesetStatus, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, UnresolvedConflictError, type ChangesetStatus, type EntityView, type Json, type ReportReason, type Resolution } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { OPENAPI } from './openapi.js';
@@ -69,6 +69,12 @@ export function createApp(options: ApiOptions): Hono {
   const { catalog } = options;
   const app = new Hono();
 
+  // Words whose rights forbid copies are never served, only listed.
+  const redact = (views: EntityView[]): Promise<Array<EntityView & { withheld?: string }>> => {
+    const gate = new ExportGate(catalog);
+    return Promise.all(views.map((v) => gate.redact(v)));
+  };
+
   const signedIn = async (c: Context): Promise<string> => {
     const account = (await options.authenticate?.(c)) ?? null;
     if (!account) throw new HttpError(401, 'sign in to do this');
@@ -120,7 +126,7 @@ export function createApp(options: ApiOptions): Hono {
       limit: intParam(c.req.query('limit'), 'limit'),
     });
     const last = items[items.length - 1];
-    return c.json({ items, next: last ? `${last.path ?? ''}${last.id}` : null });
+    return c.json({ items: await redact(items), next: last ? `${last.path ?? ''}${last.id}` : null });
   });
 
   app.get('/v1/entities/:id', async (c) => {
@@ -128,7 +134,7 @@ export function createApp(options: ApiOptions): Hono {
     const at = intParam(c.req.query('at'), 'at');
     const entity = await catalog.get(id, { at });
     if (!entity) throw new CatalogError('not-found', `${id} not found`);
-    return c.json(entity);
+    return c.json((await redact([entity]))[0]);
   });
 
   app.get('/v1/entities/:id/history', async (c) => c.json({ history: await catalog.history(entityId(c.req.param('id'))) }));
@@ -142,7 +148,10 @@ export function createApp(options: ApiOptions): Hono {
   app.get('/v1/revisions/:rev', async (c) => {
     const rev = await catalog.revision(intParam(c.req.param('rev'), 'rev')!);
     if (!rev) throw new CatalogError('not-found', 'no such revision');
-    return c.json(rev);
+    if (rev.data === null) return c.json(rev);
+    const [shown] = await redact([{ id: rev.entity_id, type: rev.entity_type, path: rev.path, rev: rev.id, data: rev.data }]);
+    // (Typed loosely: Hono's JSON typing cannot follow the recursive Json type.)
+    return c.json({ ...rev, data: shown!.data, withheld: shown!.withheld } as Record<string, unknown>);
   });
 
   app.get('/v1/resolve', async (c) => {
@@ -159,7 +168,7 @@ export function createApp(options: ApiOptions): Hono {
     if (type && !(await catalog.registry()).has(type)) throw new HttpError(400, `unknown type "${type}"`);
     const date = parseDateText(q);
     const results = await catalog.search(q, { type: type as EntityType | undefined, limit: intParam(c.req.query('limit'), 'limit') });
-    return c.json({ query: q, date: date.ok ? { key: date.key, he: describeDateKey(date.key, 'he'), en: describeDateKey(date.key, 'en') } : null, results });
+    return c.json({ query: q, date: date.ok ? { key: date.key, he: describeDateKey(date.key, 'he'), en: describeDateKey(date.key, 'en') } : null, results: await redact(results) });
   });
 
   app.get('/v1/dates/parse', (c) => {
@@ -173,7 +182,12 @@ export function createApp(options: ApiOptions): Hono {
   app.get('/v1/commits', async (c) => {
     const since = intParam(c.req.query('since'), 'since') ?? 0;
     const limit = Math.min(intParam(c.req.query('limit'), 'limit') ?? 20, 100);
-    return c.json({ commits: await catalog.commitsSince(since, limit) });
+    const gate = new ExportGate(catalog);
+    const commits = await catalog.commitsSince(since, limit);
+    for (const commit of commits) {
+      commit.changes = await Promise.all(commit.changes.map(async (change) => (change.data === null ? change : { ...change, data: (await gate.redact({ ...change, data: change.data })).data })));
+    }
+    return c.json({ commits });
   });
 
   // ---------------------------------------------------------------- reports (no account needed)
@@ -230,7 +244,16 @@ export function createApp(options: ApiOptions): Hono {
     });
   });
 
-  app.get('/v1/suggestions/:id', async (c) => c.json(await catalog.review(intParam(c.req.param('id'), 'id')!)));
+  app.get('/v1/suggestions/:id', async (c) => {
+    const view = await catalog.review(intParam(c.req.param('id'), 'id')!);
+    const gate = new ExportGate(catalog);
+    const hide = async (type: string, id: EntityId, data: Json | null) => (data === null ? null : ((await gate.redact({ id, type: type as EntityType, path: null, rev: 0, data })) as { withheld?: string }).withheld);
+    for (const entry of view.entries) {
+      const withheld = (await hide(entry.type, entry.entityId, entry.after)) ?? (await hide(entry.type, entry.entityId, entry.before));
+      if (withheld) Object.assign(entry, { before: null, after: null, changes: [], conflicts: [], withheld });
+    }
+    return c.json(view);
+  });
 
   app.post('/v1/suggestions', async (c) => {
     const by = await signedIn(c);

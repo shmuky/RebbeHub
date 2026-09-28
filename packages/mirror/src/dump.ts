@@ -5,9 +5,8 @@ import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import { createGzip } from 'node:zlib';
-import type { Catalog, EntityView } from '@rebbehub/core';
+import { ExportGate, type Catalog, type EntityView } from '@rebbehub/core';
 import type { EntityId, TextData } from '@rebbehub/model';
-import { ExportGate } from './gate.js';
 import { signManifest, type KeyPair, type Signature } from './signing.js';
 import { toSichosKodeshRelease } from './sichosKodesh.js';
 

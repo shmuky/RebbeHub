@@ -1,8 +1,7 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import type { Catalog, EntityView } from '@rebbehub/core';
+import { ExportGate, type Catalog, type EntityView } from '@rebbehub/core';
 import type { AlignmentData, EntityId, SegmentData, TextData } from '@rebbehub/model';
-import { ExportGate } from './gate.js';
 import { EMBEDDED_TYPES, entityFile, syncFile, textFile } from './layout.js';
 import { renderAlignment, renderEntity, renderText, stableJson } from './render.js';
 
