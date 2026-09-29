@@ -516,8 +516,8 @@ export function SuggestionCard({
                 {t(lang, 'approve')}
                 {allOf}
               </button>
-              <button type="button" className="btn" onClick={() => setNote('')} disabled={busy}>
-                <Icon name="back" className="flip-ltr" />
+              <button type="button" className="btn danger" onClick={() => setNote('')} disabled={busy}>
+                <Icon name="x" />
                 {t(lang, 'sendBack')}
               </button>
             </>
@@ -529,7 +529,7 @@ export function SuggestionCard({
               <textarea id={`note-${cs.id}`} value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder={t(lang, 'sendBackWhy')} autoFocus dir="auto" />
               <span className="btn-row">
                 <button type="button" className="btn danger" onClick={act('send-back', { note })} disabled={busy || !note.trim()}>
-                  <Icon name="back" className="flip-ltr" />
+                  <Icon name="x" />
                   {t(lang, 'sendBack')}
                 </button>
                 <button type="button" className="btn ghost" onClick={() => setNote(null)}>

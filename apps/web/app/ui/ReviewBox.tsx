@@ -28,7 +28,7 @@ export function reviewChoices(lang: Lang): ReviewChoice[] {
   return [
     { value: 'comment', label: tu(lang, 'comment'), hint: tu(lang, 'commentHint'), submit: tu(lang, 'addComment'), tone: 'primary', icon: 'discuss', needsNote: true },
     { value: 'approve', label: tu(lang, 'approve'), hint: tu(lang, 'approveHint'), submit: tu(lang, 'approveSuggestion'), tone: 'approve', icon: 'check' },
-    { value: 'send_back', label: tu(lang, 'sendBack'), hint: tu(lang, 'sendBackHint'), submit: tu(lang, 'sendBackSuggestion'), tone: 'danger', icon: 'back', needsNote: true },
+    { value: 'send_back', label: tu(lang, 'sendBack'), hint: tu(lang, 'sendBackHint'), submit: tu(lang, 'sendBackSuggestion'), tone: 'danger', icon: 'x', needsNote: true },
   ];
 }
 

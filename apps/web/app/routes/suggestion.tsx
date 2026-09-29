@@ -253,6 +253,29 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
     />
   ) : null;
 
+  // Undo what was done: a withdrawn suggestion reopens, a merged one is reverted (put back as it was).
+  const post = async (path: string, payload: unknown = {}) => {
+    const response = await fetch(`/_/suggestions/${id}/${path}`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', accept: 'application/json' }, body: JSON.stringify(payload) });
+    if (!response.ok) throw new Error(((await response.json().catch(() => ({}))) as { message?: string }).message ?? response.statusText);
+  };
+  const undoBar =
+    mayEdit && (view.status === 'withdrawn' || view.status === 'merged') ? (
+      <p className="note undo-note">
+        <Icon name="back" size={14} /> {tt(lang, view.status === 'withdrawn' ? 'reopenNote' : 'undoNote')}{' '}
+        <button
+          type="button"
+          className="btn"
+          disabled={busy}
+          onClick={() => {
+            if (view.status === 'merged' && !window.confirm(tt(lang, 'undoConfirm'))) return;
+            void act(() => post(view.status === 'withdrawn' ? 'reopen' : 'revert'));
+          }}
+        >
+          {tt(lang, view.status === 'withdrawn' ? 'reopen' : 'undoChange')}
+        </button>
+      </p>
+    ) : null;
+
   const reviewBox = !account ? (
     <p className="note sign-note">
       <Icon name="lock" /> <Link to={href('/signin', lang, { return: `/suggestions/${number}` })}>{w(lang, 'signIn')}</Link>
@@ -261,13 +284,13 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
     <ReviewBox
       lang={lang}
       me={{ name: account.person.displayName, id: account.person.id }}
-      choices={detail.mayApprove && !detail.mine ? reviewChoices(lang) : undefined}
+      choices={detail.mayApprove ? reviewChoices(lang).filter((c) => !(detail.mine && c.value === 'send_back')) : undefined}
       placeholder={tt(lang, 'leaveComment')}
       busy={busy}
       error={error}
       footnote={
         <>
-          <Icon name={detail.mayApprove ? 'shield' : 'lock'} size={14} /> {w(lang, detail.mayApprove && !detail.mine ? 'youKeep' : 'onlyKeepers')}
+          <Icon name={detail.mayApprove ? 'shield' : 'lock'} size={14} /> {w(lang, detail.mayApprove ? 'youKeep' : 'onlyKeepers')}
           {pending.length ? ` · ${w(lang, 'pendingNote')}: ${pending.length}` : ''}
         </>
       }
@@ -275,16 +298,13 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
         detail.mine ? (
           <button
             type="button"
-            className="btn"
+            className="btn danger"
             disabled={busy}
-            onClick={() =>
-              void act(async () => {
-                const response = await fetch(`/_/suggestions/${id}/withdraw`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', accept: 'application/json' }, body: '{}' });
-                if (!response.ok) throw new Error(((await response.json().catch(() => ({}))) as { message?: string }).message ?? response.statusText);
-              })
-            }
+            onClick={() => {
+              if (window.confirm(tt(lang, 'withdrawConfirm'))) void act(() => post('withdraw'));
+            }}
           >
-            {tt(lang, 'withdraw')}
+            <Icon name="x" /> {tt(lang, 'withdraw')}
           </button>
         ) : null
       }
@@ -372,6 +392,7 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
               <TimelineBlock>
                 <Checks checks={view.checks} lang={lang} />
               </TimelineBlock>
+              {undoBar ? <TimelineBlock>{undoBar}</TimelineBlock> : null}
               {reviewBox ? <TimelineBlock className="tl-end">{reviewBox}</TimelineBlock> : null}
             </Timeline>
           ) : tab === 'changes' ? (
@@ -379,6 +400,7 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
               {view.entries.map((e) => (
                 <ChangeWithComments key={e.entityId} entry={e} lang={lang} talk={talk} conversation={talk ? { people, viewer, id: id!, detail } : null} signedIn={Boolean(account)} onPending={(p) => setPending([...pending, p])} changed={() => void load()} />
               ))}
+              {undoBar}
               {reviewBox}
             </div>
           ) : tab === 'scan' ? (

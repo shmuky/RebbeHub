@@ -24,7 +24,7 @@ import { diffData, threeWayMerge, resolveConflicts, UnresolvedConflictError, typ
 import { canApprove, canSuggest, earnedTrust, mayGoLive, type Account, type SetInfo } from './permissions.js';
 import { searchTextOf, toTsQuery } from './searchText.js';
 import { focusCounts } from './projectWork.js';
-import { commented, reportOpened, reportStateChanged, reviewGiven, suggestionMerged, suggestionReverted, suggestionStarted, suggestionSubmitted, suggestionWithdrawn } from './threads.js';
+import { commented, reportOpened, reportStateChanged, reviewGiven, suggestionMerged, suggestionReverted, suggestionStarted, suggestionReopened, suggestionSubmitted, suggestionWithdrawn } from './threads.js';
 import { viaColumn, type Via } from './via.js';
 
 /**
@@ -896,6 +896,30 @@ export class Catalog {
       await tx.query("UPDATE changeset SET status = 'withdrawn', closed_at = now() WHERE id = $1", [cs.id]);
       await suggestionWithdrawn(tx, { id: cs.id, by });
     });
+  }
+
+  /**
+   * Undoes a withdrawal: the suggestion is open for review again, as it was
+   * (a draft stays a draft). Its checks run again against main as it is
+   * now, and the keepers of its sets are asked to look again.
+   */
+  async reopen(changesetId: number, by: string): Promise<ChangesetRow> {
+    await this.db.transaction(async (tx) => {
+      const cs = await this.changeset(changesetId, tx);
+      const actor = await this.requireAccount(by, tx);
+      if (cs.author !== by && !actor.is_steward) throw forbidden('only its author reopens a suggestion');
+      if (cs.status !== 'withdrawn') throw badState(`this suggestion is ${cs.status}`);
+      if (cs.submitted_at === null) {
+        await tx.query("UPDATE changeset SET status = 'draft', closed_at = NULL WHERE id = $1", [cs.id]);
+        return;
+      }
+      const proposals = await this.proposals(cs.id, tx);
+      const checks = await this.runChecks(tx, cs, proposals);
+      await tx.query("UPDATE changeset SET status = 'open', closed_at = NULL, checks = $2 WHERE id = $1", [cs.id, JSON.stringify(checks)]);
+      const sets = await this.setsOfProposals(tx, proposals);
+      await suggestionReopened(tx, { id: cs.id, by, keepers: [...new Set(sets.flatMap((s) => s.keepers))] });
+    });
+    return this.changeset(changesetId);
   }
 
   /** "Send back": returns a suggestion to its author with a note; they can edit and send it again. */
