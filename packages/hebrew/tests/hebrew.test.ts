@@ -105,3 +105,10 @@ describe('normalizeSearchText', () => {
     expect(normalizeSearchText('Likkutei  Sichos!')).toBe('likkutei sichos');
   });
 });
+
+describe('words that add up to a year', () => {
+  it('reads only letters running from largest to smallest as a year', () => {
+    expect(parseDateText('באתי').ok).toBe(false);
+    expect(parseDateText('תשמב')).toMatchObject({ ok: true, key: '5742' });
+  });
+});

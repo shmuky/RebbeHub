@@ -240,7 +240,7 @@ export function Header({ lang }: { lang: Lang }) {
   const other = otherLangHref(lang, pathname, search);
   const navItem = NAV.find((n) => n.to === section);
   // A page kept under another section's tab (what is missing, the catalog's health) is still called by its own name.
-  const ownTitle = pathname.startsWith('/missing') ? tu(lang, 'missing') : pathname.startsWith('/health') ? tu(lang, 'health') : null;
+  const ownTitle = pathname.startsWith('/missing') ? tu(lang, 'missing') : pathname.startsWith('/health') ? tu(lang, 'health') : pathname.startsWith('/help') ? tu(lang, 'waysToHelp') : null;
   const phoneTitle = phone.title?.[lang] ?? ownTitle ?? (navItem ? tu(lang, navItem.key) : pathname === '/search' ? tu(lang, 'searchShort') : 'RebbeHub');
   const home = pathname === '/';
 

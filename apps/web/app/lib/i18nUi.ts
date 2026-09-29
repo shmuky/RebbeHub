@@ -85,6 +85,7 @@ const UI = {
   mirrors: { he: 'הורדה ואתרי מראה', en: 'Download and mirrors' },
   health: { he: 'מצב הקטלוג', en: 'Catalog health' },
   missing: { he: 'מה חסר', en: "What's missing" },
+  waysToHelp: { he: 'לעזור', en: 'Help' },
   contribute: { he: 'איך לעזור', en: 'Contribute' },
   skip: { he: 'דלג לתוכן', en: 'Skip to content' },
   shortcutsPalette: { he: 'חיפוש ופקודות', en: 'Search and commands' },
