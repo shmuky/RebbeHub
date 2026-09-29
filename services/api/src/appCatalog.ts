@@ -475,16 +475,20 @@ export async function readParts(catalog: Catalog): Promise<Parts> {
 
 // ------------------------------------------------------------------ routes
 
-/** Keeps the latest release of each schema in this process, so a burst of phones is one read of the catalog. */
-class Releases {
+/**
+ * Keeps the latest release of each schema in this process, so a burst of
+ * phones is one read of the catalog. A Worker makes its app afresh for
+ * each request, so it keeps one of these for the life of its isolate
+ * (worker.ts) and passes it in; each request then asks the database only
+ * whether anything changed (one statement) before serving what was built.
+ */
+export class AppReleases {
   private built: { seq: number; parts: Promise<Parts>; schemas: Map<AppSchema, Promise<AppRelease>> } | null = null;
 
-  constructor(private readonly catalog: Catalog) {}
-
-  async get(schema: AppSchema): Promise<AppRelease> {
-    const { seq } = await lastChange(this.catalog);
+  async get(catalog: Catalog, schema: AppSchema): Promise<AppRelease> {
+    const { seq } = await lastChange(catalog);
     if (!this.built || this.built.seq !== seq) {
-      const parts = readParts(this.catalog);
+      const parts = readParts(catalog);
       this.built = { seq, parts, schemas: new Map() };
       parts.catch(() => {
         if (this.built?.parts === parts) this.built = null;
@@ -509,27 +513,26 @@ const SCHEMA = ':schema{v[123]}';
 const schemaOf = (c: Context): AppSchema => Number(c.req.param('schema')!.slice(1)) as AppSchema;
 const catalogPath = (schema: AppSchema, version: string) => `/v1/app/v${schema}/catalog/${version}/catalog.json`;
 
-export function appCatalogRoutes(app: Hono, catalog: Catalog): void {
-  const releases = new Releases(catalog);
+export function appCatalogRoutes(app: Hono, catalog: Catalog, releases: AppReleases = new AppReleases()): void {
   const origin = (c: Context) => new URL(c.req.url).origin;
 
   app.get(`/v1/app/${SCHEMA}/catalog/manifest.json`, async (c) => {
     const schema = schemaOf(c);
-    const { manifest } = await releases.get(schema);
+    const { manifest } = await releases.get(catalog, schema);
     // `url` points back into this same API, whatever address it was asked at.
     return c.json({ ...manifest, url: `${origin(c)}${catalogPath(schema, manifest.version)}` } satisfies AppManifest, 200, { 'Cache-Control': MANIFEST_CACHE });
   });
 
-  app.get(`/v1/app/${SCHEMA}/catalog/changelog.json`, async (c) => c.json((await releases.get(schemaOf(c))).manifest.changelog, 200, { 'Cache-Control': MANIFEST_CACHE }));
+  app.get(`/v1/app/${SCHEMA}/catalog/changelog.json`, async (c) => c.json((await releases.get(catalog, schemaOf(c))).manifest.changelog, 200, { 'Cache-Control': MANIFEST_CACHE }));
 
   app.get(`/v1/app/${SCHEMA}/catalog/latest/catalog.json`, async (c) => {
     const schema = schemaOf(c);
-    const { manifest } = await releases.get(schema);
+    const { manifest } = await releases.get(catalog, schema);
     return c.redirect(`${origin(c)}${catalogPath(schema, manifest.version)}`, 302);
   });
 
   app.get(`/v1/app/${SCHEMA}/catalog/:version{\\d+\\.\\d+\\.\\d+}/catalog.json`, async (c) => {
-    const { manifest, body } = await releases.get(schemaOf(c));
+    const { manifest, body } = await releases.get(catalog, schemaOf(c));
     // Only the release being served: an older one is gone, as on Sichos-Kodesh's API.
     if (c.req.param('version') !== manifest.version) throw new CatalogError('not-found', `catalog ${c.req.param('version')} is not served; the manifest names the one that is`);
     return c.body(body, 200, {

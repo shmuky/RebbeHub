@@ -365,13 +365,24 @@ export interface SuggestionListItem {
  */
 export async function listSuggestions(
   db: Db,
-  options: { state?: 'open' | 'closed' | 'all'; author?: string; reviewer?: string; q?: string; limit?: number; before?: number } = {},
+  options: { state?: 'open' | 'closed' | 'all'; author?: string; reviewer?: string; q?: string; about?: readonly string[]; limit?: number; before?: number } = {},
 ): Promise<{ items: SuggestionListItem[]; people: Record<string, PersonTag>; counts: { open: number; closed: number } }> {
   const params: unknown[] = [];
   const where = ["c.number IS NOT NULL", "c.status <> 'draft'"];
   const state = options.state ?? 'open';
   const filters: string[] = [];
   if (options.author) filters.push(`c.author = $${params.push(options.author)}`);
+  if (options.about) {
+    // About an item: a suggestion that changes it, or what is in it (a sefer's sichos and their texts, a sicha's
+    // texts and their paragraphs, a farbrengen's sichos). One statement here, where an item's page used to open every
+    // suggestion in full to find the ones about it.
+    const ids = `$${params.push([...new Set(options.about)].slice(0, 500))}::text[]`;
+    filters.push(
+      `EXISTS (SELECT 1 FROM revision r WHERE r.changeset_id = c.id AND (r.entity_id = ANY(${ids})
+         OR r.data->>'work' = ANY(${ids}) OR r.data->>'unit' = ANY(${ids}) OR r.data->>'text' = ANY(${ids}) OR r.data->>'event' = ANY(${ids})
+         OR r.data->>'unit' IN (SELECT u.from_id FROM entity_ref u WHERE u.field = 'work' AND u.to_id = ANY(${ids}))))`,
+    );
+  }
   if (options.reviewer) filters.push(`EXISTS (SELECT 1 FROM review_request q WHERE q.changeset_id = c.id AND q.reviewer = $${params.push(options.reviewer)})`);
   if (options.q?.trim()) {
     const q = options.q.trim();

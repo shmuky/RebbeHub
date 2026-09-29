@@ -18,6 +18,19 @@ any time. `@rebbehub/client` carries the API's version.
   of each and the latest incidents; checked every five minutes, and still
   answering while the database does not. `GET /v1/status` gives the same
   as JSON.
+- **Suggestions about an item, in one question.** `GET /v1/suggestions?state=…&about=<ids>`
+  lists only the suggestions that change those items, or what is in them
+  (a sefer's sichos and their texts, a sicha's paragraphs, a farbrengen's
+  sichos), up to 500 ids at a time.
+- **Several files, and several recordings' hanachos, at once.**
+  `GET /v1/files/batch?ids=<sha256s>` says of up to 200 files what
+  `/v1/files/{sha256}` says of one, and
+  `GET /v1/recordings/batch/hanacha?ids=<ids>` gives the synced hanacha of
+  each of up to 200 recordings that has one. A farbrengen's page asks
+  about all its parts in one request each.
+- **A lighter commit feed.** `GET /v1/commits?changes=N` carries only N of
+  each commit's changes; every commit now also says how many items it
+  changed in all (`changed`) and of what kinds (`types`).
 - **Ready for search engines and AI crawlers without draining the
   database.** Crawlers get a budget of pages a minute when the edge has no
   copy (each search engine its own, all other bots one between them), and
@@ -61,6 +74,39 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Fixed
 
+- **An item's page no longer opens the newest suggestions to find the
+  ones about it.** It asks the API (`about=`), and opens only those, a
+  page of items each. Before, every page view read the fifteen newest
+  conversations in full; with a few of hundreds of items each, that was
+  thousands of database statements a page view, which is what Cloudflare
+  counts against Hyperdrive's daily allowance
+  ([docs/operations.md](docs/operations.md), "What reaches Postgres").
+- **Fewer database statements per request.** Reading an item on main is
+  one statement instead of two; a signed-in request's account is made and
+  its steward mark kept in one; and the Sichos Kodesh apps' catalog is
+  built once per change per Worker isolate, not once per request (each
+  request now asks only whether anything changed).
+- **A farbrengen's page no longer makes a request per part.** It asked
+  the API for each recording's file and each one's synced hanacha, 58
+  requests for a farbrengen of 40 parts: more than a Worker may make in
+  one request on Cloudflare's free plan, so those pages failed whatever
+  the day's allowance. It now asks once for all the files and once for
+  all the hanachos (15 requests, 17 statements instead of 80).
+- **The home page's feed no longer downloads every change of the last
+  twelve commits.** An import's commit changes thousands of items; the
+  feed shows three of each, so it asks for three (`changes=3`) and gets
+  the count and kinds of the rest. Reading the commits is two statements
+  instead of one per commit. A sefer's, a sicha's and a set's page make
+  about a third fewer statements too, and ask for their links, their
+  counts and their relations together rather than one after the other.
+  The counts, before and after, are in
+  [docs/operations.md](docs/operations.md) ("The statement budget").
+- **The Workers run near the database.** Smart Placement is on for the
+  API and the site (`[placement]` in each `wrangler.toml`): a page is
+  many API reads one after the other, and each read several statements,
+  so they are made from next to Postgres rather than across the ocean.
+  Pages and public reads already at the edge are still served from near
+  the reader.
 - **Long links no longer push an item's page sideways on a phone.** A
   source's long address (a Drive folder) or id is shown short, as its
   host and "…", with the whole of it kept in the link and its title; the

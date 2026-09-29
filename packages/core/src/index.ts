@@ -2,7 +2,7 @@ export { Catalog, PRIVATE_REASONS, isoWeekTag, type ArchiveGapRow, type ChangeEn
 export { summarizeChanges, type ChangeGroup } from './changeSummary.js';
 export { CatalogError, type CatalogErrorCode } from './errors.js';
 export { ExportGate } from './gate.js';
-export { derivedRights, fileFromDrive, getDerivations, isCoverProfile, getFile, getPageFix, recordDerivation, recordPageFix, registerFile, setRights, storageTierFor, type DerivationRow, type FileRow, type NewDerivation, type NewFile, type NewPageFix, type PageFixRow, type PageFixVerdict } from './files.js';
+export { derivedRights, fileFromDrive, getDerivations, getDerivationsOf, isCoverProfile, getFile, getFiles, getPageFix, getPageFixes, recordDerivation, recordPageFix, registerFile, setRights, storageTierFor, type DerivationRow, type FileRow, type NewDerivation, type NewFile, type NewPageFix, type PageFixRow, type PageFixVerdict } from './files.js';
 export { driveFileOf, driveFilesOf, knownDriveFile, type DriveFileLink } from './driveFiles.js';
 export { diffData, resolveConflicts, threeWayMerge, UnresolvedConflictError, type Conflict, type FieldChange, type Json, type MergeResult, type Resolution } from './merge.js';
 export { LIVE_TYPES, STEWARD_TYPES, TRUST_THRESHOLD, UPLOAD_HOLD_HOURS, UPLOAD_LIMITS, canApprove, canSuggest, earnedTrust, mayGoLive, uploadAllowance, type Account, type SetInfo } from './permissions.js';
@@ -46,6 +46,7 @@ export {
   fixParagraph,
   hanachaOf,
   hanachaSync,
+  hanachaSyncs,
   heardWords,
   recordingTranscript,
   remapper,
@@ -92,6 +93,7 @@ export {
   getFingerprint,
   itemsUsingFile,
   pageImageCount,
+  pageImageCounts,
   recordAudioFingerprint,
   recordPdfPages,
   similarFiles,

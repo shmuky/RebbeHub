@@ -41,6 +41,22 @@ describe('search that lands on the moment, and by meaning', () => {
     expect(body.moments).toMatchObject([{ kind: 'paragraph', id: segment, event, recording, startMs: 61_000, machine: true }]);
   });
 
+  it("gives a farbrengen's parts their synced hanachos in one request, and each part its own", async () => {
+    const first = await add(catalog, 'mendy', 'keeper', 'recording', { event, title: { he: 'חלק א' }, url: 'https://example.org/a.mp3', sets: [set] });
+    const second = await add(catalog, 'mendy', 'keeper', 'recording', { event, title: { he: 'חלק ב' }, url: 'https://example.org/b.mp3', sets: [set] });
+    const text = await add(catalog, 'mendy', 'keeper', 'text', { kind: 'hanacha', recording: first, language: 'he' });
+    const segment = await add(catalog, 'mendy', 'keeper', 'segment', { text, order: 'V', kind: 'paragraph', content: 'אהבת ישראל', proofread: 1 });
+    const alignment = await add(catalog, 'mendy', 'keeper', 'alignment', { recording: first, text, granularity: 'paragraph' });
+    await add(catalog, 'mendy', 'keeper', 'alignment-span', { alignment, segment, startMs: 61_000, endMs: 90_000 });
+    const app = createApp({ catalog });
+    const sync = { text, alignment, paragraphs: [{ id: segment, content: 'אהבת ישראל', startMs: 61_000, endMs: 90_000, checked: false }] };
+    expect((await json(app, `/v1/recordings/${first}/hanacha`)).body).toEqual(sync);
+    expect((await json(app, `/v1/recordings/${second}/hanacha`)).status).toBe(404);
+    // Both parts at once: the one without a synced hanacha is left out.
+    expect((await json(app, `/v1/recordings/batch/hanacha?ids=${first},${second}`)).body).toEqual({ items: { [first]: sync } });
+    expect((await json(app, '/v1/recordings/batch/hanacha?ids=')).body).toEqual({ items: {} });
+  });
+
   it('says search by meaning is not available until it is set up, and labels what it finds', async () => {
     expect((await json(createApp({ catalog }), '/v1/search/similar?q=x')).body).toEqual({ query: 'x', available: false, machine: true, results: [] });
     await embedItems(catalog, fake);

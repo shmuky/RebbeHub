@@ -9,6 +9,13 @@ workers_dev = true
 [observability]
 enabled = true
 
+# Runs near the database (Neon, Virginia) rather than near the reader: an API request is
+# several statements one after the other, and each is a round trip to Postgres, so the
+# round trips are short from there. Reads anyone may have are still answered from the
+# cache near the reader (docs/operations.md, "Traffic and crawlers").
+[placement]
+mode = "smart"
+
 # Postgres on Neon, pooled by Hyperdrive. The id names the config; it is not a secret
 # (the connection string lives only in Cloudflare).
 [[hyperdrive]]

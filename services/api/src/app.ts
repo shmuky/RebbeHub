@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, getDerivations, getFile, getPageFix, hanachaSync, itemsUsingFile, listWebhooks, pageImageCount, printingsOf, projectTodo, recordingTranscript, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type Mailer, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, getDerivations, getDerivationsOf, getFile, getFiles, getPageFix, getPageFixes, hanachaSyncs, itemsUsingFile, listWebhooks, pageImageCounts, printingsOf, projectTodo, recordingTranscript, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type FileRow, type Mailer, type PageFixRow, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
 import { peopleOf } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType, type Language, type PageInline, type PageSegmentKind } from '@rebbehub/model';
@@ -21,7 +21,7 @@ import { pageRoutes } from './pages.js';
 import { driveRoutes, type DriveOptions } from './drive.js';
 import { threadRoutes } from './threads.js';
 import { organizeRoutes } from './organize.js';
-import { appCatalogRoutes } from './appCatalog.js';
+import { appCatalogRoutes, type AppReleases } from './appCatalog.js';
 import { machineRoutes, type MachineDispatch } from './machine.js';
 
 /**
@@ -41,6 +41,8 @@ export interface ApiOptions {
   authenticate?: (c: Context) => Promise<string | null> | string | null;
   /** Passkey sign-in: where the site is, which passkeys and sessions belong to. Unset, nobody can sign in. */
   auth?: AuthOptions;
+  /** The Sichos Kodesh apps' catalog as last built (appCatalog.ts): a Worker keeps one for its isolate's life, across its requests. */
+  appReleases?: AppReleases;
   /** Salt for hashing reporters' addresses (only the hash is kept, for rate limits). */
   reportSalt?: string;
   /** Verifies a report's captcha token (Cloudflare Turnstile); unset, reports need none. */
@@ -195,7 +197,7 @@ export function createApp(options: ApiOptions): Hono {
   mirrorRoutes(app, catalog, { mirrors: options.mirrors, files: options.files });
   threadRoutes(app, catalog, signedIn, authenticate);
   organizeRoutes(app, catalog, signedIn);
-  appCatalogRoutes(app, catalog);
+  appCatalogRoutes(app, catalog, options.appReleases);
   machineRoutes(app, catalog, signedIn, { dispatch: options.machineDispatch, waitUntil: options.waitUntil ? (_c, work) => options.waitUntil!(work) : undefined });
   scanRoutes(app, catalog, {
     filesBase,
@@ -476,9 +478,20 @@ export function createApp(options: ApiOptions): Hono {
     return c.json(await confirmSync(catalog, by, { recording: entityId(c.req.param('id')) }), 201);
   });
 
-  // The farbrengen's hanacha, paragraph by paragraph with where each is heard in this recording.
+  // The farbrengen's hanacha, paragraph by paragraph with where each is heard in these recordings: a farbrengen's page
+  // asks about all its parts in one request, where it used to ask about each (each a Worker call and its statements).
+  app.get('/v1/recordings/batch/hanacha', async (c) => {
+    const ids = (c.req.query('ids') ?? '').split(',').filter((x) => x.length > 0).map(entityId);
+    if (ids.length > 200) throw new HttpError(400, 'at most 200 ids at a time');
+    const gate = new ExportGate(catalog);
+    const items: Record<string, unknown> = {};
+    for (const [recording, found] of await hanachaSyncs(catalog, ids)) if (!(await gate.textWithheld(found.text))) items[recording] = found;
+    return c.json({ items });
+  });
+
   app.get('/v1/recordings/:id/hanacha', async (c) => {
-    const found = await hanachaSync(catalog, entityId(c.req.param('id')));
+    const id = entityId(c.req.param('id'));
+    const found = (await hanachaSyncs(catalog, [id])).get(id);
     if (!found) throw new CatalogError('not-found', 'this recording has no hanacha synced to it');
     const gate = new ExportGate(catalog);
     if (await gate.textWithheld(found.text)) throw new CatalogError('not-found', "this hanacha's text is withheld for its rights");
@@ -487,25 +500,62 @@ export function createApp(options: ApiOptions): Hono {
 
   app.get('/v1/stats', async (c) => c.json({ head: await catalog.head(), counts: await catalog.counts() }, 200, { 'Cache-Control': PUBLIC_SUMMARY }));
 
+  // Several files at once (a farbrengen's parts, a printing's scans), in the order asked, missing ones left out: four
+  // statements for them all, where each used to be its own request and its own four.
+  app.get('/v1/files/batch', async (c) => {
+    const ids = (c.req.query('ids') ?? '').split(',').filter((x) => x.length > 0);
+    if (ids.length > 200) throw new HttpError(400, 'at most 200 ids at a time');
+    if (ids.some((id) => !/^[0-9a-f]{64}$/.test(id))) throw new HttpError(400, 'a file is named by its sha256');
+    return c.json({ items: await fileInfos(c, ids) });
+  });
+
   app.get('/v1/files/:sha256', async (c) => {
     const sha256 = c.req.param('sha256');
     if (!/^[0-9a-f]{64}$/.test(sha256)) throw new HttpError(400, 'a file is named by its sha256');
-    const file = await getFile(catalog.db, sha256);
+    const [file] = await fileInfos(c, [sha256]);
     if (!file) throw new CatalogError('not-found', 'no such file');
-    const base = options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
-    const served = mayServe(file.rights_state) && file.storage_tier === 'public' && base;
-    // What was made from it (a scan's reading copy), served under the same rights; its page images are counted, and listed by its scan's pages.
-    const derivations = (await getDerivations(catalog.db, sha256))
-      .filter((d) => !/^(page-image|thumbnail)\//.test(d.profile))
-      .map((d) => ({ profile: d.profile, sha256: d.sha256, bytes: d.bytes, encoder: d.encoder, url: served ? `${base}/objects/${d.sha256}` : null }));
-    return c.json({ sha256, bytes: file.bytes, mime: file.mime, rights: file.rights_state, credit: file.credit, url: served ? `${base}/objects/${sha256}` : null, derivations, pageFix: await pageFixOf(sha256), pageImages: served ? await pageImageCount(catalog.db, sha256) : 0 });
+    return c.json(file);
   });
+
+  /** What /v1/files says of each of several files, in the order asked (missing ones left out). */
+  async function fileInfos(c: Context, sha256s: readonly string[]) {
+    const files = await getFiles(catalog.db, sha256s);
+    const found = [...new Set(sha256s)].filter((id) => files.has(id));
+    if (found.length === 0) return [];
+    const base = options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
+    const servedOf = (file: FileRow) => Boolean(mayServe(file.rights_state) && file.storage_tier === 'public' && base);
+    // What was made from each (a scan's reading copy), served under the same rights; its page images are counted, and listed by its scan's pages.
+    const [derivations, fixes, pageImages] = await Promise.all([
+      getDerivationsOf(catalog.db, found),
+      getPageFixes(catalog.db, found),
+      pageImageCounts(catalog.db, found.filter((id) => servedOf(files.get(id)!))),
+    ]);
+    return found.map((sha256) => {
+      const file = files.get(sha256)!;
+      const served = servedOf(file);
+      const fix = fixes.get(sha256);
+      return {
+        sha256,
+        bytes: file.bytes,
+        mime: file.mime,
+        rights: file.rights_state,
+        credit: file.credit,
+        url: served ? `${base}/objects/${sha256}` : null,
+        derivations: (derivations.get(sha256) ?? [])
+          .filter((d) => !/^(page-image|thumbnail)\//.test(d.profile))
+          .map((d) => ({ profile: d.profile, sha256: d.sha256, bytes: d.bytes, encoder: d.encoder, url: served ? `${base}/objects/${d.sha256}` : null })),
+        pageFix: fix ? pageFixView(fix) : null,
+        pageImages: served ? (pageImages.get(sha256) ?? 0) : 0,
+      };
+    });
+  }
 
   /** A file's page fix (docs/operations.md): measurements, open whatever the file's rights. */
   async function pageFixOf(sha256: string) {
     const fix = await getPageFix(catalog.db, sha256);
-    return fix ? { encoder: fix.encoder, verdict: fix.verdict, reason: fix.reason, pages: fix.pages } : null;
+    return fix ? pageFixView(fix) : null;
   }
+  const pageFixView = (fix: PageFixRow) => ({ encoder: fix.encoder, verdict: fix.verdict, reason: fix.reason, pages: fix.pages });
 
   // What a PDF on Google Drive needs to read straight, by its Drive id: the site's reader draws the file through
   // it, or opens the file's reading copy when RebbeHub serves one.
@@ -683,8 +733,10 @@ export function createApp(options: ApiOptions): Hono {
     const raw = c.req.query('cursor');
     const since = raw !== undefined ? Number(cursor.decode(raw)?.[0] ?? intParam(raw, 'cursor')) : (intParam(c.req.query('since'), 'since') ?? 0);
     const limit = Math.min(Math.max(intParam(c.req.query('limit'), 'limit') ?? 20, 1), 100);
+    // `changes`: only so many of each commit's changes (an import's has thousands), for a feed; `changed` and `types` still count them all.
+    const changes = intParam(c.req.query('changes'), 'changes');
     const gate = new ExportGate(catalog);
-    const commits = await catalog.commitsSince(since, limit);
+    const commits = await catalog.commitsSince(since, limit, { changes });
     for (const commit of commits) {
       commit.changes = await Promise.all(commit.changes.map(async (change) => (change.data === null ? change : { ...change, data: (await gate.redact({ ...change, data: change.data })).data })));
     }
@@ -791,8 +843,11 @@ export function createApp(options: ApiOptions): Hono {
         before = n;
       }
       const limit = Math.min(Math.max(intParam(c.req.query('limit'), 'limit') ?? 30, 1), 100);
+      const about = (c.req.query('about') ?? '').split(',').filter((x) => x.length > 0).map(entityId);
+      if (about.length > 500) throw new HttpError(400, 'at most 500 ids in about');
       const list = await listSuggestions(catalog.db, {
         state: state as 'open',
+        about: about.length ? about : undefined,
         author: await handle(c.req.query('author')),
         reviewer: await handle(c.req.query('reviewer')),
         q: c.req.query('q'),

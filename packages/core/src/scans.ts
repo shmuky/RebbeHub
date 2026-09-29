@@ -121,6 +121,13 @@ export async function pageImageCount(db: Db, sha256: string): Promise<number> {
   return (await one<{ n: number }>(db, 'SELECT count(*)::int AS n FROM file_page WHERE sha256 = $1 AND image_sha256 IS NOT NULL', [sha256]))?.n ?? 0;
 }
 
+/** The same for several PDFs in one statement, by sha256 (0 for one with no page images). */
+export async function pageImageCounts(db: Db, sha256s: readonly string[]): Promise<Map<string, number>> {
+  if (sha256s.length === 0) return new Map();
+  const { rows } = await db.query<{ sha256: string; n: number }>('SELECT sha256, count(*)::int AS n FROM file_page WHERE sha256 = ANY($1::text[]) AND image_sha256 IS NOT NULL GROUP BY sha256', [[...new Set(sha256s)]]);
+  return new Map(rows.map((r) => [r.sha256, r.n]));
+}
+
 /** A file already held whose pages or sound look like another's. */
 export interface SimilarFile {
   sha256: string;
