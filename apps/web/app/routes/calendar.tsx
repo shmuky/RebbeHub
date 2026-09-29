@@ -4,7 +4,7 @@ import { MONTHS, dateKeyFromHDate, dateKeyToGregorian, isMonthToken, monthByToke
 import { Fragment, useEffect, useRef } from 'react';
 import { data, Link, redirect } from 'react-router';
 import type { Route } from './+types/calendar';
-import { PlayEventButton, eventData, hanachaOf, type EventItem } from '../components/EventRow.js';
+import { PlayEventButton, eventData, eventRow, hanachaOf, type EventItem } from '../components/EventRow.js';
 import { siteOf } from '../lib/context.server.js';
 import { yearLabel } from '../lib/dates.js';
 import { langFrom, nameOf, t, type Lang } from '../lib/i18n.js';
@@ -90,7 +90,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     const rest = withToken(q, keysFor(monthTokens), 'year', null, lang);
     throw redirect(href(`/calendar/${toYear}`, lang, { q: rest || undefined }));
   }
-  const all = await api.events({ within: month ? `${year}-${month}` : String(year), limit: 2000 });
+  // The year's farbrengens as rows (their name, date, what they have), not whole: the page carries them all, hidden, for the filter.
+  const all = (await api.events({ within: month ? `${year}-${month}` : String(year), limit: 2000 })).map(eventRow);
   return { lang, siteUrl, year, month: month ?? null, months: monthTokens, all, q, asked: Boolean(asked) };
 }
 

@@ -534,6 +534,19 @@ the suggestions list carries no checks (six imports' checks were 500 kB).
 The budget test holds each page to a size for the same reason, and its
 sample sichos have words, so a list that leaks them shows.
 
+The same rule, one level down: a list keeps of each item what its row
+shows. A farbrengen's `links` (where it is printed, with each link's
+label and page) are four fifths of it, and a row shows an icon; the
+calendar's year, the home page's week and a farbrengen's other years keep
+each farbrengen as a row (`eventRow` in apps/web/app/components/EventRow.tsx:
+its name, its date, the kinds of its links, its recordings), so a year's
+calendar carries 43 kB of them, not 108. And what a page computes counts
+like what it carries: a suggestion's page compares each item's version
+with main's to say what changed, and comparing by writing both out as
+canonical JSON, at every level of every field, was a quarter of the home
+page's CPU (its feed opens six suggestions); `same` in
+packages/core/src/merge.ts walks the two values instead.
+
 Latency comes from the same place: each API read is a Worker call and its
 statements are round trips to Postgres in Virginia, one after the other.
 Smart Placement (`[placement]` in each `wrangler.toml`) runs the Workers

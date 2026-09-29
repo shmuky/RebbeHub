@@ -1,6 +1,7 @@
 import { threadsAbout, type AboutThread } from './about.server.js';
 import { workToc, type WorkToc } from './workView.server.js';
 import { eventView, type EventView } from './eventView.server.js';
+import { eventRow } from '../components/EventRow.js';
 import type { Backlink, Cover, Entity, FileInfo, LinkGroup, RebbeHubApi, RelationLink, ScanPages, WorkCover } from './api.js';
 
 /**
@@ -163,11 +164,11 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
       const date = typeof d.date === 'string' ? d.date : '';
       const day = /^\d{4}-(\w{2,3}-\d{2})$/.exec(date)?.[1];
       const [otherYears, sameYear] = await Promise.all([day ? api.events({ day, limit: 50 }) : [], date ? api.events({ within: date.slice(0, 4), limit: 2000 }) : []]);
-      view.lists.otherYears = otherYears.filter((e) => e.id !== entity.id);
+      view.lists.otherYears = otherYears.filter((e) => e.id !== entity.id).map(eventRow);
       // The farbrengens before and after it, in date order within its year.
       const at = sameYear.findIndex((e) => e.id === entity.id);
-      if (at > 0) view.lists.previous = [sameYear[at - 1]!];
-      if (at >= 0 && at < sameYear.length - 1) view.lists.following = [sameYear[at + 1]!];
+      if (at > 0) view.lists.previous = [eventRow(sameYear[at - 1]!)];
+      if (at >= 0 && at < sameYear.length - 1) view.lists.following = [eventRow(sameYear[at + 1]!)];
       break;
     }
     case 'publication': {

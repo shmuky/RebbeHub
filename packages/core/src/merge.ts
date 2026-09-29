@@ -1,4 +1,4 @@
-import { canonicalJson, isEntityId } from '@rebbehub/model';
+import { isEntityId } from '@rebbehub/model';
 
 /**
  * Three-way merge of an item's data against the version a suggestion was
@@ -36,8 +36,26 @@ export interface MergeResult {
 /** How a reviewer settled a conflict: one side, or a value of their own. */
 export type Resolution = { take: 'ours' } | { take: 'theirs' } | { value: Json | undefined };
 
-const same = (a: Json | undefined, b: Json | undefined): boolean =>
-  a === b || (a !== undefined && b !== undefined && canonicalJson(a) === canonicalJson(b));
+/**
+ * Whether two values are the same JSON - what `canonicalJson` would write
+ * alike: `undefined` members dropped, keys in any order - found by walking
+ * them, not by writing them out. A suggestion's page compares each of its
+ * items whole, words and all, then field by field, and writing every
+ * sicha's text out twice at every level was most of the page's CPU.
+ */
+function same(a: Json | undefined, b: Json | undefined): boolean {
+  if (a === b) return true;
+  if (a === undefined || b === undefined || a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (!same(a[i] ?? null, b[i] ?? null)) return false;
+    return true;
+  }
+  const keys = Object.keys(a).filter((key) => a[key] !== undefined);
+  if (keys.length !== Object.keys(b).filter((key) => b[key] !== undefined).length) return false;
+  for (const key of keys) if (b[key] === undefined || !same(a[key], b[key])) return false;
+  return true;
+}
 
 const isObject = (v: Json | undefined): v is { [key: string]: Json } => typeof v === 'object' && v !== null && !Array.isArray(v);
 

@@ -14,11 +14,29 @@ export type EventItem = Pick<Entity, 'id' | 'path' | 'type' | 'data'> & { record
 interface EventData {
   title?: LocalName;
   date?: string;
-  links?: Array<{ kind: string; url: string }>;
+  /** Where it is printed; a list keeps each link's kind alone (`eventRow`), the farbrengen's own page has the rest. */
+  links?: Array<{ kind: string; url?: string }>;
 }
 
 export const eventData = (e: EventItem) => e.data as unknown as EventData;
 export const hanachaOf = (e: EventItem) => eventData(e).links?.find((l) => l.kind === 'bilti-mugah' || l.kind === 'mugah') ?? eventData(e).links?.[0];
+
+/**
+ * What a list keeps of a farbrengen: its name, its date, the kinds of
+ * what it is printed in (a row shows whether it has a hanacha), and how
+ * many recordings it has. A page carries its loader data hidden in its
+ * HTML for hydration, and a farbrengen's links, with their labels and
+ * pages, are four fifths of it: a year's calendar kept 108 kB of them and
+ * showed an icon.
+ */
+export function eventRow<E extends Entity & { recordings?: number }>(e: E): Entity & { recordings?: number } {
+  const d = eventData(e);
+  const data: EventData = { title: d.title, date: d.date };
+  if (d.links) data.links = d.links.map((l) => ({ kind: l.kind }));
+  const row: Entity & { recordings?: number } = { id: e.id, type: e.type, path: e.path, rev: e.rev, data: data as unknown as Record<string, unknown> };
+  if (e.recordings !== undefined) row.recordings = e.recordings;
+  return row;
+}
 
 /**
  * Play a farbrengen from a list without opening it: its parts are fetched
