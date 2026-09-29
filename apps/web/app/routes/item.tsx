@@ -19,6 +19,7 @@ import { loadItemView } from '../lib/itemData.server.js';
 import { describe, labelOf } from '../lib/labels.js';
 import { href, itemPath } from '../lib/links.js';
 import { breadcrumbs, pageMeta, type PageMeta } from '../lib/seo.js';
+import { ITEM_PAGE } from '../../server/cachePolicy.js';
 
 /**
  * Every item's page. A readable path (`/likkutei-sichos/12/3`) is resolved
@@ -47,6 +48,13 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (!entity) throw data('not found', { status: 404 });
   const view = await loadItemView(api, entity, url);
   return { entity, view, lang, siteUrl };
+}
+
+/** Kept at the edge longer than other pages: an item changes only when a Suggestion about it is approved (cachePolicy.ts). */
+export function headers({ parentHeaders }: Route.HeadersArgs) {
+  const out = new Headers(parentHeaders);
+  out.set('Cache-Control', ITEM_PAGE);
+  return out;
 }
 
 export async function action({ request, context }: Route.ActionArgs): Promise<ReportResult | FamilyRequestResult> {

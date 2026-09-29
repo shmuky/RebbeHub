@@ -1863,6 +1863,11 @@ export interface Operations {
     };
     output: Record<string, unknown>;
   };
+  /** What crawlers may read on the API: the guides and the files, not the routes */
+  robotsTxt: {
+    input: Record<string, never>;
+    output: string;
+  };
   /** Redirects to /v1 */
   root: {
     input: Record<string, never>;
@@ -2441,6 +2446,7 @@ export const OPERATIONS = {
   revertSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/revert","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   reviewLive: {"method":"POST","path":"/v1/suggestions/{id}/review-live","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   reviewSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/reviews","pathParams":["id"],"query":[],"body":"json","answer":"json"},
+  robotsTxt: {"method":"GET","path":"/robots.txt","pathParams":[],"query":[],"body":null,"answer":"text"},
   root: {"method":"GET","path":"/","pathParams":[],"query":[],"body":null,"answer":"raw"},
   savePlace: {"method":"PUT","path":"/v1/places","pathParams":[],"query":[],"body":"json","answer":"json"},
   scanPages: {"method":"GET","path":"/v1/scans/{id}/pages","pathParams":["id"],"query":[],"body":null,"answer":"json"},
@@ -3093,6 +3099,11 @@ export abstract class GeneratedMethods {
   /** Review: approve (it goes into the catalog, where you may merge it), request changes (sent back), or comment; with comments on fields (POST /v1/suggestions/{id}/reviews) */
   reviewSuggestion(input: Operations['reviewSuggestion']['input']): Promise<Operations['reviewSuggestion']['output']> {
     return this.call('reviewSuggestion', input ?? {} as Operations['reviewSuggestion']['input']);
+  }
+
+  /** What crawlers may read on the API: the guides and the files, not the routes (GET /robots.txt) */
+  robotsTxt(): Promise<Operations['robotsTxt']['output']> {
+    return this.call('robotsTxt', {} as Operations['robotsTxt']['input']);
   }
 
   /** Redirects to /v1 (GET /) */

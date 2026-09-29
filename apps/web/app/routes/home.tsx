@@ -186,13 +186,33 @@ type FeedItem =
 export function meta({ loaderData }: Route.MetaArgs) {
   if (!loaderData) return [];
   const { lang, siteUrl } = loaderData;
+  const base = siteUrl.replace(/\/$/, '');
   return pageMeta({
     title: '',
     description: t(lang, 'tagline'),
     path: '/',
     lang,
     siteUrl,
-    jsonLd: { '@type': 'WebSite', name: 'RebbeHub', url: siteUrl, potentialAction: { '@type': 'SearchAction', target: `${siteUrl}/search?q={q}`, 'query-input': 'required name=q' } },
+    // The site and who keeps it: search engines show the name and logo beside results, and search from the result itself.
+    jsonLd: [
+      {
+        '@type': 'WebSite',
+        '@id': `${base}/#website`,
+        name: 'RebbeHub',
+        url: `${base}/`,
+        inLanguage: ['he', 'en'],
+        publisher: { '@id': `${base}/#organization` },
+        potentialAction: { '@type': 'SearchAction', target: `${base}/search?q={q}`, 'query-input': 'required name=q' },
+      },
+      {
+        '@type': 'Organization',
+        '@id': `${base}/#organization`,
+        name: 'RebbeHub',
+        url: `${base}/`,
+        logo: { '@type': 'ImageObject', url: `${base}/icon-512.png`, width: 512, height: 512 },
+        sameAs: ['https://github.com/shmuky/RebbeHub'],
+      },
+    ],
   });
 }
 

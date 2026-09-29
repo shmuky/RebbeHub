@@ -10,6 +10,8 @@
  * the page, and should see it as it now is.
  */
 
+import { isbot } from 'isbot';
+
 /** The session cookie the API sets through the site (services/api/src/auth.ts). */
 const SESSION = /(?:^|;\s*)(?:__Host-)?rh_session=/;
 
@@ -65,4 +67,47 @@ export function withCachePolicy(request: Request, response: Response): Response 
   const out = new Response(response.body, response);
   out.headers.set('Cache-Control', policy);
   return out;
+}
+
+/**
+ * What an item's page says: it changes only when someone's Suggestion is
+ * approved, so the edge keeps it an hour (a crawler's second visit, and the
+ * next reader's, cost nothing), then serves it stale for a day while it is
+ * made again. Whoever made the change is signed in and sees it at once.
+ */
+export const ITEM_PAGE = 'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400';
+
+/** The search engines people find the site through: each gets a budget of its own. */
+const SEARCH_ENGINES = /googlebot|google-inspectiontool|bingbot|applebot|duckduckbot|yandex|baiduspider|yeti|seznambot|qwantbot|petalbot/i;
+
+/** What a crawler needs to find the rest, each one query or none and kept an hour: never counted. */
+const CRAWLER_GUIDES = /^\/(robots\.txt|sitemap\.xml|sitemaps\/[^/]+\.xml|llms(-full)?\.txt)$/;
+
+/**
+ * Which budget a request's page is made from, when a crawler asks for one
+ * that is not already at the edge: every search engine its own, every
+ * other bot (AI crawlers, SEO tools, scrapers) one shared between them.
+ * People are never counted (null).
+ *
+ * Making a page no one has asked for lately costs the database one to two
+ * dozen reads, and a crawler asks for tens of thousands of them; without a
+ * budget one crawl can use a day's reads (docs/operations.md, "Crawlers").
+ */
+export function crawlBudget(request: Request): { key: string; searchEngine: boolean } | null {
+  const agent = request.headers.get('user-agent') ?? '';
+  if (!isbot(agent) || CRAWLER_GUIDES.test(new URL(request.url).pathname)) return null;
+  const engine = SEARCH_ENGINES.exec(agent)?.[0]?.toLowerCase();
+  return engine ? { key: `search:${engine}`, searchEngine: true } : { key: 'bots', searchEngine: false };
+}
+
+/**
+ * The answer for a crawler over its budget: come back later. Search engines
+ * read 503 with Retry-After as "slow down", not as a missing page, and
+ * nothing keeps it.
+ */
+export function crawlLater(): Response {
+  return new Response('Busy: please crawl more slowly.', {
+    status: 503,
+    headers: { 'Retry-After': '120', 'Cache-Control': 'no-store', 'Content-Type': 'text/plain; charset=utf-8' },
+  });
 }

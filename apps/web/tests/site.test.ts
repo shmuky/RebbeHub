@@ -7,7 +7,7 @@ import { createPerson, registerFile, setUsername } from '@rebbehub/core';
 import type { EntityId } from '@rebbehub/model';
 import { createApp } from '../../../services/api/src/app.js';
 import { add, freshCatalog } from '../../../packages/core/tests/helpers.js';
-import { PUBLIC_PAGE, edgeCacheable, forEdge } from '../server/cachePolicy.js';
+import { ITEM_PAGE, PUBLIC_PAGE, crawlBudget, crawlLater, edgeCacheable, forEdge } from '../server/cachePolicy.js';
 import { createSiteHandler } from '../server/handler.js';
 
 /**
@@ -252,8 +252,47 @@ describe('the public site', () => {
 
     // The home page says what the site is, and how to search it.
     const home = await get('/');
-    expect(home.html).toContain('"@type":"WebSite"');
-    expect(home.html).toContain('"@type":"SearchAction"');
+    const homeData = JSON.parse(/<script type="application\/ld\+json">(.*?)<\/script>/s.exec(home.html)![1]!)['@graph'] as Array<Record<string, any>>;
+    expect(homeData[0]).toMatchObject({ '@type': 'WebSite', url: `${SITE}/`, publisher: { '@id': `${SITE}/#organization` }, potentialAction: { '@type': 'SearchAction' } });
+    expect(homeData[1]).toMatchObject({ '@type': 'Organization', logo: { url: `${SITE}/icon-512.png` }, sameAs: ['https://github.com/shmuky/RebbeHub'] });
+    // Every page offers the address bar a way to search the catalog.
+    expect(home.html).toContain('<link rel="search" type="application/opensearchdescription+xml" title="RebbeHub" href="/opensearch.xml"/>');
+    const openSearch = await get('/opensearch.xml');
+    expect(openSearch.type).toContain('application/opensearchdescription+xml');
+    expect(openSearch.html).toContain(`template="${SITE}/search?q={searchTerms}"`);
+  });
+
+  it('tells browsers to keep to HTTPS and not guess types, and says where to report a security problem', async () => {
+    for (const path of ['/', '/sample', '/robots.txt', '/no/such/sefer', `/embed/${ids.event}`]) {
+      const response = await handle(new Request(`${SITE}${path}`));
+      expect(response.headers.get('x-content-type-options'), path).toBe('nosniff');
+      expect(response.headers.get('strict-transport-security'), path).toMatch(/^max-age=\d{7,}/);
+      expect(response.headers.get('referrer-policy'), path).toBe('strict-origin-when-cross-origin');
+    }
+    const security = await get('/.well-known/security.txt');
+    expect(security.type).toContain('text/plain');
+    expect(security.html).toContain('Contact: https://github.com/shmuky/RebbeHub/security/advisories/new\n');
+    expect(security.html).toContain(`Canonical: ${SITE}/.well-known/security.txt\n`);
+    const expires = new Date(/Expires: (\S+)/.exec(security.html)![1]!);
+    expect(expires.getTime()).toBeGreaterThan(Date.now() + 90 * 86_400_000);
+    expect(expires.getTime()).toBeLessThan(Date.now() + 365 * 86_400_000);
+  });
+
+  it("counts the pages crawlers make against a budget, each search engine its own, never people's or the guides", () => {
+    const as = (agent: string, path = '/sample') => crawlBudget(new Request(`${SITE}${path}`, { headers: { 'user-agent': agent } }));
+    const person = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+    expect(as(person)).toBeNull();
+    expect(as('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')).toEqual({ key: 'search:googlebot', searchEngine: true });
+    expect(as('Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)')).toEqual({ key: 'search:bingbot', searchEngine: true });
+    // AI crawlers and every other bot share one budget.
+    expect(as('Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.2; +https://openai.com/gptbot)')).toEqual({ key: 'bots', searchEngine: false });
+    expect(as('Mozilla/5.0 (compatible; ClaudeBot/1.0; +claudebot@anthropic.com)')).toEqual({ key: 'bots', searchEngine: false });
+    // What leads a crawler to the rest is never counted.
+    for (const path of ['/robots.txt', '/sitemap.xml', '/sitemaps/unit-3.xml', '/llms.txt', '/llms-full.txt']) expect(as('Googlebot/2.1', path), path).toBeNull();
+    const later = crawlLater();
+    expect(later.status).toBe(503);
+    expect(later.headers.get('retry-after')).toBe('120');
+    expect(later.headers.get('cache-control')).toBe('no-store');
   });
 
   it('keeps search results, empty talk pages, histories and permanent-id copies out of search, and answers what is not there with 404', async () => {
@@ -271,11 +310,13 @@ describe('the public site', () => {
   });
 
   it("lets Cloudflare's edge keep pages for anyone, never for someone signed in, and never what failed or is personal", async () => {
+    // An item's page is kept an hour (it changes only when a Suggestion is approved); other pages five minutes.
     const anyone = await get('/sample');
-    expect(anyone.cache).toBe(PUBLIC_PAGE);
-    expect(anyone.cache).toMatch(/s-maxage=\d+/);
+    expect(anyone.cache).toBe(ITEM_PAGE);
+    expect(anyone.cache).toMatch(/s-maxage=3600/);
+    expect((await get('/sets')).cache).toBe(PUBLIC_PAGE);
     // The data React Router fetches for the next page is kept the same way.
-    expect((await get('/sample.data')).cache).toBe(PUBLIC_PAGE);
+    expect((await get('/sample.data')).cache).toBe(ITEM_PAGE);
     const signedIn = await get('/sample', { cookie: '__Host-rh_session=abc; theme=dark' });
     expect(signedIn.status).toBe(200);
     expect(signedIn.cache).toBe('private, no-cache');
