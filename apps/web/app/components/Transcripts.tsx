@@ -75,7 +75,9 @@ function Spoken({ content, words, nowMs }: { content: string; words: Word[]; now
   return <>{out}</>;
 }
 
-export function Transcripts({ tracks, lang, onLoaded }: { tracks: Track[]; lang: Lang; onLoaded?: (transcripts: number) => void }) {
+export function Transcripts({ tracks, lang, onLoaded, only }: { tracks: Track[]; lang: Lang; onLoaded?: (transcripts: number) => void; only?: string }) {
+  // `tracks` is what plays, one part after the other; `only` narrows what is read here to one of them (a recording's own page).
+  const heard = only ? tracks.filter((tr) => tr.id === only) : tracks;
   const player = usePlayer();
   const account = useAccount();
   const [params] = useSearchParams();
@@ -87,14 +89,14 @@ export function Transcripts({ tracks, lang, onLoaded }: { tracks: Track[]; lang:
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [loaded, setLoaded] = useState(false);
   const section = useRef<HTMLElement>(null);
-  const ids = tracks.map((tr) => tr.id).join(',');
-  const playingHere = tracks.some((tr) => tr.id === player.current?.id);
+  const ids = heard.map((tr) => tr.id).join(',');
+  const playingHere = heard.some((tr) => tr.id === player.current?.id);
   const nowMs = useNowMs(playingHere);
 
   useEffect(() => {
     let live = true;
     // Most recordings have no transcript yet; those answer "not found" and are left out.
-    void Promise.all(tracks.map((tr) => get<Transcript>(`recordings/${tr.id}/transcript`).catch(() => null))).then((all) => {
+    void Promise.all(heard.map((tr) => get<Transcript>(`recordings/${tr.id}/transcript`).catch(() => null))).then((all) => {
       if (!live) return;
       const found = all.filter((x): x is Transcript => x !== null);
       setTranscripts(found);
@@ -136,16 +138,16 @@ export function Transcripts({ tracks, lang, onLoaded }: { tracks: Track[]; lang:
   }
 
   // Parts with no transcript yet: anyone signed in may ask the machine for one.
-  const missing = loaded ? tracks.filter((tr) => !transcripts.some((x) => x.recording === tr.id)) : [];
+  const missing = loaded ? heard.filter((tr) => !transcripts.some((x) => x.recording === tr.id)) : [];
   const ask = missing.length ? (
     <details className="ask-transcripts">
       <summary>
-        {t(lang, 'transcript')} · {missing.length === tracks.length ? tn(lang, 'noTranscriptYet') : `${missing.length} ${tn(lang, 'partsWithoutTranscript')}`}
+        {t(lang, 'transcript')} · {missing.length === heard.length ? tn(lang, 'noTranscriptYet') : `${missing.length} ${tn(lang, 'partsWithoutTranscript')}`}
       </summary>
       <ul className="stack">
         {missing.map((tr) => (
           <li key={tr.id}>
-            {tracks.length > 1 ? <b>{tr.title}</b> : null}
+            {heard.length > 1 ? <b>{tr.title}</b> : null}
             <AskMachine kind="transcript" item={tr.id} lang={lang} />
           </li>
         ))}

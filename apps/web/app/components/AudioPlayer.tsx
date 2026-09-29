@@ -34,7 +34,8 @@ function videoAt(url: string, startMs?: number): string {
  * playing from page to page): audio RebbeHub may serve (`src` resolved
  * from the file's rights) or heard where it is kept, and video links.
  */
-export function AudioPlayer({ recordings, sources }: { recordings: Entity[]; sources: Record<string, string | null> }) {
+/** `queue`, when given, is what plays on after these recordings (a recording's page plays its whole farbrengen). */
+export function AudioPlayer({ recordings, sources, queue }: { recordings: Entity[]; sources: Record<string, string | null>; queue?: Track[] }) {
   const lang = useLang();
   const player = usePlayer();
   const sorted = [...recordings].sort((a, b) => ((a.data as unknown as RecordingData).part ?? 0) - ((b.data as unknown as RecordingData).part ?? 0));
@@ -43,7 +44,7 @@ export function AudioPlayer({ recordings, sources }: { recordings: Entity[]; sou
       {sorted.map((recording) => {
         const data = recording.data as unknown as RecordingData;
         const src = sources[recording.id] ?? data.url ?? null;
-        const tracks: Track[] = sorted.flatMap((r) => {
+        const tracks: Track[] = queue ?? sorted.flatMap((r) => {
           const d = r.data as unknown as RecordingData;
           const url = sources[r.id] ?? d.url;
           return url ? [{ id: r.id, title: nameOf(d.title, lang), subtitle: '', url, durationMs: d.durationMs, href: href(itemPath(r), lang) }] : [];
