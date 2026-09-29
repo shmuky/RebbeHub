@@ -295,6 +295,7 @@ const STRINGS = {
   exitFullScreen: { he: 'יציאה ממסך מלא', en: 'Exit full screen' },
   machineSyncShort: { he: 'סנכרון מכונה', en: 'machine sync' },
   lyricsMachineHint: { he: 'הטקסט והסנכרון נעשו במחשב ועוד לא נבדקו כולם: אין לצטט אותם כדברי הרבי.', en: "The words and the sync were made by a machine and not all checked yet: do not quote them as the Rebbe's words." },
+  unclearWords: { he: 'לא ברור מה נאמר כאן: זה מה שהשומע חשב ששמע', en: 'Unclear: what the listener thinks was said' },
   machineTranscript: { he: 'תמלול מכונה, מסונכרן להקלטה: הקטע שנשמע מסומן, ולחיצה על קטע מנגנת ממנו. קטעים שטרם נבדקו מסומנים; אין לצטט אותם כדברי הרבי.', en: "Machine transcript, synced to the recording: the part being heard is marked, and tapping a part plays from there. Parts not yet checked are marked; do not quote them as the Rebbe's words." },
   fixTranscriptSignIn: { he: 'שומעים אחרת? כדי לתקן צריך להיכנס.', en: 'Hear it differently? To fix it, sign in.' },
   onRebbeHub: { he: 'ב-RebbeHub ←', en: 'On RebbeHub →' },

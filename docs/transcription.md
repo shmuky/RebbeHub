@@ -113,12 +113,17 @@ never started this way: each GPU run waits for a person.
 Every correction people make is training data for the next version,
 gathered with nobody doing it by hand:
 
-1. **People check.** On a farbrengen's transcript, **Heard right** marks a
-   paragraph's words checked as they are; **Fix** corrects them. Under the
+1. **People check.** On a farbrengen's transcript, **הכל מדוייק** marks a
+   paragraph's words checked as they are; editing corrects them. Words a
+   listener is not sure of are marked **לא ברור**, kept in the text as
+   `[words?]` (`packages/model/src/unclear.ts`): the site shows them as
+   uncertain, and a paragraph with one is left out of the clips. People
+   check words only: the machine's timing is good enough, and the editor
+   has no tools to move it. Under the
    editor the house spelling is shown (the booklets': אויך, דעמאלט,
    ברענגט, ע"י as written; `packages/model/src/spelling.ts`), with a hint
    for each word written otherwise, so everything checked is in one
-   spelling. Both go for review like any suggestion.
+   spelling. Every fix goes for review like any suggestion.
 2. **The machine times the words again.** A corrected paragraph loses its
    word timings. The nightly run then runs `rebbehub align` on the
    recordings with corrected paragraphs first, timing the new words.

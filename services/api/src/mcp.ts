@@ -507,16 +507,17 @@ function machineTools(site: string): Tool[] {
     {
       name: 'machine_to_check',
       title: 'See what the machines wrote that nobody checked yet',
-      description: 'Farbrengens whose machine transcripts have paragraphs no person has checked, and scans read by OCR with pages nobody proofread, the newest first, with how many in all. Checking them (suggest_fix on a paragraph or a line) is what trains the next models.',
+      description: 'Farbrengens whose machine transcripts have paragraphs no person has checked, scans read by OCR with pages nobody proofread, and pages whose words a machine read (a subject index read from its scan) with segments nobody checked, the newest first, with how many in all. Checking them (suggest_fix on a paragraph or a line) is what trains the next models.',
       inputSchema: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Rows of each list (50)' } }, additionalProperties: false },
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
       async run(args, call) {
         const limit = typeof args.limit === 'number' ? `?limit=${args.limit}` : '';
         const s = await need(call, 'GET', `/v1/machine/to-check${limit}`);
         const text = [
-          `${s.totals.transcripts} farbrengens with ${s.totals.paragraphs} transcript paragraphs to check; ${s.totals.scans} scans with ${s.totals.pages} OCR pages to check.`,
+          `${s.totals.transcripts} farbrengens with ${s.totals.paragraphs} transcript paragraphs to check; ${s.totals.scans} scans with ${s.totals.pages} OCR pages to check; ${s.totals.texts} machine-read pages with ${s.totals.entries} segments to check.`,
           ...(s.transcripts as any[]).map((f) => `  transcript: ${f.title?.he ?? f.event} ${f.date ?? ''}, ${f.checked} of ${f.paragraphs} paragraphs checked, made ${f.made.slice(0, 10)} (${f.path ?? f.event})`),
           ...(s.scans as any[]).map((f) => `  scan: ${f.title?.he ?? f.scan}, ${f.checked} of ${f.pages} pages checked, read ${f.made.slice(0, 10)} (/text/${f.scan})`),
+          ...(s.texts as any[]).map((f) => `  page: ${[f.title?.he, f.label?.he].filter(Boolean).join(', ') || f.entity}, ${f.segments ? `${f.checked} of ${f.segments} segments checked` : 'not checked'}, read ${f.made.slice(0, 10)} (/edit/${f.entity})`),
         ].join('\n');
         return { text, structured: s };
       },

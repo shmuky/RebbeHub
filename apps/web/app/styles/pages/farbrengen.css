@@ -1237,3 +1237,20 @@ button.part.on:hover {
   background: linear-gradient(170deg, #2c4378 0%, #1c2a52 48%, #121a35 100%);
   opacity: 0.35;
 }
+
+/* Words a listener marked unclear (`[words?]`): underlined in dots, in the reader and the editor alike. */
+.w-unclear {
+  text-decoration: underline dotted;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
+  text-decoration-color: var(--machine);
+}
+
+.lyrics .w-unclear {
+  text-decoration-color: #ffd98a;
+}
+
+.tx-state.resumed {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
