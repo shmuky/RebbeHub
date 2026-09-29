@@ -87,7 +87,7 @@ export default function Check({ loaderData }: Route.ComponentProps) {
               <ul className="hl-long">
                 {list.transcripts.map((f) => (
                   <li key={f.event}>
-                    <Link className="row hover" to={href(f.path ?? `/${f.event}`, lang)}>
+                    <Link className="row hover" to={`${href(f.path ?? `/${f.event}`, lang, { review: '1' })}#transcript`}>
                       <Icon name="audio" />
                       <span className="row-main">
                         <span className="row-title">{nameOf(f.title, lang) || (f.date ? dateLabel(f.date, lang, { civil: false }) : f.event)}</span>
