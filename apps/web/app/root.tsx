@@ -70,7 +70,8 @@ function Footer({ lang }: { lang: Lang }) {
         <p>
           <a href="https://github.com/shmuky/RebbeHub">{t(lang, 'code')}</a> · <a href="https://github.com/shmuky/RebbeHub/blob/main/CONTRIBUTING.md">{t(lang, 'help')}</a> ·{' '}
           <Link to={href('/about', lang)}>{t(lang, 'about')}</Link> · <Link to={href('/takedown', lang)}>{t(lang, 'takedownTitle')}</Link> ·{' '}
-          <Link to={href('/mirrors', lang)}>{lang === 'he' ? 'הורדה ואתרי מראה' : 'Download and mirror'}</Link>
+          <Link to={href('/mirrors', lang)}>{lang === 'he' ? 'הורדה ואתרי מראה' : 'Download and mirror'}</Link> ·{' '}
+          <Link to={href('/developers', lang)}>{lang === 'he' ? 'למפתחים' : 'Developers'}</Link>
         </p>
       </div>
     </footer>

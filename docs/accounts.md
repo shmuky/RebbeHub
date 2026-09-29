@@ -177,11 +177,23 @@ to `rebbehub-api`. Without them no advice is written and nothing shows.
 - Pages are the same for everyone and cached as such; who is signed in is
   asked by the browser after the page loads (`/_/auth/me`, never cached).
 
+## API tokens
+
+A script or an AI agent acts for a person with a personal API token
+(`rhp_…`), made and revoked on `/account` (*For developers: API tokens*)
+and only there: a token cannot make, list or revoke tokens, sign in, or
+use the admin routes. Each has a name, its scopes (`read`, or `read` and
+`write`) and, if chosen, an end date. It is shown once; only its sha256
+is kept (`auth.api_token`, migration 0018), with when it was last used. A
+suggestion sent with one is the person's own and is reviewed like any
+other. Suspending a person revokes all their tokens. How to use one:
+[developers/auth](developers/auth.md).
+
 ## Where it is kept
 
 People, passkeys, Google accounts, email addresses and links, email
 update settings, sessions and challenges live in the `auth` schema
-(migrations 0003, 0004 and 0011), apart from the catalog in `public`. The import may
+(migrations 0003, 0004 and 0011; API tokens, 0018), apart from the catalog in `public`. The import may
 rebuild the catalog and replace every table in `public`
 (`scripts/import-catalog.sh`, which leaves `auth` out of the copy);
 signing in is not adding to the catalog, and a person's catalog account

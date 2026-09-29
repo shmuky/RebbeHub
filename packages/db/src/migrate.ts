@@ -14,6 +14,7 @@ import * as scansAndTeshuros from './migrations/0012_scans_and_teshuros.js';
 import * as projectClaims from './migrations/0013_project_claims.js';
 import * as readingPlaces from './migrations/0014_reading_places.js';
 import * as pageWords from './migrations/0015_page_words.js';
+import * as apiTokens from './migrations/0018_api_tokens.js';
 
 export interface Migration {
   version: number;
@@ -38,6 +39,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 13, name: 'project-claims', up: projectClaims.up },
   { version: 14, name: 'reading-places', up: readingPlaces.up },
   { version: 15, name: 'page-words', up: pageWords.up },
+  { version: 18, name: 'api-tokens', up: apiTokens.up },
 ];
 
 /** Applies the migrations `db` has not had yet, each in its own transaction. Returns the versions applied. */

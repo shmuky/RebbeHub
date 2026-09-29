@@ -43,6 +43,11 @@ export default [
   route('projects/:slug', 'routes/project.tsx'),
   route('signin', 'routes/signin.tsx'),
   route('account', 'routes/account.tsx'),
+  // For developers and AI agents: the docs, the interactive API reference, and llms.txt.
+  route('developers/reference', 'routes/developers-reference.tsx'),
+  route('developers/:page?', 'routes/developers.tsx'),
+  route('llms.txt', 'routes/llms.ts', { id: 'llms' }),
+  route('llms-full.txt', 'routes/llms.ts', { id: 'llms-full' }),
   route('robots.txt', 'routes/robots.ts'),
   route('sitemap.xml', 'routes/sitemap-index.ts'),
   route('sitemaps/:type.xml', 'routes/sitemap.ts'),

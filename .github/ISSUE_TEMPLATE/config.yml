@@ -3,3 +3,9 @@ contact_links:
   - name: Security problem
     url: https://github.com/shmuky/RebbeHub/security/advisories/new
     about: Report a security problem privately. Please do not open a public issue for it.
+  - name: Report a problem on the site
+    url: https://rebbehub.org
+    about: Every page has "Report a problem" (no account needed) and "Suggest a fix" - the quickest way to fix the catalog.
+  - name: Developer docs and API
+    url: https://rebbehub.org/developers
+    about: The API, tokens, the MCP server for AI agents, dumps and webhooks.

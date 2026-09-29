@@ -50,12 +50,13 @@ sources. See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 ## Rights and takedowns
 
 Files start in the most careful state their source allows (see
-[docs/rights.md](docs/rights.md)). Anyone may ask for a file to be taken
-down through the [rights form](https://github.com/shmuky/RebbeHub/issues/new?template=3-rights.yml)
-(and, once the site is live, its own public form). A steward can move a
-file out of public view in one click - it is kept privately, never
-deleted - and the action is logged. The response time RebbeHub commits to
-is set by the stewards and published here before launch.
+[docs/rights.md](docs/rights.md)). Anyone may ask for a file to be taken down, with no account, on the
+site's [takedown form](https://rebbehub.org/takedown) or through the
+[rights form](https://github.com/shmuky/RebbeHub/issues/new?template=3-rights.yml).
+A steward answers within two weeks, and can move a file out of public view
+in one click - it is kept privately, never deleted - and the action is
+logged. A family may ask that a teshura not be shown, and its scans stop
+being served at once while a steward reviews it.
 
 ## Changing this document
 

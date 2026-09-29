@@ -10,6 +10,7 @@ import { itemPath } from '../lib/links.js';
 import { refreshAccount, useAccount, useEmailSignIn, useGoogleSignIn, type SignedIn } from '../lib/useAccount.js';
 import { setFollow, useFollows } from '../lib/useFollows.js';
 import { Webhooks } from '../components/Webhooks.js';
+import { ApiTokens } from '../components/ApiTokens.js';
 import { useLang } from '../lib/useLang.js';
 
 /**
@@ -394,6 +395,7 @@ export default function Account() {
         ) : null}
       </p>
 
+      <ApiTokens lang={lang} />
       <Webhooks lang={lang} />
 
       <section className="note">

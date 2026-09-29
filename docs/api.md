@@ -2,7 +2,11 @@
 
 `https://api.rebbehub.org` serves the whole catalog, read without an
 account; `/openapi.json` lists every route. What changes the catalog
-needs a signed-in session, from the site's own pages.
+needs a signed-in person: the site's session, or a personal API token made
+on `/account` ([auth](developers/auth.md)). The developer docs, with every
+route's examples and a reference to try them in, are at
+[rebbehub.org/developers](https://rebbehub.org/developers)
+([developers/](developers/index.md)).
 
 ## Reading
 
@@ -71,18 +75,8 @@ needs a signed-in session, from the site's own pages.
 ## OAI-PMH for libraries
 
 `https://api.rebbehub.org/oai` speaks OAI-PMH 2.0 (when switched on,
-[deploy](deploy.md)): sefarim, sichos, farbrengens, printings and
-recordings as Dublin Core (`oai_dc`), harvested by the commit that last
-changed them (`from`, `until`), by kind (`set=type:unit`) or by set
-(`set=set:rh-…`), a hundred at a time with a resumption token. Deleted
-items are reported as deleted (`deletedRecord: persistent`); identifiers
-are `oai:rebbehub.org:rh-…`. Records are CC0.
-
-```
-/oai?verb=Identify
-/oai?verb=ListRecords&metadataPrefix=oai_dc&from=2026-09-01
-/oai?verb=GetRecord&metadataPrefix=oai_dc&identifier=oai:rebbehub.org:rh-…
-```
+[deploy](deploy.md)), Dublin Core records under CC0: see
+[OAI-PMH and IIIF](developers/oai-pmh.md).
 
 ## Translations
 
@@ -105,7 +99,7 @@ there. Personal: never cached, never exported.
 
 ## Adding
 
-With a signed-in session:
+With a signed-in session or a token with the `write` scope:
 
 - `POST /v1/uploads/check` (`{ sha256, pageHashes?, work?, publication? }`):
   before an upload, whether RebbeHub has the file or one like it, and
@@ -129,22 +123,9 @@ With a signed-in session:
 
 On `/account` (*For developers: webhooks*), or `POST /v1/webhooks` with
 `{ "url": "https://…" }`, a signed-in person registers up to five
-addresses. Every merge from then on is posted to each, in order and at
-least once, every few minutes:
-
-```http
-POST <your address>
-Content-Type: application/json
-X-RebbeHub-Signature: sha256=<HMAC-SHA256 of the body, keyed with the hook's secret>
-
-{ "commits": [ { "seq": 9, "at": "…", "message": "…", "author": "…", "mergedBy": "…",
-                 "changes": [ { "id": "rh-…", "type": "event", "path": "/events/…", "rev": 22993, "data": { … } } ] } ] }
-```
-
-The secret is shown once, when the address is added. Answer with a 2xx
-status; anything else is tried again, and after 20 failures in a row the
-hook is switched off. Words withheld for rights are left out, as in
-`/v1/commits`.
+addresses; every merge from then on is posted to each, signed with the
+hook's secret. The body, the signature and retries:
+[webhooks](developers/webhooks.md).
 
 ## Embeds
 
