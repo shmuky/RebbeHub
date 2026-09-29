@@ -34,9 +34,12 @@ on:
 permissions:
   contents: read
 
-# Two upkeep runs never overlap: a second one waits for the first.
+# Every workflow that writes the live catalog (import, upkeep, network, ocr)
+# shares one group, so they wait for each other: an import copies the catalog
+# back only if nothing else changed it meanwhile (scripts/import-catalog.sh).
+# GitHub keeps one waiting run per group; a newer one replaces it.
 concurrency:
-  group: upkeep-production
+  group: catalog-production
   cancel-in-progress: false
 
 jobs:
