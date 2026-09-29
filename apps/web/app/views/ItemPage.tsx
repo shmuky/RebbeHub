@@ -19,7 +19,7 @@ import type { ItemView } from '../lib/itemData.server.js';
 import { labelOf } from '../lib/labels.js';
 import { st } from '../lib/scanStrings.js';
 import { ps } from '../lib/pageStrings.js';
-import { href, itemPath, SOURCE_NAMES, sourceUrl } from '../lib/links.js';
+import { href, itemPath, shortLabel, SOURCE_NAMES, sourceUrl } from '../lib/links.js';
 import { useLang } from '../lib/useLang.js';
 import { readHref } from '../routes/read.js';
 import { readable } from './EventPage.js';
@@ -112,7 +112,7 @@ function Copies({ copies, lang }: { copies: Array<{ source: string; sourceId: st
           </>
         );
         return link ? (
-          <a key={i} href={link} rel="noopener" target="_blank">
+          <a key={i} href={link} rel="noopener" target="_blank" title={link}>
             {body}
           </a>
         ) : (
@@ -312,7 +312,13 @@ function PublicationPage({ entity, view, lang }: { entity: Entity; view: ItemVie
                       return (
                         <span key={i} className="num">
                           {i ? ', ' : ''}
-                          {link ? <a href={link}>{String(value)}</a> : String(value)}
+                          {link ? (
+                            <a href={link} title={link} dir="ltr">
+                              {shortLabel(String(value), 32)}
+                            </a>
+                          ) : (
+                            shortLabel(String(value), 32)
+                          )}
                         </span>
                       );
                     })}
@@ -534,8 +540,8 @@ function Fact({ value, view, lang }: { value: unknown; view: ItemView; lang: Lan
     }
     if (/^https?:\/\//.test(value)) {
       return (
-        <a href={value} target="_blank" rel="noopener">
-          {value}
+        <a href={value} target="_blank" rel="noopener" title={value} dir="ltr">
+          {shortLabel(value)}
         </a>
       );
     }

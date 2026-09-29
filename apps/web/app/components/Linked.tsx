@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 import type { Entity, LinkGroup } from '../lib/api.js';
-import { SOURCE_NAMES, href, sourceUrl } from '../lib/links.js';
+import { SOURCE_NAMES, href, shortLabel, sourceUrl } from '../lib/links.js';
 import type { Lang } from '../lib/i18n.js';
 import { count, groupName, ps } from '../lib/pageStrings.js';
 
@@ -64,26 +64,57 @@ export function Sources({ data, lang }: { data: Record<string, unknown>; lang: L
       <ul className="list">
         {sources.map((s, i) => {
           const link = s.url ?? (s.sourceId ? sourceUrl({ source: s.source, sourceId: s.sourceId }) : null);
+          // A long id or address (a Drive folder's link) is shown short; the whole of it stays in the link and its title.
           const body = (
             <>
-              <span>
+              <span className="src-name">
                 {name(s.source)}
-                {s.sourceId ? ` · ${s.sourceId}` : ''}
+                {s.sourceId ? <span className="src-id">
+                    {' · '}
+                    <bdi dir="ltr">{shortLabel(s.sourceId)}</bdi>
+                  </span> : null}
               </span>
               {s.fetchedAt ? <span className="meta">{`${ps(lang, 'fetched')} ${s.fetchedAt.slice(0, 10)}`}</span> : null}
             </>
           );
-          return <li key={`s${i}`}>{link ? <a href={link} target="_blank" rel="noopener">{body}</a> : <div className="row">{body}</div>}</li>;
+          const title = link ?? s.sourceId;
+          return (
+            <li key={`s${i}`}>
+              {link ? (
+                <a href={link} target="_blank" rel="noopener" title={title}>
+                  {body}
+                </a>
+              ) : (
+                <div className="row" title={title}>
+                  {body}
+                </div>
+              )}
+            </li>
+          );
         })}
         {external.map(([source, id]) => {
           const link = sourceUrl({ source, sourceId: id });
           const body = (
             <>
-              <span>{name(source)}</span>
-              <span className="meta">{id}</span>
+              <span className="src-name">{name(source)}</span>
+              <span className="meta src-id" dir="ltr">
+                {shortLabel(String(id))}
+              </span>
             </>
           );
-          return <li key={`x${source}`}>{link ? <a href={link} target="_blank" rel="noopener">{body}</a> : <div className="row">{body}</div>}</li>;
+          return (
+            <li key={`x${source}`}>
+              {link ? (
+                <a href={link} target="_blank" rel="noopener" title={link}>
+                  {body}
+                </a>
+              ) : (
+                <div className="row" title={String(id)}>
+                  {body}
+                </div>
+              )}
+            </li>
+          );
         })}
       </ul>
     </section>

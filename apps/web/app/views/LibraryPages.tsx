@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Form, Link, useSearchParams } from 'react-router';
 import type { LocalName } from '@rebbehub/model';
 import { CoverChoice } from '../components/CoverChoice.js';
+import { EditActions, RowEdit } from '../components/EditSheet.js';
 import { ItemList } from '../components/ItemLink.js';
 import { Books, RebbePortrait } from '../components/Library.js';
 import { SeeAll } from '../components/Linked.js';
@@ -12,6 +13,7 @@ import { languageName, nameOf, t, type Lang } from '../lib/i18n.js';
 import { num } from '../lib/i18nUi.js';
 import type { ItemView } from '../lib/itemData.server.js';
 import { href, itemPath } from '../lib/links.js';
+import { labelOf } from '../lib/labels.js';
 import type { TocRow } from '../lib/workView.server.js';
 import { Icon } from '../ui/Icon.js';
 import { readHref } from '../routes/read.js';
@@ -114,16 +116,6 @@ function HelpNote({ lang, title, to, action }: { lang: Lang; title: string; to: 
   );
 }
 
-/** Into the organizing view of this set or sefer: move, rename, reorder and merge what is in it. */
-function OrganizeLink({ id, lang }: { id: string; lang: Lang }) {
-  return (
-    <Link className="btn" to={href('/organize', lang, { root: id })}>
-      <Icon name="layers" />
-      {w(lang, 'organize')}
-    </Link>
-  );
-}
-
 export function SetPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang: Lang }) {
   const d = entity.data as D;
   const members = view.lists.members ?? [];
@@ -145,7 +137,7 @@ export function SetPage({ entity, view, lang }: { entity: Entity; view: ItemView
         ].filter((f): f is NonNullable<typeof f> => f !== null) as never,
         tabs: [{ key: 'page', label: t(lang, 'seforim'), icon: 'book', to: href(itemPath(entity), lang), count: works.length || undefined }, ...commonTabs(entity, view, lang)],
         tab: 'page',
-        actions: <OrganizeLink id={entity.id} lang={lang} />,
+        actions: <EditActions target={{ id: entity.id, type: 'set', label: nameOf(d.name, lang), parent: typeof d.parent === 'string' ? d.parent : null }} lang={lang} editHref={href(`/edit/${entity.id}`, lang)} />,
       }}
       side={
         <>
@@ -154,12 +146,20 @@ export function SetPage({ entity, view, lang }: { entity: Entity; view: ItemView
         </>
       }
     >
-      {works.length ? <Books works={works} lang={lang} covers={view.covers} meta={(wk) => (counts[wk.id] ? `${num(counts[wk.id]!, lang)} ${t(lang, 'unitsShort')}` : undefined)} /> : null}
+      {works.length ? (
+        <Books
+          works={works}
+          lang={lang}
+          covers={view.covers}
+          meta={(wk) => (counts[wk.id] ? `${num(counts[wk.id]!, lang)} ${t(lang, 'unitsShort')}` : undefined)}
+          action={(wk) => <RowEdit lang={lang} target={{ id: wk.id, type: 'work', label: nameOf((wk.data as D).title, lang), parent: entity.id }} />}
+        />
+      ) : null}
       <SeeAll id={entity.id} group={view.linked.find((g) => g.field === 'sets' && g.type === 'work')} shown={works.length} lang={lang} />
       {others.length ? (
         <section className="stack">
           <h2 className="h-sec">{t(lang, 'moreInShelf')}</h2>
-          <ItemList items={others} />
+          <ItemList items={others} after={(o) => <RowEdit lang={lang} target={{ id: o.id, type: o.type, label: labelOf(o, lang), parent: entity.id }} />} />
         </section>
       ) : null}
       {view.linked
@@ -231,15 +231,18 @@ function Contents({ entity, view, lang, part }: { entity: Entity; view: ItemView
                 </div>
               ) : null}
               {g.rows.map((r) => (
-                <Link key={r.id} className="e" to={href(r.path, lang)}>
-                  <span className="t">
-                    {r.title}
-                    {r.sub ? <small>{r.sub}</small> : null}
-                  </span>
-                  <Marks row={r} lang={lang} />
-                  <span className="ct num">{r.sections ? `${num(r.sections, lang)} ${w(lang, 'sec')}` : '—'}</span>
-                  <span className="pg num">{r.page ?? ''}</span>
-                </Link>
+                <div key={r.id} className="e-line">
+                  <Link className="e" to={href(r.path, lang)}>
+                    <span className="t">
+                      {r.title}
+                      {r.sub ? <small>{r.sub}</small> : null}
+                    </span>
+                    <Marks row={r} lang={lang} />
+                    <span className="ct num">{r.sections ? `${num(r.sections, lang)} ${w(lang, 'sec')}` : '—'}</span>
+                    <span className="pg num">{r.page ?? ''}</span>
+                  </Link>
+                  <RowEdit lang={lang} target={{ id: r.id, type: 'unit', label: r.title, parent: entity.id }} />
+                </div>
               ))}
             </div>
           ))}
@@ -367,7 +370,7 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
         desc: d.description ? <p>{nameOf(d.description, lang)}</p> : undefined,
         actions: (
           <>
-            <OrganizeLink id={entity.id} lang={lang} />
+            <EditActions target={{ id: entity.id, type: 'work', label: title, parent: sets[0]?.id ?? null }} lang={lang} editHref={href(`/edit/${entity.id}`, lang)} />
             {toc?.read.scanFile ? (
               <Link className="btn" to={href(`/files/${toc.read.scanFile}`, lang)}>
                 <Icon name="down" />
