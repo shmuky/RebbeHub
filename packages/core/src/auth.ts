@@ -1,4 +1,6 @@
 import { one, type Db } from '@rebbehub/db';
+import { invalid } from './errors.js';
+import { checkUsername, suggestUsername, usernameMessage } from './usernames.js';
 
 /**
  * People and their sign-in (the `auth` schema, migration 0003): a person,
@@ -11,6 +13,8 @@ import { one, type Db } from '@rebbehub/db';
 export interface Person {
   id: string;
   displayName: string;
+  /** Their handle (`@mendy`), unique whatever its case (usernames.ts, migration 0016). */
+  username?: string;
   /** Kept here as well as on the catalog account, which a rebuild of the catalog replaces (migration 0005). */
   steward?: boolean;
   /** A platform admin: a steward who also appoints stewards and admins (migration 0006). */
@@ -67,10 +71,21 @@ export function cleanDisplayName(name: unknown): string | null {
   return clean.length >= 1 && clean.length <= 60 ? clean : null;
 }
 
-export async function createPerson(db: Db, displayName: string): Promise<Person> {
+/**
+ * A new person, with the handle they chose, or else one suggested from
+ * their name. A chosen handle someone else has is refused, never changed
+ * behind their back.
+ */
+export async function createPerson(db: Db, displayName: string, username?: string): Promise<Person> {
   const id = newPersonId();
-  await db.query('INSERT INTO auth.person (id, display_name) VALUES ($1, $2)', [id, displayName]);
-  return { id, displayName };
+  if (username !== undefined) {
+    const refusal = await checkUsername(db, username);
+    if (refusal) throw invalid(usernameMessage(refusal));
+  }
+  const handle = username ?? (await suggestUsername(db, displayName));
+  // The first change after signing up waits for nobody (username_changed_at stays empty).
+  await db.query('INSERT INTO auth.person (id, display_name, username) VALUES ($1, $2, $3)', [id, displayName, handle]);
+  return { id, displayName, username: handle };
 }
 
 /** A person's new name; their catalog account takes it the next time they are signed in. */
@@ -79,8 +94,8 @@ export async function renamePerson(db: Db, id: string, displayName: string): Pro
 }
 
 export async function getPerson(db: Db, id: string): Promise<Person | null> {
-  const row = await one<{ id: string; display_name: string }>(db, 'SELECT id, display_name FROM auth.person WHERE id = $1', [id]);
-  return row ? { id: row.id, displayName: row.display_name } : null;
+  const row = await one<{ id: string; display_name: string; username: string }>(db, 'SELECT id, display_name, username FROM auth.person WHERE id = $1', [id]);
+  return row ? { id: row.id, displayName: row.display_name, username: row.username } : null;
 }
 
 /** Keeps a challenge for one ceremony; it is answered once, within a few minutes. */
@@ -137,14 +152,14 @@ export async function passkeysOf(db: Db, personId: string): Promise<Array<{ cred
 
 /** The person a Google account (by Google's `sub`) belongs to; each sign-in notes when, and the email as it is now. */
 export async function googleSignedIn(db: Db, sub: string, email: string | null): Promise<Person | null> {
-  const row = await one<{ id: string; display_name: string }>(
+  const row = await one<{ id: string; display_name: string; username: string }>(
     db,
     `UPDATE auth.google_account g SET last_used_at = now(), email = $2
      FROM auth.person p WHERE g.sub = $1 AND p.id = g.person_id
-     RETURNING p.id, p.display_name`,
+     RETURNING p.id, p.display_name, p.username`,
     [sub, email],
   );
-  return row ? { id: row.id, displayName: row.display_name } : null;
+  return row ? { id: row.id, displayName: row.display_name, username: row.username } : null;
 }
 
 export async function linkGoogle(db: Db, sub: string, personId: string, email: string | null): Promise<void> {
@@ -158,12 +173,12 @@ export async function googleAccountsOf(db: Db, personId: string): Promise<Array<
 
 /** Everyone with an account, for the stewards' people page: newest first, or those whose name or number matches `q`. */
 export async function listPeople(db: Db, options: { q?: string; limit?: number } = {}): Promise<
-  Array<{ id: string; displayName: string; steward: boolean; admin: boolean; createdAt: string; passkeys: number; google: string | null; suspended: boolean; suggestions: number }>
+  Array<{ id: string; displayName: string; username: string; steward: boolean; admin: boolean; createdAt: string; passkeys: number; google: string | null; suspended: boolean; suggestions: number }>
 > {
   const params: unknown[] = [];
-  const where = options.q ? `WHERE p.display_name ILIKE $${params.push(`%${options.q}%`)} OR p.id = $${params.push(options.q.trim())}` : '';
-  const { rows } = await db.query<{ id: string; display_name: string; steward: boolean; admin: boolean; created_at: Date | string; passkeys: number; google: string | null; suspended: boolean; suggestions: number }>(
-    `SELECT p.id, p.display_name, p.steward, p.admin, p.created_at,
+  const where = options.q ? `WHERE p.display_name ILIKE $${params.push(`%${options.q}%`)} OR p.id = $${params.push(options.q.trim())} OR lower(p.username) = lower($${params.push(options.q.trim().replace(/^@/, ''))})` : '';
+  const { rows } = await db.query<{ id: string; display_name: string; username: string; steward: boolean; admin: boolean; created_at: Date | string; passkeys: number; google: string | null; suspended: boolean; suggestions: number }>(
+    `SELECT p.id, p.display_name, p.username, p.steward, p.admin, p.created_at,
             (SELECT count(*)::int FROM auth.passkey k WHERE k.person_id = p.id) AS passkeys,
             (SELECT min(g.email) FROM auth.google_account g WHERE g.person_id = p.id) AS google,
             coalesce(a.suspended_at IS NOT NULL, FALSE) AS suspended,
@@ -172,7 +187,7 @@ export async function listPeople(db: Db, options: { q?: string; limit?: number }
      ORDER BY p.created_at DESC LIMIT ${Math.min(options.limit ?? 50, 200)}`,
     params,
   );
-  return rows.map((r) => ({ id: r.id, displayName: r.display_name, steward: r.steward || r.admin, admin: r.admin, createdAt: new Date(r.created_at).toISOString(), passkeys: r.passkeys, google: r.google, suspended: r.suspended, suggestions: r.suggestions }));
+  return rows.map((r) => ({ id: r.id, displayName: r.display_name, username: r.username, steward: r.steward || r.admin, admin: r.admin, createdAt: new Date(r.created_at).toISOString(), passkeys: r.passkeys, google: r.google, suspended: r.suspended, suggestions: r.suggestions }));
 }
 
 /** Marks a person a steward (or an admin, who is always a steward), or takes it away; the catalog account follows when they are next signed in. */
@@ -191,14 +206,14 @@ export async function startSession(db: Db, personId: string, userAgent?: string)
 /** The person a session token signs in, while it lasts; each use extends it. */
 export async function sessionPerson(db: Db, token: string): Promise<Person | null> {
   const hash = await hashToken(token);
-  const row = await one<{ id: string; display_name: string; steward: boolean; admin: boolean }>(
+  const row = await one<{ id: string; display_name: string; username: string; steward: boolean; admin: boolean }>(
     db,
     `UPDATE auth.session s SET last_seen_at = now(), expires_at = now() + interval '${SESSION_DAYS} days'
      FROM auth.person p WHERE s.token_hash = $1 AND s.expires_at > now() AND p.id = s.person_id
-     RETURNING p.id, p.display_name, p.steward, p.admin`,
+     RETURNING p.id, p.display_name, p.username, p.steward, p.admin`,
     [hash],
   );
-  return row ? { id: row.id, displayName: row.display_name, ...(row.steward || row.admin ? { steward: true } : {}), ...(row.admin ? { admin: true } : {}) } : null;
+  return row ? { id: row.id, displayName: row.display_name, username: row.username, ...(row.steward || row.admin ? { steward: true } : {}), ...(row.admin ? { admin: true } : {}) } : null;
 }
 
 export async function endSession(db: Db, token: string): Promise<void> {

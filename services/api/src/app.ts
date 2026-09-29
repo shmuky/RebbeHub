@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, getDerivations, getFile, getPageFix, hanachaSync, itemsUsingFile, listWebhooks, pageImageCount, printingsOf, projectTodo, recordingTranscript, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type Mailer, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, getDerivations, getFile, getPageFix, hanachaSync, itemsUsingFile, listWebhooks, pageImageCount, printingsOf, projectTodo, recordingTranscript, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type Mailer, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
@@ -11,6 +11,7 @@ import { networkRoutes } from './network.js';
 import { oaiRoutes, type OaiOptions } from './oai.js';
 import { mirrorRoutes, type MirrorOptions } from './mirrors.js';
 import { readingRoutes } from './reading.js';
+import { threadRoutes } from './threads.js';
 
 /**
  * The RebbeHub API. Reading needs nothing; reporting a problem needs no
@@ -157,6 +158,7 @@ export function createApp(options: ApiOptions): Hono {
     throw new HttpError(status, message);
   });
   mirrorRoutes(app, catalog, { mirrors: options.mirrors, files: options.files });
+  threadRoutes(app, catalog, signedIn, authenticate);
   scanRoutes(app, catalog, {
     filesBase: (c) => options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null),
     siteUrl: options.siteUrl ?? options.auth?.origins[0] ?? 'https://rebbehub.org',
@@ -633,7 +635,7 @@ export function createApp(options: ApiOptions): Hono {
   // ---------------------------------------------------------------- reports (no account needed)
 
   app.post('/v1/reports', async (c) => {
-    const input = await body<{ entityId?: string; reason?: string; note?: string; captcha?: string }>(c);
+    const input = await body<{ entityId?: string; reason?: string; note?: string; captcha?: string; title?: string }>(c);
     if (!input.reason || !REPORT_REASONS.includes(input.reason as ReportReason)) throw new HttpError(400, `reason must be one of ${REPORT_REASONS.join(', ')}`);
     const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim();
     const account = (await authenticate?.(c)) ?? null;
@@ -649,8 +651,11 @@ export function createApp(options: ApiOptions): Hono {
       note: input.note,
       reporter: account ?? undefined,
       reporterHash,
+      title: typeof input.title === 'string' ? input.title : undefined,
     });
-    return c.json({ id }, 201);
+    // Its number (#12), by which the site shows it as an issue.
+    const number = (await catalog.db.query<{ number: string }>('SELECT number FROM report WHERE id = $1', [id])).rows[0]?.number;
+    return c.json({ id, number: number === undefined ? null : Number(number) }, 201);
   });
 
   // A takedown request (no account needed): a Report in the set's inbox, with who asked kept for stewards alone.
@@ -707,6 +712,26 @@ export function createApp(options: ApiOptions): Hono {
   // ---------------------------------------------------------------- suggestions
 
   app.get('/v1/suggestions', async (c) => {
+    // Asked for by state (open, closed, all), it is the list of conversations: newest first, by number, with who is asked to review.
+    const state = c.req.query('state');
+    if (state !== undefined) {
+      if (!['open', 'closed', 'all'].includes(state)) throw new HttpError(400, 'state is open, closed or all');
+      const handle = async (value: string | undefined) => {
+        if (!value) return undefined;
+        const ids = await idsOfUsernames(catalog.db, [value.replace(/^@/, '')]);
+        return [...ids.values()][0] ?? value;
+      };
+      const before = intParam(c.req.query('before'), 'before');
+      const list = await listSuggestions(catalog.db, {
+        state: state as 'open',
+        author: await handle(c.req.query('author')),
+        reviewer: await handle(c.req.query('reviewer')),
+        q: c.req.query('q'),
+        before,
+        limit: intParam(c.req.query('limit'), 'limit'),
+      });
+      return c.json({ suggestions: list.items, people: list.people, counts: list.counts });
+    }
     const status = c.req.query('status');
     if (status && !STATUSES.includes(status as ChangesetStatus)) throw new HttpError(400, `status is one of ${STATUSES.join(', ')}`);
     return c.json({
@@ -861,8 +886,9 @@ export function createApp(options: ApiOptions): Hono {
 
   app.post('/v1/follows', async (c) => {
     const by = await signedIn(c);
-    const input = await body<{ kind?: 'entity' | 'set' | 'project' | 'changeset'; id?: string; on?: boolean }>(c);
+    const input = await body<{ kind?: 'entity' | 'set' | 'project' | 'changeset' | 'report'; id?: string; on?: boolean }>(c);
     if (!input.kind || !input.id) throw new HttpError(400, 'say what to follow (kind and id)');
+    if (!['entity', 'set', 'project', 'changeset', 'report'].includes(input.kind)) throw new HttpError(400, 'kind is entity, set, project, changeset or report');
     await catalog.follow(by, { kind: input.kind, id: input.id }, input.on ?? true);
     return c.json({ ok: true });
   });

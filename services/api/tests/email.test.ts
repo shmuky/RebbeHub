@@ -177,6 +177,8 @@ describe('notifications by email', () => {
     await catalog.follow(id, { kind: 'entity', id: event });
     await call('POST', '/v1/auth/notifications', { body: { mode: 'immediate' }, cookie: mendy.cookie });
     await add(catalog, id, 'keeper', 'recording', { event, title: { he: 'חלק א' }, sets: [set] });
+    // Their inbox (the keeper reviewed their suggestion) is another matter, and already read here.
+    await catalog.db.query('UPDATE auth.notification SET read_at = now()');
     outbox = [];
     expect(await sendNotifications(catalog, mailer, { siteUrl: SITE })).toEqual({ sent: 0, looked: 1 });
   });
