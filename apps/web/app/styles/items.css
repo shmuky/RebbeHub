@@ -608,7 +608,7 @@ details.pick .pop {
 .segment-anchor {
   margin-inline-end: 6px;
   font: 400 12px var(--ui);
-  color: var(--faint);
+  color: var(--subtle);
   text-decoration: none;
   vertical-align: 2px;
 }

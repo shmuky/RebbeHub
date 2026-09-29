@@ -381,7 +381,8 @@ function YearGrid({ year, events, lang }: { year: number; events: EventItem[]; l
   const level = (n: number) => (n === 0 ? 0 : n === 1 ? 1 : n === 2 ? 2 : 3);
   return (
     <figure className="year-grid" aria-label={w(lang, 'yearView')}>
-      <div className="yg-scroll">
+      {/* Scrolls sideways on a phone: reachable by keyboard too. */}
+      <div className="yg-scroll" tabIndex={0}>
         <div className="yg" style={{ ['--weeks' as string]: weeks.length }}>
           <div className="yg-months" aria-hidden="true">
             {heads.map((h) => (

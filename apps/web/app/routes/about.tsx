@@ -95,7 +95,7 @@ export default function About({ loaderData }: Route.ComponentProps) {
         </div>
         <aside className="side" aria-label={W.links[lang]}>
           <section>
-            <h4>{W.links[lang]}</h4>
+            <h2>{W.links[lang]}</h2>
             <ul className="side-list help-now">
               <li>
                 <a href="https://github.com/shmuky/RebbeHub">
@@ -143,7 +143,7 @@ export default function About({ loaderData }: Route.ComponentProps) {
             </ul>
           </section>
           <section>
-            <h4>{W.licence[lang]}</h4>
+            <h2>{W.licence[lang]}</h2>
             <dl>
               {W.licences.map((l) => (
                 <div key={l.id} className="dl-row">

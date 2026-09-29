@@ -50,10 +50,10 @@ export function commonTabs(entity: Pick<Entity, 'id'>, view: Pick<ItemView, 'tal
 export function SideSection({ title, children, action }: { title: ReactNode; children: ReactNode; action?: ReactNode }) {
   return (
     <section>
-      <h4>
+      <h2>
         {title}
         {action}
-      </h4>
+      </h2>
       {children}
     </section>
   );

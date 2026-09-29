@@ -78,6 +78,12 @@ describe('errors, CORS and caching', () => {
     expect(etagMatches('W/"a", "b"', '"b"')).toBe(true);
   });
 
+  it('keeps crawlers to the guides and the files: the routes are read through the site', async () => {
+    const robots = await app.request('/robots.txt');
+    expect(await robots.text()).toBe('User-agent: *\nAllow: /llms.txt\nAllow: /openapi.json\nAllow: /objects/\nAllow: /v1/app/\nDisallow: /\n');
+    expect(robots.headers.get('Cache-Control')).toMatch(/^public, .*s-maxage=86400/);
+  });
+
   it("is kept at Cloudflare's edge when anyone may have it: a few minutes for reads, longer for sums of the whole catalog", async () => {
     expect((await call('GET', `/v1/entities/${event}`)).headers.get('Cache-Control')).toMatch(/s-maxage=\d+/);
     expect((await call('GET', '/v1/stats')).headers.get('Cache-Control')).toMatch(/^public, .*s-maxage=600/);
