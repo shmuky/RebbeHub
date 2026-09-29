@@ -23,7 +23,7 @@ const row: ReviewRow = {
   post_review: null,
   submitted_at: '2026-09-28T12:00:00Z',
   created_at: '2026-09-28T12:00:00Z',
-  checks: [],
+  // As the list gives it: no checks, which only a Suggestion read on its own carries.
   items: 500,
 };
 
