@@ -231,3 +231,90 @@ export function summariseTraining(all: { clips: TrainingClip[]; skipped: Trainin
     skipped,
   };
 }
+
+/**
+ * What the next model waits for (the training thread, 2026-09-29): V4 is
+ * trained once people have checked about ten farbrengens, about 34 hours
+ * of speech (a farbrengen runs about 3.4 hours; V3 learned from about 66).
+ * Only what was checked since V3 was trained counts, and never the
+ * held-out recordings the models are scored on. Farbrengens before 5740
+ * are the most wanted: that is where the model is weakest. Reaching the
+ * goal starts nothing; each paid training run waits for a person's OK.
+ */
+export const TRAINING_GOAL = { model: 'V4', since: '2026-09-29', hours: 34, farbrengens: 10, mostWantedBefore: 5740 } as const;
+
+export interface GoalFarbrengen {
+  event: EntityId;
+  path: string | null;
+  title: { he: string; en?: string } | null;
+  date: string | null;
+  paragraphs: number;
+  checked: number;
+  /** Before 5740, where the model is weakest. */
+  mostWanted: boolean;
+}
+
+export interface TrainingGoal {
+  model: string;
+  since: string;
+  hours: { done: number; target: number };
+  farbrengens: { done: number; target: number };
+  /** Transcribed farbrengens not yet fully checked, the most wanted first, then those nearest done. */
+  next: GoalFarbrengen[];
+}
+
+/** Each transcribed farbrengen with how many of its transcripts' paragraphs a person has checked, in one query. */
+async function farbrengenProgress(catalog: Catalog): Promise<Array<GoalFarbrengen & { heldOut: boolean }>> {
+  const { rows } = await catalog.db.query<{ event: EntityId; path: string | null; title: GoalFarbrengen['title']; date: string | null; url: string | null; paragraphs: string | number; checked: string | number }>(
+    `SELECT ev.id AS event, ev.path, er.data->'title' AS title, er.data->>'date' AS date, rr.data->>'url' AS url,
+            count(s.id) AS paragraphs,
+            count(s.id) FILTER (WHERE coalesce((sr.data->>'proofread')::int, 0) > 0 OR sr.data->'origin'->>'checked' = 'true') AS checked
+     FROM entity t JOIN revision tr ON tr.id = t.main_rev AND tr.data->>'kind' = 'transcript'
+     JOIN entity rec ON rec.id = tr.data->>'recording' AND NOT rec.deleted JOIN revision rr ON rr.id = rec.main_rev
+     JOIN entity ev ON ev.id = rr.data->>'event' AND NOT ev.deleted JOIN revision er ON er.id = ev.main_rev AND er.data->>'kind' = 'farbrengen'
+     JOIN entity_ref x ON x.to_id = t.id AND x.field = 'text'
+     JOIN entity s ON s.id = x.from_id AND s.type = 'segment' AND NOT s.deleted JOIN revision sr ON sr.id = s.main_rev
+     WHERE t.type = 'text' AND NOT t.deleted
+     GROUP BY ev.id, ev.path, er.data, rec.id, rr.data`,
+  );
+  const byEvent = new Map<EntityId, GoalFarbrengen & { heldOut: boolean }>();
+  for (const r of rows) {
+    const jem = r.url ? /\/jem-audio\/([^/?#]+)$/.exec(r.url) : null;
+    const heldOut = Boolean(jem && HELD_OUT_AUDIO.includes(decodeURIComponent(jem[1]!)));
+    const year = Number(r.date?.slice(0, 4));
+    const e = byEvent.get(r.event) ?? { event: r.event, path: r.path, title: r.title, date: r.date, paragraphs: 0, checked: 0, mostWanted: year > 0 && year < TRAINING_GOAL.mostWantedBefore, heldOut: false };
+    e.paragraphs += Number(r.paragraphs);
+    e.checked += Number(r.checked);
+    e.heldOut ||= heldOut;
+    byEvent.set(r.event, e);
+  }
+  return [...byEvent.values()];
+}
+
+/** How near the next model is: hours and farbrengens checked since the last one, and which farbrengens to check next. */
+export async function trainingGoal(catalog: Catalog, all: { clips: TrainingClip[] }, options: { next?: number } = {}): Promise<TrainingGoal> {
+  const since = new Date(TRAINING_GOAL.since).toISOString();
+  const counted = all.clips.filter((c) => c.checkedAt >= since && !c.audio.some((a) => HELD_OUT_AUDIO.includes(a)));
+  const seconds = counted.reduce((t, c) => t + (c.end - c.start), 0);
+  const recent = new Set(counted.map((c) => c.recording));
+  const farbrengens = (await farbrengenProgress(catalog)).filter((f) => !f.heldOut);
+  // A farbrengen counts once every transcribed paragraph of it is checked, some of it since the last model.
+  const recentEvents = new Set<EntityId>();
+  if (recent.size) {
+    const { rows } = await catalog.db.query<{ event: EntityId }>(`SELECT DISTINCT r.data->>'event' AS event FROM entity e JOIN revision r ON r.id = e.main_rev WHERE e.id = ANY($1::text[])`, [[...recent]]);
+    for (const r of rows) recentEvents.add(r.event);
+  }
+  const done = farbrengens.filter((f) => f.paragraphs > 0 && f.checked === f.paragraphs && recentEvents.has(f.event)).length;
+  const next = farbrengens
+    .filter((f) => f.checked < f.paragraphs)
+    .sort((a, b) => Number(b.mostWanted) - Number(a.mostWanted) || b.checked / b.paragraphs - a.checked / a.paragraphs || (a.date ?? '').localeCompare(b.date ?? ''))
+    .slice(0, options.next ?? 5)
+    .map(({ heldOut: _h, ...f }) => f);
+  return {
+    model: TRAINING_GOAL.model,
+    since: TRAINING_GOAL.since,
+    hours: { done: Math.round(seconds / 36) / 100, target: TRAINING_GOAL.hours },
+    farbrengens: { done, target: TRAINING_GOAL.farbrengens },
+    next,
+  };
+}

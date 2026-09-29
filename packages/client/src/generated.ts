@@ -2301,6 +2301,8 @@ export interface Operations {
       recordings: number;
       newHours: number | null;
       skipped: Record<string, unknown>;
+      /** What the next model waits for: hours and farbrengens checked since the last one, against the target, and the farbrengens to check next (the most wanted first) */
+      goal: Record<string, unknown>;
     };
   };
   /** Every kind of item and its JSON Schema */
