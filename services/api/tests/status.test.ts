@@ -38,8 +38,10 @@ describe('the checks', () => {
     const quota = await checkDatabase(async () => Promise.reject(new Error('free tier quota exceeded')));
     expect(quota).toMatchObject({ state: 'down', detail: expect.stringContaining('00:00 UTC') });
     const refused = await checkDatabase(async () => Promise.reject(new Error('connect ECONNREFUSED 10.0.0.1:5432')));
-    // The raw error, with its address, never reaches the public page.
-    expect(refused.detail).toBe('The database did not answer.');
+    // What went wrong shows, but never an address, a host or a connection string.
+    expect(refused.detail).toBe('The database did not answer (connect ECONNREFUSED …).');
+    const leaky = Object.assign(new Error('bad postgres://user:pw@db.example.neon.tech/x at ep-cool-1.aws.neon.tech'), { code: '08006' });
+    expect((await checkDatabase(async () => Promise.reject(leaky))).detail).toBe('The database did not answer (08006: bad … at …).');
   });
 
   it('the allowance: fine, nearly used, on pace to run out, used up, not measured', () => {
@@ -67,6 +69,9 @@ describe('the checks', () => {
     expect(asked!.variables).toMatchObject({ account: 'acc', config: 'cfg', from: '2026-09-29T00:00:00.000Z' });
     const refused = (async () => Response.json({ errors: [{ message: 'not authorized' }] }, { status: 403 })) as unknown as typeof fetch;
     expect(await hyperdriveQueriesToday({ accountId: 'acc', token: 't', configId: 'cfg', now: at('2026-09-29T13:00:00Z'), fetch: refused })).toBeNull();
+    // A token that may not read the account gets no account back: not measured, never zero.
+    const noAccount = (async () => Response.json({ data: { viewer: { accounts: [] } } })) as unknown as typeof fetch;
+    expect(await hyperdriveQueriesToday({ accountId: 'acc', token: 't', configId: 'cfg', now: at('2026-09-29T13:00:00Z'), fetch: noAccount })).toBeNull();
   });
 
   it('jobs: failed ones named; none run while the database is down', () => {
