@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, isAbsolute, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { alignAroundLocks, alignParagraphs, alignWords, hanachaOf, heardWords, recordingTranscript, type Catalog, type HeardWord, type Json } from '@rebbehub/core';
 import { orderKeys, type EntityId, type Language } from '@rebbehub/model';
@@ -77,6 +78,35 @@ export function workersAiWhisper(input: { accountId: string; token: string; mode
         }
       }
       return heard;
+    },
+  };
+}
+
+/**
+ * Whisper on this machine (services/jobs/whisper/transcribe.py, with
+ * faster-whisper), by default ivrit.ai's Yiddish Whisper: free, runs on a
+ * CPU at about four times the speed of speech, and hears the Rebbe's
+ * Yiddish far better than Whisper itself (docs/transcription.md).
+ */
+export function localWhisper(input: { model?: string; python?: string; script?: string } = {}): Transcriber {
+  const model = input.model ?? 'ivrit-ai/yi-whisper-large-v3-turbo-ct2';
+  const script = input.script ?? fileURLToPath(new URL('../whisper/transcribe.py', import.meta.url));
+  return {
+    name: 'whisper-local',
+    // A model kept on disk (rebbe-whisper, fetched from R2) is named by its folder.
+    version: (isAbsolute(model) ? basename(model) : model).replace(/-ct2$/, ''),
+    async transcribe(audio, language) {
+      const { stdout } = await run(input.python ?? 'python3', [script, audio, '--language', language, '--model', model], { maxBuffer: 1 << 28 });
+      return stdout
+        .split('\n')
+        .filter((line) => line.trim())
+        .map((line) => {
+          const piece = JSON.parse(line) as { start: number; end: number; text: string; words?: Array<[string, number, number]> };
+          const words = piece.words?.map(([text, start, end]) => ({ text, startMs: Math.round(start * 1000), endMs: Math.round(end * 1000) }));
+          return { startMs: Math.round(piece.start * 1000), endMs: Math.round(piece.end * 1000), text: piece.text, ...(words?.length ? { words } : {}) };
+        })
+        // JEM's spoken opening ("This audio has been restored by JEM") is not the Rebbe's words.
+        .filter((h) => !/restored by/i.test(h.text));
     },
   };
 }

@@ -105,7 +105,8 @@ inside talk pages' wiki text, and a steward's page to edit labels.
   reading, and a signed-in reader fixes a line into the community layer,
   reviewed like any suggestion.
 - **Transcription and sync** ✅: `rebbehub transcribe` and the *Machine
-  transcription (manual)* workflow (Whisper on Workers AI) turn a
+  transcription (manual)* workflow (ivrit.ai's Yiddish Whisper on the
+  runner's CPU, or Whisper on Workers AI; [transcription](transcription.md)) turn a
   recording into a transcript of paragraphs, each synced to where it is
   heard; farbrengen pages follow the player, play from a tapped
   paragraph, and take fixes.

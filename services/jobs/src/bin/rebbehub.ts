@@ -74,9 +74,12 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 --reread: scans read by an older engine, read again
                                                 (lines people checked are kept)
   rebbehub transcribe --approve-as <steward> [--recording <id>] [--limit <n>] [--linked] [--files <url>]
+                  [--engine workers-ai|local]
                                                 machine transcripts, with sync, of recordings that have
                                                 none (Whisper on Workers AI: CLOUDFLARE_ACCOUNT_ID and
-                                                CLOUDFLARE_AI_TOKEN); --linked also those heard elsewhere
+                                                CLOUDFLARE_AI_TOKEN; local: ivrit.ai's Yiddish Whisper
+                                                here, pip install faster-whisper); --linked also those
+                                                heard elsewhere
   rebbehub embed [--limit <n>]                  vectors for search by meaning, of items not embedded yet
                                                 (BGE-M3 on Workers AI: CLOUDFLARE_ACCOUNT_ID and
                                                 CLOUDFLARE_AI_TOKEN)
@@ -84,6 +87,7 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 citations found in texts, proposed as links for review
   rebbehub check-links [--limit <n>]            whether the catalog's links still answer, for /health
   rebbehub align --approve-as <steward> [--recording <id>] [--limit <n>] [--linked] [--files <url>]
+                  [--engine workers-ai|local]
                                                 word timings for transcripts that have none, and the
                                                 farbrengen's hanacha synced paragraph by paragraph
   rebbehub page-images [--scan <id>] [--limit <n>] [--files <url>] [--bucket rebbehub-public]
@@ -122,6 +126,7 @@ const HELP = `rebbehub - RebbeHub's command line
 const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
+    engine: { type: 'string' },
     database: { type: 'string' },
     id: { type: 'string' },
     name: { type: 'string' },
@@ -214,10 +219,10 @@ try {
       await ocrCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), scan: values.scan, limit: number(values.limit), files: values.files, reread: values.reread });
       break;
     case 'align':
-      await alignCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files });
+      await alignCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files, engine: values.engine });
       break;
     case 'transcribe':
-      await transcribeCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files });
+      await transcribeCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files, engine: values.engine });
       break;
     case 'embed':
       await embedCommand(ctx, { limit: number(values.limit) });

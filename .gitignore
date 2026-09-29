@@ -17,3 +17,4 @@ out/
 .wrangler/
 .dev.vars
 wrangler.local.toml
+__pycache__/

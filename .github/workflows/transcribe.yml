@@ -1,14 +1,20 @@
 name: Machine transcription (manual)
 
-# Transcribes recordings that have no transcript yet with Whisper on
-# Cloudflare Workers AI, and syncs each paragraph to where it is heard
-# (services/jobs/src/transcribe.ts). The transcripts are marked as machine
-# output on the site until people check them. Workers AI is paid by the
-# minute of audio, so this runs only when started, for as many as asked.
+# Transcribes recordings that have no transcript yet with Whisper, and
+# syncs each paragraph to where it is heard (services/jobs/src/transcribe.ts).
+# The transcripts are marked as machine output on the site until people
+# check them. The local engine (ivrit.ai's Yiddish Whisper on the runner's
+# CPU, about a quarter of the recording's length) is free and hears the
+# Rebbe's Yiddish better; Workers AI is quicker and paid by the minute of
+# audio. Either way this runs only when started, for as many as asked.
 #
-# Needs repository secrets: DATABASE_URL (as the import), and
-# CLOUDFLARE_ACCOUNT_ID with CLOUDFLARE_AI_TOKEN (a token allowed only
-# Workers AI). See docs/deploy.md.
+# Needs repository secrets: DATABASE_URL (as the import), and for Workers
+# AI, CLOUDFLARE_ACCOUNT_ID with CLOUDFLARE_AI_TOKEN (a token allowed only
+# Workers AI). With R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY
+# (an R2 token that can read rebbehub-preservation), the local
+# engine uses rebbe-whisper, the model fine-tuned on the Rebbe's voice,
+# kept private in R2; without them, ivrit.ai's model. See docs/deploy.md
+# and docs/transcription.md.
 on:
   workflow_dispatch:
     inputs:
@@ -27,6 +33,11 @@ on:
       recording:
         description: One recording's id (rh-…), instead
         required: false
+      engine:
+        description: Who hears the recordings
+        type: choice
+        options: [local, workers-ai]
+        default: local
       align:
         description: Then time the words of transcripts that have no word timings, and sync hanachos (rebbehub align)
         type: boolean
@@ -49,11 +60,18 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_AI_TOKEN: ${{ secrets.CLOUDFLARE_AI_TOKEN }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      REBBE_MODEL: models/rebbe-whisper-5742
+      ENGINE: ${{ inputs.engine }}
     steps:
       - name: Check it is configured
         run: |
           missing=""
-          for name in DATABASE_URL CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_AI_TOKEN; do
+          needed="DATABASE_URL"
+          if [ "$ENGINE" = "workers-ai" ]; then needed="$needed CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_AI_TOKEN"; fi
+          for name in $needed; do
             if [ -z "${!name}" ]; then missing="$missing $name"; fi
           done
           if [ -n "$missing" ]; then echo "::error::Add the repository secrets$missing (see docs/deploy.md)."; exit 1; fi
@@ -64,6 +82,32 @@ jobs:
           cache: npm
       - name: Install ffmpeg
         run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+      - name: Install faster-whisper
+        if: inputs.engine == 'local'
+        run: python3 -m pip install faster-whisper
+      - name: Keep the Whisper model between runs
+        if: inputs.engine == 'local'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: whisper-yi-whisper-large-v3-turbo-ct2
+      - name: Keep the Rebbe model between runs
+        if: inputs.engine == 'local'
+        uses: actions/cache@v4
+        with:
+          path: ~/${{ env.REBBE_MODEL }}
+          key: ${{ env.REBBE_MODEL }}
+      - name: Fetch the Rebbe model from R2
+        if: inputs.engine == 'local'
+        run: |
+          dir="$HOME/$REBBE_MODEL"
+          if [ ! -s "$dir/model.bin" ] && [ -n "$R2_ENDPOINT" ] && [ -n "$R2_ACCESS_KEY_ID" ]; then
+            AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" AWS_DEFAULT_REGION=auto \
+              aws s3 sync "s3://rebbehub-preservation/$REBBE_MODEL/" "$dir" \
+              --endpoint-url "$R2_ENDPOINT"
+          fi
+          if [ -s "$dir/model.bin" ]; then echo "WHISPER_MODEL=$dir" >> "$GITHUB_ENV"
+          else echo "::notice::No Rebbe model in R2; hearing with ivrit.ai's Yiddish Whisper."; fi
       - name: Install
         run: npm ci
       - name: Build
@@ -77,7 +121,7 @@ jobs:
           ALIGN: ${{ inputs.align }}
         run: |
           npm run rebbehub -- migrate
-          args=(--approve-as "$STEWARD" --limit "$LIMIT")
+          args=(--approve-as "$STEWARD" --limit "$LIMIT" --engine "$ENGINE")
           if [ "$LINKED" = "true" ]; then args+=(--linked); fi
           if [ -n "$RECORDING" ]; then args+=(--recording "$RECORDING"); fi
           npm run rebbehub -- transcribe "${args[@]}"

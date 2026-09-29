@@ -143,14 +143,24 @@ npm run rebbehub -- import sichos-kodesh-occasions --from ../Sichos-Kodesh --app
 - **Machine OCR** runs every night by itself (the *Machine OCR* workflow),
   reading a few served scans that have no text yet with Tesseract; it
   needs only `DATABASE_URL`. **Run workflow** reads more at once.
-- **Machine transcription (manual)** transcribes recordings with Whisper
-  on Cloudflare Workers AI, which is paid by the minute of audio (about
+- **Machine transcription (manual)** transcribes recordings with Whisper.
+  Its **engine** box picks who hears them: `local` (the default), ivrit.ai's
+  Yiddish Whisper on the runner's CPU, free, about a quarter of the
+  recording's length ([transcription](transcription.md)); or `workers-ai`,
+  Whisper on Cloudflare Workers AI, which is paid by the minute of audio (about
   $0.0005 a minute; an hour-long farbrengen, about 3 cents), so it runs
-  only when started, for as many recordings as asked. It needs two more
-  repository secrets:
+  only when started, for as many recordings as asked. Workers AI needs two
+  more repository secrets:
   - `CLOUDFLARE_ACCOUNT_ID`: the account the Workers are in;
   - `CLOUDFLARE_AI_TOKEN`: a Cloudflare API token with **Workers AI:
     Read** and **Workers AI: Edit** only.
+
+  The local engine hears best with rebbe-whisper, the model fine-tuned on
+  the Rebbe's voice, kept private in `rebbehub-preservation` under
+  `models/rebbe-whisper-5742/`. To let the workflow fetch it, add the
+  bucket's S3 endpoint as `R2_ENDPOINT` (`https://<account>.r2.cloudflarestorage.com`)
+  and an R2 API token that can only read that bucket, as `R2_ACCESS_KEY_ID`
+  and `R2_SECRET_ACCESS_KEY`. Without them it uses ivrit.ai's model.
 
   Its **align** box then runs `rebbehub align` too, with the same keys:
   word timings for transcripts that have none (made before word timings,
