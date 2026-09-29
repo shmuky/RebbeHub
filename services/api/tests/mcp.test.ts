@@ -52,6 +52,9 @@ describe('the MCP server', () => {
       'open_issue',
       'suggest_items',
       'approve_suggestion',
+      'close_suggestion',
+      'reopen_suggestion',
+      'send_back_suggestion',
       'ask_machine',
       'machine_queue',
       'machine_to_check',
@@ -195,6 +198,21 @@ describe('the MCP server', () => {
     const approved = await tool('approve_suggestion', { suggestion, note: 'Checked' }, await tokenFor(steward));
     expect(approved.isError).toBe(false);
     expect((await catalog.get(workId))!.data).toMatchObject({ slug: 'an-index' });
+
+    // A suggestion made stale by a later change clashes: a steward closes it, reopens it, and approves it keeping what is live.
+    const stewardToken = await tokenFor(steward);
+    const retitle = (he: string) => ({ type: 'work', id: workId, data: { ...work.data, title: { he } } });
+    const stale = (await tool('suggest_items', { items: [retitle('מפתח ענינים')], title: 'Title' }, token)).structuredContent.suggestion;
+    const later = (await tool('suggest_items', { items: [retitle('מפתח השיחות')], title: 'Another title' }, token)).structuredContent.suggestion;
+    expect((await tool('approve_suggestion', { suggestion: later }, stewardToken)).isError).toBe(false);
+    const clash = await tool('approve_suggestion', { suggestion: stale }, stewardToken);
+    expect(clash.isError).toBe(true);
+    expect(clash.content[0].text).toMatch(/need a decision/);
+    expect((await tool('close_suggestion', { suggestion: stale }, stewardToken)).structuredContent).toMatchObject({ status: 'withdrawn' });
+    expect((await catalog.changeset(stale)).status).toBe('withdrawn');
+    expect((await tool('reopen_suggestion', { suggestion: stale }, stewardToken)).isError).toBe(false);
+    expect((await tool('approve_suggestion', { suggestion: stale, clashes: 'keep_live' }, stewardToken)).isError).toBe(false);
+    expect((await catalog.get(workId))!.data).toMatchObject({ title: { he: 'מפתח השיחות' } });
   });
 
   it('shows the tree and organizes it as suggestions, with a write token', async () => {

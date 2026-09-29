@@ -418,12 +418,47 @@ function tools(siteUrl: string): Tool[] {
     {
       name: 'approve_suggestion',
       title: 'Approve a suggestion',
-      description: "Approve a suggestion sent for review, merging it into the catalog, when you may (its sets' keepers, or a steward). With a short note for the record.",
-      inputSchema: { type: 'object', properties: { suggestion: { type: 'integer' }, note: { type: 'string', maxLength: 2000 } }, required: ['suggestion'], additionalProperties: false },
+      description:
+        "Approve a suggestion sent for review, merging it into the catalog, when you may (its sets' keepers, or a steward). With a short note for the record. Where items were changed on the site since it was made and clash, `clashes` settles all of them at once: keep_live keeps the site's version of each clashing field, take_suggestion takes the suggestion's.",
+      inputSchema: { type: 'object', properties: { suggestion: { type: 'integer' }, note: { type: 'string', maxLength: 2000 }, clashes: { type: 'string', enum: ['keep_live', 'take_suggestion'] } }, required: ['suggestion'], additionalProperties: false },
       annotations: WRITE,
       async run(args, call) {
-        const merged = await need(call, 'POST', `/v1/suggestions/${Number(args.suggestion)}/approve`, { note: typeof args.note === 'string' ? args.note : undefined });
+        const resolutions = args.clashes === 'keep_live' ? ALL_LIVE : args.clashes === 'take_suggestion' ? ALL_SUGGESTED : undefined;
+        const merged = await need(call, 'POST', `/v1/suggestions/${Number(args.suggestion)}/approve`, { note: typeof args.note === 'string' ? args.note : undefined, resolutions });
         return { text: `Suggestion ${args.suggestion} approved and merged${merged.commit != null ? ` (commit ${merged.commit})` : ''}.`, structured: { suggestion: args.suggestion, commit: merged.commit ?? null } };
+      },
+    },
+    {
+      name: 'close_suggestion',
+      title: 'Close a suggestion',
+      description: 'Close (withdraw) a suggestion without merging it: your own, or any as a steward, for one that is no longer needed. It can be reopened with reopen_suggestion.',
+      inputSchema: { type: 'object', properties: { suggestion: { type: 'integer' } }, required: ['suggestion'], additionalProperties: false },
+      annotations: WRITE,
+      async run(args, call) {
+        await need(call, 'POST', `/v1/suggestions/${Number(args.suggestion)}/withdraw`);
+        return { text: `Suggestion ${args.suggestion} closed. ${site}/review?s=${Number(args.suggestion)}`, structured: { suggestion: args.suggestion, status: 'withdrawn' } };
+      },
+    },
+    {
+      name: 'reopen_suggestion',
+      title: 'Reopen a suggestion',
+      description: 'Reopen a closed (withdrawn) suggestion: it is open for review again, and its checks run again.',
+      inputSchema: { type: 'object', properties: { suggestion: { type: 'integer' } }, required: ['suggestion'], additionalProperties: false },
+      annotations: WRITE,
+      async run(args, call) {
+        await need(call, 'POST', `/v1/suggestions/${Number(args.suggestion)}/reopen`);
+        return { text: `Suggestion ${args.suggestion} is open for review again. ${site}/review?s=${Number(args.suggestion)}`, structured: { suggestion: args.suggestion, status: 'open' } };
+      },
+    },
+    {
+      name: 'send_back_suggestion',
+      title: 'Send a suggestion back',
+      description: 'Send a suggestion back to its author without approving it, saying what should change (keepers of its sets, stewards).',
+      inputSchema: { type: 'object', properties: { suggestion: { type: 'integer' }, note: { type: 'string', minLength: 1, maxLength: 2000 } }, required: ['suggestion', 'note'], additionalProperties: false },
+      annotations: WRITE,
+      async run(args, call) {
+        await need(call, 'POST', `/v1/suggestions/${Number(args.suggestion)}/send-back`, { note: String(args.note) });
+        return { text: `Suggestion ${args.suggestion} sent back.`, structured: { suggestion: args.suggestion, status: 'sent_back' } };
       },
     },
     ...machineTools(site),
@@ -521,6 +556,9 @@ const SUGGESTION_WORDS = {
 };
 const ORGANIZE_NOTE =
   ' It becomes one suggestion under your account, reviewed by the keepers of the sets it touches (stewards for sets themselves); nothing changes until it is approved, and old paths redirect after. Needs a RebbeHub API token with the write scope. preview_organize shows the change first.';
+/** One decision for every clash of a suggestion: `*` stands for every item and every field (core's decisionsFor); in a merge "ours" is the site's version, "theirs" the suggestion's. */
+const ALL_LIVE = { '*': { '*': { take: 'ours' } } };
+const ALL_SUGGESTED = { '*': { '*': { take: 'theirs' } } };
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
 const OPERATIONS = {
   type: 'array',
