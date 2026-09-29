@@ -1,5 +1,5 @@
 import type { Context, Hono } from 'hono';
-import { ENTITY_TYPES } from '@rebbehub/model';
+import { ENTITY_TYPES, allSegments, inlineText, isPageText } from '@rebbehub/model';
 import { mcpChallenge } from './oauth.js';
 import { mcpInnerCalls, tokenGrantOf } from './tokens.js';
 
@@ -25,6 +25,29 @@ import { mcpInnerCalls, tokenGrantOf } from './tokens.js';
  * withheld for rights stay withheld, and a fix it sends is a suggestion
  * reviewed like any other.
  */
+
+
+/**
+ * The words a unit keeps in its own body, one version (the language asked
+ * for, or the first), paragraph by paragraph, with the source's credit
+ * line. Segments a machine made and no person checked are marked.
+ */
+function pageWords(item: any, language: string | undefined): { text: string; structured: unknown } {
+  const body = item.data.body;
+  if (!isPageText(body)) return { text: String(body), structured: { unit: item.id, body } };
+  const version = body.versions.find((v) => !language || v.language === language || v.id === language);
+  if (!version) throw new ToolError(`no text of ${item.id} in ${language}; it has ${body.versions.map((v) => v.language).join(', ')}`);
+  const unchecked = (origin: any) => Boolean(origin && !origin.checked);
+  const paragraphs = [...allSegments(version.segments), ...(version.notes ?? [])]
+    .map((segment) => ({ id: segment.id, kind: segment.kind, content: inlineText(segment.text).trim(), machine: unchecked(segment.origin) || unchecked(version.origin) }))
+    .filter((p) => p.content);
+  const credit = version.credit ? `\n\n${version.credit}${version.url ? ` (${version.url})` : ''}` : '';
+  const machine = paragraphs.some((p) => p.machine);
+  return {
+    text: `${paragraphs.map((p) => `${p.machine ? '[machine] ' : ''}${p.content}`).join('\n\n')}${credit}${machine ? `\n\n${MACHINE_NOTE}` : ''}`,
+    structured: { unit: item.id, language: version.language, credit: version.credit ?? null, url: version.url ?? null, paragraphs },
+  };
+}
 
 export const MCP_PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'] as const;
 export const MCP_SERVER_NAME = 'rebbehub';
@@ -236,6 +259,8 @@ function tools(siteUrl: string): Tool[] {
           const texts = (await Promise.all((backlinks as any[]).slice(0, 20).map((b) => need(call, 'GET', `/v1/entities/${b.from}`).catch(() => null)))).filter((t) => t && !t.withheld);
           const language = typeof args.language === 'string' ? args.language : undefined;
           const chosen = texts.find((t) => !language || t.data?.language === language) ?? null;
+          // A page imported with its words (the Chabad Library's, Sefaria's) keeps them on the unit itself.
+          if (!chosen && item.data?.body) return pageWords(item, language);
           if (!chosen) throw new ToolError(texts.length ? `no text of ${item.id} in ${language}; it has ${[...new Set(texts.map((t) => t.data?.language))].join(', ')}` : `the catalog has no text of ${item.id} that may be shown`);
           textId = chosen.id;
         } else throw new ToolError(`get_text reads units, texts, scans and recordings; ${item.id} is a ${item.type}. Try list_children to find them.`);
