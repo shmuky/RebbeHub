@@ -316,6 +316,24 @@ describe('the public site', () => {
     expect((await get('/issues/not-a-number')).status).toBe(404);
   });
 
+  it('splits the account into its own pages, as GitHub settings are, and answers a part that is not there with 404', async () => {
+    for (const path of ['/account', '/account/security', '/account/emails', '/account/following', '/account/apps', '/account/developers']) {
+      const page = await get(path);
+      expect(page.status, path).toBe(200);
+      expect(page.html, path).toMatch(/<meta name="robots" content="noindex/);
+    }
+    expect((await get('/account/nothing-here')).status).toBe(404);
+  });
+
+  it('shows anyone how to connect Claude, ChatGPT and other AI apps: one address to copy, one-click links where the app takes them', async () => {
+    const page = await get('/connect?lang=en');
+    expect(page.status).toBe(200);
+    expect(page.html).toContain('http://api.test/mcp');
+    expect(page.html).toContain('https://claude.ai/settings/connectors');
+    expect(page.html).not.toMatch(/<meta name="robots" content="noindex/);
+    expect((await get('/sitemaps/pages.xml')).html).toContain(`${SITE}/connect`);
+  });
+
   it('passes people and conversations through to the API, and only those', async () => {
     const people = await get('/_/threads/people?q=lev');
     expect(people.status).toBe(200);

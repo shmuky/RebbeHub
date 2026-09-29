@@ -5,6 +5,7 @@ import { createApp, turnstileVerifier, type FileStore } from './app.js';
 import { AppReleases } from './appCatalog.js';
 import { DEFAULT_IP_PER_MINUTE, DEFAULT_KEY_PER_MINUTE, DEFAULT_SEARCH_PER_MINUTE, mayUseEdgeCache, type RateLimiter } from './platform.js';
 import { authFor } from './auth.js';
+import { githubDispatch } from './machine.js';
 import { resendMailer, workersAiAdvisor } from './mail.js';
 
 /**
@@ -73,6 +74,10 @@ interface Env {
   RATE_LIMIT_DRIVE?: RateLimiter;
   /** The largest Drive file passed on, in megabytes (default 300). */
   DRIVE_MAX_MB?: string;
+  /** A GitHub token (a secret) that may only run this repository's workflows: someone asking for OCR or a transcript starts the free machine job at once; without it, the nightly run takes the request. */
+  GITHUB_DISPATCH_TOKEN?: string;
+  /** Whose workflows those are (default shmuky/RebbeHub). */
+  GITHUB_REPO?: string;
 }
 
 interface Ctx {
@@ -168,6 +173,8 @@ async function answer(request: Request, env: Env, ctx: { waitUntil(promise: Prom
     auth: env.SITE_URL ? authFor(env.SITE_URL, { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }) : undefined,
     mailer: mailerOf(env),
     appReleases,
+    machineDispatch: env.GITHUB_DISPATCH_TOKEN ? githubDispatch({ token: env.GITHUB_DISPATCH_TOKEN, repo: env.GITHUB_REPO }) : undefined,
+    waitUntil: (work) => ctx.waitUntil(work),
   });
   try {
     return await app.fetch(request);

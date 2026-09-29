@@ -270,7 +270,7 @@ const STRINGS = {
   openedBy: { he: 'נפתח בידי', en: 'Opened by' },
   textOfScan: { he: 'הטקסט', en: 'The text' },
   readTheText: { he: 'קריאת הטקסט, עמוד אחר עמוד', en: 'Read the text, page by page' },
-  notReadYet: { he: 'הסריקה הזו עוד לא נקראה במחשב. הקריאה נעשית אוטומטית לכל סריקה שמותר להציג.', en: 'This scan has not been read by machine yet. Every scan that may be shown is read automatically.' },
+  notReadYet: { he: 'הסריקה הזו עוד לא נקראה במחשב. כל סריקה שמותר להציג נקראת אוטומטית, החדשות קודם; אפשר גם לבקש אותה עכשיו.', en: 'This scan has not been read by machine yet. Every scan that may be shown is read automatically, the newest first; you can also ask for this one now.' },
   machineReading: { he: 'קריאת מכונה', en: 'Machine reading' },
   linesUnchecked: { he: 'שורות שטרם נבדקו', en: 'lines not yet checked' },
   previousPage: { he: 'העמוד הקודם', en: 'Previous page' },

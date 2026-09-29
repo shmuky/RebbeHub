@@ -9,8 +9,9 @@ import { Box, ChoiceList, EmptyState, Label } from '../ui/primitives.js';
  * For developers and agents: personal API tokens (docs/developers/auth.md).
  * Made and revoked only here, on the site's own page; the token itself is
  * shown once, when it is made, and never again. Apps connected with OAuth
- * (Claude and other agents, through the consent page) are listed here too,
- * by the app's name and where it lives, and disconnected the same way.
+ * (Claude and other agents, through the consent page) come from the same
+ * list; `only="apps"` shows them alone, by the app's name and where it
+ * lives, to disconnect, and `only="tokens"` the personal tokens and making one.
  */
 
 interface Token {
@@ -54,6 +55,9 @@ const WORDS = {
     connected: 'חוברה',
     disconnect: 'ניתוק',
     apps: 'אפליקציות כמו Claude שחיברתם לחשבון מופיעות כאן גם הן.',
+    appsTitle: 'אפליקציות מחוברות',
+    appsIntro: 'אפליקציות AI שחיברתם לחשבון. כל אחת פועלת בשמכם רק במה שאישרתם, ואפשר לנתק אותה בכל רגע.',
+    noApps: 'עוד לא חיברתם אפליקציה.',
   },
   en: {
     title: 'For developers: API tokens',
@@ -82,6 +86,9 @@ const WORDS = {
     connected: 'connected',
     disconnect: 'Disconnect',
     apps: 'Apps you connected to your account, like Claude, are listed here too.',
+    appsTitle: 'Connected apps',
+    appsIntro: 'AI apps you connected to your account. Each acts as you only in what you allowed, and you can disconnect it any time.',
+    noApps: 'No apps connected yet.',
   },
 } as const;
 
@@ -97,9 +104,11 @@ async function call<T>(path: string, method = 'GET', body?: unknown): Promise<T>
   return json;
 }
 
-export function ApiTokens({ lang }: { lang: Lang }) {
+export function ApiTokens({ lang, only }: { lang: Lang; only?: 'tokens' | 'apps' }) {
   const w = WORDS[lang];
-  const [tokens, setTokens] = useState<Token[]>([]);
+  const [all, setTokens] = useState<Token[]>([]);
+  const apps = only === 'apps';
+  const tokens = apps ? all.filter((t) => t.kind === 'oauth') : only === 'tokens' ? all.filter((t) => t.kind !== 'oauth') : all;
   const [name, setName] = useState('');
   const [write, setWrite] = useState(false);
   const [days, setDays] = useState('');
@@ -115,23 +124,22 @@ export function ApiTokens({ lang }: { lang: Lang }) {
   return (
     <Box
       as="section"
-      id="api-tokens"
+      id={apps ? 'connected-apps' : 'api-tokens'}
       className="set-box"
       header={
         <>
-          <Icon name="key" />
-          <h2>{w.title}</h2>
+          <Icon name={apps ? 'bot' : 'key'} />
+          <h2>{apps ? w.appsTitle : w.title}</h2>
+          {tokens.length ? <span className="count">{tokens.length}</span> : null}
           <span className="end">
             <Link to={href('/developers/auth', lang)}>{w.docs}</Link>
           </span>
         </>
       }
     >
-      <p className="set-intro">
-        {w.intro} {w.apps}
-      </p>
+      <p className="set-intro">{apps ? w.appsIntro : only === 'tokens' ? w.intro : `${w.intro} ${w.apps}`}</p>
       {tokens.length === 0 ? (
-        <EmptyState compact icon="key" title={w.none} />
+        <EmptyState compact icon={apps ? 'bot' : 'key'} title={apps ? w.noApps : w.none} />
       ) : (
         <ul className="rows">
           {tokens.map((t) => (
@@ -160,7 +168,7 @@ export function ApiTokens({ lang }: { lang: Lang }) {
           ))}
         </ul>
       )}
-      {made ? (
+      {!apps && made ? (
         <div className="set-pad">
           <div className="alert positive" role="status">
             <Icon name="check" />
@@ -184,55 +192,57 @@ export function ApiTokens({ lang }: { lang: Lang }) {
           </div>
         </div>
       ) : null}
-      <form
-        className="form stack set-form"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setError(null);
-          try {
-            const answer = await call<{ token: string }>('tokens', 'POST', { name, scopes: write ? ['read', 'write'] : ['read'], ...(days ? { expiresInDays: Number(days) } : {}) });
-            setMade(answer.token);
-            setCopied(false);
-            setName('');
-            await load();
-          } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
-          }
-        }}
-      >
-        <h3 className="set-sub">{w.newToken}</h3>
-        <label className="field">
-          {w.name}
-          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required />
-        </label>
-        <fieldset className="field">
-          <legend>{w.scopes}</legend>
-          <label className="check-line">
-            <input type="checkbox" checked disabled /> {w.read}
+      {apps ? null : (
+        <form
+          className="form stack set-form"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setError(null);
+            try {
+              const answer = await call<{ token: string }>('tokens', 'POST', { name, scopes: write ? ['read', 'write'] : ['read'], ...(days ? { expiresInDays: Number(days) } : {}) });
+              setMade(answer.token);
+              setCopied(false);
+              setName('');
+              await load();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : String(err));
+            }
+          }}
+        >
+          <h3 className="set-sub">{w.newToken}</h3>
+          <label className="field">
+            {w.name}
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required />
           </label>
-          <label className="check-line">
-            <input type="checkbox" checked={write} onChange={(e) => setWrite(e.target.checked)} /> {w.write}
-          </label>
-        </fieldset>
-        <div className="field">
-          <span className="field-label" aria-hidden="true">
-            {w.expires}
-          </span>
-          <ChoiceList name="token-expires" inline value={days} onChange={setDays} legend={w.expires} options={[{ value: '', label: w.never }, ...[30, 90, 365].map((n) => ({ value: String(n), label: w.days(n) }))]} />
-        </div>
-        {error ? (
-          <div className="alert negative" role="alert">
-            <Icon name="warn" />
-            <div>{error}</div>
+          <fieldset className="field">
+            <legend>{w.scopes}</legend>
+            <label className="check-line">
+              <input type="checkbox" checked disabled /> {w.read}
+            </label>
+            <label className="check-line">
+              <input type="checkbox" checked={write} onChange={(e) => setWrite(e.target.checked)} /> {w.write}
+            </label>
+          </fieldset>
+          <div className="field">
+            <span className="field-label" aria-hidden="true">
+              {w.expires}
+            </span>
+            <ChoiceList name="token-expires" inline value={days} onChange={setDays} legend={w.expires} options={[{ value: '', label: w.never }, ...[30, 90, 365].map((n) => ({ value: String(n), label: w.days(n) }))]} />
           </div>
-        ) : null}
-        <div className="form-actions">
-          <button type="submit" className="btn primary">
-            <Icon name="plus" />
-            {w.make}
-          </button>
-        </div>
-      </form>
+          {error ? (
+            <div className="alert negative" role="alert">
+              <Icon name="warn" />
+              <div>{error}</div>
+            </div>
+          ) : null}
+          <div className="form-actions">
+            <button type="submit" className="btn primary">
+              <Icon name="plus" />
+              {w.make}
+            </button>
+          </div>
+        </form>
+      )}
     </Box>
   );
 }
