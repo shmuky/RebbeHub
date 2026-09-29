@@ -37,6 +37,8 @@ stream. It has one address, `https://api.rebbehub.org/mcp`:
 | `list_children` | what an item holds, in order: a sefer's sichos, a text's paragraphs, a farbrengen's recordings, a set's items; a page at a time |
 | `get_text` | the words of a sicha, a scan's page or a recording's transcript; machine words marked `[machine]` |
 | `suggest_fix` | a correction to one item, as a suggestion for review, under your name (`write`) |
+| `suggest_items` | add new items, or change or delete many, as one suggestion; 200 items a call, added to the same draft over several calls (`write`) |
+| `approve_suggestion` | approve a suggestion sent for review, when you may: its sets' keepers, or a steward (`write`) |
 | `list_issues` | issues people opened, open ones first, or about one item |
 | `open_issue` | report a problem for people to look into, under your name (`write`) |
 | `get_tree` | the catalog as a tree: the top sets, or one set or sefer, with the sets and items under it and how much each holds |
