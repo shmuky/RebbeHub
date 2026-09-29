@@ -4,7 +4,7 @@ import { checkLinksCommand, citationsCommand, embedCommand } from '../networkCom
 import { machineCommand } from '../machineCommand.js';
 import { trainingClipsCommand } from '../trainingClipsCommand.js';
 import { ocrCommand } from '../ocrCommand.js';
-import { alignCommand, transcribeCommand } from '../transcribeCommand.js';
+import { alignCommand, mendSplitsCommand, transcribeCommand } from '../transcribeCommand.js';
 import { coversCommand, fingerprintsCommand, pageImagesCommand } from '../scanPagesCommand.js';
 import {
   accountCommand,
@@ -100,6 +100,11 @@ const HELP = `rebbehub - RebbeHub's command line
                   [--engine workers-ai|local]
                                                 word timings for transcripts that have none, and the
                                                 farbrengen's hanacha synced paragraph by paragraph
+  rebbehub mend-splits --approve-as <steward> [--recording <id>] [--limit <n>] [--dry-run]
+                                                words older machine transcripts cut in two between
+                                                paragraphs, joined again: one bot suggestion per
+                                                recording, only paragraphs no person checked or fixed;
+                                                --dry-run only lists them
   rebbehub page-images [--scan <id>] [--limit <n>] [--files <url>] [--bucket rebbehub-public]
                                                 page images and thumbnails of served scans that have
                                                 none (the IIIF manifests and the site's viewer show them),
@@ -236,6 +241,9 @@ try {
       break;
     case 'align':
       await alignCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files, engine: values.engine });
+      break;
+    case 'mend-splits':
+      await mendSplitsCommand(ctx, { approveAs: values['approve-as'], recording: values.recording, limit: number(values.limit), dryRun: values['dry-run'] });
       break;
     case 'transcribe':
       await transcribeCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files, engine: values.engine, requestedOnly: values['requested-only'], shard: values.shard });

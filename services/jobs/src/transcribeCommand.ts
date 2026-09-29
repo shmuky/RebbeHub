@@ -1,6 +1,7 @@
 import type { EntityId } from '@rebbehub/model';
 import { withCatalog, type Context } from './commands.js';
 import { alignRecordings, localWhisper, transcribeRecordings, workersAiWhisper, type Transcriber } from './transcribe.js';
+import { mendTranscriptSplits } from './wordSplits.js';
 
 /**
  * `rebbehub transcribe`: machine transcripts, with their sync, of
@@ -50,6 +51,26 @@ export async function alignCommand(ctx: Context, input: { approveAs: string; rec
       fetchAudio: (recording) => fetchAudio(base, recording),
     });
     ctx.log(`aligned ${done.length} recordings, ${done.reduce((n, d) => n + d.words, 0)} words, ${done.reduce((n, d) => n + d.hanacha, 0)} hanacha paragraphs`);
+  });
+}
+
+/**
+ * `rebbehub mend-splits`: words that machine transcripts made before the
+ * fix cut in two between paragraphs ("... פון דעם י" | "וד, און ..."),
+ * joined again, one suggestion by the transcription bot per recording (see
+ * wordSplits.ts). Paragraphs a person checked or fixed are left as they are.
+ */
+export async function mendSplitsCommand(ctx: Context, input: { approveAs?: string; recording?: string; limit?: number; dryRun?: boolean }): Promise<void> {
+  if (!input.dryRun && !input.approveAs) throw new Error('--approve-as is needed, or --dry-run');
+  await withCatalog(ctx, async (catalog) => {
+    const done = await mendTranscriptSplits(catalog, {
+      approveAs: input.approveAs ?? '',
+      recording: input.recording as EntityId | undefined,
+      limit: input.limit,
+      dryRun: input.dryRun,
+      log: ctx.log,
+    });
+    ctx.log(`${input.dryRun ? 'would mend' : 'mended'} ${done.reduce((n, d) => n + d.mended.length, 0)} cut words in ${done.length} transcripts`);
   });
 }
 

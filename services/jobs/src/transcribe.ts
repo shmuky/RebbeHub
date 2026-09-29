@@ -30,6 +30,11 @@ export interface Heard {
   text: string;
   /** Each word's own time, when the recogniser gives them. */
   words?: HeardWord[];
+  /**
+   * The piece carries on the last word of the piece before: the recogniser
+   * ended that piece in the middle of a word ("... פון דעם י", then "וד, און").
+   */
+  glued?: boolean;
 }
 
 export interface Transcriber {
@@ -102,9 +107,19 @@ export function localWhisper(input: { model?: string; python?: string; script?: 
         .split('\n')
         .filter((line) => line.trim())
         .map((line) => {
-          const piece = JSON.parse(line) as { start: number; end: number; text: string; words?: Array<[string, number, number]> };
-          const words = piece.words?.map(([text, start, end]) => ({ text, startMs: Math.round(start * 1000), endMs: Math.round(end * 1000) }));
-          return { startMs: Math.round(piece.start * 1000), endMs: Math.round(piece.end * 1000), text: piece.text, ...(words?.length ? { words } : {}) };
+          const piece = JSON.parse(line) as { start: number; end: number; text: string; words?: Array<[string, number, number, boolean?]>; glued?: boolean };
+          const words: HeardWord[] = [];
+          for (const [i, [text, start, end, glued]] of (piece.words ?? []).entries()) {
+            const last = words.at(-1);
+            // A word that carries on the one before is one word with it; the piece's first word is glued with the piece.
+            if (glued && i > 0 && last) {
+              last.text += text;
+              last.endMs = Math.round(end * 1000);
+            } else {
+              words.push({ text, startMs: Math.round(start * 1000), endMs: Math.round(end * 1000) });
+            }
+          }
+          return { startMs: Math.round(piece.start * 1000), endMs: Math.round(piece.end * 1000), text: piece.text, ...(words.length ? { words } : {}), ...(piece.glued ? { glued: true } : {}) };
         })
         // JEM's spoken opening ("This audio has been restored by JEM") is not the Rebbe's words.
         .filter((h) => !/restored by/i.test(h.text));
@@ -112,19 +127,39 @@ export function localWhisper(input: { model?: string; python?: string; script?: 
   };
 }
 
-/** Gathers what was heard into paragraphs of about a minute, breaking at pauses of two seconds or more. */
-export function paragraphs(heard: Heard[], options: { targetMs?: number; pauseMs?: number } = {}): Heard[] {
+/**
+ * Gathers what was heard into paragraphs of about a minute. A paragraph
+ * breaks at a pause of two seconds or more; once it is a minute long, at
+ * the end of a sentence (a piece ending in . ? ! : or ;), and once it is
+ * two minutes long, at the next piece whatever it ends in, so a long run
+ * without punctuation still breaks. It never breaks at a piece that carries
+ * on the last word of the one before (`glued`): that piece is joined
+ * without a space, and the two halves of the word are one word, heard from
+ * the start of the first to the end of the second.
+ */
+export function paragraphs(heard: Heard[], options: { targetMs?: number; maxMs?: number; pauseMs?: number } = {}): Heard[] {
   const target = options.targetMs ?? 60_000;
+  const max = options.maxMs ?? target * 2;
   const pause = options.pauseMs ?? 2_000;
   const out: Heard[] = [];
   for (const h of heard) {
     const last = out.at(-1);
-    if (last && h.startMs - last.endMs < pause && last.endMs - last.startMs < target) {
-      last.text = `${last.text} ${h.text}`;
-      last.endMs = h.endMs;
-      last.words = last.words && h.words ? [...last.words, ...h.words] : undefined;
+    const glued = Boolean(h.glued && last);
+    const length = last ? last.endMs - last.startMs : 0;
+    const sentenceEnd = last ? /[.?!:;…]["'״”)\]]*$/.test(last.text) : false;
+    if (last && (glued || (h.startMs - last.endMs < pause && (length < target || (length < max && !sentenceEnd))))) {
+      last.text = glued ? `${last.text}${h.text}` : `${last.text} ${h.text}`;
+      last.endMs = Math.max(last.endMs, h.endMs);
+      if (last.words && h.words) {
+        const [first, ...rest] = h.words;
+        const end = last.words.at(-1);
+        if (glued && end && first) last.words = [...last.words.slice(0, -1), { text: `${end.text}${first.text}`, startMs: end.startMs, endMs: first.endMs }, ...rest];
+        else last.words = [...last.words, ...h.words];
+      } else {
+        last.words = undefined;
+      }
     } else {
-      out.push({ ...h, words: h.words ? [...h.words] : undefined });
+      out.push({ startMs: h.startMs, endMs: h.endMs, text: h.text, words: h.words ? [...h.words] : undefined });
     }
   }
   return out;
