@@ -374,6 +374,16 @@ export class RebbeHubApi {
     return this.get<{ head: number; counts: Record<string, number> }>('/v1/stats');
   }
 
+  /** Every sitemap there is: each kind of item with a page, cut into pages, with when each last changed. */
+  sitemaps() {
+    return this.get<{ pageSize: number; sitemaps: Array<{ type: string; page: number; count: number; lastmod: string | null }> }>('/v1/sitemap');
+  }
+
+  /** One sitemap's items; null when there is no such page. */
+  sitemapPage(type: string, page: number) {
+    return this.maybe(this.get<{ items: Array<{ id: string; path: string | null; lastmod: string | null }> }>(`/v1/sitemap/${encodeURIComponent(type)}/${page}`));
+  }
+
   /** The API's own description of itself (OpenAPI 3.1), for the developer docs. */
   openapi<T = Record<string, unknown>>() {
     return this.get<T>('/openapi.json');

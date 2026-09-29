@@ -17,6 +17,7 @@ import * as pageWords from './migrations/0015_page_words.js';
 import * as peopleAndThreads from './migrations/0016_people_and_threads.js';
 import * as covers from './migrations/0017_covers.js';
 import * as apiTokens from './migrations/0018_api_tokens.js';
+import * as listingIndexes from './migrations/0019_listing_indexes.js';
 
 export interface Migration {
   version: number;
@@ -44,6 +45,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 16, name: 'people-and-threads', up: peopleAndThreads.up },
   { version: 17, name: 'covers', up: covers.up },
   { version: 18, name: 'api-tokens', up: apiTokens.up },
+  { version: 19, name: 'listing-indexes', up: listingIndexes.up },
 ];
 
 /** Applies the migrations `db` has not had yet, each in its own transaction. Returns the versions applied. */

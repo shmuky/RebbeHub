@@ -1647,6 +1647,36 @@ export interface Operations {
     };
     output: Record<string, unknown>;
   };
+  /** One sitemap's items: their ids, paths and when each last changed */
+  sitemapPage: {
+    input: {
+      type: "set" | "author" | "person" | "work" | "unit" | "event" | "publication" | "recording";
+      page: number;
+    };
+    output: {
+      type: string;
+      page: number;
+      items: Array<{
+        /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+        id: string;
+        path: string | null;
+        lastmod: string | null;
+      }>;
+    };
+  };
+  /** Every sitemap there is: each kind of item with a page of its own, in pages of pageSize items (id order), with when each page last changed */
+  sitemaps: {
+    input: Record<string, never>;
+    output: {
+      pageSize: number;
+      sitemaps: Array<{
+        type: string;
+        page: number;
+        count: number;
+        lastmod: string | null;
+      }>;
+    };
+  };
   /** How many items of each type, and the latest commit */
   stats: {
     input: Record<string, never>;
@@ -1989,6 +2019,8 @@ export const OPERATIONS = {
   setIssueState: {"method":"POST","path":"/v1/issues/{number}/state","pathParams":["number"],"query":[],"body":"json","answer":"json"},
   setIssueVisibility: {"method":"POST","path":"/v1/issues/{number}/visibility","pathParams":["number"],"query":[],"body":"json","answer":"json"},
   similarFiles: {"method":"GET","path":"/v1/files/{sha256}/similar","pathParams":["sha256"],"query":[],"body":null,"answer":"json"},
+  sitemapPage: {"method":"GET","path":"/v1/sitemap/{type}/{page}","pathParams":["type","page"],"query":[],"body":null,"answer":"json"},
+  sitemaps: {"method":"GET","path":"/v1/sitemap","pathParams":[],"query":[],"body":null,"answer":"json"},
   stats: {"method":"GET","path":"/v1/stats","pathParams":[],"query":[],"body":null,"answer":"json"},
   submitSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/submit","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   suggestFix: {"method":"POST","path":"/v1/suggestions/quick","pathParams":[],"query":[],"body":"json","answer":"json"},
@@ -2592,6 +2624,16 @@ export abstract class GeneratedMethods {
   /** Held files that look like this one (the same scan or recording in other bytes): a machine's guess (GET /v1/files/{sha256}/similar) */
   similarFiles(input: Operations['similarFiles']['input']): Promise<Operations['similarFiles']['output']> {
     return this.call('similarFiles', input ?? {} as Operations['similarFiles']['input']);
+  }
+
+  /** One sitemap's items: their ids, paths and when each last changed (GET /v1/sitemap/{type}/{page}) */
+  sitemapPage(input: Operations['sitemapPage']['input']): Promise<Operations['sitemapPage']['output']> {
+    return this.call('sitemapPage', input ?? {} as Operations['sitemapPage']['input']);
+  }
+
+  /** Every sitemap there is: each kind of item with a page of its own, in pages of pageSize items (id order), with when each page last changed (GET /v1/sitemap) */
+  sitemaps(): Promise<Operations['sitemaps']['output']> {
+    return this.call('sitemaps', {} as Operations['sitemaps']['input']);
   }
 
   /** How many items of each type, and the latest commit (GET /v1/stats) */

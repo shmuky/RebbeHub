@@ -1,5 +1,5 @@
 import type { Context, Hono } from 'hono';
-import { CatalogError, ExportGate, coverSources, coversOf, fileAbout, linkedCounts, linkedPage, pdfPageCount, type Catalog, type CoverView, type EntityView } from '@rebbehub/core';
+import { CatalogError, ExportGate, SITEMAP_PAGE_SIZE, SITEMAP_TYPES, coverSources, sitemapChunks, sitemapPage, coversOf, fileAbout, linkedCounts, linkedPage, pdfPageCount, type Catalog, type CoverView, type EntityView } from '@rebbehub/core';
 import { mayServe, readId, type EntityId, type EntityType } from '@rebbehub/model';
 import { HttpError } from './app.js';
 import { cursor, nextLink } from './platform.js';
@@ -123,5 +123,18 @@ export function pageRoutes(app: Hono, catalog: Catalog, options: PageRouteOption
       covers: about.covers,
       usedBy: { total: about.usedBy.total, items: await redact(about.usedBy.items.map((i) => ({ id: i.id, type: i.type as EntityType, path: i.path, rev: 0, data: i.data as never }))) },
     });
+  });
+
+  // For crawlers: every sitemap there is (each type in pages of SITEMAP_PAGE_SIZE items), then one page's items with when each
+  // last changed. The site's /sitemap.xml and /sitemaps/<type>-<page>.xml are made from these. Slow to change: kept at the edge an hour.
+  const LONG = 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400';
+  app.get('/v1/sitemap', async (c) => c.json({ pageSize: SITEMAP_PAGE_SIZE, sitemaps: await sitemapChunks(catalog.db) }, 200, { 'Cache-Control': LONG }));
+  app.get('/v1/sitemap/:type/:page{[0-9]+}', async (c) => {
+    const type = c.req.param('type') as EntityType;
+    if (!SITEMAP_TYPES.includes(type)) throw new CatalogError('not-found', `there is no sitemap of ${type}`);
+    const page = Number(c.req.param('page'));
+    const items = page >= 1 ? await sitemapPage(catalog.db, type, page) : [];
+    if (!items.length) throw new CatalogError('not-found', `${type} has no page ${page}`);
+    return c.json({ type, page, items }, 200, { 'Cache-Control': LONG });
   });
 }
