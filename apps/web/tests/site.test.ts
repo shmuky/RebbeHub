@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { ServerBuild } from 'react-router';
-import { registerFile } from '@rebbehub/core';
+import { createPerson, registerFile, setUsername } from '@rebbehub/core';
 import type { EntityId } from '@rebbehub/model';
 import { createApp } from '../../../services/api/src/app.js';
 import { add, freshCatalog } from '../../../packages/core/tests/helpers.js';
@@ -58,6 +58,9 @@ beforeAll(async () => {
   await catalog.putRevision(move.id, 'mendy', { id: ids.teshura, type: 'publication', data: current.data, path: '/teshuros/5784-cohen-levi' });
   await catalog.submit(move.id, 'mendy');
   await catalog.merge(move.id, 'keeper');
+  // A handle that changed: the old address leads to the new one.
+  const levi = await createPerson(catalog.db, 'Levi Yitzchak', 'levi');
+  await setUsername(catalog.db, levi.id, 'levi-y');
 
   const api = createApp({ catalog, reportSalt: 'test', filesBaseUrl: 'https://files.rebbehub.test' });
   handle = createSiteHandler(build, { apiUrl: 'http://api.test', siteUrl: SITE, fetch: (input, init) => Promise.resolve(api.request(input, init)) });
@@ -193,5 +196,30 @@ describe('the public site', () => {
     expect(works.html).toContain(`<loc>${SITE}/sample</loc>`);
     expect(works.html).toContain(`hreflang="en" href="${SITE}/sample?lang=en"`);
     expect((await get('/sitemaps/schema.xml')).status).toBe(404);
+  });
+
+  it('shows a person by their handle, and an old handle leads to the new one', async () => {
+    const page = await get('/u/levi-y?lang=en');
+    expect(page.status).toBe(200);
+    expect(page.html).toContain('@levi-y');
+    expect(page.html).toContain('Levi Yitzchak');
+    expect(page.html).toContain('Activity');
+    const moved = await get('/u/levi');
+    expect(moved.status).toBe(301);
+    expect(moved.location).toBe('/u/levi-y');
+    expect((await get('/u/nobody-has-this')).status).toBe(404);
+  });
+
+  it('has pages for suggestions, issues and the inbox, filled in by the browser', async () => {
+    for (const path of ['/suggestions', '/suggestions/1', '/issues', '/issues/new', '/issues/1', '/inbox']) expect((await get(path)).status).toBe(200);
+    expect((await get('/issues/not-a-number')).status).toBe(404);
+  });
+
+  it('passes people and conversations through to the API, and only those', async () => {
+    const people = await get('/_/threads/people?q=lev');
+    expect(people.status).toBe(200);
+    expect(JSON.parse(people.html).people.map((p: { username: string }) => p.username)).toContain('levi-y');
+    expect((await get('/_/threads/issues/templates')).status).toBe(200);
+    expect((await get('/_/threads/admin/people')).status).toBe(404);
   });
 });

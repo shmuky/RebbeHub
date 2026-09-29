@@ -72,6 +72,9 @@ function Footer({ lang }: { lang: Lang }) {
           <Link to={href('/about', lang)}>{t(lang, 'about')}</Link> · <Link to={href('/takedown', lang)}>{t(lang, 'takedownTitle')}</Link> ·{' '}
           <Link to={href('/mirrors', lang)}>{lang === 'he' ? 'הורדה ואתרי מראה' : 'Download and mirror'}</Link>
         </p>
+        <p>
+          <Link to={href('/suggestions', lang)}>{lang === 'he' ? 'הצעות' : 'Suggestions'}</Link> · <Link to={href('/issues', lang)}>{lang === 'he' ? 'דיווחים' : 'Issues'}</Link>
+        </p>
       </div>
     </footer>
   );

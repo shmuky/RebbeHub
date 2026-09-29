@@ -99,17 +99,30 @@ export const OPENAPI = {
           properties: {
             entityId: { type: 'string' },
             reason: { enum: ['wrong-fact', 'missing-page', 'bad-scan', 'audio-problem', 'wrong-text', 'duplicate', 'rights', 'offensive', 'other'] },
-            note: { type: 'string', maxLength: 2000 },
+            note: { type: 'string', maxLength: 10000 },
+            title: { type: 'string', maxLength: 200 },
             captcha: { type: 'string' },
           },
         }),
-        responses: { '201': { description: 'The report id' }, '429': { description: 'Too many reports from one address' } },
+        responses: { '201': { description: 'The report id and its #number' }, '429': { description: 'Too many reports from one address' } },
       },
       get: { summary: "A set's inbox of reports", security: signedIn, parameters: [q('set', 'A set id'), q('status', 'open, resolved or dismissed')], responses: ok('Reports') },
     },
     '/v1/reports/{id}/close': { post: { summary: 'Resolve or dismiss a report (keepers)', security: signedIn, parameters: [numParam('id')], responses: ok('Closed') } },
     '/v1/suggestions': {
-      get: { summary: 'Suggestions, by status or author', parameters: [q('status', 'draft, open, merged, sent_back, withdrawn'), q('author', 'An account id'), q('postReview', 'true: live changes awaiting review')], responses: ok('Suggestions') },
+      get: {
+        summary: 'Suggestions, by status or author; with `state`, as a list of conversations (numbers, reviewers, approvals, the issues each closes) with counts',
+        parameters: [
+          q('status', 'draft, open, merged, sent_back, withdrawn'),
+          q('state', 'open, closed or all: the conversation list'),
+          q('author', 'An account id or a handle'),
+          q('reviewer', 'With `state`: asked to review, or reviewed (a handle)'),
+          q('q', 'With `state`: words in the title, or #number'),
+          numParam('before', 'query'),
+          q('postReview', 'true: live changes awaiting review'),
+        ],
+        responses: ok('Suggestions'),
+      },
       post: { summary: 'Start a suggestion', security: signedIn, requestBody: json({ type: 'object', required: ['title'], properties: { title: { type: 'string' }, description: { type: 'string' }, project: { type: 'integer' } } }), responses: { '201': { description: 'The draft' } } },
     },
     '/v1/suggestions/{id}': { get: { summary: "The review view: each item before and after, clashes with main, and the reviewer's advice (machine-written, `machine: true`)", parameters: [numParam('id')], responses: ok('The suggestion') } },
@@ -154,7 +167,7 @@ export const OPENAPI = {
     '/v1/suggestions/{id}/send-back': { post: { summary: 'Send back with a note', security: signedIn, parameters: [numParam('id')], responses: ok('Sent back') } },
     '/v1/suggestions/{id}/withdraw': { post: { summary: 'Withdraw your suggestion', security: signedIn, parameters: [numParam('id')], responses: ok('Withdrawn') } },
     '/v1/suggestions/{id}/revert': { post: { summary: 'Undo a merged suggestion', security: signedIn, parameters: [numParam('id')], responses: ok('The revert') } },
-    '/v1/follows': { post: { summary: 'Follow or unfollow an item, set, project or suggestion', security: signedIn, responses: ok('Done') } },
+    '/v1/follows': { post: { summary: 'Follow or unfollow an item, set, project, suggestion or issue (kind `report`)', security: signedIn, responses: ok('Done') } },
     '/v1/files/{sha256}/similar': {
       get: {
         summary: "Held files that look like this one (the same scan or recording in other bytes): a machine's guess from page hashes and audio fingerprints",
@@ -217,6 +230,94 @@ export const OPENAPI = {
         parameters: [idParam],
         requestBody: json({ type: 'object', properties: { relation: { type: 'string' }, note: { type: 'string' }, contact: { type: 'string' }, captcha: { type: 'string' } } }),
         responses: { '201': { description: 'The report id and how many files were paused' }, '429': { description: 'Too many requests from one address' } },
+      },
+    },
+    // People and conversations (threads.ts): handles, @mentions, suggestions as pull requests, reports as issues, the inbox.
+    '/v1/people': { get: { summary: 'People to @mention: handles that start with, or names that contain, what is typed; those in the conversation first', parameters: [q('q', 'What follows the @'), q('thread', 'changeset:<id> or report:<id>'), numParam('limit', 'query')], responses: ok('People') } },
+    '/v1/people/{username}': { get: { summary: "A person's public page: who they are, their counts and recent activity (an old handle finds them too, with `movedFrom`)", parameters: [{ name: 'username', in: 'path', required: true, schema: { type: 'string' } }], responses: ok('The profile') } },
+    '/v1/threads': { get: { summary: 'Suggestions and issues to #mention, by number or words', parameters: [q('q', 'What follows the #'), numParam('limit', 'query')], responses: ok('Threads') } },
+    '/v1/threads/{number}': { get: { summary: 'Which of the two #12 is: a suggestion or an issue, and its id', parameters: [numParam('number')], responses: ok('{ kind, number, id }') } },
+    '/v1/suggestions/{id}/conversation': { get: { summary: "A suggestion's timeline (comments, reviews, events), the reviewers asked, and the issues it closes", parameters: [numParam('id')], responses: ok('The conversation') } },
+    '/v1/suggestions/{id}/comments': {
+      post: {
+        summary: 'Comment on a suggestion, answer a comment, or comment on one field of one item',
+        security: signedIn,
+        parameters: [numParam('id')],
+        requestBody: json({ type: 'object', required: ['body'], properties: { body: { type: 'string', maxLength: 10000 }, parent: { type: 'integer' }, anchor: { type: 'object', properties: { entity: { type: 'string' }, field: { type: 'string' } } } } }),
+        responses: { '201': { description: 'The comment id' } },
+      },
+    },
+    '/v1/suggestions/{id}/reviews': {
+      post: {
+        summary: 'Review: approve (it goes into the catalog), request changes (sent back), or comment; with comments on fields',
+        security: signedIn,
+        parameters: [numParam('id')],
+        requestBody: json({
+          type: 'object',
+          required: ['verdict'],
+          properties: {
+            verdict: { enum: ['approve', 'request_changes', 'comment'] },
+            body: { type: 'string' },
+            comments: { type: 'array', items: { type: 'object', properties: { entity: { type: 'string' }, field: { type: 'string' }, body: { type: 'string' } } } },
+            resolutions: { type: 'object' },
+          },
+        }),
+        responses: { '201': { description: 'The review, the new status, and the commit when approved' }, '409': { description: 'Clashes that need a decision' } },
+      },
+    },
+    '/v1/suggestions/{id}/review-requests': {
+      post: { summary: 'Ask people to review (again)', security: signedIn, parameters: [numParam('id')], requestBody: json({ type: 'object', required: ['reviewers'], properties: { reviewers: { type: 'array', items: { type: 'string' } } } }), responses: { '201': { description: 'Who was asked' } } },
+    },
+    '/v1/suggestions/{id}/review-requests/{username}': {
+      delete: { summary: 'Stop asking someone to review', security: signedIn, parameters: [numParam('id'), { name: 'username', in: 'path', required: true, schema: { type: 'string' } }], responses: ok('Done') },
+    },
+    '/v1/issues': {
+      get: {
+        summary: 'Issues (reports), newest first, with open and closed counts; private ones only for those who may read them',
+        parameters: [q('state', 'open (default), closed or all'), q('label', 'Label names, comma-separated'), q('type', 'The kind of report'), q('set', 'A set id'), q('entity', 'An item id'), q('assignee', 'A handle, or none'), q('author', 'A handle'), q('q', 'Words'), numParam('before', 'query'), numParam('limit', 'query')],
+        responses: ok('Issues'),
+      },
+      post: {
+        summary: 'Open an issue',
+        security: signedIn,
+        requestBody: json({ type: 'object', required: ['title'], properties: { title: { type: 'string', maxLength: 200 }, body: { type: 'string' }, type: { type: 'string' }, entityId: { type: 'string' }, labels: { type: 'array', items: { type: 'string' } } } }),
+        responses: { '201': { description: 'The issue' } },
+      },
+    },
+    '/v1/issues/templates': { get: { summary: 'The kinds of issue and the words each starts with', responses: ok('Templates') } },
+    '/v1/issues/{number}': {
+      get: { summary: 'An issue, its timeline, what the reader may do, and the suggestions that close it', parameters: [numParam('number')], responses: ok('The issue') },
+      patch: { summary: 'Change its title or words', security: signedIn, parameters: [numParam('number')], requestBody: json({ type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' } } }), responses: ok('The issue') },
+    },
+    '/v1/issues/{number}/state': {
+      post: { summary: 'Close as completed or not planned, or reopen', security: signedIn, parameters: [numParam('number')], requestBody: json({ type: 'object', required: ['state'], properties: { state: { enum: ['open', 'completed', 'not_planned'] }, note: { type: 'string' } } }), responses: ok('The issue') },
+    },
+    '/v1/issues/{number}/labels': {
+      put: { summary: 'Set its labels (keepers, stewards, trusted people)', security: signedIn, parameters: [numParam('number')], requestBody: json({ type: 'object', required: ['labels'], properties: { labels: { type: 'array', items: { type: 'string' } } } }), responses: ok('The issue') },
+    },
+    '/v1/issues/{number}/assignees': {
+      put: { summary: 'Set who it is assigned to (yourself, or others when you triage)', security: signedIn, parameters: [numParam('number')], requestBody: json({ type: 'object', required: ['assignees'], properties: { assignees: { type: 'array', items: { type: 'string' } } } }), responses: ok('The issue') },
+    },
+    '/v1/issues/{number}/visibility': {
+      post: { summary: 'Make it private or public (stewards and keepers)', security: signedIn, parameters: [numParam('number')], requestBody: json({ type: 'object', required: ['private'], properties: { private: { type: 'boolean' } } }), responses: ok('The issue') },
+    },
+    '/v1/issues/{number}/comments': {
+      post: { summary: 'Comment on an issue', security: signedIn, parameters: [numParam('number')], requestBody: json({ type: 'object', required: ['body'], properties: { body: { type: 'string' }, parent: { type: 'integer' } } }), responses: { '201': { description: 'The comment id' } } },
+    },
+    '/v1/labels': {
+      get: { summary: 'Every label and how many open issues carry it', responses: ok('Labels') },
+      post: { summary: 'Make a label (stewards)', security: signedIn, requestBody: json({ type: 'object', required: ['name'], properties: { name: { type: 'string' }, description: { type: 'string' }, color: { type: 'string' } } }), responses: { '201': { description: 'The label' } } },
+    },
+    '/v1/comments/{id}': { patch: { summary: 'Change your own comment', security: signedIn, parameters: [numParam('id')], requestBody: json({ type: 'object', required: ['body'], properties: { body: { type: 'string' } } }), responses: ok('Done') } },
+    '/v1/comments/{id}/resolve': { post: { summary: "Resolve (or unresolve) a comment on a suggestion's field", security: signedIn, parameters: [numParam('id')], requestBody: json({ type: 'object', properties: { resolved: { type: 'boolean' } } }), responses: ok('Done') } },
+    '/v1/inbox': { get: { summary: 'Your inbox: mentions, review requests, assignments and what you follow', security: signedIn, parameters: [q('filter', 'unread, all, or a reason'), q('before', 'A time'), numParam('limit', 'query')], responses: ok('Inbox lines and the unread count') } },
+    '/v1/inbox/count': { get: { summary: 'How many inbox lines are unread', security: signedIn, responses: ok('{ unread }') } },
+    '/v1/inbox/read': {
+      post: {
+        summary: 'Mark inbox lines read (or unread): by id, by conversation, or all',
+        security: signedIn,
+        requestBody: json({ type: 'object', properties: { ids: { type: 'array', items: { type: 'integer' } }, subject: { type: 'object' }, all: { type: 'boolean' }, unread: { type: 'boolean' } } }),
+        responses: ok('How many changed, and the unread count'),
       },
     },
   },

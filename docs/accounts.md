@@ -11,8 +11,10 @@ No password to choose, forget or steal. A person's phone or computer makes
 a passkey for RebbeHub alone and opens it with their fingerprint, face or
 screen lock; RebbeHub keeps only its public key.
 
-- **New account** (`/signin`): a name to be known by, then the device makes
-  the passkey. The account id is `u-` and ten letters and digits.
+- **New account** (`/signin`): a name to be known by and a handle
+  (suggested from the name, see [Handles](#handles-and-mentions)), then
+  the device makes the passkey. The account id is `u-` and ten letters
+  and digits.
 - **Signing in**: the device offers the passkeys it holds for the site.
 - **Account** (`/account`): the person's name, their passkeys, signing out.
 
@@ -100,6 +102,34 @@ Kept in `auth.notification_setting` (migration 0011).
 Locally, `DEV_EMAIL=1 npm run dev:api` prints each email (with its link)
 instead of sending it.
 
+## The inbox
+
+Every signed-in person has an inbox (`/inbox`, the bell in the top bar
+with its unread count), as GitHub's notifications:
+
+- **Why a line is there**: they were @mentioned; asked to review a
+  suggestion (the keepers of its sets are asked on their own when it is
+  sent, as CODEOWNERS are, and asked again when it comes back after they
+  requested changes); an issue was assigned to them; something happened
+  to their own suggestion or issue (a review, a comment, merged, closed);
+  or in a conversation they follow.
+- **Following** a conversation is automatic for its author, anyone who
+  writes in it, reviews it, is mentioned, asked or assigned; anyone can
+  follow or stop following from its side column. A new suggestion or
+  issue about an item or set someone follows also comes to them.
+- **One line per conversation and reason** while it is unread: a busy
+  conversation counts up ("3 times") instead of filling the inbox. The
+  person's own acts never come to them, nor anything in a conversation
+  they may not read (a private issue).
+- **Read**: opening the conversation reads its lines; "Done" reads one
+  without opening it; "Mark all as read".
+- **By email**: when email updates are on (above), the next update also
+  carries the inbox lines not yet read, each once. With email off, the
+  inbox is the only place they are.
+
+Kept in `auth.notification` (migration 0016), with the people, so a
+rebuild of the catalog never empties it.
+
 ## One person, one account
 
 - Signed in, a person adds a passkey, an email address or links Google
@@ -112,6 +142,48 @@ instead of sending it.
 - A steward's mark is kept on the person (`auth.person.steward`,
   migration 0005) and copied to their catalog account whenever they are
   signed in, so a rebuild of the catalog never takes it away.
+
+## Handles and mentions
+
+Every person has a handle (`@mendy`), unique on the site whatever its
+case, used for @mentions and for their page at `/u/<handle>`:
+
+- **Chosen at sign-up** (passkey or email link), suggested from the name
+  as it is typed (Hebrew names spelt the way people spell them in Latin
+  letters: `מנחם מענדל` suggests `menachem-mendel`), and checked as it
+  is typed. Left empty, or signing up with Google, one is made from the
+  name.
+- **Its shape**: 2 to 39 Latin letters, digits and single hyphens, not
+  starting or ending with a hyphen.
+- **Reserved**: the site's own words (`admin`, `issues`, `inbox`,
+  `suggestions`, `system`, `steward`, `support` and the like, the list in
+  `packages/core/src/usernames.ts`), and handles shaped like an account
+  id (`u-…`), an item id (`rh-…`) or a made-up one (`reader-…`).
+- **Changing it** (`/account`): at most once a day (a change of case
+  only is always allowed). The old handle keeps leading to the person:
+  `/u/<old>` redirects for good, and @mentions already written with it
+  still reach them. Nobody else can take an old handle; its owner can
+  take it back.
+- **Accounts from before handles** were given one by migration 0016,
+  from their name where it makes a free handle, or `reader-` and their
+  account number where it does not; they can choose their own.
+
+**A person's page** (`/u/<handle>`) shows their name, handle, role
+(steward, Trusted), when they joined, their counts (suggestions and how
+many were approved, reviews, issues, comments) and their recent public
+activity. It never shows an email address, and nothing from a private
+issue.
+
+**@mentions** work wherever people write: a suggestion's description, a
+comment or review, an issue and its comments, and talk pages. The
+writing box suggests people as `@` is typed (those already in the
+conversation first). The person mentioned gets an inbox line (and email,
+if they chose updates) and follows the conversation from then on, unless
+it is a private issue they may not read. A handle nobody has tells
+nobody; nor does a mention inside `code`, or in an email address. `#12` points at suggestion or issue 12 (they share
+one numbering), and shows in its timeline as "mentioned this in";
+`Fixes #12` in a suggestion's description closes issue 12 when the
+suggestion is merged.
 
 ## Stewards and platform admins
 
@@ -187,6 +259,12 @@ rebuild the catalog and replace every table in `public`
 signing in is not adding to the catalog, and a person's catalog account
 (`public.account`, which their suggestions point at) is made again from
 `auth.person` whenever they are signed in.
+
+Handles and the handles people used to have (`auth.person.username`,
+`auth.username_redirect`) and inbox lines (`auth.notification`) are kept
+there too (migration 0016). The numbering of suggestions and issues
+(`#12`) is done by a function kept in `auth` (`auth.number_thread`), so a
+rebuilt catalog keeps its numbers and goes on from them.
 
 Where a signed-in person stopped reading and listening is kept there too
 (`auth.reading_place`, migration 0014: the latest 60, a PDF's page or a

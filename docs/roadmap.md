@@ -59,6 +59,18 @@ the public takedown form with a steward's one-click takedown are built
 ([accounts](accounts.md)); email and the summary show once their secrets
 are set.
 
+People and conversations, the GitHub way, are built (migration 0016):
+every person has a unique handle (chosen at sign-up, changeable, old ones
+redirect) and a page at `/u/<handle>`; @mentions and `#12` wherever people
+write; suggestions as pull requests (`/suggestions`, a timeline, reviews
+that Comment, Approve or Request changes, comments on a field, keepers
+asked to review on their own, `Fixes #12`); reports as issues (`/issues`,
+open and closed, labels, assignees, kinds with their templates, public
+unless about rights or offensive content); and an inbox (`/inbox`, and in
+the email updates) ([api](api.md#people-and-conversations),
+[accounts](accounts.md#handles-and-mentions)). Not yet: @mentions linked
+inside talk pages' wiki text, and a steward's page to edit labels.
+
 ## Phases 3-6
 
 - **The Sichos Kodesh scans** ✅: 2,710 old typewritten hanachos, open,

@@ -117,6 +117,83 @@ With a signed-in session:
   reports): a family asks that a teshura stop being shown
   ([rights](rights.md)).
 
+## People and conversations
+
+It works the way GitHub works. Suggestions are pull requests and Reports
+are issues, numbered together (`#12` is one or the other, never both;
+`GET /v1/threads/12` says which). Imports are not conversations and have
+no number. Reading needs no account (private issues aside); writing
+needs a signed-in session. People are named by their handle
+([accounts](accounts.md#handles-and-mentions)).
+
+**People**
+
+- `GET /v1/people?q=men&thread=changeset:<id>`: people to @mention,
+  those already in the conversation first.
+- `GET /v1/people/<handle>`: a person's public page (an old handle finds
+  them too, with `movedFrom`).
+- `GET /v1/threads?q=`: suggestions and issues to #mention, by number or
+  words.
+
+**Suggestions**
+
+- `GET /v1/suggestions?state=open|closed|all&author=&reviewer=&q=`:
+  the list, with each one's number, reviewers, approvals, comments and
+  the issues it closes, and the open and closed counts. Without `state`
+  the older list (`status=`) answers as before.
+- `GET /v1/suggestions/<id>/conversation`: the timeline in order
+  (comments, reviews, and events: sent for review, review requested,
+  renamed, referenced from elsewhere, merged, withdrawn, reverted), who
+  is asked to review, and the issues it closes.
+- `POST /v1/suggestions/<id>/reviews`:
+  `{ verdict: "approve" | "request_changes" | "comment", body?, comments?: [{ entity, field, body }] }`,
+  a whole review in one: Approve merges it (as `/approve` does), Request
+  changes sends it back (as `/send-back` does), and the comments on
+  fields are kept with the review.
+- `POST /v1/suggestions/<id>/comments`: `{ body, parent?, anchor?: { entity, field } }`.
+- `POST /v1/suggestions/<id>/review-requests` `{ reviewers: [handle] }`
+  (asking someone who reviewed asks again),
+  `DELETE /v1/suggestions/<id>/review-requests/<handle>`.
+- `PATCH /v1/suggestions/<id>` `{ title?, description? }`. `Fixes #12`
+  (or `closes`, `resolves`, `סוגר`, `מתקן`…) in the description links
+  issue 12; merging the suggestion closes it.
+
+When a suggestion is sent for review, the keepers of the sets it touches
+are asked to review it on their own (as CODEOWNERS are), except for a
+bot's suggestions. When it comes back after changes were requested,
+those who requested them are asked again.
+
+**Issues**
+
+- `GET /v1/issues?state=&label=&type=&set=&entity=&assignee=&author=&q=`:
+  newest first, with the open and closed counts; `assignee=none` for
+  those nobody has taken.
+- `GET /v1/issues/templates`: the kinds of issue and the words each
+  starts with.
+- `POST /v1/issues` `{ title, body?, type, entityId?, labels? }`.
+- `GET /v1/issues/<number>`: the issue, its timeline, the suggestions
+  that close it, and `rights`: what the reader may do.
+- `PATCH /v1/issues/<number>` `{ title?, body? }`,
+  `POST …/state` `{ state: "open" | "completed" | "not_planned", note? }`,
+  `PUT …/labels` `{ labels }`, `PUT …/assignees` `{ assignees }`,
+  `POST …/visibility` `{ private }`, `POST …/comments` `{ body, parent? }`.
+- `GET /v1/labels`; stewards make them with `POST /v1/labels`.
+
+Issues are public, as on GitHub, except those about rights or offensive
+content, which only stewards, the set's keepers, the reporter and those
+assigned may read. Every report sent before issues existed stays private.
+`POST /v1/reports` (no account) still works and now takes a `title` too;
+it answers with the new issue's `number`.
+
+**Comments and the inbox**
+
+- `PATCH /v1/comments/<id>` `{ body }` (its writer);
+  `POST /v1/comments/<id>/resolve` `{ resolved }` (a comment on a field).
+- `GET /v1/inbox?filter=unread|all|mention|review_requested|assigned|…`,
+  `GET /v1/inbox/count`, `POST /v1/inbox/read`
+  `{ ids? | subject?: { kind, id } | all?, unread? }`.
+- `POST /v1/follows` takes `{ kind: "report", id }` for an issue.
+
 ## Webhooks
 
 On `/account` (*For developers: webhooks*), or `POST /v1/webhooks` with
