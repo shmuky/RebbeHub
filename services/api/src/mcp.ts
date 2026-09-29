@@ -332,6 +332,75 @@ function tools(siteUrl: string): Tool[] {
         return { text: `Issue #${number} opened. ${site}/issues/${number}`, structured: { number, url: `${site}/issues/${number}` } };
       },
     },
+    {
+      name: 'suggest_items',
+      title: 'Add or change items',
+      description:
+        "Add new items, or change or delete several at once, as one suggestion: what the site's editor does, many items at a time. Each item is its type and its whole data (as get_item shows data; schemas are at /schemas/<type>), with id to change an existing one (data null deletes it) and path for a new item's readable path. Up to 200 items a call: pass the suggestion id back as `suggestion` with submit false to keep adding to one suggestion, and submit it with the last call. New items get their ids here, in the order given. Reviewed by the keepers like any suggestion; a steward may approve it with approve_suggestion. Needs a RebbeHub API token with the write scope.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 200,
+            items: {
+              type: 'object',
+              properties: {
+                type: { enum: [...ENTITY_TYPES] },
+                data: { oneOf: [{ type: 'object', additionalProperties: true }, { type: 'null' }], description: "The item's whole data; null deletes it" },
+                id: { ...ID, description: 'An existing item to change, or an id for a new one; left out, a new id is made' },
+                path: { type: 'string', description: "A new item's readable path, starting with /" },
+              },
+              required: ['type', 'data'],
+              additionalProperties: false,
+            },
+          },
+          suggestion: { type: 'integer', description: 'A suggestion made by an earlier call, still a draft, to add these items to' },
+          submit: { type: 'boolean', default: true, description: 'Send it for review after these items; false keeps it a draft to add more' },
+          ...SUGGESTION_WORDS,
+        },
+        required: ['items'],
+        additionalProperties: false,
+      },
+      annotations: WRITE,
+      async run(args, call) {
+        if (!Array.isArray(args.items) || args.items.length === 0) throw new ToolError('give items: a list of { type, data, id?, path? }');
+        if (args.items.length > 200) throw new ToolError('at most 200 items a call; keep adding to the same suggestion');
+        let suggestion = typeof args.suggestion === 'number' ? args.suggestion : null;
+        if (suggestion === null) {
+          const title = typeof args.title === 'string' && args.title.trim() ? args.title.trim() : `Add ${args.items.length} item${args.items.length === 1 ? '' : 's'}`;
+          suggestion = (await need(call, 'POST', '/v1/suggestions', { title, description: typeof args.note === 'string' ? args.note : undefined })).id as number;
+        }
+        const made: { id: string; type: string; path: string | null }[] = [];
+        for (const [i, item] of (args.items as any[]).entries()) {
+          if (!item || typeof item !== 'object' || typeof item.type !== 'string' || item.data === undefined) throw new ToolError(`item ${i + 1}: give type and data (suggestion ${suggestion} keeps the ${i} before it)`);
+          const answer = await call('PUT', `/v1/suggestions/${suggestion}/items`, { type: item.type, data: item.data, id: item.id, path: item.path });
+          if (answer.status >= 400) throw new ToolError(`item ${i + 1}: ${answer.body?.message ?? `the API answered ${answer.status}`} (suggestion ${suggestion} keeps the ${i} before it; fix it and call again with suggestion ${suggestion})`);
+          made.push({ id: answer.body.id, type: item.type, path: item.path ?? null });
+        }
+        const url = `${site}/review?s=${suggestion}`;
+        if (args.submit === false) return { text: `Suggestion ${suggestion}: ${made.length} item${made.length === 1 ? '' : 's'} added, still a draft. ${url}`, structured: { suggestion, status: 'draft', items: made, url } };
+        const sent = await need(call, 'POST', `/v1/suggestions/${suggestion}/submit`);
+        const failed = (sent.checks ?? []).filter((c: any) => c.status === 'fail');
+        const status = sent.status === 'merged' ? 'merged at once (the set lets your changes go live; it will still be reviewed after)' : `sent for review (${sent.status})`;
+        return {
+          text: [`Suggestion ${suggestion}: ${status}; ${made.length} item${made.length === 1 ? '' : 's'} in this call. ${url}`, ...failed.map((c: any) => `Failed check: ${c.message}`)].join('\n'),
+          structured: { suggestion, status: sent.status, items: made, checks: sent.checks ?? [], url },
+        };
+      },
+    },
+    {
+      name: 'approve_suggestion',
+      title: 'Approve a suggestion',
+      description: "Approve a suggestion sent for review, merging it into the catalog, when you may (its sets' keepers, or a steward). With a short note for the record.",
+      inputSchema: { type: 'object', properties: { suggestion: { type: 'integer' }, note: { type: 'string', maxLength: 2000 } }, required: ['suggestion'], additionalProperties: false },
+      annotations: WRITE,
+      async run(args, call) {
+        const merged = await need(call, 'POST', `/v1/suggestions/${Number(args.suggestion)}/approve`, { note: typeof args.note === 'string' ? args.note : undefined });
+        return { text: `Suggestion ${args.suggestion} approved and merged${merged.commit != null ? ` (commit ${merged.commit})` : ''}.`, structured: { suggestion: args.suggestion, commit: merged.commit ?? null } };
+      },
+    },
     ...organizeTools(site),
   ];
 }
@@ -547,7 +616,7 @@ export function mcpRoutes(app: Hono, options: { siteUrl: string; version: string
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: MCP_SERVER_NAME, title: 'RebbeHub', version: options.version, websiteUrl: `${options.siteUrl.replace(/\/+$/, '')}/developers` },
           instructions:
-            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix (write scope; you will be asked to connect your RebbeHub account) makes a suggestion under the connected person\'s account that people review before anything changes; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into. To organize the catalog, get_tree shows it; move_items, move_up, rename_item, reorder_children, create_set, delete_set, merge_items and organize (write scope) each make one suggestion that people review; preview_organize shows the change first.',
+            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix (write scope; you will be asked to connect your RebbeHub account) makes a suggestion under the connected person\'s account that people review before anything changes; suggest_items (write scope) adds, changes or deletes many items in one suggestion, and approve_suggestion approves one when you may; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into. To organize the catalog, get_tree shows it; move_items, move_up, rename_item, reorder_children, create_set, delete_set, merge_items and organize (write scope) each make one suggestion that people review; preview_organize shows the change first.',
         };
       }
       case 'ping':
