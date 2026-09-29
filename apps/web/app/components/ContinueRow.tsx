@@ -1,10 +1,10 @@
-import { BookOpen, Headphones, Pause, Play, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import type { Lang } from '../lib/i18n.js';
 import { accountPlaces, forgetPlace, localPlaces, mergePlaces, placeKey, type Place } from '../lib/places.js';
 import { useAccount } from '../lib/useAccount.js';
 import { clock, usePlayer, type Track } from '../player/PlayerProvider.js';
+import { Icon } from '../ui/Icon.js';
 
 const WORDS = {
   heading: { he: 'להמשיך מאיפה שהפסקתם', en: 'Continue where you stopped' },
@@ -16,7 +16,7 @@ const WORDS = {
   remove: { he: 'להסיר מהרשימה', en: 'Remove from this list' },
 } as const;
 
-const SHOWN = 6;
+const SHOWN = 4;
 
 /** `עמוד 14 מתוך 60`, `part 2 · 12:40`. */
 function whereIn(place: Place, lang: Lang): string {
@@ -51,37 +51,36 @@ export function ContinueRow({ lang }: { lang: Lang }) {
 
   if (!places.length) return null;
   return (
-    <section className="continue">
-      <h2 className="section-header">{WORDS.heading[lang]}</h2>
-      <ul className="rows continue-rows">
+    <section className="continue" aria-labelledby="continue-h">
+      <h2 className="h-sec" id="continue-h">
+        {WORDS.heading[lang]}
+      </h2>
+      <ul className="box rows">
         {places.slice(0, SHOWN).map((place) => {
           const queue = (place.place.queue as Track[] | undefined) ?? [];
           const index = Number(place.place.index) || 0;
           const mine = place.kind === 'listen' && player.current !== null && placeKey(player.current) === place.key;
-          const Icon = place.kind === 'read' ? BookOpen : Headphones;
           return (
-            <li key={`${place.kind} ${place.key}`}>
-              <Link className="row" to={place.href}>
-                <Icon size={16} className="row-icon" aria-hidden="true" />
-                <span className="row-main">
-                  <span className="row-title">{place.title}</span>
-                  <span className="row-sub">{[place.sub, whereIn(place, lang)].filter(Boolean).join(' · ')}</span>
-                </span>
+            <li key={`${place.kind} ${place.key}`} className="row">
+              <Icon name={place.kind === 'read' ? 'book' : 'audio'} className="subtle" />
+              <Link className="row-main" to={place.href}>
+                <span className="row-title">{place.title}</span>
+                <span className="row-sub">{[place.sub, whereIn(place, lang)].filter(Boolean).join(' · ')}</span>
               </Link>
               {place.kind === 'listen' && queue[index] ? (
                 <button
                   type="button"
-                  className="round-play small"
+                  className="pp sm"
                   aria-label={`${mine && player.playing ? WORDS.pause[lang] : WORDS.play[lang]}: ${place.title}`}
                   title={mine && player.playing ? WORDS.pause[lang] : WORDS.play[lang]}
                   onClick={() => (mine ? player.toggle() : player.play(queue, index, Number(place.place.time) || 0))}
                 >
-                  {mine && player.playing ? <Pause size={16} /> : <Play size={16} />}
+                  <Icon name={mine && player.playing ? 'pause' : 'play'} />
                 </button>
               ) : null}
               <button
                 type="button"
-                className="icon-link"
+                className="btn ghost icon sm"
                 aria-label={`${WORDS.remove[lang]}: ${place.title}`}
                 title={WORDS.remove[lang]}
                 onClick={() => {
@@ -89,7 +88,7 @@ export function ContinueRow({ lang }: { lang: Lang }) {
                   setPlaces((all) => all.filter((p) => p !== place));
                 }}
               >
-                <X size={14} aria-hidden="true" />
+                <Icon name="x" size={14} />
               </button>
             </li>
           );

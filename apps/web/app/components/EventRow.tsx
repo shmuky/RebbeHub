@@ -1,4 +1,3 @@
-import { FileText, Loader2, Music, Pause, Play } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import type { LocalName } from '@rebbehub/model';
@@ -8,6 +7,7 @@ import { nameOf, t, type Lang } from '../lib/i18n.js';
 import { href, itemPath } from '../lib/links.js';
 import { useLang } from '../lib/useLang.js';
 import { usePlayer, type Track } from '../player/PlayerProvider.js';
+import { Icon } from '../ui/Icon.js';
 
 export type EventItem = Pick<Entity, 'id' | 'path' | 'type' | 'data'> & { recordings?: number };
 
@@ -43,8 +43,8 @@ export function PlayEventButton({ event, size = 'small' }: { event: EventItem; s
     }
   }
   return (
-    <button type="button" className={size === 'small' ? 'round-play small' : 'round-play'} onClick={start} aria-label={label} title={label}>
-      {loading ? <Loader2 size={16} className="spin" /> : mine && player.playing ? <Pause size={16} /> : <Play size={16} />}
+    <button type="button" className={size === 'small' ? 'pp sm' : 'pp'} onClick={start} aria-label={label} title={label}>
+      {loading ? <Icon name="loader" className="spin" /> : <Icon name={mine && player.playing ? 'pause' : 'play'} />}
     </button>
   );
 }
@@ -53,24 +53,24 @@ export function PlayEventButton({ event, size = 'small' }: { event: EventItem; s
 export function EventRow({ event, sub, lang }: { event: EventItem; sub?: string; lang: Lang }) {
   const d = eventData(event);
   return (
-    <Link className="row" to={href(itemPath(event), lang)}>
+    <Link className="row hover" to={href(itemPath(event), lang)}>
       <span className="row-main">
         <span className="row-title">{nameOf(d.title, lang)}</span>
         <span className="row-sub">{sub ?? (d.date ? dateLabel(d.date, lang, { civil: false }) : '')}</span>
       </span>
-      <span className="row-trailing" aria-hidden="true">
-        {d.links?.length ? <FileText size={15} /> : null}
-        {event.recordings ? <Music size={15} /> : null}
+      <span className="end has" aria-hidden="true">
+        {d.links?.length ? <Icon name="scan" /> : null}
+        {event.recordings ? <Icon name="audio" /> : null}
       </span>
     </Link>
   );
 }
 
-/** Farbrengens as rows. */
+/** Farbrengens as rows, in a box. */
 export function EventRows({ events, sub }: { events: EventItem[]; sub?: (e: EventItem) => string }) {
   const lang = useLang();
   return (
-    <ul className="rows">
+    <ul className="box rows">
       {events.map((e) => (
         <li key={e.id}>
           <EventRow event={e} sub={sub?.(e)} lang={lang} />

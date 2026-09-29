@@ -1,20 +1,29 @@
 import { isRouteErrorResponse, Link, Links, Meta, Outlet, Scripts, ScrollRestoration, useLocation, useRouteLoaderData, type LinksFunction } from 'react-router';
 import type { Route } from './+types/root';
 import { dir, langFrom, t, type Lang } from './lib/i18n.js';
+import { tu } from './lib/i18nUi.js';
 import { href } from './lib/links.js';
 import { useLang } from './lib/useLang.js';
 import { siteOf } from './lib/context.server.js';
-import { AccountLink } from './components/AccountLink.js';
-import { AppNav } from './components/AppNav.js';
 import { PlayerBar } from './player/PlayerBar.js';
 import { PlayerProvider } from './player/PlayerProvider.js';
 import { useServiceWorker } from './lib/pwa.js';
-import './app.css';
+import { Header } from './ui/Header.js';
+import { Footer } from './ui/Footer.js';
+import { ToastProvider } from './ui/Toast.js';
+import { EmptyState } from './ui/primitives.js';
+import { THEME_SCRIPT } from './ui/theme.js';
+import './styles/fonts.css';
+import './styles/tokens.css';
+import './styles/base.css';
+import './styles/components.css';
+import './styles/layout.css';
+import './styles/pages.css';
 
 export const links: LinksFunction = () => [
-  { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
-  { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossOrigin: 'anonymous' },
-  { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&family=Noto+Sans+Hebrew:wght@400;600;700&family=Noto+Sans:wght@400;600;700&display=swap' },
+  // Sichos-Kodesh's faces, self-hosted (styles/fonts.css): the UI's two are fetched early, the rest when used.
+  { rel: 'preload', href: '/fonts/noto-sans-hebrew-400.woff2', as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' },
+  { rel: 'preload', href: '/fonts/noto-sans-hebrew-700.woff2', as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' },
   { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
   // Installable as an app, with an offline shell (public/sw.js, registered in lib/pwa.ts).
   { rel: 'manifest', href: '/manifest.webmanifest' },
@@ -32,51 +41,6 @@ export function headers() {
   return { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=600', 'Content-Security-Policy': "frame-ancestors 'self'", 'X-Frame-Options': 'SAMEORIGIN' };
 }
 
-function LanguageSwitch({ lang }: { lang: Lang }) {
-  const location = useLocation();
-  const params = new URLSearchParams(location.search);
-  if (lang === 'he') params.set('lang', 'en');
-  else params.delete('lang');
-  const qs = params.toString();
-  return (
-    <a className="lang-switch" href={qs ? `${location.pathname}?${qs}` : location.pathname} hrefLang={lang === 'he' ? 'en' : 'he'} lang={lang === 'he' ? 'en' : 'he'}>
-      {t(lang, 'language')}
-    </a>
-  );
-}
-
-function TopBar({ lang }: { lang: Lang }) {
-  return (
-    <header className="top-bar">
-      <Link to={href('/', lang)} className="brand" aria-label={t(lang, 'home')}>
-        <span className="brand-mark" aria-hidden="true">
-          ר
-        </span>
-        <span className="brand-name">RebbeHub</span>
-      </Link>
-      <span className="top-actions">
-        <AccountLink lang={lang} />
-        <LanguageSwitch lang={lang} />
-      </span>
-    </header>
-  );
-}
-
-function Footer({ lang }: { lang: Lang }) {
-  return (
-    <footer className="site-footer">
-      <div>
-        <p>{t(lang, 'footerOpen')}</p>
-        <p>
-          <a href="https://github.com/shmuky/RebbeHub">{t(lang, 'code')}</a> · <a href="https://github.com/shmuky/RebbeHub/blob/main/CONTRIBUTING.md">{t(lang, 'help')}</a> ·{' '}
-          <Link to={href('/about', lang)}>{t(lang, 'about')}</Link> · <Link to={href('/takedown', lang)}>{t(lang, 'takedownTitle')}</Link> ·{' '}
-          <Link to={href('/mirrors', lang)}>{lang === 'he' ? 'הורדה ואתרי מראה' : 'Download and mirror'}</Link>
-        </p>
-      </div>
-    </footer>
-  );
-}
-
 export function Layout({ children }: { children: React.ReactNode }) {
   const data = useRouteLoaderData('root') as { lang?: Lang } | undefined;
   const lang = data?.lang ?? 'he';
@@ -89,8 +53,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="color-scheme" content="light dark" />
-        <meta name="theme-color" content="#faf8f4" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#0e1110" media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#15171a" media="(prefers-color-scheme: dark)" />
+        {/* The reader's own light or dark, set before anything is drawn. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <Meta />
         <Links />
       </head>
@@ -98,26 +64,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {embedded ? (
           <main id="main">{children}</main>
         ) : (
-          <>
-        <a className="skip-link" href="#main">
-          {lang === 'he' ? 'דלג לתוכן' : 'Skip to content'}
-        </a>
-        <PlayerProvider>
-          <div className="app">
-            <AppNav lang={lang} />
-            <div className="app-main">
-              <TopBar lang={lang} />
-              <main id="main" className="screen">
-                {children}
-              </main>
+          <ToastProvider>
+            <a className="skip-link" href="#main">
+              {tu(lang, 'skip')}
+            </a>
+            <PlayerProvider>
+              <Header lang={lang} />
+              <main id="main">{children}</main>
               <Footer lang={lang} />
-            </div>
-          </div>
-          <div className="bottom-bars">
-            <PlayerBar />
-          </div>
-        </PlayerProvider>
-          </>
+              <PlayerBar />
+            </PlayerProvider>
+          </ToastProvider>
         )}
         <ScrollRestoration />
         <Scripts />
@@ -134,12 +91,25 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const lang = useLang();
   const notFound = isRouteErrorResponse(error) && error.status === 404;
   return (
-    <section className="message">
-      <h1>{t(lang, notFound ? 'notFound' : 'error')}</h1>
-      <p>{t(lang, notFound ? 'notFoundText' : 'errorText')}</p>
-      <p>
-        <Link to={href('/', lang)}>{t(lang, 'home')}</Link>
-      </p>
-    </section>
+    <div className="wrap narrow page">
+      <div className="box error-box">
+        <EmptyState
+          icon={notFound ? 'search' : 'warn'}
+          title={<span className="message-title">{t(lang, notFound ? 'notFound' : 'error')}</span>}
+          actions={
+            <>
+              <Link className="btn primary" to={href('/', lang)}>
+                {t(lang, 'home')}
+              </Link>
+              <Link className="btn" to={href('/search', lang)}>
+                {tu(lang, 'searchShort')}
+              </Link>
+            </>
+          }
+        >
+          {t(lang, notFound ? 'notFoundText' : 'errorText')}
+        </EmptyState>
+      </div>
+    </div>
   );
 }

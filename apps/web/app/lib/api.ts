@@ -209,6 +209,54 @@ export interface CatalogHealth {
   embeddings: { embedded: number; waiting: number };
 }
 
+/** A suggestion as GET /v1/suggestions lists it. */
+export interface SuggestionRow {
+  id: number;
+  title: string;
+  description: string | null;
+  author: string;
+  status: 'draft' | 'open' | 'merged' | 'sent_back' | 'withdrawn';
+  kind: 'suggestion' | 'import' | 'revert' | 'live';
+  post_review: 'pending' | 'done' | null;
+  project_id?: number | null;
+  submitted_at: string | null;
+  created_at: string;
+  closed_at?: string | null;
+  merged_commit?: number | null;
+  checks: Array<{ check: string; status: 'pass' | 'warn' | 'fail'; message: string; entityId?: string; path?: string }>;
+}
+
+/** One change a suggestion makes to one item. */
+export interface SuggestionEntry {
+  entityId: string;
+  type: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  changes: Array<{ path: string; before?: unknown; after?: unknown }>;
+  conflicts: unknown[];
+  withheld?: string;
+}
+
+/** A suggestion as GET /v1/suggestions/:id gives it, for its page. */
+export interface SuggestionDetail {
+  changeset: SuggestionRow;
+  entries: SuggestionEntry[];
+  reviews: Array<{ reviewer: string; verdict: 'approve' | 'send_back' | 'comment'; body: string | null; created_at: string }>;
+  names: Record<string, string>;
+  files: Record<string, { url: string | null; mime: string; bytes: number; rights: string; similar?: Array<{ kind: 'same' | 'shares'; matched?: number; of?: number; items: Array<{ id: string; type: string; path: string | null }> }> }>;
+  mayApprove: boolean;
+  mayApproveReason?: string | null;
+  mine: boolean;
+  /** The reviewer's advice, written by a machine (null until one has been written). */
+  advice: { summary: string; model: string; at: string; machine: true } | null;
+  /**
+   * The conversation, when the API gives it (comments with their authors,
+   * and events such as "linked report #12"): drawn in the timeline in order.
+   */
+  comments?: Array<{ id: number; author: string; authorName?: string; body: string; at: string; parent?: number | null; hidden?: boolean }>;
+  events?: Array<{ kind: string; actor: string; actorName?: string; at: string; detail?: Record<string, unknown> }>;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -459,6 +507,21 @@ export class RebbeHubApi {
     if (!response.ok) throw new ApiError(response.status, body.message ?? response.statusText);
     return { id: body.id! };
   }
+  /** Suggestions, oldest first (public): by status, author, or those live and waiting for review after. */
+  async suggestions(options: { status?: string; author?: string; postReview?: boolean; limit?: number } = {}) {
+    return (await this.get<{ suggestions: SuggestionRow[] }>('/v1/suggestions', { status: options.status, author: options.author, postReview: options.postReview ? 'true' : undefined, limit: options.limit })).suggestions;
+  }
+
+  /** One suggestion with its changes, reviews and who wrote them; null when there is none. */
+  suggestion(id: number) {
+    return this.maybe(this.get<SuggestionDetail>(`/v1/suggestions/${id}`));
+  }
+
+  /** The commits after `since`, oldest first, each with the items it changed (as they became). */
+  async commits(since: number, limit = 20) {
+    return (await this.get<{ commits: Array<{ seq: number; at: string; message: string; mergedBy: string; author: string; changes: Array<{ id: string; type: string; path: string | null; rev: number; data: Record<string, unknown> | null }> }> }>('/v1/commits', { since, limit })).commits;
+  }
+
   /** What a mirror needs: the git mirror, the release keys, every edition's dumps (services/api/src/mirrors.ts). */
   async mirrors() {
     return this.get<MirrorsInfo>('/v1/mirrors');

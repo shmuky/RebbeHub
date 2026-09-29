@@ -26,6 +26,10 @@ export default [
   route('_/translations/*', 'routes/translations-pass.ts'),
   route('_/uploads/check', 'routes/uploads-check.ts'),
   route('_/lookup', 'routes/lookup.ts'),
+  // What the command palette finds as one types.
+  route('_/find', 'routes/find.ts'),
+  // Reports, as a list to search and filter (stewards and keepers see each one; others the count and the form).
+  route('reports', 'routes/reports.tsx'),
   route('_/steward/*', 'routes/admin-pass.ts'),
   route('admin', 'routes/admin.tsx'),
   route('review', 'routes/review.tsx'),
