@@ -625,7 +625,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   return (
     <div className="home">
       <DayStrip lang={lang} week={week} civil={civil} weekday={weekday} year={year} yearCount={yearEvents.length} />
-      {toCheck?.totals.transcripts ? <ReviewHero lang={lang} list={toCheck} /> : null}
+      {toCheck?.totals.transcripts || toCheck?.totals.texts ? <ReviewHero lang={lang} list={toCheck} /> : null}
       <div className="wrap home-grid">
         <aside className="home-lib" aria-label={w(lang, 'library')}>
           <h2 className="h-sec">{w(lang, 'library')}</h2>
