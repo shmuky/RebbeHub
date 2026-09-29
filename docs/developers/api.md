@@ -69,10 +69,16 @@ Search (`/v1/search`) is ranked, not paged: ask for more with `limit`.
 - Every JSON answer to a GET has an `ETag`. Send it back as
   `If-None-Match` and an unchanged answer is `304 Not Modified`, with no
   body.
-- Answers to anonymous requests are `Cache-Control: public, max-age=60`
-  (routes that never change say more: file bytes and dumps are
-  immutable); answers to signed-in requests are `private, no-cache`, and
-  personal ones (`/v1/places`, `/v1/tokens`) `no-store`. `Vary:
+- Answers to anonymous requests are `Cache-Control: public, max-age=60,
+  s-maxage=120, stale-while-revalidate=600`, and are kept at Cloudflare's
+  edge that long (sums of the whole catalog - `/v1/stats`, `/v1/health`,
+  `/v1/community`, `/v1/refcounts` - ten minutes; routes that never change
+  say more: file bytes and dumps are immutable). So a change can take a
+  couple of minutes to show to anonymous readers. The newest page of
+  `/v1/commits` is kept only ten seconds: it and webhooks are the way to
+  follow changes as they happen. Answers to
+  signed-in requests are `private, no-cache` and never kept at the edge,
+  and personal ones (`/v1/places`, `/v1/tokens`) `no-store`. `Vary:
   Authorization, Cookie` keeps them apart in shared caches.
 
 ## CORS

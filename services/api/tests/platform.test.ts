@@ -3,7 +3,7 @@ import type { Hono } from 'hono';
 import { createPerson, type Catalog } from '@rebbehub/core';
 import type { EntityId } from '@rebbehub/model';
 import { createApp } from '../src/app.js';
-import { cursor, etagMatches, memoryRateLimiter } from '../src/platform.js';
+import { cursor, etagMatches, mayUseEdgeCache, memoryRateLimiter } from '../src/platform.js';
 import { add, freshCatalog, yudShvat } from '../../../packages/core/tests/helpers.js';
 
 /**
@@ -28,7 +28,7 @@ beforeEach(async () => {
     catalog,
     // The session in tests: a header; tokens are real.
     authenticate: (c) => c.req.header('X-Test-Account') ?? null,
-    rateLimits: { ip: memoryRateLimiter(5, 60, () => clock), key: memoryRateLimiter(8, 60, () => clock), ipPerMinute: 5, keyPerMinute: 8 },
+    rateLimits: { ip: memoryRateLimiter(5, 60, () => clock), key: memoryRateLimiter(8, 60, () => clock), search: memoryRateLimiter(2, 60, () => clock), ipPerMinute: 5, keyPerMinute: 8, searchPerMinute: 2 },
   });
 });
 
@@ -76,6 +76,40 @@ describe('errors, CORS and caching', () => {
     // A route's own caching stays its own.
     expect((await call('GET', '/openapi.json')).headers.get('Cache-Control')).toBe('public, max-age=300');
     expect(etagMatches('W/"a", "b"', '"b"')).toBe(true);
+  });
+
+  it("is kept at Cloudflare's edge when anyone may have it: a few minutes for reads, longer for sums of the whole catalog", async () => {
+    expect((await call('GET', `/v1/entities/${event}`)).headers.get('Cache-Control')).toMatch(/s-maxage=\d+/);
+    expect((await call('GET', '/v1/stats')).headers.get('Cache-Control')).toMatch(/^public, .*s-maxage=600/);
+    expect((await call('GET', '/v1/sitemap')).headers.get('Cache-Control')).toMatch(/^public, .*s-maxage=3600/);
+    // What someone signed in reads never is.
+    expect((await call('GET', `/v1/entities/${event}`, { as: 'mendy', headers: { Cookie: 'rh_session=x' } })).headers.get('Cache-Control')).toBe('private, no-cache');
+    // The edge answers only reads from nobody in particular, and never sign-in, the MCP server or a part of a file.
+    const request = (path: string, init: RequestInit = {}) => new Request(`https://api.rebbehub.test${path}`, init);
+    expect(mayUseEdgeCache(request('/v1/entities/rh-7k2m9q4d'))).toBe(true);
+    expect(mayUseEdgeCache(request('/v1/search?q=x', { method: 'HEAD' }))).toBe(true);
+    expect(mayUseEdgeCache(request('/objects/abc'))).toBe(true);
+    expect(mayUseEdgeCache(request('/v1/reports', { method: 'POST' }))).toBe(false);
+    expect(mayUseEdgeCache(request('/v1/issues', { headers: { Authorization: 'Bearer rhp_x' } }))).toBe(false);
+    expect(mayUseEdgeCache(request('/v1/issues', { headers: { Cookie: '__Host-rh_session=x' } }))).toBe(false);
+    expect(mayUseEdgeCache(request('/v1/auth/me'))).toBe(false);
+    expect(mayUseEdgeCache(request('/v1/entities/rh-7k2m9q4d', { headers: { 'Cache-Control': 'no-cache' } }))).toBe(false);
+    expect(mayUseEdgeCache(request('/mcp'))).toBe(false);
+    expect(mayUseEdgeCache(request('/objects/abc', { headers: { Range: 'bytes=0-99' } }))).toBe(false);
+  });
+});
+
+describe('sitemaps', () => {
+  it('list every kind of item with a page, a page of items at a time, and nothing else', async () => {
+    const index = await call('GET', '/v1/sitemap');
+    expect(index.status).toBe(200);
+    expect(index.body.pageSize).toBe(10_000);
+    expect(index.body.sitemaps).toContainEqual({ type: 'event', page: 1, count: 1, lastmod: expect.stringMatching(/^\d{4}-/) });
+    expect(index.body.sitemaps.some((s: { type: string }) => s.type === 'schema')).toBe(false);
+    const page = await call('GET', '/v1/sitemap/event/1');
+    expect(page.body.items).toEqual([{ id: event, path: '/events/5742-05-10', lastmod: expect.stringMatching(/^\d{4}-/) }]);
+    expect((await call('GET', '/v1/sitemap/event/2')).status).toBe(404);
+    expect((await call('GET', '/v1/sitemap/schema/1')).status).toBe(404);
   });
 });
 
@@ -136,6 +170,16 @@ describe('rate limits', () => {
     expect((await call('GET', '/v1/stats')).status).toBe(200);
     clock += 60_000;
     expect((await call('GET', '/v1/stats', { ip: '203.0.113.9' })).status).toBe(200);
+  });
+
+  it("hold searching to its own smaller allowance per address, on top of the address's", async () => {
+    for (let i = 0; i < 2; i++) expect((await call('GET', '/v1/search?q=shvat', { ip: '203.0.113.20' })).status).toBe(200);
+    const limited = await call('GET', '/v1/search/moments?q=shvat', { ip: '203.0.113.20' });
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get('RateLimit-Policy')).toMatch(/"search";q=2;w=60/);
+    // Reading an item from the same address is not searching; the site's own server (no address) is not held back.
+    expect((await call('GET', `/v1/entities/${event}`, { ip: '203.0.113.20' })).status).toBe(200);
+    expect((await call('GET', '/v1/search?q=shvat')).status).toBe(200);
   });
 });
 

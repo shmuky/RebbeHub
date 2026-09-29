@@ -6,10 +6,14 @@ The API is free and open; the limits keep it so for everyone.
 | --- | --- |
 | Each address (no token) | 300 requests a minute |
 | Each API token | 1,200 requests a minute, wherever it is sent from |
+| Searching, each address (no token) | 60 searches a minute (`/v1/search`, `/v1/search/moments`, `/v1/search/similar`), counted on top of the above |
 
 - Every answer says the policy: `RateLimit-Policy: "address";q=300;w=60, "token";q=1200;w=60`.
 - Past it, the answer is `429` with `{ "error": "rate-limited" }` and
   `Retry-After: 60`. Wait that long; do not retry at once.
+- Reads anyone may make are answered from Cloudflare's edge for a minute
+  or two (longer for the sums of the whole catalog); an answer from there
+  does not count against you, and says `Cf-Cache-Status: HIT`.
 - File bytes (`/objects/<sha256>`, asked for in many small ranges while a
   recording plays) are not counted.
 - A request with a bad token counts against its address, so guessing
@@ -32,6 +36,6 @@ The API is free and open; the limits keep it so for everyone.
 ## Running your own
 
 On Cloudflare Workers the limits are Cloudflare's rate limiting bindings
-(`RATE_LIMIT_ADDRESS`, `RATE_LIMIT_TOKEN` in `services/api/wrangler.toml`,
+(`RATE_LIMIT_ADDRESS`, `RATE_LIMIT_TOKEN`, `RATE_LIMIT_SEARCH` in `services/api/wrangler.toml`,
 [configuration](../configuration.md)); without them nothing is counted.
 `npm run dev:api` counts nothing unless `RATE_LIMIT=1`.

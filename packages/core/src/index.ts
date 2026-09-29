@@ -226,3 +226,4 @@ export {
 export { inbox, markRead, unreadCount, type InboxFilter, type InboxLine } from './inbox.js';
 export { inboxHref, inboxText } from './notify.js';
 export { profile, type Profile, type ProfileActivity } from './profiles.js';
+export { SITEMAP_PAGE_SIZE, SITEMAP_TYPES, sitemapChunks, sitemapPage, type SitemapChunk, type SitemapEntry } from './sitemap.js';

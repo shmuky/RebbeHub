@@ -12,6 +12,16 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Ready for search engines and crowds.** Sitemaps a page of 10,000 items
+  at a time in both languages, with when each item last changed
+  (`/sitemap.xml`; the API's new `/v1/sitemap` and
+  `/v1/sitemap/{type}/{page}`); every page with its preview picture (a
+  sefer's shaar), Twitter card, and schema.org data (Book, Event with its
+  recordings as AudioObjects, BreadcrumbList); a robots.txt that keeps
+  crawlers out of what is personal and endless. Pages and the API's
+  public reads are kept at Cloudflare's edge, so a burst of readers or a
+  crawler mostly never reaches the database; searching has its own
+  allowance per address (60 a minute).
 - **Covers from linked PDFs.** A sefer whose PDF is only linked (a scan on
   Drive, a HebrewBooks printing) gets its title page as a cover too; the
   cover source list (`/v1/works/{id}/cover`) now names `linked` sources and

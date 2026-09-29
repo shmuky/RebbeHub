@@ -1,7 +1,8 @@
+import { WorkerEntrypoint } from 'cloudflare:workers';
 import { Catalog, adviseSuggestions, deliverWebhooks, embedderFromEnv, sendNotifications } from '@rebbehub/core';
 import { connectPostgres } from '@rebbehub/db';
 import { createApp, turnstileVerifier, type FileStore } from './app.js';
-import { DEFAULT_IP_PER_MINUTE, DEFAULT_KEY_PER_MINUTE, type RateLimiter } from './platform.js';
+import { DEFAULT_IP_PER_MINUTE, DEFAULT_KEY_PER_MINUTE, DEFAULT_SEARCH_PER_MINUTE, mayUseEdgeCache, type RateLimiter } from './platform.js';
 import { authFor } from './auth.js';
 import { resendMailer, workersAiAdvisor } from './mail.js';
 
@@ -61,9 +62,18 @@ interface Env {
   /** Cloudflare rate limiting bindings (wrangler.toml, [[ratelimits]]): requests per caller's address, and per API token. */
   RATE_LIMIT_ADDRESS?: RateLimiter;
   RATE_LIMIT_TOKEN?: RateLimiter;
+  /** Searches per address a minute, on top of the address's allowance. */
+  RATE_LIMIT_SEARCH?: RateLimiter;
   /** What those bindings allow a minute, for the RateLimit-Policy header (they are set in wrangler.toml). */
   RATE_LIMIT_ADDRESS_PER_MINUTE?: string;
   RATE_LIMIT_TOKEN_PER_MINUTE?: string;
+  RATE_LIMIT_SEARCH_PER_MINUTE?: string;
+}
+
+interface Ctx {
+  waitUntil(promise: Promise<unknown>): void;
+  /** The Worker's own entrypoints (ctx.exports): `CachedApi`, behind the Workers cache. */
+  exports?: { CachedApi?: { fetch(request: Request): Promise<Response> } };
 }
 
 const mailerOf = (env: Env) => (env.RESEND_API_KEY ? resendMailer({ apiKey: env.RESEND_API_KEY, from: env.EMAIL_FROM }) : undefined);
@@ -102,33 +112,56 @@ export default {
     ctx.waitUntil(run().finally(() => db.close()));
   },
 
-  async fetch(request: Request, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): Promise<Response> {
-    const db = connectPostgres(env.HYPERDRIVE.connectionString, { max: 1 });
-    const app = createApp({
-      catalog: new Catalog(db),
-      reportSalt: env.REPORT_SALT,
-      verifyCaptcha: env.TURNSTILE_SECRET ? turnstileVerifier(env.TURNSTILE_SECRET) : undefined,
-      filesBaseUrl: env.FILES_BASE_URL,
-      files: env.FILES_PUBLIC ? r2Store(env.FILES_PUBLIC) : undefined,
-      texts: env.FILES_PUBLIC ? { store: r2Store(env.FILES_PUBLIC), writer: r2Writer(env.FILES_PUBLIC), from: env.SK_ARCHIVE ? r2Store(env.SK_ARCHIVE) : undefined } : undefined,
-      uploads: env.FILES_PUBLIC && env.FILES_PRESERVATION ? { public: r2Writer(env.FILES_PUBLIC), preservation: r2Writer(env.FILES_PRESERVATION) } : undefined,
-      embedder: embedderFromEnv({ CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_AI_TOKEN: env.CLOUDFLARE_AI_TOKEN }),
-      oai: env.OAI_ADMIN_EMAIL ? { adminEmail: env.OAI_ADMIN_EMAIL, siteUrl: env.SITE_URL } : undefined,
-      mirrors: { gitUrls: list(env.CATALOG_GIT_URL), publicKeys: list(env.RELEASE_PUBLIC_KEYS), dumpsBaseUrl: env.DUMPS_BASE_URL || undefined },
-      siteUrl: env.SITE_URL,
-      rateLimits: {
-        ip: env.RATE_LIMIT_ADDRESS,
-        key: env.RATE_LIMIT_TOKEN,
-        ipPerMinute: Number(env.RATE_LIMIT_ADDRESS_PER_MINUTE) || DEFAULT_IP_PER_MINUTE,
-        keyPerMinute: Number(env.RATE_LIMIT_TOKEN_PER_MINUTE) || DEFAULT_KEY_PER_MINUTE,
-      },
-      auth: env.SITE_URL ? authFor(env.SITE_URL, { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }) : undefined,
-      mailer: mailerOf(env),
-    });
-    try {
-      return await app.fetch(request);
-    } finally {
-      ctx.waitUntil(db.close());
-    }
+  /**
+   * Every request comes here first, and is never cached here. A read anyone
+   * may make goes on to `CachedApi`, behind Cloudflare's Workers cache
+   * (wrangler.toml, [exports]), which keeps each answer as long as its
+   * Cache-Control says (platform.ts): a burst of the same reads reaches
+   * Postgres about once. What a token or a session asks, and every change,
+   * is answered here, fresh.
+   */
+  async fetch(request: Request, env: Env, ctx: Ctx): Promise<Response> {
+    const cached = ctx.exports?.CachedApi;
+    if (cached && mayUseEdgeCache(request)) return cached.fetch(request);
+    return answer(request, env, ctx);
   },
 };
+
+/** The API's answers to anyone's reads, kept at the edge (the Workers cache is switched on for this entrypoint alone). */
+export class CachedApi extends WorkerEntrypoint<Env> {
+  fetch(request: Request): Promise<Response> {
+    return answer(request, this.env, this.ctx);
+  }
+}
+
+async function answer(request: Request, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): Promise<Response> {
+  const db = connectPostgres(env.HYPERDRIVE.connectionString, { max: 1 });
+  const app = createApp({
+    catalog: new Catalog(db),
+    reportSalt: env.REPORT_SALT,
+    verifyCaptcha: env.TURNSTILE_SECRET ? turnstileVerifier(env.TURNSTILE_SECRET) : undefined,
+    filesBaseUrl: env.FILES_BASE_URL,
+    files: env.FILES_PUBLIC ? r2Store(env.FILES_PUBLIC) : undefined,
+    texts: env.FILES_PUBLIC ? { store: r2Store(env.FILES_PUBLIC), writer: r2Writer(env.FILES_PUBLIC), from: env.SK_ARCHIVE ? r2Store(env.SK_ARCHIVE) : undefined } : undefined,
+    uploads: env.FILES_PUBLIC && env.FILES_PRESERVATION ? { public: r2Writer(env.FILES_PUBLIC), preservation: r2Writer(env.FILES_PRESERVATION) } : undefined,
+    embedder: embedderFromEnv({ CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_AI_TOKEN: env.CLOUDFLARE_AI_TOKEN }),
+    oai: env.OAI_ADMIN_EMAIL ? { adminEmail: env.OAI_ADMIN_EMAIL, siteUrl: env.SITE_URL } : undefined,
+    mirrors: { gitUrls: list(env.CATALOG_GIT_URL), publicKeys: list(env.RELEASE_PUBLIC_KEYS), dumpsBaseUrl: env.DUMPS_BASE_URL || undefined },
+    siteUrl: env.SITE_URL,
+    rateLimits: {
+      ip: env.RATE_LIMIT_ADDRESS,
+      key: env.RATE_LIMIT_TOKEN,
+      ipPerMinute: Number(env.RATE_LIMIT_ADDRESS_PER_MINUTE) || DEFAULT_IP_PER_MINUTE,
+      keyPerMinute: Number(env.RATE_LIMIT_TOKEN_PER_MINUTE) || DEFAULT_KEY_PER_MINUTE,
+      search: env.RATE_LIMIT_SEARCH,
+      searchPerMinute: Number(env.RATE_LIMIT_SEARCH_PER_MINUTE) || DEFAULT_SEARCH_PER_MINUTE,
+    },
+    auth: env.SITE_URL ? authFor(env.SITE_URL, { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }) : undefined,
+    mailer: mailerOf(env),
+  });
+  try {
+    return await app.fetch(request);
+  } finally {
+    ctx.waitUntil(db.close());
+  }
+}

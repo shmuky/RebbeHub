@@ -34,8 +34,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
 export function meta({ loaderData }: Route.MetaArgs) {
   if (!loaderData) return [];
-  const { lang, siteUrl, entity } = loaderData;
-  return pageMeta({ title: `${t(lang, 'tabTalk')}: ${labelOf(entity, lang)}`, path: `/talk/${entity.id}`, lang, siteUrl });
+  const { lang, siteUrl, entity, talk } = loaderData;
+  // An empty talk page says nothing its item's page does not: kept out of search until someone writes on it.
+  return pageMeta({ title: `${t(lang, 'tabTalk')}: ${labelOf(entity, lang)}`, path: `/talk/${entity.id}`, lang, siteUrl, noindex: !talk.some((c) => !c.hidden) });
 }
 
 const W = {

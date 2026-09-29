@@ -137,7 +137,8 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
       [...ids(d.work), ...ids(d.events)].forEach((id) => wanted.add(id));
       const texts = await entitiesOf(api, await api.backlinks(entity.id, { field: 'unit', type: 'text' }));
       view.lists.texts = texts;
-      for (const text of texts) view.segments[text.id] = await allSegments(api, text.id);
+      const segments = await Promise.all(texts.map((text) => allSegments(api, text.id)));
+      texts.forEach((text, i) => (view.segments[text.id] = segments[i]!));
       const maps = await entitiesOf(api, await api.backlinks(entity.id, { field: 'unit', type: 'contents-map' }));
       view.lists.printedIn = maps;
       maps.forEach((m) => ids((m.data as { publication?: string }).publication).forEach((id) => wanted.add(id)));
@@ -148,10 +149,9 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
       view.lists.units = await entitiesOf(api, await api.backlinks(entity.id, { field: 'events', type: 'unit' }));
       const recordings = await entitiesOf(api, await api.backlinks(entity.id, { field: 'event', type: 'recording' }));
       view.lists.recordings = recordings;
-      for (const r of recordings) {
-        const file = (r.data as { file?: string }).file;
-        view.files[r.id] = file ? await api.file(file) : null;
-      }
+      // Each part's file, asked for together rather than one after another.
+      const files = await Promise.all(recordings.map((r) => ((r.data as { file?: string }).file ? api.file((r.data as { file: string }).file) : null)));
+      recordings.forEach((r, i) => (view.files[r.id] = files[i] ?? null));
       view.event = await orNone(eventView(api, view.lists.units, recordings, url.searchParams.get('lang') === 'en' ? 'en' : 'he'), { said: [], texts: [] });
       const date = typeof d.date === 'string' ? d.date : '';
       const day = /^\d{4}-(\w{2,3}-\d{2})$/.exec(date)?.[1];
@@ -168,7 +168,8 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
       const scans = await entitiesOf(api, await api.backlinks(entity.id, { field: 'publication', type: 'scan' }));
       scans.sort((a, b) => Number(Boolean((b.data as { preferred?: boolean }).preferred)) - Number(Boolean((a.data as { preferred?: boolean }).preferred)));
       view.lists.scans = scans;
-      for (const s of scans) view.files[s.id] = await api.file((s.data as { file: string }).file);
+      const files = await Promise.all(scans.map((s) => api.file((s.data as { file: string }).file)));
+      scans.forEach((s, i) => (view.files[s.id] = files[i] ?? null));
       await loadPages(scans);
       // The sefer's other printings, and what this one reprints.
       if (typeof d.work === 'string') view.lists.otherPrintings = sortPrintings((await entitiesOf(api, await api.backlinks(d.work, { field: 'work', type: 'publication' }))).filter((p) => p.id !== entity.id));
@@ -232,6 +233,8 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
   const setOf = entity.type === 'set' ? entity : setWanted ? (view.refs[setWanted] ?? (await orNone(api.entity(setWanted), null)) ?? undefined) : undefined;
   if (setOf && !view.refs[setOf.id]) view.refs[setOf.id] = setOf;
   const keepers = ((setOf?.data as { keepers?: string[] } | undefined)?.keepers ?? []).slice(0, 12);
+  // A sicha's or a printing's sefer's cover: the picture its page shows when it is shared.
+  if ((entity.type === 'unit' || entity.type === 'publication') && typeof d.work === 'string') view.covers = await orNone(api.covers([d.work]), {});
   if (keepers.length) view.keepers = (await api.peopleByIds(keepers)).map((p) => ({ id: p.id, username: p.username, displayName: p.displayName }));
   return view;
 }

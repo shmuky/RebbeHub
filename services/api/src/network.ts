@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 import { catalogHealth, EMBEDDED_TYPES, relationsOf, searchMoments, searchSimilar, type Catalog, type Embedder } from '@rebbehub/core';
 import { readId, type EntityType } from '@rebbehub/model';
 import { HttpError } from './app.js';
+import { PUBLIC_SUMMARY } from './platform.js';
 
 /**
  * The API's phase-6 reading (the plan, section 9): search that lands on
@@ -43,5 +44,5 @@ export function networkRoutes(app: Hono, catalog: Catalog, options: { embedder?:
   });
 
   // Coverage per year and set, pages nobody checked, recordings not synced, links that do not answer, suggestions waiting longest.
-  app.get('/v1/health', async (c) => c.json((await catalogHealth(catalog, { limit: whole(c.req.query('limit'), 'limit', 500) })) as unknown as Record<string, unknown>));
+  app.get('/v1/health', async (c) => c.json((await catalogHealth(catalog, { limit: whole(c.req.query('limit'), 'limit', 500) })) as unknown as Record<string, unknown>, 200, { 'Cache-Control': PUBLIC_SUMMARY }));
 }

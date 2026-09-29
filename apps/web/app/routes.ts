@@ -69,7 +69,8 @@ export default [
   route('llms-full.txt', 'routes/llms.ts', { id: 'llms-full' }),
   route('robots.txt', 'routes/robots.ts'),
   route('sitemap.xml', 'routes/sitemap-index.ts'),
-  route('sitemaps/:type.xml', 'routes/sitemap.ts'),
+  // Sitemaps: the site's own pages, and each kind of item a page at a time (`/sitemaps/unit-3.xml`).
+  route('sitemaps/:name.xml', 'routes/sitemap.ts'),
   // Every item has a readable path (`/likkutei-sichos/12/3`) and a permanent one (`/rh-7k2m9q4d`).
   route('*', 'routes/item.tsx'),
 ] satisfies RouteConfig;

@@ -1,7 +1,7 @@
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 import { createApiToken, listApiTokens, looksLikeToken, revokeApiToken, tokenGrant, type Catalog, type TokenGrant } from '@rebbehub/core';
 import { HttpError } from './app.js';
-import { callerAddress, type RateLimits } from './platform.js';
+import { SEARCH_PATHS, callerAddress, type RateLimits } from './platform.js';
 
 /**
  * Personal API tokens (packages/core/src/tokens.ts): made and revoked on
@@ -40,6 +40,8 @@ export function tokenGate(catalog: Catalog, limits: RateLimits | undefined): Mid
     const policy: string[] = [];
     if (limits?.ip) policy.push(`"address";q=${limits.ipPerMinute ?? 0};w=60`);
     if (limits?.key) policy.push(`"token";q=${limits.keyPerMinute ?? 0};w=60`);
+    const searching = SEARCH_PATHS.test(c.req.path);
+    if (searching && limits?.search) policy.push(`"search";q=${limits.searchPerMinute ?? 0};w=60`);
     if (policy.length) c.header('RateLimit-Policy', policy.join(', '));
 
     if (header !== undefined && /^bearer\s/i.test(header)) {
@@ -61,6 +63,8 @@ export function tokenGate(catalog: Catalog, limits: RateLimits | undefined): Mid
       // A file's bytes are asked for in many small ranges while it plays; they are not counted.
       if (!(await limits.ip.limit({ key: ip })).success) tooMany(c);
     }
+    // Searches from an address count twice: against its allowance, and against the smaller one for searching (a token's own allowance covers its searches).
+    if (searching && ip && limits?.search && !tokenGrantOf(c) && !(await limits.search.limit({ key: ip })).success) tooMany(c);
     await next();
   };
 }
