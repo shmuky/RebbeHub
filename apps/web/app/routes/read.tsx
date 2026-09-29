@@ -306,30 +306,30 @@ export default function Read({ loaderData }: Route.ComponentProps) {
             </button>
           ) : null}
         </div>
+        {resumedAt && ready ? (
+          <div className="reader-note">
+            <p className="alert info reader-resumed" role="status">
+              <Icon name="history" />
+              <span>
+                {WORDS.resumed[lang]} {resumedAt}
+                {WORDS.resumedTail[lang]}{' '}
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => {
+                    window.scrollTo(0, 0);
+                    current.current = 1;
+                    setAt(1);
+                    setResumedAt(null);
+                  }}
+                >
+                  {WORDS.fromStart[lang]}
+                </button>
+              </span>
+            </p>
+          </div>
+        ) : null}
       </header>
-      {resumedAt && ready ? (
-        <div className="reader-note">
-          <p className="alert info reader-resumed" role="status">
-            <Icon name="history" />
-            <span>
-              {WORDS.resumed[lang]} {resumedAt}
-              {WORDS.resumedTail[lang]}{' '}
-              <button
-                type="button"
-                className="link-button"
-                onClick={() => {
-                  window.scrollTo(0, 0);
-                  current.current = 1;
-                  setAt(1);
-                  setResumedAt(null);
-                }}
-              >
-                {WORDS.fromStart[lang]}
-              </button>
-            </span>
-          </p>
-        </div>
-      ) : null}
       <div className="pdf-viewer-status">
         {state.status === 'loading' ? (
           <div className="pdf-loading" role="status">

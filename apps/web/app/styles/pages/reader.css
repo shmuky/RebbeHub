@@ -133,9 +133,13 @@ main#main:has(> .pdf-viewer-screen) {
 }
 
 .reader-note {
-  max-width: 760px;
-  margin: 12px auto 0;
-  padding-inline: var(--gutter);
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 0 var(--gutter) 8px;
+}
+
+.reader-note .alert {
+  padding-block: 6px;
 }
 
 .reader-resumed {

@@ -353,6 +353,22 @@
   .strip-legend {
     display: none !important;
   }
+  .text-line .fix {
+    opacity: 1;
+    padding-inline: 6px;
+  }
+  .text-line .fix-word {
+    display: none;
+  }
+  .layer-rows .row {
+    flex-wrap: wrap;
+  }
+  .layer-rows .row-main {
+    flex-basis: calc(100% - 40px);
+  }
+  .layer-rows .row .btn {
+    margin-inline-start: auto;
+  }
 }
 
 /* ================================================================== printings compared (/compare) */

@@ -26,6 +26,18 @@
   margin-top: 2px;
 }
 
+/* The side's counts: the name as wide as it needs, the number at the end. */
+.cal-page .side dl,
+.lib-page .side dl {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.cal-page .side dd,
+.lib-page .side dd {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
 /* A thing's marks at the end of a row: a scan or hanacha, a recording. */
 .row .has {
   display: inline-grid;
