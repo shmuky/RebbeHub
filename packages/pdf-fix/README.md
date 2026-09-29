@@ -38,3 +38,8 @@ nothing is centred, enlarged or cut:
 The turns are a PDF matrix per page, so a reader draws the linked file
 through them and no copy is made (docs/operations.md, *Page fixes for
 linked PDFs*).
+
+Pages are drawn by Poppler's `pdftoppm` when it is installed
+(poppler-utils), and by pdf.js otherwise or for a page Poppler cannot
+read: both draw the crop box, and read the same tilt (tests/render.test.ts).
+On a big compressed scan Poppler is a hundred times faster.
