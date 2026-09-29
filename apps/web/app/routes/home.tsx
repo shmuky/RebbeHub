@@ -258,6 +258,8 @@ const W = {
   reportsWaiting: { he: 'דיווחים ממתינים לבדיקה', en: 'reports waiting to be checked' },
   suggestionsWaiting: { he: 'הצעות ממתינות לבדיקה', en: 'suggestions waiting for review' },
   pagesUnchecked: { he: 'עמודים סרוקים שטרם נבדקו', en: 'scanned pages not yet checked' },
+  machineNew: { he: 'לבדוק מה שהמכונה כתבה', en: 'Check what the machines wrote' },
+  machineNewHint: { he: 'תמלולים והקלדות חדשים, לפני שאדם בדק', en: 'New transcripts and OCR, before a person checked them' },
   noText: { he: 'התוועדויות בלי טקסט', en: 'farbrengens with no text' },
   projects: { he: 'פרויקטים פעילים', en: 'Active projects' },
   noProjects: { he: 'אין כרגע פרויקט פתוח.', en: 'No project is open just now.' },
@@ -694,6 +696,15 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               <Link to={href('/help', lang)}>{t(lang, 'howToHelp')}</Link>
             </h2>
             <ul className="box needs">
+              <li className="todo">
+                <span className="num">
+                  <Icon name="bot" />
+                </span>
+                <div>
+                  <Link to={href('/check', lang)}>{w(lang, 'machineNew')}</Link>
+                  <div className="subtle tiny">{w(lang, 'machineNewHint')}</div>
+                </div>
+              </li>
               {gaps.eventsWithoutRecordings ? (
                 <li className="todo">
                   <span className="num">{num(gaps.eventsWithoutRecordings, lang)}</span>
@@ -717,7 +728,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               {pages && pages.total > pages.checked ? (
                 <li className="todo">
                   <span className="num">{num(pages.total - pages.checked, lang)}</span>
-                  <Link to={href('/health', lang)}>{w(lang, 'pagesUnchecked')}</Link>
+                  <Link to={href('/check', lang)}>{w(lang, 'pagesUnchecked')}</Link>
                 </li>
               ) : null}
               {gaps.eventsWithoutTexts ? (

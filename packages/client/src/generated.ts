@@ -1502,6 +1502,41 @@ export interface Operations {
     input: Record<string, never>;
     output: Record<string, unknown>;
   };
+  /** What the machines wrote that no person has checked yet: farbrengens with unchecked transcript paragraphs, scans with pages read by OCR and not yet proofread, the newest first */
+  machineToCheck: {
+    input: {
+      /** How many (at most 200) */
+      limit?: number;
+    };
+    output: {
+      transcripts: Array<{
+        /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+        event: string;
+        path: string | null;
+        title: Record<string, unknown>;
+        date: string | null;
+        paragraphs: number;
+        checked: number;
+        /** When the machine last wrote a transcript of it */
+        made: string;
+      }>;
+      scans: Array<{
+        /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+        scan: string;
+        publication: string | null;
+        title: Record<string, unknown>;
+        pages: number;
+        checked: number;
+        made: string;
+      }>;
+      totals: {
+        transcripts: number;
+        paragraphs: number;
+        scans: number;
+        pages: number;
+      };
+    };
+  };
   /** Map pages of a publication to the unit they hold (an existing unit, a new one, or words) */
   mapContents: {
     input: {
@@ -2545,6 +2580,7 @@ export const OPERATIONS = {
   llmsTxt: {"method":"GET","path":"/llms.txt","pathParams":[],"query":[],"body":null,"answer":"text"},
   machineRequests: {"method":"GET","path":"/v1/machine/requests","pathParams":[],"query":["kind","status","item","items","limit"],"body":null,"answer":"json"},
   machineSummary: {"method":"GET","path":"/v1/machine","pathParams":[],"query":[],"body":null,"answer":"json"},
+  machineToCheck: {"method":"GET","path":"/v1/machine/to-check","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
   mapContents: {"method":"POST","path":"/v1/suggestions/contents-map","pathParams":[],"query":[],"body":"json","answer":"json"},
   markInboxRead: {"method":"POST","path":"/v1/inbox/read","pathParams":[],"query":[],"body":"json","answer":"json"},
   mcp: {"method":"POST","path":"/mcp","pathParams":[],"query":[],"body":"json","answer":"json"},
@@ -3063,6 +3099,11 @@ export abstract class GeneratedMethods {
   /** What waits for the machines (OCR, transcription), what is left for them, and what they did this week (GET /v1/machine) */
   machineSummary(): Promise<Operations['machineSummary']['output']> {
     return this.call('machineSummary', {} as Operations['machineSummary']['input']);
+  }
+
+  /** What the machines wrote that no person has checked yet: farbrengens with unchecked transcript paragraphs, scans with pages read by OCR and not yet proofread, the newest first (GET /v1/machine/to-check) */
+  machineToCheck(input?: Operations['machineToCheck']['input']): Promise<Operations['machineToCheck']['output']> {
+    return this.call('machineToCheck', input ?? {} as Operations['machineToCheck']['input']);
   }
 
   /** Map pages of a publication to the unit they hold (an existing unit, a new one, or words) (POST /v1/suggestions/contents-map) */

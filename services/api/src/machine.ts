@@ -1,5 +1,5 @@
 import type { Context, Hono } from 'hono';
-import { machineRequests, machineSummary, requestMachineWork, summariseTraining, trainingClips, trainingGoal, type Catalog, type MachineKind, type MachineRequestStatus } from '@rebbehub/core';
+import { machineRequests, machineSummary, machineToCheck, requestMachineWork, summariseTraining, trainingClips, trainingGoal, type Catalog, type MachineKind, type MachineRequestStatus } from '@rebbehub/core';
 import { readId, type EntityId } from '@rebbehub/model';
 import { HttpError } from './app.js';
 
@@ -15,6 +15,7 @@ import { HttpError } from './app.js';
  *                                         (transcript); asking again joins the waiting request
  *   GET  /v1/machine/training?since=      the next Rebbe Whisper's training data so far: hours, clips,
  *                                         and what was checked since the last round
+ *   GET  /v1/machine/to-check             what the machines wrote that nobody checked yet, the newest first
  *   GET  /v1/machine/training/clips       those clips, one JSON object a line, as the training
  *                                         script reads them (core/trainingClips.ts)
  *
@@ -45,6 +46,14 @@ export function machineRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context
       const all = await trainingClips(catalog);
       return Response.json({ ...summariseTraining(all, since), goal: await trainingGoal(catalog, all) });
     });
+  });
+
+  // What the machines wrote that no person has checked, the newest first: the list the home page links to. Kept five minutes at the edge.
+  app.get('/v1/machine/to-check', async (c) => {
+    const raw = c.req.query('limit');
+    const limit = raw === undefined ? 50 : Number(raw);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new HttpError(400, 'limit is a whole number from 1 to 200');
+    return edgeCached(c.req.raw, 300, async () => Response.json(await machineToCheck(catalog, { limit })));
   });
 
   app.get('/v1/machine/training/clips', async (c) =>

@@ -42,6 +42,8 @@ export default [
   route('_/organize/*', 'routes/organize-pass.ts'),
   route('admin', 'routes/admin.tsx'),
   route('review', 'routes/review.tsx'),
+  // What the machines (OCR, transcription) wrote that nobody checked yet, the newest first: the home page links to it.
+  route('check', 'routes/check.tsx'),
   route('missing', 'routes/missing.tsx'),
   route('health', 'routes/health.tsx'),
   // Whether the site, the API, the MCP server and the database are up, from the API's checks every five minutes.

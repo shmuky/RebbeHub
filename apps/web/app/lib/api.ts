@@ -263,6 +263,13 @@ export interface CatalogHealth {
   embeddings: { embedded: number; waiting: number };
 }
 
+/** What the machines wrote that no person has checked yet, as GET /v1/machine/to-check gives it, the newest first. */
+export interface MachineToCheck {
+  transcripts: Array<{ event: string; path: string | null; title: { he: string; en?: string } | null; date: string | null; paragraphs: number; checked: number; made: string }>;
+  scans: Array<{ scan: string; publication: string | null; title: { he: string; en?: string } | null; pages: number; checked: number; made: string }>;
+  totals: { transcripts: number; paragraphs: number; scans: number; pages: number };
+}
+
 /** Whether RebbeHub is up, as GET /v1/status gives it (services/api/src/status.ts). */
 export type CheckId = 'site' | 'api' | 'mcp' | 'database' | 'quota' | 'workers' | 'jobs';
 export type CheckState = 'up' | 'degraded' | 'down' | 'unknown';
@@ -615,6 +622,10 @@ export class RebbeHubApi {
 
   health() {
     return this.get<CatalogHealth>('/v1/health');
+  }
+
+  toCheck(limit?: number) {
+    return this.get<MachineToCheck>('/v1/machine/to-check', { limit });
   }
 
   /** The status checks' last report; it never asks the database. */
