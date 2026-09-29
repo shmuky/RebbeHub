@@ -401,7 +401,7 @@ export function SuggestionCard({
         </div>
         <div className="rq-state">
           {live ? (
-            <span className="machine rq-live">
+            <span className="machine-label rq-live">
               <Icon name="pulse" size={12} />
               {W.wentLive[lang]}
             </span>

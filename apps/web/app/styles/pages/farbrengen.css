@@ -582,7 +582,7 @@ button.part.on:hover {
   white-space: nowrap;
 }
 
-.lyrics .machine {
+.lyrics .machine-label {
   background: rgba(255, 214, 102, 0.16);
   color: #ffd98a;
   border-color: rgba(255, 214, 102, 0.35);

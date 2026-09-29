@@ -51,7 +51,7 @@ export function Label({ children, tone, color, to, size, className }: { children
 /** Machine output nobody has checked yet, said in words and in amber. */
 export function MachineLabel({ children, lang, size }: { children?: ReactNode; lang: Lang; size?: 'sm' }) {
   return (
-    <span className={cx('machine', size)}>
+    <span className={cx('machine-label', size)}>
       <Icon name="bot" size={12} />
       {children ?? tu(lang, 'machineUnchecked')}
     </span>
@@ -81,7 +81,7 @@ export function AgentBy({ via, lang, children, who }: { via: AgentVia | null | u
   const w = AGENT_WORDS[lang];
   return (
     <span className="agent-by" title={`${via.kind === 'oauth' ? w.oauth : w.token} ${who ?? ''}`.trim()}>
-      <span className="machine sm agent-mark">
+      <span className="machine-label sm agent-mark">
         <Icon name="bot" size={12} />
         <bdi>{via.name}</bdi>
       </span>
