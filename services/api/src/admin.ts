@@ -1,5 +1,5 @@
 import type { Context, Hono } from 'hono';
-import { listPeople, setPersonRole, takeDownFile, takedowns, type Catalog } from '@rebbehub/core';
+import { listPeople, revokeAllApiTokens, setPersonRole, takeDownFile, takedowns, type Catalog } from '@rebbehub/core';
 import { one } from '@rebbehub/db';
 import { HttpError } from './app.js';
 
@@ -76,6 +76,8 @@ export function adminRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context) 
     if (person.id === me.id) throw new HttpError(400, 'you cannot suspend yourself');
     if (person.admin && !me.admin) throw new HttpError(403, 'a platform admin is suspended only by another admin');
     await catalog.setSuspended(me.id, person.id, input.on !== false, input.reason);
+    // Their API tokens stop at once (the catalog refuses a suspended account's work anyway); restored, they make new ones.
+    if (input.on !== false) await revokeAllApiTokens(db, person.id);
     return c.json({ ok: true });
   });
 }

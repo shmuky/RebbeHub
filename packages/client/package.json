@@ -1,0 +1,27 @@
+{
+  "name": "@rebbehub/client",
+  "version": "1.0.0",
+  "description": "A small typed TypeScript client for the RebbeHub API, generated from its OpenAPI document: search, items, texts, suggestions, with API tokens and cursor paging.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "homepage": "https://rebbehub.org/developers/client",
+  "repository": { "type": "git", "url": "git+https://github.com/shmuky/RebbeHub.git", "directory": "packages/client" },
+  "bugs": "https://github.com/shmuky/RebbeHub/issues",
+  "keywords": ["rebbehub", "chabad", "torah", "api", "client", "openapi"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "generate": "tsx scripts/generate.ts"
+  }
+}

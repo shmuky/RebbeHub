@@ -8,7 +8,7 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: /^@rebbehub\/db\/pglite$/, replacement: fileURLToPath(new URL('./packages/db/src/pglite.ts', import.meta.url)) },
-      ...['hebrew', 'model', 'db', 'core', 'mirror', 'importers', 'pdf-fix'].map((name) => ({ find: new RegExp(`^@rebbehub/${name}$`), replacement: src(`packages/${name}`) })),
+      ...['hebrew', 'model', 'db', 'core', 'mirror', 'importers', 'pdf-fix', 'client'].map((name) => ({ find: new RegExp(`^@rebbehub/${name}$`), replacement: src(`packages/${name}`) })),
     ],
   },
   test: {

@@ -365,15 +365,18 @@ export class Catalog {
 
   /**
    * An item's children on main in their own order (a work's units, a
-   * text's segments), a page at a time: `after` is the last `order` seen.
+   * text's segments), a page at a time: `after` is the last `order` seen,
+   * and `afterId` the last id, so children sharing an order are not skipped.
    */
-  async children(parentId: EntityId, field: string, type: EntityType, options: { after?: string; limit?: number } = {}): Promise<EntityView[]> {
+  async children(parentId: EntityId, field: string, type: EntityType, options: { after?: string; afterId?: string; limit?: number } = {}): Promise<EntityView[]> {
     const { rows } = await this.db.query<RevisionRow>(
       `SELECT r.* FROM entity_ref x JOIN entity e ON e.id = x.from_id JOIN revision r ON r.id = e.main_rev
        WHERE x.to_id = $1 AND x.field = $2 AND e.type = $3 AND NOT e.deleted
-         AND ($4::text IS NULL OR coalesce(r.data->>'order', '') COLLATE "C" > $4::text COLLATE "C")
+         AND ($4::text IS NULL
+              OR coalesce(r.data->>'order', '') COLLATE "C" > $4::text COLLATE "C"
+              OR ($5::text IS NOT NULL AND coalesce(r.data->>'order', '') COLLATE "C" = $4::text COLLATE "C" AND e.id > $5::text))
        ORDER BY coalesce(r.data->>'order', '') COLLATE "C", e.id LIMIT ${Math.min(Math.max(options.limit ?? 100, 1), 1000)}`,
-      [parentId, field, type, options.after ?? null],
+      [parentId, field, type, options.after ?? null, options.afterId ?? null],
     );
     return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }));
   }
@@ -621,16 +624,20 @@ export class Catalog {
     return row;
   }
 
-  async listChangesets(options: { status?: ChangesetStatus; author?: string; project?: number; postReview?: boolean; limit?: number } = {}): Promise<ChangesetRow[]> {
+  /** Suggestions, oldest sent first; `after` (the last one seen: when it was sent, and its id) gives the next page. */
+  async listChangesets(options: { status?: ChangesetStatus; author?: string; project?: number; postReview?: boolean; limit?: number; after?: { at: string; id: number } } = {}): Promise<ChangesetRow[]> {
     const params: unknown[] = [];
     const where: string[] = [];
     if (options.status) where.push(`status = $${params.push(options.status)}`);
     if (options.author) where.push(`author = $${params.push(options.author)}`);
     if (options.project !== undefined) where.push(`project_id = $${params.push(options.project)}`);
     if (options.postReview) where.push("post_review = 'pending'");
+    // To the millisecond, as a cursor carries it (JavaScript's dates have no finer).
+    const at = "date_trunc('milliseconds', coalesce(submitted_at, created_at))";
+    if (options.after) where.push(`(${at}, id) > ($${params.push(options.after.at)}::timestamptz, $${params.push(options.after.id)}::bigint)`);
     const { rows } = await this.db.query<ChangesetRow>(
       `SELECT * FROM changeset ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-       ORDER BY coalesce(submitted_at, created_at) ASC LIMIT ${Math.min(options.limit ?? 50, 500)}`,
+       ORDER BY ${at} ASC, id ASC LIMIT ${Math.min(Math.max(options.limit ?? 50, 1), 500)}`,
       params,
     );
     return rows;

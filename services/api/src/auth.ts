@@ -209,7 +209,7 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
   const verify = auth.verify ?? defaultVerify(auth);
   const db = catalog.db;
 
-  const refuse = (c: Context, status: 400 | 401 | 403, message: string) => c.json({ error: status === 403 ? 'forbidden' : 'bad-request', message }, status);
+  const refuse = (c: Context, status: 400 | 401 | 403, message: string) => c.json({ error: status === 403 ? 'forbidden' : status === 401 ? 'unauthorized' : 'bad-request', message }, status);
 
   const signIn = async (c: Context, personId: string) => {
     const token = await startSession(db, personId, c.req.header('User-Agent'));
@@ -421,7 +421,7 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
     const started = await startEmailLink(db, { email, personId: current?.id });
     if ('refused' in started) {
       if (started.refused === 'taken') return refuse(c, 400, 'that address already signs into another account');
-      return c.json({ error: 'too-many', message: 'too many links for this address in the last hour; please try again later' }, 429);
+      return c.json({ error: 'rate-limited', message: 'too many links for this address in the last hour; please try again later' }, 429);
     }
     await mailer.send(signInMessage({ to: email, siteUrl: auth.origins[0]!, token: started.token, lang: langOf(input.lang), adding: Boolean(current), returnTo: safeReturn(input.return) }));
     // The same answer whether or not the address has an account here: nobody learns who does.

@@ -11,12 +11,19 @@ import { networkRoutes } from './network.js';
 import { oaiRoutes, type OaiOptions } from './oai.js';
 import { mirrorRoutes, type MirrorOptions } from './mirrors.js';
 import { readingRoutes } from './reading.js';
+import { tokenGate, tokenGrantOf, tokenRoutes } from './tokens.js';
+import { ERROR_CODES, caching, cors, cursor, nextLink, type RateLimits } from './platform.js';
+import { mcpRoutes } from './mcp.js';
 
 /**
- * The RebbeHub API. Reading needs nothing; reporting a problem needs no
- * account (a captcha and a rate limit instead); suggesting and reviewing
- * need a signed-in account: a passkey session (auth.ts) or, in tests,
- * whatever `authenticate` says.
+ * The RebbeHub API, version 1 (docs/developers/api.md). Reading needs
+ * nothing; reporting a problem needs no account (a captcha and a rate
+ * limit instead); suggesting and reviewing need a signed-in account: a
+ * passkey session from the site's own pages (auth.ts), a personal API
+ * token (tokens.ts) or, in tests, whatever `authenticate` says. What
+ * every route shares - errors, cursors, ETags, CORS, rate limits - is in
+ * platform.ts; the routes and the OpenAPI description (openapi.ts) are
+ * kept in step by a test.
  */
 
 export interface ApiOptions {
@@ -50,6 +57,8 @@ export interface ApiOptions {
   embedder?: Embedder | null;
   /** OAI-PMH for libraries, at /oai; unset (no administrators' address), it is not offered. */
   oai?: OaiOptions;
+  /** Requests allowed per address and per token (platform.ts); unset, none are counted (local work, tests). */
+  rateLimits?: RateLimits;
 }
 
 /** A byte range asked for with `Range: bytes=…`. */
@@ -90,7 +99,7 @@ const STATUS_BY_CODE: Record<CatalogError['code'], 400 | 401 | 403 | 404 | 409 |
 
 export class HttpError extends Error {
   constructor(
-    readonly status: 400 | 401 | 403 | 404 | 409 | 422 | 429,
+    readonly status: 400 | 401 | 403 | 404 | 405 | 409 | 422 | 429,
     message: string,
   ) {
     super(message);
@@ -120,7 +129,10 @@ async function body<T>(c: Context): Promise<T> {
 export function createApp(options: ApiOptions): Hono {
   const { catalog } = options;
   const app = new Hono();
-  const authenticate = options.authenticate ?? (options.auth ? sessionAuthenticator(catalog, options.auth) : undefined);
+  const session = options.authenticate ?? (options.auth ? sessionAuthenticator(catalog, options.auth) : undefined);
+  // A request's token, when it sent one, is who it is; otherwise its session.
+  const authenticate = async (c: Context): Promise<string | null> => tokenGrantOf(c)?.personId ?? (await session?.(c)) ?? null;
+  const siteUrl = options.siteUrl ?? options.auth?.origins[0] ?? 'https://rebbehub.org';
 
   // Words whose rights forbid copies are never served, only listed.
   const redact = (views: EntityView[]): Promise<Array<EntityView & { withheld?: string }>> => {
@@ -135,21 +147,21 @@ export function createApp(options: ApiOptions): Hono {
   };
 
   app.onError((error, c) => {
-    if (error instanceof HttpError) return c.json({ error: 'bad-request', message: error.message }, error.status);
+    if (error instanceof HttpError) return c.json({ error: ERROR_CODES[error.status] ?? 'bad-request', message: error.message }, error.status);
     if (error instanceof UnresolvedConflictError) return c.json({ error: 'conflict', message: error.message, conflicts: error.conflicts }, 409);
     if (error instanceof CatalogError) return c.json({ error: error.code, message: error.message, detail: error.detail ?? null }, STATUS_BY_CODE[error.code]);
     console.error(error);
     return c.json({ error: 'internal', message: 'something went wrong on our side' }, 500);
   });
 
-  app.use('*', async (c, next) => {
-    await next();
-    c.header('Access-Control-Allow-Origin', '*');
-    c.header('X-Content-Type-Options', 'nosniff');
-  });
+  app.use('*', cors());
+  app.use('*', caching());
+  app.use('*', tokenGate(catalog, options.rateLimits));
 
   if (options.auth) authRoutes(app, catalog, options.mailer && !options.auth.mailer ? { ...options.auth, mailer: options.mailer } : options.auth);
   adminRoutes(app, catalog, signedIn);
+  tokenRoutes(app, catalog, signedIn);
+  mcpRoutes(app, { siteUrl, version: options.version ?? API_VERSION });
   uploadRoutes(app, catalog, signedIn, options.uploads);
   networkRoutes(app, catalog, { embedder: options.embedder });
   if (options.oai) oaiRoutes(app, catalog, options.oai);
@@ -159,7 +171,7 @@ export function createApp(options: ApiOptions): Hono {
   mirrorRoutes(app, catalog, { mirrors: options.mirrors, files: options.files });
   scanRoutes(app, catalog, {
     filesBase: (c) => options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null),
-    siteUrl: options.siteUrl ?? options.auth?.origins[0] ?? 'https://rebbehub.org',
+    siteUrl,
     signedIn,
     authenticate,
     reportSalt: options.reportSalt,
@@ -168,14 +180,18 @@ export function createApp(options: ApiOptions): Hono {
   });
 
   app.get('/', (c) => c.redirect('/v1'));
-  app.get('/openapi.json', (c) => c.json(OPENAPI));
+  app.get('/openapi.json', (c) => c.json(OPENAPI, 200, { 'Cache-Control': 'public, max-age=300' }));
+  // For AI agents: what this API is and where its tools are (the site's /llms.txt says more).
+  app.get('/llms.txt', (c) => c.text(apiLlmsTxt(new URL(c.req.url).origin, siteUrl), 200, { 'Cache-Control': 'public, max-age=3600' }));
 
   app.get('/v1', async (c) =>
     c.json({
       name: 'RebbeHub',
-      version: options.version ?? '0.1.0',
+      version: options.version ?? API_VERSION,
       head: await catalog.head(),
       docs: '/openapi.json',
+      developers: `${siteUrl.replace(/\/+$/, '')}/developers`,
+      mcp: '/mcp',
       licence: { code: 'AGPL-3.0-only', facts: 'CC0-1.0', community: 'CC-BY-SA-4.0' },
     }),
   );
@@ -191,14 +207,14 @@ export function createApp(options: ApiOptions): Hono {
     const type = c.req.query('type');
     if (type && !(await catalog.registry()).has(type)) throw new HttpError(400, `unknown type "${type}"`);
     const set = c.req.query('set');
-    const items = await catalog.list({
-      type: type as EntityType | undefined,
-      set: set ? entityId(set) : undefined,
-      after: c.req.query('after'),
-      limit: intParam(c.req.query('limit'), 'limit'),
-    });
+    const limit = Math.min(Math.max(intParam(c.req.query('limit'), 'limit') ?? 50, 1), 500);
+    const raw = c.req.query('cursor') ?? c.req.query('after');
+    const after = cursor.decode(raw)?.[0] ?? raw;
+    const items = await catalog.list({ type: type as EntityType | undefined, set: set ? entityId(set) : undefined, after: after === undefined ? undefined : String(after), limit });
     const last = items[items.length - 1];
-    return c.json({ items: await redact(items), next: last ? `${last.path ?? ''}${last.id}` : null });
+    const next = last && items.length === limit ? cursor.encode([`${last.path ?? ''}${last.id}`]) : null;
+    nextLink(c, next);
+    return c.json({ items: await redact(items), next });
   });
 
   app.get('/v1/entities/batch', async (c) => {
@@ -212,9 +228,15 @@ export function createApp(options: ApiOptions): Hono {
     const type = c.req.query('type');
     if (!field || !/^[a-z][a-zA-Z]*$/.test(field)) throw new HttpError(400, 'say which field points at the parent (field=work)');
     if (!type || !(await catalog.registry()).has(type)) throw new HttpError(400, 'say which type of children (type=unit)');
-    const items = await catalog.children(entityId(c.req.param('id')), field, type as EntityType, { after: c.req.query('after'), limit: intParam(c.req.query('limit'), 'limit') });
-    const last = items[items.length - 1] as { data: { order?: string } } | undefined;
-    return c.json({ items: await redact(items), next: last?.data.order ?? null });
+    const limit = Math.min(Math.max(intParam(c.req.query('limit'), 'limit') ?? 100, 1), 1000);
+    const raw = c.req.query('cursor') ?? c.req.query('after');
+    // A cursor holds the last child's order and id; an older plain value is an order alone.
+    const [after, afterId] = cursor.decode(raw) ?? [raw];
+    const items = await catalog.children(entityId(c.req.param('id')), field, type as EntityType, { after: after === undefined ? undefined : String(after), afterId: afterId === undefined ? undefined : String(afterId), limit });
+    const last = items[items.length - 1] as { id: string; data: { order?: string } } | undefined;
+    const next = last && items.length === limit ? cursor.encode([last.data.order ?? '', last.id]) : null;
+    nextLink(c, next);
+    return c.json({ items: await redact(items), next });
   });
 
   app.get('/v1/events', async (c) => {
@@ -470,9 +492,9 @@ export function createApp(options: ApiOptions): Hono {
 
   // Published manifests (the Sichos Kodesh scans' reading copies…): facts about files - hashes, sizes, page
   // measurements - open like the rest of the catalog. Every import reads them back into the catalog.
-  app.get('/manifests/:name{[a-z0-9-]+/[a-z0-9-]+\\.json}', async (c) => {
+  app.get('/manifests/:collection{[a-z0-9-]+}/:name{[a-z0-9-]+\\.json}', async (c) => {
     if (!options.files) throw new CatalogError('not-found', 'no such manifest');
-    const object = await options.files.get(`manifests/${c.req.param('name')}`);
+    const object = await options.files.get(`manifests/${c.req.param('collection')}/${c.req.param('name')}`);
     if (!object) throw new CatalogError('not-found', 'no such manifest');
     return c.body(object.body, 200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
   });
@@ -620,14 +642,18 @@ export function createApp(options: ApiOptions): Hono {
   });
 
   app.get('/v1/commits', async (c) => {
-    const since = intParam(c.req.query('since'), 'since') ?? 0;
-    const limit = Math.min(intParam(c.req.query('limit'), 'limit') ?? 20, 100);
+    // `cursor` is the `next` of the page before; `since` a commit's seq, to start from anywhere.
+    const raw = c.req.query('cursor');
+    const since = raw !== undefined ? Number(cursor.decode(raw)?.[0] ?? intParam(raw, 'cursor')) : (intParam(c.req.query('since'), 'since') ?? 0);
+    const limit = Math.min(Math.max(intParam(c.req.query('limit'), 'limit') ?? 20, 1), 100);
     const gate = new ExportGate(catalog);
     const commits = await catalog.commitsSince(since, limit);
     for (const commit of commits) {
       commit.changes = await Promise.all(commit.changes.map(async (change) => (change.data === null ? change : { ...change, data: (await gate.redact({ ...change, data: change.data })).data })));
     }
-    return c.json({ commits });
+    const next = commits.length === limit ? cursor.encode([commits[commits.length - 1]!.seq]) : null;
+    nextLink(c, next);
+    return c.json({ commits, next });
   });
 
   // ---------------------------------------------------------------- reports (no account needed)
@@ -709,14 +735,20 @@ export function createApp(options: ApiOptions): Hono {
   app.get('/v1/suggestions', async (c) => {
     const status = c.req.query('status');
     if (status && !STATUSES.includes(status as ChangesetStatus)) throw new HttpError(400, `status is one of ${STATUSES.join(', ')}`);
-    return c.json({
-      suggestions: await catalog.listChangesets({
-        status: status as ChangesetStatus | undefined,
-        author: c.req.query('author'),
-        postReview: c.req.query('postReview') === 'true',
-        limit: intParam(c.req.query('limit'), 'limit'),
-      }),
+    const limit = Math.min(Math.max(intParam(c.req.query('limit'), 'limit') ?? 50, 1), 500);
+    const [at, id] = cursor.decode(c.req.query('cursor')) ?? [];
+    if (c.req.query('cursor') && (typeof at !== 'string' || typeof id !== 'number')) throw new HttpError(400, 'that cursor is not one this list gave');
+    const suggestions = await catalog.listChangesets({
+      status: status as ChangesetStatus | undefined,
+      author: c.req.query('author'),
+      postReview: c.req.query('postReview') === 'true',
+      limit,
+      after: typeof at === 'string' && typeof id === 'number' ? { at, id } : undefined,
     });
+    const last = suggestions[suggestions.length - 1];
+    const next = last && suggestions.length === limit ? cursor.encode([new Date(last.submitted_at ?? last.created_at).toISOString(), Number(last.id)]) : null;
+    nextLink(c, next);
+    return c.json({ suggestions, next });
   });
 
   app.get('/v1/suggestions/:id', async (c) => {
@@ -869,6 +901,25 @@ export function createApp(options: ApiOptions): Hono {
 
   app.notFound((c) => c.json({ error: 'not-found', message: 'no such route; see /openapi.json' }, 404));
   return app;
+}
+
+/** The API's version: /v1 changes only by adding (docs/developers/api.md, Stability). */
+export const API_VERSION = '1.0.0';
+
+/** The API's own /llms.txt: a pointer for agents that land here first. */
+function apiLlmsTxt(api: string, site: string): string {
+  const home = site.replace(/\/+$/, '');
+  return `# RebbeHub API
+
+> The open, community-edited index of Chabad Torah and media: sefarim, sichos, letters, farbrengens, recordings and scans, with their texts. Reading needs no account.
+
+- [OpenAPI 3.1 description](${api}/openapi.json): every route
+- [MCP server](${api}/mcp): tools search, get_item, list_children, get_text, suggest_fix (Streamable HTTP, POST)
+- [Developer docs](${home}/developers): getting started, tokens, rate limits, rights
+- [Full docs for LLMs](${home}/llms-full.txt)
+
+Ids (rh-...) never change. Words a machine read or heard are marked until a person checks them. Rights: ${home}/developers/rights
+`;
 }
 
 /** Verifies a Cloudflare Turnstile token. */
