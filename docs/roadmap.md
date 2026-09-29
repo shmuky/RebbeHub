@@ -23,7 +23,7 @@ stands. ✅ built and tested · 🟡 partly · ⬜ not yet.
 
 | Plan item | Status | Where |
 | --- | --- | --- |
-| Public read API (REST + OpenAPI) | ✅ | `services/api` |
+| Public read API (REST + OpenAPI) | ✅ | `services/api`; v1 is stable: one error shape, cursors, ETags, CORS, rate limits - [developers](developers/api.md) |
 | Search (built-in Postgres full text over normalised names, text and dates; Hebrew and English date queries); hits in scans open at the lit-up line, in transcripts at the moment heard | ✅ | `core` search and `moments.ts`, the site's `/search`; Meilisearch only if the catalog outgrows it |
 | Permanent links (ids, paths, redirects) | ✅ | `core`, `api /v1/resolve` |
 | Git mirror (JSON per item, texts as Markdown, sync as WebVTT; one git commit per merge) | ✅ | `packages/mirror`, `rebbehub mirror` |
@@ -142,6 +142,15 @@ are set.
   lists its printings; *Map pages* marks what a teshura's pages hold,
   through a suggestion; the Teshuros set defaults to credit, and a family
   can ask for a teshura to stop being shown ([rights](rights.md)).
+- **Public API, developer docs, agents** ✅: personal API tokens (read,
+  or read and write; hashed, made and revoked on `/account`) so scripts
+  and AI agents contribute through the same review; every route in the
+  OpenAPI 3.1 document, checked by a test; rate limits by address and by
+  token; `/developers`, drawn from [docs/developers](developers/index.md),
+  with an interactive reference; `/llms.txt`, `/llms-full.txt`, and an MCP
+  server at `api.rebbehub.org/mcp` (search, items, texts, suggest a fix);
+  the typed client `@rebbehub/client`. The rate limits need the
+  `[[ratelimits]]` bindings deployed ([configuration](configuration.md)).
 - Still to come: letters reproduced in teshuros found by text
   (cross-linking reads citations only).
 

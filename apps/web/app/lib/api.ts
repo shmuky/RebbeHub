@@ -285,6 +285,11 @@ export class RebbeHubApi {
     return this.get<{ head: number; counts: Record<string, number> }>('/v1/stats');
   }
 
+  /** The API's own description of itself (OpenAPI 3.1), for the developer docs. */
+  openapi<T = Record<string, unknown>>() {
+    return this.get<T>('/openapi.json');
+  }
+
   entity<T = Record<string, unknown>>(id: string) {
     return this.maybe(this.get<Entity<T>>(`/v1/entities/${encodeURIComponent(id)}`));
   }
