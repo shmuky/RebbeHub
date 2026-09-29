@@ -1,7 +1,10 @@
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { EntityId } from '@rebbehub/model';
 import { registerFile } from '@rebbehub/core';
-import { paragraphs, recordingsToTranscribe, transcribeRecordings, type Transcriber } from '../src/transcribe.js';
+import { localWhisper, paragraphs, recordingsToTranscribe, transcribeRecordings, type Transcriber } from '../src/transcribe.js';
 import { add, freshCatalog, yudShvat } from '../../../packages/core/tests/helpers.js';
 
 describe('machine transcription and sync', () => {
@@ -18,6 +21,22 @@ describe('machine transcription and sync', () => {
       { startMs: 15000, endMs: 90000, text: 'ג ד' },
       { startMs: 90500, endMs: 95000, text: 'ה' },
     ]);
+  });
+
+  it("reads the local Whisper's lines, in milliseconds, without JEM's spoken opening", async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'whisper-'));
+    const script = join(dir, 'fake.mjs');
+    const lines = [
+      { start: 0, end: 1.84, text: 'This audio has been restored by JEM.', words: [['This', 0, 0.22]] },
+      { start: 5.136, end: 6.5, text: 'עס זאל', words: [['עס', 5.136, 5.5], ['זאל', 5.6, 6.5]] },
+      { start: 7, end: 8, text: 'קומען' },
+    ];
+    await writeFile(script, `${lines.map((l) => `console.log(${JSON.stringify(JSON.stringify(l))})`).join(';')}; (await import('node:fs')).writeFileSync(${JSON.stringify(join(dir, 'args'))}, process.argv.slice(2).join(' '))`);
+    expect(await localWhisper({ python: process.execPath, script }).transcribe('a.mp3', 'yi', dir)).toEqual([
+      { startMs: 5136, endMs: 6500, text: 'עס זאל', words: [{ text: 'עס', startMs: 5136, endMs: 5500 }, { text: 'זאל', startMs: 5600, endMs: 6500 }] },
+      { startMs: 7000, endMs: 8000, text: 'קומען' },
+    ]);
+    expect(await readFile(join(dir, 'args'), 'utf8')).toBe('a.mp3 --language yi --model ivrit-ai/yi-whisper-large-v3-turbo-ct2');
   });
 
   it("adds a served recording's transcript and its sync, once, as the bot, approved by a steward", async () => {
