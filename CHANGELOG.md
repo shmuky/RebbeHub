@@ -17,6 +17,15 @@ any time. `@rebbehub/client` carries the API's version.
   read by OCR with pages nobody proofread, the newest first, each leading
   to where it is checked. From `GET /v1/machine/to-check` (two queries,
   kept five minutes at the edge) and the MCP tool `machine_to_check`.
+
+- **The account is on Workers Paid.** No daily allowance of database
+  statements, 30 seconds of CPU a request instead of 10 ms. The status
+  page's quota line says "no limit" (`HYPERDRIVE_DAILY_QUERIES = "0"`),
+  its Workers' load is measured against the paid plan's CPU allowance
+  (`WORKERS_CPU_MS = "30000"`), and crawlers may have more pages a minute
+  (search engines 60 each, all other bots 10 between them; they were 6 and
+  2).
+
 - **`GET /v1/events?brief=1`: each event's facts with each link's kind
   alone.** A farbrengen's links (where it is printed, each with its label
   and pages) are most of it, and a calendar's row shows whether it has a
@@ -125,6 +134,15 @@ any time. `@rebbehub/client` carries the API's version.
   paragraphs each of up to 200 texts has and how many a person checked.
 
 ### Fixed
+
+- **Search answers in well under a second, not thirteen.** Postgres
+  ranked a search's matches by reading the words of every matching item
+  again; a common word matches fourteen thousand sichos, and the search
+  page waited thirteen seconds for it. The words as Postgres searches
+  them are now kept with each item (`entity.search_tsv`, migration 0024)
+  and indexed, so a search matches and ranks from what is kept. The
+  places a search's words are (`/v1/search/moments`) are found the same
+  way.
 
 - **A calendar year is a quarter lighter, and the home page's feed a
   third cheaper to make.** The calendar's year, the home page's week and

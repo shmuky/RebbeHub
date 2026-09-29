@@ -105,6 +105,9 @@ HYPERDRIVE_ID = "a06ec525cf9442f484f60ce9d38f0d39"
 # The account the Workers and Hyperdrive live in (Shmuly's personal account, not the one named "RebbeHub").
 # Kept here, not only in the dashboard, because a deploy replaces the vars with this file's.
 CLOUDFLARE_ACCOUNT_ID = "536c9c83f0b93f5963de4fb85d8edec8"
-HYPERDRIVE_DAILY_QUERIES = "100000"
+# The account is on Workers Paid since 29 Elul 5786 (29 September 2026): Hyperdrive counts no daily allowance, and a
+# request may use 30 seconds of CPU (30000 ms) before it is stopped, not the free plan's 10 ms.
+HYPERDRIVE_DAILY_QUERIES = "0"
+WORKERS_CPU_MS = "30000"
 RATE_LIMIT_TOKEN_PER_MINUTE = "1200"
 RATE_LIMIT_SEARCH_PER_MINUTE = "60"

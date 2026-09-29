@@ -34,17 +34,18 @@ simple = { limit = 60, period = 60 }
 
 # Pages made for crawlers a minute, counted only when the edge has no copy (server/worker.ts, CachedSite): each
 # search engine its own budget, all other bots (AI crawlers, SEO tools) one between them. Over it, a crawler is
-# told 503 and to come back in two minutes. Each such page costs the database one to two dozen reads, so these
-# are set for Hyperdrive's free 100,000 queries a day; raise them on a paid plan (docs/operations.md, "Crawlers").
+# told 503 and to come back in two minutes. Each such page costs the database one to two dozen reads; on the
+# paid plan (no daily allowance) the numbers keep one crawl from taking the database from readers: a search
+# engine may have a page a second, all other bots ten a minute between them (docs/operations.md, "Crawlers").
 [[ratelimits]]
 name = "RATE_LIMIT_CRAWL_SEARCH"
 namespace_id = "1101"
-simple = { limit = 6, period = 60 }
+simple = { limit = 60, period = 60 }
 
 [[ratelimits]]
 name = "RATE_LIMIT_CRAWL"
 namespace_id = "1102"
-simple = { limit = 2, period = 60 }
+simple = { limit = 10, period = 60 }
 
 # Cloudflare's Workers cache (docs/operations.md, "Traffic and crawlers"). The default entrypoint runs on
 # every request and is never cached: it sends pages for someone not signed in on to CachedSite, which the
