@@ -100,6 +100,9 @@ RATE_LIMIT_ADDRESS_PER_MINUTE = "300"
 # against its daily allowance: 100000 on the free plan; "0" on a plan without one. Counting needs the secret
 # CLOUDFLARE_ANALYTICS_TOKEN (Account Analytics: Read) and CLOUDFLARE_ACCOUNT_ID.
 HYPERDRIVE_ID = "a06ec525cf9442f484f60ce9d38f0d39"
+# The account the Workers and Hyperdrive live in (Shmuly's personal account, not the one named "RebbeHub").
+# Kept here, not only in the dashboard, because a deploy replaces the vars with this file's.
+CLOUDFLARE_ACCOUNT_ID = "536c9c83f0b93f5963de4fb85d8edec8"
 HYPERDRIVE_DAILY_QUERIES = "100000"
 RATE_LIMIT_TOKEN_PER_MINUTE = "1200"
 RATE_LIMIT_SEARCH_PER_MINUTE = "60"

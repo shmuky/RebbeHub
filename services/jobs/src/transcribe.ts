@@ -130,10 +130,19 @@ export function paragraphs(heard: Heard[], options: { targetMs?: number; pauseMs
   return out;
 }
 
-/** Recordings with no transcript yet, the newest first (one just added is heard next): those whose file is served, and with `linked` those heard at another site too. */
-export async function recordingsToTranscribe(catalog: Catalog, options: { recording?: EntityId; limit?: number; linked?: boolean } = {}): Promise<Array<{ id: EntityId; file: string | null; url: string | null; language: Language }>> {
+/**
+ * Recordings with no transcript yet, the newest first (one just added is
+ * heard next): those whose file is served, and with `linked` those heard
+ * at another site too. With `shard` [i, n], only part i of n, so n jobs
+ * side by side each take their own recordings.
+ */
+export async function recordingsToTranscribe(catalog: Catalog, options: { recording?: EntityId; limit?: number; linked?: boolean; shard?: [number, number] } = {}): Promise<Array<{ id: EntityId; file: string | null; url: string | null; language: Language }>> {
   const params: unknown[] = [];
-  const only = options.recording ? `AND e.id = $${params.push(options.recording)}` : '';
+  const only = options.recording
+    ? `AND e.id = $${params.push(options.recording)}`
+    : options.shard
+      ? `AND mod(abs(hashtext(e.id)), $${params.push(options.shard[1])}) = $${params.push(options.shard[0])}`
+      : '';
   const heardHere = "EXISTS (SELECT 1 FROM file f WHERE f.sha256 = r.data->>'file' AND f.storage_tier = 'public' AND f.rights_state IN ('open', 'credit'))";
   const { rows } = await catalog.db.query<{ id: EntityId; file: string | null; url: string | null; language: Language | null }>(
     `SELECT e.id, r.data->>'file' AS file, r.data->>'url' AS url, r.data->>'language' AS language
@@ -166,6 +175,8 @@ export async function transcribeRecordings(
     linked?: boolean;
     /** Only what people asked for (core/machineWork.ts), not the newest recordings nobody asked for too. */
     requestedOnly?: boolean;
+    /** Part i of n of the recordings nobody asked for, for n jobs side by side; requests are shared among them. */
+    shard?: [number, number];
     log?: (line: string) => void;
   },
 ): Promise<Array<{ recording: EntityId; paragraphs: number }>> {
@@ -179,7 +190,7 @@ export async function transcribeRecordings(
     sweep: !input.requestedOnly,
     log,
     // A recording someone asked for is heard wherever it is, linked or served; the sweep keeps to `linked`.
-    find: ({ item, limit }) => recordingsToTranscribe(catalog, { recording: item, limit, linked: item ? true : input.linked }),
+    find: ({ item, limit }) => recordingsToTranscribe(catalog, { recording: item, limit, linked: item ? true : input.linked, shard: item ? undefined : input.shard }),
     work: transcribeOne,
   });
   failIfAny(failed);
@@ -222,23 +233,31 @@ export const ALIGN_BOT = 'bot:align';
  * Recordings whose transcript has no word timings yet (it was transcribed
  * before them, or a person changed its words since), and recordings whose
  * farbrengen's hanacha is in the catalog but not yet synced to them.
+ * Those with words a person corrected come first (timed, they are the
+ * next model's training clips: core/trainingClips.ts), then the ones
+ * aligned longest ago, so one that cannot be timed does not hold up the rest.
  */
 export async function recordingsToAlign(catalog: Catalog, options: { recording?: EntityId; limit?: number; linked?: boolean } = {}): Promise<Array<{ id: EntityId; file: string | null; url: string | null; language: Language }>> {
   const params: unknown[] = [];
   const only = options.recording ? `AND e.id = $${params.push(options.recording)}` : '';
   const heardHere = "EXISTS (SELECT 1 FROM file f WHERE f.sha256 = r.data->>'file' AND f.storage_tier = 'public' AND f.rights_state IN ('open', 'credit'))";
+  const untimed = "NOT coalesce((spr.data->>'locked')::boolean, FALSE) AND NOT (spr.data ? 'words')";
   const { rows } = await catalog.db.query<{ id: EntityId; file: string | null; url: string | null; language: Language | null }>(
     `SELECT e.id, r.data->>'file' AS file, r.data->>'url' AS url, r.data->>'language' AS language
      FROM entity e JOIN revision r ON r.id = e.main_rev
+     JOIN LATERAL (
+       SELECT bool_or(${untimed}) AS untimed,
+              bool_or(${untimed} AND (coalesce((sr.data->>'proofread')::int, 0) > 0 OR sr.data->'origin'->>'checked' = 'true')) AS corrected,
+              max(spr.created_at) AS last
+       FROM entity a JOIN revision ar ON ar.id = a.main_rev
+       JOIN entity_ref y ON y.to_id = a.id AND y.field = 'alignment'
+       JOIN entity sp ON sp.id = y.from_id AND sp.type = 'alignment-span' AND NOT sp.deleted JOIN revision spr ON spr.id = sp.main_rev
+       LEFT JOIN entity s ON s.id = spr.data->>'segment' LEFT JOIN revision sr ON sr.id = s.main_rev
+       WHERE a.type = 'alignment' AND NOT a.deleted AND ar.data->>'recording' = e.id
+     ) w ON w.untimed
      WHERE e.type = 'recording' AND NOT e.deleted ${only}
        AND (${heardHere}${options.linked ? " OR r.data->>'url' IS NOT NULL" : ''})
-       AND EXISTS (
-         SELECT 1 FROM entity a JOIN revision ar ON ar.id = a.main_rev
-         JOIN entity_ref y ON y.to_id = a.id AND y.field = 'alignment'
-         JOIN entity sp ON sp.id = y.from_id AND sp.type = 'alignment-span' AND NOT sp.deleted JOIN revision spr ON spr.id = sp.main_rev
-         WHERE a.type = 'alignment' AND NOT a.deleted AND ar.data->>'recording' = e.id
-           AND NOT coalesce((spr.data->>'locked')::boolean, FALSE) AND NOT (spr.data ? 'words'))
-     ORDER BY e.id LIMIT ${Math.min(options.limit ?? 5, 500)}`,
+     ORDER BY w.corrected DESC, w.last, e.id LIMIT ${Math.min(options.limit ?? 5, 500)}`,
     params,
   );
   const out = rows.map((r) => ({ id: r.id, file: r.file, url: r.url, language: r.language ?? ('yi' as Language) }));

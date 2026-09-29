@@ -2,6 +2,7 @@
 import { parseArgs } from 'node:util';
 import { checkLinksCommand, citationsCommand, embedCommand } from '../networkCommands.js';
 import { machineCommand } from '../machineCommand.js';
+import { trainingClipsCommand } from '../trainingClipsCommand.js';
 import { ocrCommand } from '../ocrCommand.js';
 import { alignCommand, transcribeCommand } from '../transcribeCommand.js';
 import { coversCommand, fingerprintsCommand, pageImagesCommand } from '../scanPagesCommand.js';
@@ -77,7 +78,7 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 --reread: scans read by an older engine, read again
                                                 (lines people checked are kept)
   rebbehub transcribe --approve-as <steward> [--recording <id>] [--limit <n>] [--linked] [--files <url>]
-                  [--engine workers-ai|local] [--requested-only]
+                  [--engine workers-ai|local] [--requested-only] [--shard <i>/<n>]
                                                 machine transcripts, with sync: the recordings people asked
                                                 for first, then the newest that have none (Whisper on Workers AI: CLOUDFLARE_ACCOUNT_ID and
                                                 CLOUDFLARE_AI_TOKEN; local: ivrit.ai's Yiddish Whisper
@@ -86,6 +87,9 @@ const HELP = `rebbehub - RebbeHub's command line
   rebbehub machine [list [--kind ocr|transcript] [--status <status>] | ask --kind <kind> --item <id> --as <account>]
                                                 the machines' queue: what waits, what is left, and asking
                                                 for a scan to be read or a recording transcribed
+  rebbehub training-clips [--out <clips.jsonl>] [--since <date>]
+                                                the next Rebbe Whisper's training data: every transcript
+                                                paragraph a person checked, as clips (docs/transcription.md)
   rebbehub embed [--limit <n>]                  vectors for search by meaning, of items not embedded yet
                                                 (BGE-M3 on Workers AI: CLOUDFLARE_ACCOUNT_ID and
                                                 CLOUDFLARE_AI_TOKEN)
@@ -172,6 +176,7 @@ const { values, positionals } = parseArgs({
     status: { type: 'string' },
     again: { type: 'boolean' },
     files: { type: 'string' },
+    since: { type: 'string' },
     minutes: { type: 'string' },
     mark: { type: 'boolean' },
     'guard-mark': { type: 'string' },
@@ -233,7 +238,10 @@ try {
       await alignCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files, engine: values.engine });
       break;
     case 'transcribe':
-      await transcribeCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files, engine: values.engine, requestedOnly: values['requested-only'] });
+      await transcribeCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files, engine: values.engine, requestedOnly: values['requested-only'], shard: values.shard });
+      break;
+    case 'training-clips':
+      await trainingClipsCommand(ctx, { out: values.out, since: values.since, files: values.files });
       break;
     case 'machine':
       await machineCommand(ctx, { action: rest[0], kind: values.kind, item: values.item, as: values.as, status: values.status, limit: number(values.limit) });

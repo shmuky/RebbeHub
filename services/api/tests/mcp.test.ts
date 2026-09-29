@@ -54,6 +54,7 @@ describe('the MCP server', () => {
       'approve_suggestion',
       'ask_machine',
       'machine_queue',
+      'training_data',
       'get_tree',
       'preview_organize',
       'organize',

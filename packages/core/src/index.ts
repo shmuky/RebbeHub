@@ -251,3 +251,4 @@ export {
   type TreeNode,
 } from './organize.js';
 export { MACHINE_KINDS, MACHINE_REQUESTS_PER_DAY, checkMachineWork, finishMachineWork, machineRequest, machineRequests, machineSummary, releaseMachineRequests, requestMachineWork, takeMachineRequests, type MachineKind, type MachineRequest, type MachineRequestStatus } from './machineWork.js';
+export { CLIP_MAX_SECONDS, HELD_OUT_AUDIO, piecesOf, splitOf, summariseTraining, trainingClips, type ClipQuality, type TrainingClip, type TrainingSkip, type TrainingSummary } from './trainingClips.js';

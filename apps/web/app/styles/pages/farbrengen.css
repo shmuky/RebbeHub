@@ -567,3 +567,9 @@ button.part.on:hover {
     transition: none;
   }
 }
+
+/* The house spelling, under the editor: a hint, never a change. */
+.transcript-para .spelling-hints {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 0.85em;
+}

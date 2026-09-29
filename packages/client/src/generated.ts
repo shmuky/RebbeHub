@@ -2230,6 +2230,29 @@ export interface Operations {
       id: number;
     };
   };
+  /** The training clips, one JSON object a line, as the training script reads them (audio, start, end, text, split) */
+  trainingClips: {
+    input: Record<string, never>;
+    output: Record<string, unknown>;
+  };
+  /** The next Rebbe Whisper's training data so far: every transcript paragraph a person checked, as clips */
+  trainingSummary: {
+    input: {
+      /** A date: also count the hours checked since then */
+      since?: string;
+    };
+    output: {
+      clips: number;
+      hours: number;
+      gold: number;
+      silver: number;
+      trainHours: number;
+      testHours: number;
+      recordings: number;
+      newHours: number | null;
+      skipped: Record<string, unknown>;
+    };
+  };
   /** Every kind of item and its JSON Schema */
   types: {
     input: Record<string, never>;
@@ -2530,6 +2553,8 @@ export const OPERATIONS = {
   suggestionConversation: {"method":"GET","path":"/v1/suggestions/{id}/conversation","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   suggestWords: {"method":"POST","path":"/v1/suggestions/words","pathParams":[],"query":[],"body":"json","answer":"json"},
   threadByNumber: {"method":"GET","path":"/v1/threads/{number}","pathParams":["number"],"query":[],"body":null,"answer":"json"},
+  trainingClips: {"method":"GET","path":"/v1/machine/training/clips","pathParams":[],"query":[],"body":null,"answer":"json"},
+  trainingSummary: {"method":"GET","path":"/v1/machine/training","pathParams":[],"query":["since"],"body":null,"answer":"json"},
   types: {"method":"GET","path":"/v1/types","pathParams":[],"query":[],"body":null,"answer":"json"},
   unitPrintings: {"method":"GET","path":"/v1/units/{id}/printings","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   unsubscribe: {"method":"POST","path":"/v1/auth/email/unsubscribe","pathParams":[],"query":["token"],"body":"json","answer":"json"},
@@ -3292,6 +3317,16 @@ export abstract class GeneratedMethods {
   /** Which of the two #12 is: a suggestion or an issue, and its id (GET /v1/threads/{number}) */
   threadByNumber(input: Operations['threadByNumber']['input']): Promise<Operations['threadByNumber']['output']> {
     return this.call('threadByNumber', input ?? {} as Operations['threadByNumber']['input']);
+  }
+
+  /** The training clips, one JSON object a line, as the training script reads them (audio, start, end, text, split) (GET /v1/machine/training/clips) */
+  trainingClips(): Promise<Operations['trainingClips']['output']> {
+    return this.call('trainingClips', {} as Operations['trainingClips']['input']);
+  }
+
+  /** The next Rebbe Whisper's training data so far: every transcript paragraph a person checked, as clips (GET /v1/machine/training) */
+  trainingSummary(input?: Operations['trainingSummary']['input']): Promise<Operations['trainingSummary']['output']> {
+    return this.call('trainingSummary', input ?? {} as Operations['trainingSummary']['input']);
   }
 
   /** Every kind of item and its JSON Schema (GET /v1/types) */
