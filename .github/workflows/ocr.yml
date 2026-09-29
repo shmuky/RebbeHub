@@ -3,13 +3,21 @@ name: Machine OCR
 # Reads the served scans that have no machine text yet, page by page, with
 # Tesseract (Hebrew), and adds each one's text as machine OCR: labelled as
 # such on the site until people check it line by line (services/jobs/src/ocr.ts).
-# Runs every night for a few scans, and on demand. Needs the DATABASE_URL
-# repository secret, as the import does (docs/deploy.md).
+# Runs every night: the scans people asked for first (the site's "Read
+# this scan" button, POST /v1/machine/requests, the ask_machine MCP tool,
+# `rebbehub machine ask`), then the newest scans not read yet. When the API
+# has GITHUB_DISPATCH_TOKEN, someone asking starts it at once for what was
+# asked (requested: true). Free: Tesseract on the runner's CPU. Needs the
+# DATABASE_URL repository secret, as the import does (docs/deploy.md).
 on:
   schedule:
     - cron: "17 2 * * *"
   workflow_dispatch:
     inputs:
+      requested:
+        description: Only the scans people asked for (how the API starts it)
+        type: boolean
+        default: false
       steward:
         description: The steward who approves the machine's text
         default: shmuly
@@ -57,6 +65,9 @@ jobs:
         env:
           STEWARD: ${{ inputs.steward || 'shmuly' }}
           LIMIT: ${{ inputs.limit || '5' }}
+          REQUESTED: ${{ inputs.requested }}
         run: |
           npm run rebbehub -- migrate
-          npm run rebbehub -- ocr --approve-as "$STEWARD" --limit "$LIMIT"
+          args=(--approve-as "$STEWARD" --limit "$LIMIT")
+          if [ "$REQUESTED" = "true" ]; then args+=(--requested-only); fi
+          npm run rebbehub -- ocr "${args[@]}"

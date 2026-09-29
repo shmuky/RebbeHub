@@ -40,6 +40,7 @@ describe('migrations', () => {
       'label',
       'link_check',
       'machine_pass',
+      'machine_request',
       'mention',
       'page_fix',
       'path_redirect',

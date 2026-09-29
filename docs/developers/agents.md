@@ -21,7 +21,7 @@ stream. It has one address, `https://api.rebbehub.org/mcp`:
 - **Reading needs no account.** `search`, `get_item`, `list_children`,
   `get_text` and `list_issues` answer anyone.
 - **Writing asks for you when it is needed.** A tool that writes
-  (`suggest_fix`, `open_issue`) called without sign-in answers HTTP
+  (`suggest_fix`, `open_issue`, `ask_machine`…) called without sign-in answers HTTP
   `401` with `WWW-Authenticate: Bearer resource_metadata="https://api.rebbehub.org/.well-known/oauth-protected-resource/mcp", scope="read write"`,
   the MCP authorization spec's step-up, so the client asks you to sign
   in and tries again. Connected for reading only, it answers `403` with
@@ -41,6 +41,8 @@ stream. It has one address, `https://api.rebbehub.org/mcp`:
 | `approve_suggestion` | approve a suggestion sent for review, when you may: its sets' keepers, or a steward (`write`) |
 | `list_issues` | issues people opened, open ones first, or about one item |
 | `open_issue` | report a problem for people to look into, under your name (`write`) |
+| `ask_machine` | ask for a scan to be read by OCR or a recording transcribed; queued for the free machines, their words marked `[machine]` until checked (`write`) |
+| `machine_queue` | what waits for the machines, in order, what they did lately, and how much is left |
 | `get_tree` | the catalog as a tree: the top sets, or one set or sefer, with the sets and items under it and how much each holds |
 | `preview_organize` | what a plan of organizing operations would change, item by item, the paths that redirect; saves nothing |
 | `organize` | a whole plan of organizing operations as one suggestion (needs `write`) |

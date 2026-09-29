@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { alignAroundLocks, alignParagraphs, alignWords, hanachaOf, heardWords, recordingTranscript, type Catalog, type HeardWord, type Json } from '@rebbehub/core';
 import { orderKeys, type EntityId, type Language } from '@rebbehub/model';
+import { failIfAny, machineRun } from './machineQueue.js';
 
 /**
  * Transcription and sync (the plan, section 7: "the system aligns
@@ -129,7 +130,7 @@ export function paragraphs(heard: Heard[], options: { targetMs?: number; pauseMs
   return out;
 }
 
-/** Recordings with no transcript yet, oldest first: those whose file is served, and with `linked` those heard at another site too. */
+/** Recordings with no transcript yet, the newest first (one just added is heard next): those whose file is served, and with `linked` those heard at another site too. */
 export async function recordingsToTranscribe(catalog: Catalog, options: { recording?: EntityId; limit?: number; linked?: boolean } = {}): Promise<Array<{ id: EntityId; file: string | null; url: string | null; language: Language }>> {
   const params: unknown[] = [];
   const only = options.recording ? `AND e.id = $${params.push(options.recording)}` : '';
@@ -143,7 +144,7 @@ export async function recordingsToTranscribe(catalog: Catalog, options: { record
          SELECT 1 FROM entity_ref x JOIN entity t ON t.id = x.from_id AND t.type = 'text' AND NOT t.deleted
          JOIN revision tr ON tr.id = t.main_rev
          WHERE x.to_id = e.id AND x.field = 'recording' AND tr.data->>'kind' = 'transcript')
-     ORDER BY e.id LIMIT ${Math.min(options.limit ?? 5, 500)}`,
+     ORDER BY e.created_at DESC, e.id LIMIT ${Math.min(options.limit ?? 5, 500)}`,
     params,
   );
   return rows.map((r) => ({ id: r.id, file: r.file, url: r.url, language: r.language ?? 'yi' }));
@@ -163,6 +164,8 @@ export async function transcribeRecordings(
     recording?: EntityId;
     limit?: number;
     linked?: boolean;
+    /** Only what people asked for (core/machineWork.ts), not the newest recordings nobody asked for too. */
+    requestedOnly?: boolean;
     log?: (line: string) => void;
   },
 ): Promise<Array<{ recording: EntityId; paragraphs: number }>> {
@@ -170,16 +173,25 @@ export async function transcribeRecordings(
   await catalog.createAccount({ id: TRANSCRIBE_BOT, displayName: 'Machine transcription', isBot: true });
   const origin = { by: `transcribe:${input.transcriber.name}@${input.transcriber.version}` };
   const done: Array<{ recording: EntityId; paragraphs: number }> = [];
-  for (const rec of await recordingsToTranscribe(catalog, { recording: input.recording, limit: input.limit, linked: input.linked })) {
+  const { failed } = await machineRun(catalog, 'transcript', {
+    item: input.recording,
+    limit: input.limit ?? 5,
+    sweep: !input.requestedOnly,
+    log,
+    // A recording someone asked for is heard wherever it is, linked or served; the sweep keeps to `linked`.
+    find: ({ item, limit }) => recordingsToTranscribe(catalog, { recording: item, limit, linked: item ? true : input.linked }),
+    work: transcribeOne,
+  });
+  failIfAny(failed);
+  return done;
+
+  async function transcribeOne(rec: { id: EntityId; file: string | null; url: string | null; language: Language }): Promise<void | { skipped: string }> {
     const dir = await mkdtemp(join(tmpdir(), 'rebbehub-transcribe-'));
     try {
       const audio = join(dir, 'audio');
       await writeFile(audio, await input.fetchAudio(rec));
       const paras = paragraphs(await input.transcriber.transcribe(audio, rec.language, dir));
-      if (paras.length === 0) {
-        log(`${rec.id}: nothing heard`);
-        continue;
-      }
+      if (paras.length === 0) return { skipped: 'nothing heard' };
       // Word timings: each paragraph's words matched to the words as they were heard.
       const timed = paras.some((p) => p.words?.length) ? alignWords(paras.map((p) => p.text), heardWords(paras)) : null;
       const suggestion = await catalog.createChangeset(TRANSCRIBE_BOT, { title: `Machine transcript of ${rec.id} (${input.transcriber.version})` });
@@ -202,7 +214,6 @@ export async function transcribeRecordings(
       await rm(dir, { recursive: true, force: true });
     }
   }
-  return done;
 }
 
 export const ALIGN_BOT = 'bot:align';

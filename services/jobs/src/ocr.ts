@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { pageLevel, reseedLines, type Catalog, type Json } from '@rebbehub/core';
 import type { EntityId, TextLine } from '@rebbehub/model';
+import { failIfAny, machineRun } from './machineQueue.js';
 
 /**
  * Machine OCR (the plan, section 7: "every new scan gets machine OCR
@@ -92,7 +93,7 @@ export const tesseract: OcrEngine = {
   },
 };
 
-/** Served scans that have no machine layer yet, oldest first; with `reread`, those this engine read in another version. */
+/** Served scans that have no machine layer yet, the newest first (a scan just added is read the next night); with `reread`, those this engine read in another version. */
 export async function scansToRead(catalog: Catalog, options: { scan?: EntityId; limit?: number; reread?: { name: string; version: string } } = {}): Promise<Array<{ id: EntityId; file: string; sets: EntityId[] }>> {
   const params: unknown[] = [];
   const only = options.scan ? `AND e.id = $${params.push(options.scan)}` : '';
@@ -111,7 +112,7 @@ export async function scansToRead(catalog: Catalog, options: { scan?: EntityId; 
      FROM entity e JOIN revision r ON r.id = e.main_rev JOIN file f ON f.sha256 = r.data->>'file'
      WHERE e.type = 'scan' AND NOT e.deleted AND f.storage_tier = 'public' AND f.rights_state IN ('open', 'credit') ${only}
        ${which}
-     ORDER BY e.id LIMIT ${Math.min(options.limit ?? 10, 1000)}`,
+     ORDER BY e.created_at DESC, e.id LIMIT ${Math.min(options.limit ?? 10, 1000)}`,
     params,
   );
   return rows.map((r) => ({ id: r.id, file: r.file, sets: r.sets ?? [] }));
@@ -124,14 +125,40 @@ export async function scansToRead(catalog: Catalog, options: { scan?: EntityId; 
  */
 export async function readScans(
   catalog: Catalog,
-  input: { approveAs: string; fetchFile: (sha256: string) => Promise<Uint8Array>; engine?: OcrEngine; scan?: EntityId; limit?: number; reread?: boolean; log?: (line: string) => void },
+  input: {
+    approveAs: string;
+    fetchFile: (sha256: string) => Promise<Uint8Array>;
+    engine?: OcrEngine;
+    scan?: EntityId;
+    limit?: number;
+    reread?: boolean;
+    /** Only what people asked for (core/machineWork.ts), not the newest scans nobody asked for too. */
+    requestedOnly?: boolean;
+    log?: (line: string) => void;
+  },
 ): Promise<Array<{ scan: EntityId; pages: number; lines: number }>> {
   const engine = input.engine ?? tesseract;
   const log = input.log ?? (() => {});
   await catalog.createAccount({ id: OCR_BOT, displayName: 'Machine OCR', isBot: true });
   const version = await engine.version();
   const done: Array<{ scan: EntityId; pages: number; lines: number }> = [];
-  for (const scan of await scansToRead(catalog, { scan: input.scan, limit: input.limit, ...(input.reread ? { reread: { name: engine.name, version } } : {}) })) {
+  if (input.reread) {
+    // Re-reading is its own pass over what an older version read; requests are for scans never read.
+    for (const scan of await scansToRead(catalog, { scan: input.scan, limit: input.limit, reread: { name: engine.name, version } })) await readOne(scan);
+    return done;
+  }
+  const { failed } = await machineRun(catalog, 'ocr', {
+    item: input.scan,
+    limit: input.limit ?? 10,
+    sweep: !input.requestedOnly,
+    log,
+    find: ({ item, limit }) => scansToRead(catalog, { scan: item, limit }),
+    work: readOne,
+  });
+  failIfAny(failed);
+  return done;
+
+  async function readOne(scan: { id: EntityId; file: string }): Promise<void> {
     const dir = await mkdtemp(join(tmpdir(), 'rebbehub-ocr-'));
     try {
       const pdf = join(dir, 'scan.pdf');
@@ -170,7 +197,6 @@ export async function readScans(
       await rm(dir, { recursive: true, force: true });
     }
   }
-  return done;
 }
 
 async function layersOfScan(catalog: Catalog, scan: EntityId): Promise<Array<{ id: EntityId; kind: string; engine?: { name: string; version: string }; seededFrom?: EntityId }>> {

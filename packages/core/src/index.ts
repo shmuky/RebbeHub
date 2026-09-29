@@ -248,3 +248,4 @@ export {
   type OrganizeRef,
   type TreeNode,
 } from './organize.js';
+export { MACHINE_KINDS, MACHINE_REQUESTS_PER_DAY, checkMachineWork, finishMachineWork, machineRequest, machineRequests, machineSummary, releaseMachineRequests, requestMachineWork, takeMachineRequests, type MachineKind, type MachineRequest, type MachineRequestStatus } from './machineWork.js';

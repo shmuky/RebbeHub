@@ -21,6 +21,7 @@ import { driveRoutes, type DriveOptions } from './drive.js';
 import { threadRoutes } from './threads.js';
 import { organizeRoutes } from './organize.js';
 import { appCatalogRoutes } from './appCatalog.js';
+import { machineRoutes, type MachineDispatch } from './machine.js';
 
 /**
  * The RebbeHub API, version 1 (docs/developers/api.md). Reading needs
@@ -70,6 +71,10 @@ export interface ApiOptions {
   drive?: DriveOptions;
   /** Reads an app's own description (a Client ID Metadata Document) when it connects with OAuth; unset, fetch. Replaced in tests. */
   fetchClientMetadata?: MetadataFetch;
+  /** Starts the free machine jobs when someone asks for OCR or a transcript (GitHub Actions); unset, the nightly run takes the request. */
+  machineDispatch?: MachineDispatch;
+  /** Lets work finish after the answer is sent (Workers' waitUntil); unset, the answer waits for it. */
+  waitUntil?: (work: Promise<unknown>) => void;
 }
 
 /** A byte range asked for with `Range: bytes=…`. */
@@ -187,6 +192,7 @@ export function createApp(options: ApiOptions): Hono {
   threadRoutes(app, catalog, signedIn, authenticate);
   organizeRoutes(app, catalog, signedIn);
   appCatalogRoutes(app, catalog);
+  machineRoutes(app, catalog, signedIn, { dispatch: options.machineDispatch, waitUntil: options.waitUntil ? (_c, work) => options.waitUntil!(work) : undefined });
   scanRoutes(app, catalog, {
     filesBase,
     siteUrl,
