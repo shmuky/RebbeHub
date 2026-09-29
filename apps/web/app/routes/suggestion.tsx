@@ -21,8 +21,8 @@ import { DiffBox, DiffSegment, DiffStat, FieldDiff } from '../ui/Diff.js';
 import { Icon } from '../ui/Icon.js';
 import { ReviewBox, reviewChoices } from '../ui/ReviewBox.js';
 import { Timeline, TimelineBlock, TimelineComment } from '../ui/Timeline.js';
-import { Avatar, Breadcrumbs, EmptyState, Label, MachineLabel, Skeleton, StatusBadge, Tabs, cx, type State } from '../ui/primitives.js';
-import { Conversation, FollowToggle, Person, When } from '../views/Conversation.js';
+import { Avatar, Breadcrumbs, EmptyState, Label, MachineLabel, Skeleton, StatusBadge, Tabs, cx, type State, MachineNote } from '../ui/primitives.js';
+import { Conversation, FollowToggle, Person, When, Author } from '../views/Conversation.js';
 
 /**
  * One suggestion, as a pull request's page is (the plan: "a Suggestion is
@@ -311,7 +311,7 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
               {tt(lang, view.status === 'merged' ? 'stateMerged' : view.status === 'sent_back' ? 'stateSentBack' : view.status === 'withdrawn' ? 'stateWithdrawn' : view.status === 'draft' ? 'stateDraft' : 'stateOpen')}
             </StatusBadge>
             <span>
-              <Person id={view.author} people={people} lang={lang} /> {w(lang, 'proposes')} {changeCount === 1 ? w(lang, 'change1') : `${num(changeCount, lang)} ${w(lang, 'changesIn')}`}
+              <Author id={view.author} people={people} lang={lang} via={view.via} /> {w(lang, 'proposes')} {changeCount === 1 ? w(lang, 'change1') : `${num(changeCount, lang)} ${w(lang, 'changesIn')}`}
               {view.where ? (
                 <Label to={href(view.where.path, lang)} className="where-label">
                   {[view.where.within, view.where.label].filter(Boolean).join(' · ')}
@@ -340,14 +340,16 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
                 id="description"
                 author={people[view.author]?.name ?? view.author}
                 authorId={view.author}
+                bot={Boolean(view.via)}
                 role={w(lang, 'author')}
                 mine={viewer === view.author}
                 header={
                   <>
-                    <Person id={view.author} people={people} lang={lang} /> <span className="muted">{lang === 'he' ? 'כתב' : 'wrote'}</span> <When at={view.createdAt} lang={lang} anchor="description" />
+                    <Author id={view.author} people={people} lang={lang} via={view.via} /> <span className="muted">{lang === 'he' ? 'כתב' : 'wrote'}</span> <When at={view.createdAt} lang={lang} anchor="description" />
                   </>
                 }
               >
+                {view.via ? <AgentNote via={view.via} status={view.status} author={people[view.author]?.username ? `@${people[view.author]!.username}` : (people[view.author]?.name ?? view.author)} lang={lang} /> : null}
                 <Description view={view} lang={lang} mayEdit={mayEdit} id={id!} onSave={(description) => act(() => threads(`suggestions/${id}`, { method: 'PATCH', body: { description } }))} />
               </TimelineComment>
               {view.entries.slice(0, 3).map((e) => (
@@ -819,3 +821,17 @@ function ChangeWithComments({
   );
 }
 
+/**
+ * A suggestion an agent sent for a person says so in words, as machine
+ * output does: until a person has reviewed it, it is the agent's work, not
+ * the person's.
+ */
+function AgentNote({ via, status, author, lang }: { via: NonNullable<SuggestionView['via']>; status: SuggestionView['status']; author: string; lang: Lang }) {
+  const waiting = status === 'open' || status === 'sent_back' || status === 'draft';
+  const app = via.kind === 'oauth';
+  const text =
+    lang === 'he'
+      ? `${via.name} ${app ? '(אפליקציה מחוברת, סוכן)' : '(טוקן API, סוכן)'} שלח את ההצעה הזאת בשביל ${author}.${waiting ? ' עדיין אף אדם לא סקר אותה.' : ''}`
+      : `${via.name} ${app ? '(a connected app, an agent)' : '(an API token, an agent)'} sent this suggestion for ${author}.${waiting ? ' No person has reviewed it yet.' : ''}`;
+  return <MachineNote>{text}</MachineNote>;
+}

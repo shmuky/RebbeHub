@@ -4,6 +4,7 @@ import type { Route } from './+types/read';
 import type { PageFixInfo, RebbeHubApi } from '../lib/api.js';
 import { siteOf } from '../lib/context.server.js';
 import { langFrom, t } from '../lib/i18n.js';
+import { driveFileId, driveReadUrl } from '../lib/drive.js';
 import { accountPlaces, localPlace, recordPlace } from '../lib/places.js';
 import { pageMeta } from '../lib/seo.js';
 import { useAccount } from '../lib/useAccount.js';
@@ -24,8 +25,11 @@ import '../styles/pages/reader.css';
  *
  *   /read?src=<pdf address>&title=<name>&sub=<event · date>&page=<n>
  *
- * Only files RebbeHub serves, or the Sichos-Kodesh media proxy links to,
- * are opened here.
+ * Only files RebbeHub serves, and files on Google Drive the catalog links
+ * to, are opened here. A Drive file is named by its own Drive address (the
+ * "File" button goes there) and its bytes are read through RebbeHub's API
+ * (lib/drive.ts); an address on Sichos-Kodesh's media proxy, which older
+ * imports stored, is read the same way.
  *
  * A scan RebbeHub has measured opens straightened (its page fix): its
  * reading copy when RebbeHub serves one, otherwise the file itself with its
@@ -38,10 +42,10 @@ import '../styles/pages/reader.css';
  * of a signed-in reader, so the phone opens where the computer left off.
  */
 
-const MEDIA_PROXY_HOST = 'sichos-kodesh-media-proxy.shmuky.workers.dev';
-const ALLOWED_HOSTS = [MEDIA_PROXY_HOST, 'api.rebbehub.org', 'files.rebbehub.org'];
+const ALLOWED_HOSTS = ['api.rebbehub.org', 'files.rebbehub.org'];
 
 function allowed(src: string, apiBase: string): boolean {
+  if (driveFileId(src)) return true;
   try {
     const url = new URL(src);
     const own = new URL(apiBase);
@@ -51,11 +55,10 @@ function allowed(src: string, apiBase: string): boolean {
   }
 }
 
-/** What a PDF on Drive (through the media proxy) needs to read straight; reading goes on without it if the API cannot say. */
+/** What a PDF on Drive needs to read straight; reading goes on without it if the API cannot say. */
 async function pageFixFor(api: RebbeHubApi, src: string): Promise<{ readingCopy: string | null; pages: PageFixInfo['pages'] } | null> {
-  const url = new URL(src);
-  const id = /^\/drive\/([\w-]{10,})$/.exec(url.pathname)?.[1];
-  if (url.hostname !== MEDIA_PROXY_HOST || !id) return null;
+  const id = driveFileId(src);
+  if (!id) return null;
   try {
     const fix = await api.pageFix(id);
     if (fix?.verdict !== 'fixed') return null;
@@ -76,6 +79,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     lang: langFrom(request),
     siteUrl,
     src,
+    // Where its bytes are read: a Drive file through the API, anything else where it is.
+    file: driveReadUrl(src, api.baseUrl) ?? src,
     title: (url.searchParams.get('title') ?? '').slice(0, 200),
     sub: (url.searchParams.get('sub') ?? '').slice(0, 200),
     page: Math.max(1, Number(url.searchParams.get('page')) || 1),
@@ -128,12 +133,12 @@ function pageInView(container: HTMLElement): number {
 }
 
 export default function Read({ loaderData }: Route.ComponentProps) {
-  const { src, title, sub, page, pageAsked, fix } = loaderData;
+  const { src, file, title, sub, page, pageAsked, fix } = loaderData;
   const lang = useLang();
   const account = useAccount();
   // Straightened unless the reader asks to see the scan as it is.
   const [straight, setStraight] = useState(true);
-  const shown = fix?.readingCopy && straight ? fix.readingCopy : src;
+  const shown = fix?.readingCopy && straight ? fix.readingCopy : file;
   const fixes = useMemo(() => (fix && !fix.readingCopy && straight ? fixesByPage(fix.pages) : undefined), [fix, straight]);
   const navigate = useNavigate();
   const pages = useRef<HTMLDivElement>(null);

@@ -3,7 +3,9 @@
 Every importer is a bot: what it reads becomes Suggestions under its own
 bot account, approved with `--approve-as <steward>` or left in the review
 queue. Running one again changes only what its source changed, and never
-overwrites what people have fixed. RebbeHub keeps no copy of
+overwrites what people have fixed: a field people changed since the bot
+last said it stays theirs, an item people moved to a new path stays there,
+and one people deleted (merged into another, say) is not made again. RebbeHub keeps no copy of
 Sichos-Kodesh's content: each importer reads a Sichos-Kodesh checkout
 (`--from`) or a folder made from one, at run time.
 
@@ -19,13 +21,34 @@ workflow crawls what it can first ([deploy](deploy.md)).
 | --- | --- | --- |
 | `sichos-kodesh-works` | the checkout | the works and their units |
 | `sichos-kodesh-occasions` | the checkout (`MAFTEIACH_DATA` optional) | farbrengens, recordings, hanachos |
-| `otzros` | the checkout | the Otzros scans |
+| `otzros` | Drive, listed at run time | Otzros HaRebbe's library: a sefer per folder of PDFs, a page per PDF, and its folders as a tree of Sets |
 | `hebrewbooks` | the checkout (`HEBREWBOOKS_SHELF` optional) | HebrewBooks' Chabad shelf, link-only |
 | `chabadlibrary` | `CHABADLIBRARY_TREE` | a page per chapter of chabadlibrary.org, with its words where `crawl-library --texts` kept them (the `chabad-library` profile), credited to the library |
 | `jem` | `JEM_DB` | JEM's recordings |
 | `sefaria` | `SEFARIA_DATA` | Sefaria's Chabad books Sichos-Kodesh does not publish |
 | `igros` | `IGROS_DATA` | the letters' dates |
 | `archive` | `SK_ARCHIVE_DB` | Sichos-Kodesh's archive history, and the Missing board's Files lost |
+
+## otzros
+
+Lists Otzros HaRebbe's public Drive library of Lubavitch seforim (ספרי
+ליובאוויטש) from Drive's folder views at run time; nothing is copied. Each
+folder that holds PDFs becomes a sefer (`/otzros/<hash>`) and each PDF a
+page of it, linked at the file's own Drive address, which the site's
+reader opens through the API ([operations](operations.md#drive-links)).
+The folder's trail is the sefer's description.
+
+The library's folders are a first sorting, and come in as one: each folder
+that holds other folders of PDFs becomes a Set (`/sets/otzros/<hash>`)
+whose parent is the Set of the folder it is in, up to the library's own
+Set (`/sets/otzros`); each sefer joins the Set of the folder it is in, as
+well as its genre's and the library's. So the library can be browsed as
+Drive has it, and sorted from there into the catalog's own sefarim with
+the organize and merge tools. A run adds the Sets to sefarim already
+imported without moving them. Where people have sorted since - a sefer
+moved into other Sets (its `sets` are then kept whole, as people left
+them), a Set put under another, a sefer or page given a new path, a
+duplicate page deleted - running it again leaves it so.
 
 ## hebrewbooks
 

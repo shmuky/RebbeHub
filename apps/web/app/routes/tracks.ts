@@ -14,5 +14,5 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
   const event = await api.entity(params.id);
   if (!event || event.type !== 'event') throw new Response('Not found', { status: 404 });
   const { items } = await api.children(event.id, 'event', 'recording', { limit: 200 });
-  return Response.json({ tracks: tracksOf(event, items, lang) }, { headers: { 'Cache-Control': 'public, max-age=300' } });
+  return Response.json({ tracks: tracksOf(event, items, lang, {}, api.baseUrl) }, { headers: { 'Cache-Control': 'public, max-age=300' } });
 }

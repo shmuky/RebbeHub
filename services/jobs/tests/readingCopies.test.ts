@@ -6,7 +6,7 @@ import { PDFDocument } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
 import { getDerivations, getFile, getPageFix, setRights } from '@rebbehub/core';
 import { catalogIsRebuildable } from '../src/commands.js';
-import { collectManifest, makeReadingCopies, registerReadingCopies, sichosKodeshScans, type ObjectStore } from '../src/readingCopies.js';
+import { archivePdfs, collectManifest, makeReadingCopies, registerReadingCopies, sichosKodeshScans, type ObjectStore } from '../src/readingCopies.js';
 import { freshCatalog } from '../../../packages/core/tests/helpers.js';
 import { drawPage } from '../../../packages/pdf-fix/tests/page.js';
 
@@ -56,6 +56,16 @@ describe('the Sichos Kodesh reading copies', () => {
       { driveFileId: 'drive-sk-2', label: 'שיחות קודש', where: '5736/11114313' },
       { driveFileId: 'drive-sk-3', label: 'בהוס\' לשיחו"ק (ח"ב)', where: '5736/11114315' },
     ]);
+  });
+
+  it("reads the archive's index from its own bucket, with no other server", async () => {
+    const bucket = new MemoryStore();
+    const index = { objects: { ['a'.repeat(64)]: { kind: 'pdf', bytes: 10, sourceId: 'drive-sk-1', aliases: ['drive-sk-1b'] }, ['b'.repeat(64)]: { kind: 'audio', bytes: 5, sourceId: 'drive-audio' } } };
+    await bucket.put('objects.json', new TextEncoder().encode(JSON.stringify(index)));
+    const pdfs = await archivePdfs(bucket);
+    expect([...pdfs.keys()]).toEqual(['drive-sk-1', 'drive-sk-1b']);
+    expect(pdfs.get('drive-sk-1b')).toEqual({ sha256: 'a'.repeat(64), bytes: 10 });
+    await expect(archivePdfs(new MemoryStore())).rejects.toThrow(/no objects\.json/);
   });
 
   it('copies each scan from the archive, puts its reading copy next to it, and records both in the catalog', async () => {

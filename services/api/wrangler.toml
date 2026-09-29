@@ -57,6 +57,13 @@ name = "RATE_LIMIT_SEARCH"
 namespace_id = "1003"
 simple = { limit = 60, period = 60 }
 
+# Google Drive files read for the site's reader and player (GET /v1/drive/<id>, src/drive.ts) per address a
+# minute, counted on top of the address's allowance; a file read whole is kept at the edge and not counted again.
+[[ratelimits]]
+name = "RATE_LIMIT_DRIVE"
+namespace_id = "1005"
+simple = { limit = 120, period = 60 }
+
 # Cloudflare's Workers cache (docs/operations.md, "Traffic and crawlers"). The default entrypoint runs on
 # every request and is never cached: it sends reads from nobody in particular (no token, no session) on to
 # CachedApi, which the cache sits in front of and which keeps each answer as long as its Cache-Control says.

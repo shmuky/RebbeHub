@@ -10,7 +10,7 @@ import type { Entity } from './api.js';
 export interface Follows {
   follows: Array<{ kind: 'entity' | 'set' | 'project' | 'changeset'; id: string; since: string }>;
   items: Entity[];
-  feed: Array<{ seq: number; at: string; message: string; authorName: string; authorIsBot: boolean; entityId: string; changes: number }>;
+  feed: Array<{ seq: number; at: string; message: string; authorName: string; authorIsBot: boolean; via?: { kind: 'token' | 'oauth'; name: string } | null; entityId: string; changes: number }>;
 }
 
 let asked: Promise<Follows | null> | null = null;

@@ -45,8 +45,9 @@ import { clearMirror, directorySink, exportCommits, exportSnapshot, generateKeyP
 import { BUILTIN_SCHEMAS, SchemaRegistry } from '@rebbehub/model';
 import { commitAll, git } from './git.js';
 import { pullMirror } from './mirrorPull.js';
+import { relinkDriveLinks } from './relinkDrive.js';
 import { collectPageFixes, loadPageFixes, makePageFixes, OTZROS_COLLECTION, otzrosPdfs, pageFixesKey, pageFixesUrl, registerPageFixes } from './pageFixes.js';
-import { ARCHIVE_OBJECTS_URL, archivePdfs, collectManifest, loadManifest, makeReadingCopies, MANIFEST_KEY, MANIFEST_URL, R2Store, registerReadingCopies, type ObjectStore, sichosKodeshScans } from './readingCopies.js';
+import { archivePdfs, collectManifest, loadManifest, makeReadingCopies, MANIFEST_KEY, MANIFEST_URL, R2Store, registerReadingCopies, type ObjectStore, sichosKodeshScans } from './readingCopies.js';
 
 export interface Context {
   log: (line: string) => void;
@@ -103,7 +104,7 @@ export async function migrateCommand(ctx: Context): Promise<void> {
  * mention, a follow, a label, anything that happened in a conversation, a
  * file someone uploaded, a steward's rights decision on a file, a cover a
  * person chose, a project, a webhook; and, kept with the person in `auth`
- * but made for the catalog, an API token, an inbox line, a handle the
+ * but made for the catalog, an API token or a connected app, an inbox line, a handle the
  * person chose. Files the import registers itself (the Sichos Kodesh scans and their reading
  * copies) are rebuilt with it. SQL, so the import can check it again
  * inside the transaction that replaces the catalog.
@@ -116,7 +117,7 @@ export const PEOPLE_MADE_SQL = `SELECT EXISTS (SELECT 1 FROM changeset c JOIN ac
   OR EXISTS (SELECT 1 FROM review r JOIN account a ON a.id = r.reviewer WHERE NOT a.is_bot AND r.reviewer <> 'system' AND length(trim(coalesce(r.body, ''))) > 0) OR EXISTS (SELECT 1 FROM review_request)
   OR EXISTS (SELECT 1 FROM mention) OR EXISTS (SELECT 1 FROM thread_link) OR EXISTS (SELECT 1 FROM report_label) OR EXISTS (SELECT 1 FROM report_assignee)
   OR EXISTS (SELECT 1 FROM cover WHERE chosen_by = 'person')
-  OR EXISTS (SELECT 1 FROM auth.api_token) OR EXISTS (SELECT 1 FROM auth.notification)
+  OR EXISTS (SELECT 1 FROM auth.api_token) OR EXISTS (SELECT 1 FROM auth.oauth_connection) OR EXISTS (SELECT 1 FROM auth.notification)
   OR EXISTS (SELECT 1 FROM auth.username_redirect) OR EXISTS (SELECT 1 FROM auth.person WHERE username_changed_at IS NOT NULL)`;
 
 /**
@@ -136,7 +137,7 @@ export async function catalogIsRebuildable(db: Db): Promise<boolean> {
  * whole-catalog copy runs it first, so it can never replace anything
  * people have made.
  */
-export const REBUILD_GUARD_SQL = `LOCK TABLE changeset, report, comment, review, review_request, mention, thread_link, report_label, report_assignee, follow, file, cover, project, webhook, thread_event, label, auth.api_token, auth.notification, auth.username_redirect IN ACCESS EXCLUSIVE MODE;
+export const REBUILD_GUARD_SQL = `LOCK TABLE changeset, report, comment, review, review_request, mention, thread_link, report_label, report_assignee, follow, file, cover, project, webhook, thread_event, label, auth.api_token, auth.oauth_connection, auth.notification, auth.username_redirect IN ACCESS EXCLUSIVE MODE;
 DO $$ BEGIN IF (${PEOPLE_MADE_SQL}) THEN RAISE EXCEPTION 'people have added to the catalog; not replacing it'; END IF; END $$;`;
 
 /**
@@ -150,6 +151,7 @@ const MARKED_BY_SIZE: Record<string, string | null> = {
   entity: 'updated_seq',
   entity_ref: null,
   entity_external_id: null,
+  drive_file: null,
   path_redirect: null,
   audit_log: 'id',
   embedding: null,
@@ -227,6 +229,17 @@ export async function convertBodiesCommand(ctx: Context, input: { chunk?: number
   await withCatalog(ctx, async (catalog) => {
     const done = await convertLegacyBodies(catalog, { batch: input.chunk, log: ctx.log });
     ctx.log(done ? `${done} pages' words turned into structured words` : 'every page already has structured words');
+  });
+}
+
+/** Media proxy links become Drive links, as reviewed bot Suggestions of `chunk` items (docs/operations.md); `dryRun` only counts them. */
+export async function relinkDriveCommand(ctx: Context, input: { chunk?: number; dryRun?: boolean } = {}): Promise<void> {
+  await withCatalog(ctx, async (catalog) => {
+    const result = await relinkDriveLinks(catalog, { batch: input.chunk, dryRun: input.dryRun, log: ctx.log });
+    const types = Object.entries(result.byType).map(([type, n]) => `${n} ${type}`).join(', ');
+    if (!result.items) ctx.log('no links on the media proxy left to relink');
+    else if (input.dryRun) ctx.log(`would relink ${result.links} links in ${result.items} items (${types}), in ${Math.ceil(result.items / (input.chunk ?? 500))} suggestions`);
+    else ctx.log(`${result.links} links in ${result.items} items (${types}) sent for review in ${result.suggestions.length} suggestions`);
   });
 }
 
@@ -533,10 +546,12 @@ export async function readingCopiesMakeCommand(
   const shard = input.shard?.split('/').map(Number) as [number, number] | undefined;
   if (shard && !(shard.length === 2 && shard[0]! >= 0 && shard[0]! < shard[1]!)) throw new Error('--shard is i/n, as 0/4');
   ctx.log(`${scans.length} Sichos Kodesh scans in the catalog${shard ? `; this is part ${shard[0]} of ${shard[1]}` : ''}`);
+  const source = r2(input.sourceBucket ?? 'sichos-kodesh-archive');
   const result = await makeReadingCopies({
     scans,
-    archive: await archivePdfs(input.archive ?? ARCHIVE_OBJECTS_URL),
-    source: r2(input.sourceBucket ?? 'sichos-kodesh-archive'),
+    // The archive's index from its own bucket, unless another is named.
+    archive: await archivePdfs(input.archive ?? source),
+    source,
     target: r2(input.bucket ?? 'rebbehub-public'),
     work: input.work,
     ...(shard ? { shard } : {}),

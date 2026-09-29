@@ -5,10 +5,10 @@ import { RichText } from '../components/threads/RichText.js';
 import type { Lang } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
 import { LABELS } from '../lib/suggestions.js';
-import { fullTime, personPath, threadPath, threads, type IssueLabel, type People, type TimelineItem } from '../lib/threads.js';
+import { fullTime, personPath, threadPath, threads, type IssueLabel, type People, type TimelineItem, type Via } from '../lib/threads.js';
 import { tt } from '../lib/threadStrings.js';
 import { Icon, type IconName } from '../ui/Icon.js';
-import { Label, RelativeTime } from '../ui/primitives.js';
+import { AgentBy, Label, RelativeTime } from '../ui/primitives.js';
 import { TimelineBlock, TimelineComment, TimelineEvent } from '../ui/Timeline.js';
 
 /**
@@ -60,6 +60,19 @@ export function Person({ id, people, lang }: { id: string | null; people: People
       <b>{name}</b>
       {p.bot ? <span className="bot-tag">{tt(lang, 'bot')}</span> : null}
     </Link>
+  );
+}
+
+/**
+ * Who wrote something: the person, or, when an agent sent it for them (one
+ * of their API tokens, an app they connected), the agent for the person:
+ * "Claude · for @shmuly".
+ */
+export function Author({ id, people, lang, via }: { id: string | null; people: People; lang: Lang; via?: Via | null }) {
+  return (
+    <AgentBy via={via} lang={lang} who={id ? (people[id]?.username ? `@${people[id]!.username}` : people[id]?.name) : undefined}>
+      <Person id={id} people={people} lang={lang} />
+    </AgentBy>
   );
 }
 
@@ -116,24 +129,24 @@ function ReviewItem(props: ConversationProps & { review: Review; comments: Comme
   if (!review.body && comments.length === 0)
     return (
       <TimelineEvent icon={icon} tone={tone} id={`r-${review.id}`}>
-        <Person id={review.author} people={people} lang={lang} /> {tt(lang, verb)} <When at={review.at} lang={lang} anchor={`r-${review.id}`} />
+        <Author id={review.author} people={people} lang={lang} via={review.via} /> {tt(lang, verb)} <When at={review.at} lang={lang} anchor={`r-${review.id}`} />
       </TimelineEvent>
     );
   const person = people[review.author];
   return (
     <>
       <TimelineEvent icon={icon} tone={tone}>
-        <Person id={review.author} people={people} lang={lang} /> {tt(lang, verb)} <When at={review.at} lang={lang} anchor={`r-${review.id}`} />
+        <Author id={review.author} people={people} lang={lang} via={review.via} /> {tt(lang, verb)} <When at={review.at} lang={lang} anchor={`r-${review.id}`} />
       </TimelineEvent>
       <TimelineComment
         id={`r-${review.id}`}
         author={person?.name ?? review.author}
         authorId={review.author}
-        bot={person?.bot}
+        bot={person?.bot || Boolean(review.via)}
         role={roleOf?.(review.author)}
         header={
           <>
-            <Person id={review.author} people={people} lang={lang} /> <span className="muted">{W.wrote[lang]}</span> <When at={review.at} lang={lang} anchor={`r-${review.id}`} />
+            <Author id={review.author} people={people} lang={lang} via={review.via} /> <span className="muted">{W.wrote[lang]}</span> <When at={review.at} lang={lang} anchor={`r-${review.id}`} />
           </>
         }
       >
@@ -184,7 +197,7 @@ function CommentCard(props: ConversationProps & { comment: Comment; replies: Com
 
   const header = (
     <>
-      <Person id={comment.author} people={people} lang={lang} /> <span className="muted">{W.wrote[lang]}</span> <When at={comment.at} lang={lang} anchor={`c-${comment.id}`} />
+      <Author id={comment.author} people={people} lang={lang} via={comment.via} /> <span className="muted">{W.wrote[lang]}</span> <When at={comment.at} lang={lang} anchor={`c-${comment.id}`} />
       {comment.edited ? <span className="subtle">· {tt(lang, 'edited')}</span> : null}
       {comment.anchor ? (
         <span className="anchor-tag">
@@ -217,7 +230,7 @@ function CommentCard(props: ConversationProps & { comment: Comment; replies: Com
           {replies.map((r) => (
             <li key={r.id} id={`c-${r.id}`}>
               <div className="reply-h">
-                <Person id={r.author} people={people} lang={lang} /> <When at={r.at} lang={lang} anchor={`c-${r.id}`} />
+                <Author id={r.author} people={people} lang={lang} via={r.via} /> <When at={r.at} lang={lang} anchor={`c-${r.id}`} />
                 {r.edited ? <span className="subtle"> · {tt(lang, 'edited')}</span> : null}
               </div>
               <CommentWords {...props} comment={r} />
@@ -252,7 +265,7 @@ function CommentCard(props: ConversationProps & { comment: Comment; replies: Com
       </article>
     );
   return (
-    <TimelineComment id={`c-${comment.id}`} author={person?.name ?? comment.author} authorId={comment.author} bot={person?.bot} mine={viewer === comment.author} role={roleOf?.(comment.author)} header={header} footer={footer}>
+    <TimelineComment id={`c-${comment.id}`} author={person?.name ?? comment.author} authorId={comment.author} bot={person?.bot || Boolean(comment.via)} mine={viewer === comment.author} role={roleOf?.(comment.author)} header={header} footer={footer}>
       {body}
     </TimelineComment>
   );

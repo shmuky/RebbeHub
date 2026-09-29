@@ -60,6 +60,16 @@ the public takedown form with a steward's one-click takedown are built
 ([accounts](accounts.md)); email and the summary show once their secrets
 are set.
 
+Organizing the catalog by hand is built: `/organize` (from the library,
+every set and every sefer) picks rows and moves them, moves them up a
+level, renames them in place, puts them in order by dragging or the
+keyboard, makes new sets, removes empty ones and merges duplicates, all
+as one suggestion previewed first; the same through `POST /v1/organize`
+and the MCP tools, with splitting a sefer too (`packages/core/src/organize.ts`,
+[suggestions](developers/suggestions.md#organizing-the-catalog)). Not yet:
+splitting from the site, and ordering a sefer that sits in several sets
+separately in each.
+
 People and conversations, the GitHub way, are built (migration 0016):
 every person has a unique handle (chosen at sign-up, changeable, old ones
 redirect) and a page at `/u/<handle>`; @mentions and `#12` wherever people
@@ -170,7 +180,12 @@ inside talk pages' wiki text, and a steward's page to edit labels.
   OpenAPI 3.1 document, checked by a test; rate limits by address and by
   token; `/developers`, drawn from [docs/developers](developers/index.md),
   with an interactive reference; `/llms.txt`, `/llms-full.txt`, and an MCP
-  server at `api.rebbehub.org/mcp` (search, items, texts, suggest a fix);
+  server at `api.rebbehub.org/mcp` (search, items, texts, suggest a fix)
+  that Claude and other MCP clients connect to with OAuth 2.1 (PKCE,
+  registration or a Client ID Metadata Document, refresh and revoking),
+  approved on `/oauth/consent` and listed on the account page; reading
+  needs no account, and a writing tool asks for sign-in (step-up);
+  what a token or app sends shows as the agent's, for the person;
   the typed client `@rebbehub/client`. The rate limits need the
   `[[ratelimits]]` bindings deployed ([configuration](configuration.md)).
 - **Covers from the shaar** ✅: `rebbehub covers` draws a sefer's cover

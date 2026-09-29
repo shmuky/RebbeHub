@@ -37,6 +37,13 @@ export interface ImportRecord {
    * skipped until the item exists.
    */
   patch?: 'set' | 'add';
+  /**
+   * Fields kept whole as people have them once a person changed them
+   * since the bot last said them, instead of merged with the source: a
+   * sefer's `sets`, so one people moved out of the Set its importer put
+   * it in is not put back.
+   */
+  keep?: string[];
   /** Records of one group go into a suggestion of their own, titled with it: each of the archive's commits stays one bot commit. */
   group?: { key: string; title: string };
 }
@@ -117,6 +124,13 @@ export async function runImport(catalog: Catalog, importer: Importer, options: I
     const data = await resolve(record.data);
     const main = await catalog.get(id);
     let proposed: Json = data;
+    let path = record.path;
+    if (!main && !record.patch && (await catalog.lastMergedBy(id, importer.bot.id))) {
+      // The bot made it and people have since deleted it (merged into another, say): it stays deleted.
+      result.keptHumanEdits++;
+      result.unchanged++;
+      continue;
+    }
     if (record.patch) {
       if (!main) {
         result.skipped++;
@@ -139,7 +153,23 @@ export async function runImport(catalog: Catalog, importer: Importer, options: I
       const merged = threeWayMerge(previous?.data ?? null, main.data, data);
       result.keptHumanEdits += merged.conflicts.length;
       proposed = merged.merged!; // conflicting fields stay as people have them
-      if ((await contentHash(proposed)) === (await contentHash(main.data)) && (record.path === undefined || record.path === main.path)) {
+      if (previous) {
+        const before = previous.data as Record<string, Json> | null;
+        const now = main.data as Record<string, Json>;
+        for (const field of record.keep ?? []) {
+          if (canonicalJson(before?.[field] ?? null) === canonicalJson(now[field] ?? null)) continue;
+          // Changed by people since: kept whole, as they have it.
+          if (canonicalJson((proposed as Record<string, Json>)[field] ?? null) !== canonicalJson(now[field] ?? null)) result.keptHumanEdits++;
+          if (now[field] === undefined) delete (proposed as Record<string, Json>)[field];
+          else (proposed as Record<string, Json>)[field] = now[field]!;
+        }
+        // Moved by people since (a new path): it stays where they moved it.
+        if ((previous.path ?? null) !== (main.path ?? null)) {
+          if (path !== undefined && path !== main.path) result.keptHumanEdits++;
+          path = main.path ?? undefined;
+        }
+      }
+      if ((await contentHash(proposed)) === (await contentHash(main.data)) && (path === undefined || path === main.path)) {
         result.unchanged++;
         continue;
       }
@@ -155,7 +185,7 @@ export async function runImport(catalog: Catalog, importer: Importer, options: I
       changeset = cs.id;
     }
     // A patch leaves the item where its own importer put it.
-    const path = record.patch ? (main?.path ?? undefined) : record.path;
+    if (record.patch) path = main?.path ?? undefined;
     await catalog.putRevision(changeset, importer.bot.id, { id, type: record.type, data: proposed, path });
     if (++inChunk >= chunkSize) await close();
   }

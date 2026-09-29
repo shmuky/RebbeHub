@@ -12,6 +12,54 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Drive files read through RebbeHub.** `GET /v1/drive/{id}` reads a
+  Google Drive file the catalog links to (a hanacha's PDF, an Otzros
+  scan) for the site's reader and player, with CORS and Range, kept at the
+  edge; only files an item links to, up to 300 MB, 120 a minute per
+  address. New error codes `too-large` (413) and `upstream` (502). The
+  site no longer depends on Sichos-Kodesh's media proxy for PDFs.
+- **`rebbehub relink-drive`** (and the Upkeep workflow's `relink-drive`,
+  `relink-drive-dry-run`): links older imports stored on the media proxy
+  become the files' own Drive links, as reviewed bot Suggestions of 500
+  items; `--dry-run` counts them.
+- **The Otzros library as a tree.** Its Drive folders become nested Sets
+  under `/sets/otzros`, each sefer in its folder's Set, to browse and sort
+  from; the sefarim keep their paths.
+- **Connect Claude to your account.** The API is now an OAuth 2.1
+  authorization server for MCP clients: Protected Resource Metadata
+  (`/.well-known/oauth-protected-resource/mcp`), Authorization Server
+  Metadata (`/.well-known/oauth-authorization-server`), registration
+  (`/oauth/register`) and Client ID Metadata Documents, `/oauth/authorize`
+  with PKCE (S256) and resource indicators, `/oauth/token` (codes and
+  refresh tokens, turned over at each use) and `/oauth/revoke`. You
+  approve an app on the site's new consent page (`/oauth/consent`), where
+  you see its name, where it sends you back, and may allow reading only.
+  Connected apps are listed on the account page beside your tokens
+  (`kind: "oauth"` in `/v1/tokens`) and disconnected there. In claude.ai:
+  Settings → Connectors → Add custom connector →
+  `https://api.rebbehub.org/mcp`, *Sign in when needed*, Claude's
+  published identity (CIMD).
+- **An agent's work shows as the agent's.** Suggestions, comments,
+  issues and reviews sent with a personal token or a connected app keep
+  what sent them (`via`, migration 0021), returned on suggestions, their
+  conversation, issues, history and commits, and shown on the site with
+  the agent mark: "Claude · for @you" (Hebrew too).
+
+- **Organizing the catalog.** Sefarim moved between sets, sets under other
+  sets or up a level, sichos to another sefer; names and addresses
+  changed; lists put in a new order by dragging or the keyboard; new sets
+  made and empty ones removed; duplicates merged (their sichos, printings
+  and links moving over) and sefarim split. Each plan is one suggestion,
+  however many items it touches, previewed item by item first; old
+  addresses redirect once it is approved, a merged item's to the one kept.
+  On the site: "Organize" on the library, every set and every sefer
+  (`/organize`). In the API: `GET /v1/tree`, `POST /v1/organize/preview`,
+  `POST /v1/organize`, and `detail.mergedInto` on a merged item's 404. For
+  agents, the MCP tools `get_tree`, `preview_organize`, `organize`,
+  `move_items`, `move_up`, `rename_item`, `reorder_children`, `create_set`,
+  `delete_set` and `merge_items`. Sets and sefarim take an `order` among
+  their siblings (built-in schemas, version 8); migration 0022 keeps where
+  merged items went.
 - **Ready for search engines and crowds.** Sitemaps a page of 10,000 items
   at a time in both languages, with when each item last changed
   (`/sitemap.xml`; the API's new `/v1/sitemap` and
@@ -56,6 +104,20 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Changed
 
+- Importers store a PDF on Google Drive at its own Drive address
+  (`https://drive.google.com/file/d/<id>/view`), the mafteiach's and
+  Otzros HaRebbe's link, not the media proxy's; an Otzros page has one
+  edition, its Drive file. JEM's recordings still play through the proxy.
+- Running an importer again leaves an item people moved to a new path, or
+  deleted, where they left it, and a sefer's Sets as people sorted them.
+- `rebbehub reading-copies make` reads the archive's list from the
+  archive's own bucket, not from Sichos-Kodesh's pack API.
+
+- **The MCP server's writing tools ask for sign-in**: called without a
+  token, `suggest_fix` and `open_issue` answer HTTP `401` with
+  `WWW-Authenticate` naming the resource metadata (MCP step-up), and with
+  a read-only token `403` `insufficient_scope`, instead of a tool error.
+  Reading without an account works as before.
 - Every `401` answer says `unauthorized` (sign-in routes said
   `bad-request`), and every `429` says
   `rate-limited` (was `too-many`).

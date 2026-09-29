@@ -14,7 +14,7 @@ import { refreshAccount, useAccount, useEmailSignIn, useGoogleSignIn, type Signe
 import { setFollow, useFollows } from '../lib/useFollows.js';
 import { useLang } from '../lib/useLang.js';
 import { Icon, type IconName } from '../ui/Icon.js';
-import { Avatar, Box, ChoiceList, EmptyState, Label, RelativeTime, Skeleton } from '../ui/primitives.js';
+import { AgentBy, Avatar, Box, ChoiceList, EmptyState, Label, RelativeTime, Skeleton } from '../ui/primitives.js';
 import '../styles/pages/people.css';
 
 /**
@@ -274,14 +274,17 @@ function FollowsSection({ lang, when }: { lang: Lang; when: (iso: string) => str
                 const item = items.find((i) => i.id === f.entityId);
                 return (
                   <li key={f.seq} className="row">
-                    <Icon name={f.authorIsBot ? 'bot' : 'pencil'} />
+                    <Icon name={f.authorIsBot || f.via ? 'bot' : 'pencil'} />
                     <span className="row-main">
                       <Link className="row-title" to={href(`/${f.entityId}`, lang)} dir="auto">
                         {f.message}
                       </Link>
                       <span className="row-sub" suppressHydrationWarning>
                         {item ? `${labelOf(item, lang)} · ` : ''}
-                        {f.authorName} · {when(f.at)}
+                        <AgentBy via={f.via} lang={lang} who={f.authorName}>
+                          {f.authorName}
+                        </AgentBy>{' '}
+                        · {when(f.at)}
                         {f.changes > 1 ? ` · ${f.changes.toLocaleString(lang === 'he' ? 'he-IL' : 'en-US')} ${t(lang, 'changesCount')}` : ''}
                       </span>
                     </span>

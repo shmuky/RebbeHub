@@ -42,7 +42,7 @@ export default function Embed({ loaderData }: Route.ComponentProps) {
   const { lang, siteUrl, entity, view } = loaderData;
   const d = entity.data as { date?: string; title?: LocalName };
   const recordings = view.lists.recordings ?? [];
-  const tracks = entity.type === 'event' ? tracksOf(entity, recordings, lang, Object.fromEntries(recordings.map((r) => [r.id, view.files[r.id]?.url ?? null]))) : [];
+  const tracks = entity.type === 'event' ? tracksOf(entity, recordings, lang, Object.fromEntries(recordings.map((r) => [r.id, view.files[r.id]?.url ?? null])), view.apiBase) : [];
   const link = `${siteUrl.replace(/\/$/, '')}${href(itemPath(entity), lang)}`;
   return (
     <article className="embed-card">

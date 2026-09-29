@@ -7,6 +7,7 @@ The API is free and open; the limits keep it so for everyone.
 | Each address (no token) | 300 requests a minute |
 | Each API token | 1,200 requests a minute, wherever it is sent from |
 | Searching, each address (no token) | 60 searches a minute (`/v1/search`, `/v1/search/moments`, `/v1/search/similar`), counted on top of the above |
+| Google Drive files, each address | 120 a minute (`/v1/drive/<id>`, the site's reader and player), counted on top of the above |
 
 - Every answer says the policy: `RateLimit-Policy: "address";q=300;w=60, "token";q=1200;w=60`.
 - Past it, the answer is `429` with `{ "error": "rate-limited" }` and
@@ -36,6 +37,6 @@ The API is free and open; the limits keep it so for everyone.
 ## Running your own
 
 On Cloudflare Workers the limits are Cloudflare's rate limiting bindings
-(`RATE_LIMIT_ADDRESS`, `RATE_LIMIT_TOKEN`, `RATE_LIMIT_SEARCH` in `services/api/wrangler.toml`,
+(`RATE_LIMIT_ADDRESS`, `RATE_LIMIT_TOKEN`, `RATE_LIMIT_SEARCH`, `RATE_LIMIT_DRIVE` in `services/api/wrangler.toml`,
 [configuration](../configuration.md)); without them nothing is counted.
 `npm run dev:api` counts nothing unless `RATE_LIMIT=1`.

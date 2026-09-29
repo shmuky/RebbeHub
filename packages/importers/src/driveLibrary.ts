@@ -1,16 +1,18 @@
 import { createHash } from 'node:crypto';
-import { orderKeys, type Genre, type LocalName } from '@rebbehub/model';
+import { orderKeys, type Genre } from '@rebbehub/model';
 import { ref, type ImportRecord, type Importer } from './importer.js';
-import { pdfUrl, SICHOS_KODESH_MEDIA_PROXY } from './sichosKodeshOccasions.js';
 import { GENRE_NAMES } from './sichosKodeshWorks.js';
 
 /**
  * Otzros HaRebbe's library of Lubavitch seforim (ספרי ליובאוויטש): a
  * public Google Drive folder of PDFs, a folder per sefer. Each folder that
  * holds PDFs becomes a sefer on RebbeHub and each PDF a page of it, linking
- * to its exact file on Drive and read in the site's own reader through
- * Sichos-Kodesh's media proxy. Nothing is copied: the folders are listed
- * at import time from Drive's public folder view.
+ * to its exact file on Drive, which the site's reader opens through
+ * RebbeHub's API. Each folder that holds other folders of PDFs becomes a
+ * Set, in the Set of the folder it is in, under the library's own Set: the
+ * Drive library's tree, a first sorting that people then sort on into the
+ * catalog's own sefarim. Nothing is copied: the folders are listed at
+ * import time from Drive's public folder view.
  */
 
 export const OTZROS_FOLDER: DriveEntry = { title: 'ספרי ליובאוויטש', id: '0B_WSU737WJ1ffjFrTGFlMjBDdW44eU1yNkpLOHJHY0JRTWh3dU5BcFhZMV81Zmphc1J6VDQ', resourceKey: '0-OGquHQDd2VMz957qpqEEGA' };
@@ -104,10 +106,22 @@ const clip = (text: string) => text.slice(0, 500);
 const nameOf = (file: string) => file.replace(/\.pdf$/i, '').trim() || file;
 const natural = new Intl.Collator('he', { numeric: true });
 
+
 export const driveViewUrl = (file: DriveEntry) => `https://drive.google.com/file/d/${file.id}/view${file.resourceKey ? `?resourcekey=${file.resourceKey}` : ''}`;
 
-export function driveLibraryImporter(input: DriveFolder | (() => Promise<DriveFolder>), options: { proxy?: string } = {}): Importer {
-  const proxy = options.proxy ?? SICHOS_KODESH_MEDIA_PROXY;
+/** The Set a Drive folder of the library became (a folder that holds other folders of PDFs). */
+export const otzrosFolderSetKey = (folderId: string) => `otzros-folder:${folderId}`;
+
+/** Whether a folder, or any folder in it, holds a PDF. */
+const holdsPdfs = (folder: DriveFolder): boolean => folder.files.some((f) => /\.pdf$/i.test(f.title)) || folder.folders.some(holdsPdfs);
+
+/** A folder's name; one named only by a year or a number ("5727") is named with the folder it is in. */
+function folderName(folder: DriveFolder, trail: string[]): string {
+  const bare = !/[\p{L}]/u.test(folder.title.replace(/^\d+[.)]\s*/, '')) && trail.length > 0;
+  return clip(bare ? `${trail[trail.length - 1]!.replace(/^\d+[.)]\s*/, '')} ${folder.title}` : folder.title);
+}
+
+export function driveLibraryImporter(input: DriveFolder | (() => Promise<DriveFolder>)): Importer {
   return {
     id: 'otzros',
     bot: { id: 'bot:otzros', displayName: 'Otzros HaRebbe library importer' },
@@ -115,29 +129,49 @@ export function driveLibraryImporter(input: DriveFolder | (() => Promise<DriveFo
       const root = typeof input === 'function' ? await input() : input;
       yield { key: OTZROS_SET.key, type: 'set', path: OTZROS_SET.path, data: { name: OTZROS_SET.name, slug: 'otzros', policy: 'moderated', keepers: [] } };
       const genres = new Set<Genre>();
+      const sets: ImportRecord[] = [];
       const works: ImportRecord[] = [];
       const units: ImportRecord[] = [];
-      const walk = (folder: DriveFolder, trail: string[], genre: Genre) => {
+      /** `inSet`: the Set of the folder this one is in (the library's own Set, at the top). */
+      const walk = (folder: DriveFolder, trail: string[], genre: Genre, inSet: string) => {
         const pdfs = folder.files.filter((f) => /\.pdf$/i.test(f.title)).sort((a, b) => natural.compare(a.title, b.title));
+        const subs = folder.folders.filter(holdsPdfs).sort((a, b) => natural.compare(a.title, b.title));
+        // A folder of folders is a Set, in the Set of the folder it is in: the library's tree, to browse and sort from.
+        const ownSet = subs.length ? otzrosFolderSetKey(folder.id) : null;
+        if (ownSet) {
+          sets.push({
+            key: ownSet,
+            type: 'set',
+            path: `${OTZROS_SET.path}/${short(folder.id)}`,
+            data: {
+              name: { he: folderName(folder, trail) },
+              slug: `otzros-${short(folder.id)}`,
+              policy: 'moderated',
+              keepers: [],
+              parent: ref(inSet),
+              ...(trail.length ? { description: { he: clip(trail.join(' / ')) } } : {}),
+            },
+          });
+        }
         if (pdfs.length) {
           genres.add(genre);
           const key = `otzros-work:${folder.id}`;
           const slug = `otzros-${short(folder.id)}`;
           const path = `/otzros/${short(folder.id)}`;
-          // A folder named only by a year or a number ("5727") is named with the folder it is in.
-          const bare = !/[\p{L}]/u.test(folder.title.replace(/^\d+[.)]\s*/, '')) && trail.length > 0;
-          const title: LocalName = { he: clip(bare ? `${trail[trail.length - 1]!.replace(/^\d+[.)]\s*/, '')} ${folder.title}` : folder.title) };
           works.push({
             key,
             type: 'work',
             path,
+            // Where people have put the sefer since (another Set, out of this one) stays where they put it.
+            keep: ['sets'],
             data: {
-              title,
+              title: { he: folderName(folder, trail) },
               slug,
               authors: [],
               genre,
               levels: ['volume'],
-              sets: [ref(`rebbehub-set:${genre}`), ref(OTZROS_SET.key)],
+              // Its genre, the library, and the Set of the folder it is in.
+              sets: [...new Set([`rebbehub-set:${genre}`, OTZROS_SET.key, inSet])].map(ref),
               ...(trail.length ? { description: { he: clip(trail.join(' / ')) } } : {}),
               externalIds: { 'drive-folder': folder.id },
               // The folder on Drive, as the copy's id: a link is its own address.
@@ -156,20 +190,19 @@ export function driveLibraryImporter(input: DriveFolder | (() => Promise<DriveFo
                 order: orders[i]!,
                 label: { he: clip(pdfs.length === 1 ? folder.title : nameOf(file.title)) },
                 externalIds: { 'drive-file': file.id },
-                editions: [
-                  // Read in the site's reader through the media proxy; the exact file on Drive is the source.
-                  { source: 'other', sourceId: file.id, kind: 'pdf', licence: 'free-to-read', credit: 'אוצרות הרבי', label: 'reader', url: pdfUrl({ driveFileId: file.id, resourceKey: file.resourceKey }, proxy) },
-                  { source: 'other', sourceId: file.id, kind: 'pdf', licence: 'free-to-read', credit: 'אוצרות הרבי', label: 'drive', url: driveViewUrl(file) },
-                ],
+                // The exact file on Drive; the site's reader opens it through RebbeHub's API (GET /v1/drive/<id>).
+                editions: [{ source: 'other', sourceId: file.id, kind: 'pdf', licence: 'free-to-read', credit: 'אוצרות הרבי', label: 'drive', url: driveViewUrl(file) }],
               },
             });
           });
         }
-        for (const sub of [...folder.folders].sort((a, b) => natural.compare(a.title, b.title))) walk(sub, [...trail, folder.title], genre);
+        for (const sub of subs) walk(sub, [...trail, folder.title], genre, ownSet ?? inSet);
       };
-      for (const top of root.folders) walk(top, [], genreOf(top.title));
+      for (const top of root.folders.filter(holdsPdfs)) walk(top, [], genreOf(top.title), OTZROS_SET.key);
       // The genre sets, as the works importer makes them (the same records: nothing changes if they are there).
       for (const genre of genres) yield { key: `rebbehub-set:${genre}`, type: 'set', path: `/sets/${genre}`, data: { name: GENRE_NAMES[genre], slug: genre, policy: 'moderated', keepers: [] } };
+      // A folder's Set comes before the Sets and sefarim in it.
+      yield* sets;
       yield* works;
       yield* units;
     },

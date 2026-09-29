@@ -68,6 +68,10 @@ interface Env {
   RATE_LIMIT_ADDRESS_PER_MINUTE?: string;
   RATE_LIMIT_TOKEN_PER_MINUTE?: string;
   RATE_LIMIT_SEARCH_PER_MINUTE?: string;
+  /** Google Drive files read for the site (GET /v1/drive/<id>) per address a minute, on top of the address's allowance. */
+  RATE_LIMIT_DRIVE?: RateLimiter;
+  /** The largest Drive file passed on, in megabytes (default 300). */
+  DRIVE_MAX_MB?: string;
 }
 
 interface Ctx {
@@ -156,6 +160,7 @@ async function answer(request: Request, env: Env, ctx: { waitUntil(promise: Prom
       search: env.RATE_LIMIT_SEARCH,
       searchPerMinute: Number(env.RATE_LIMIT_SEARCH_PER_MINUTE) || DEFAULT_SEARCH_PER_MINUTE,
     },
+    drive: { limiter: env.RATE_LIMIT_DRIVE, ...(Number(env.DRIVE_MAX_MB) > 0 ? { maxBytes: Number(env.DRIVE_MAX_MB) * 1024 * 1024 } : {}) },
     auth: env.SITE_URL ? authFor(env.SITE_URL, { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }) : undefined,
     mailer: mailerOf(env),
   });

@@ -16,6 +16,13 @@ export interface PersonTag {
 
 export type People = Record<string, PersonTag>;
 
+/** Sent by an agent for its author: one of their API tokens, or an app they connected (Claude). The API's `via`. */
+export interface Via {
+  kind: 'token' | 'oauth';
+  id?: string;
+  name: string;
+}
+
 export type TimelineItem =
   | {
       type: 'comment';
@@ -29,8 +36,9 @@ export type TimelineItem =
       review: number | null;
       resolved: boolean;
       edited: boolean;
+      via?: Via | null;
     }
-  | { type: 'review'; id: number; at: string; author: string; verdict: 'approve' | 'send_back' | 'comment'; body: string | null }
+  | { type: 'review'; id: number; at: string; author: string; verdict: 'approve' | 'send_back' | 'comment'; body: string | null; via?: Via | null }
   | { type: 'event'; id: string; at: string; actor: string | null; kind: string; detail: Record<string, unknown> };
 
 export interface IssueLabel {
@@ -60,6 +68,7 @@ export interface Issue {
   closedAt: string | null;
   closedBy: string | null;
   closedBySuggestion: number | null;
+  via?: Via | null;
 }
 
 export interface IssueRights {
@@ -93,6 +102,7 @@ export interface SuggestionListItem {
   approvals: number;
   changesRequested: boolean;
   fixes: number[];
+  via?: Via | null;
 }
 
 export interface InboxLine {

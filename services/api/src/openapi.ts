@@ -144,6 +144,7 @@ const OPERATIONS: Operation[] = [
   { method: 'get', path: '/v1/files/{sha256}', operationId: 'getFile', tag: 'Files', summary: "A file's size, rights and address, what was made from it, and its page fix", access: 'public', params: [path('sha256', sha256Schema)], ok: { description: 'The file', schema: ref('File') } },
   { method: 'get', path: '/v1/files/{sha256}/similar', operationId: 'similarFiles', tag: 'Files', summary: "Held files that look like this one (the same scan or recording in other bytes): a machine's guess", access: 'public', params: [path('sha256', sha256Schema)], ok: { description: 'Similar files, with the items that use each', schema: any() } },
   { method: 'get', path: '/v1/page-fixes/drive/{id}', operationId: 'driveFix', tag: 'Files', summary: 'What a PDF on Google Drive needs to read straight, by its Drive id, or the reading copy to open instead', access: 'public', params: [path('id', str('A Google Drive file id', { pattern: '^[\\w-]{10,}$' }))], ok: { description: 'The page fix', schema: any() } },
+  { method: 'get', path: '/v1/drive/{id}', operationId: 'driveFile', tag: 'Files', summary: "A Google Drive file the catalog links to (a hanacha's PDF, an Otzros scan), read for the site's reader and player", description: 'Only files an item links to. Supports Range requests; the whole file is kept at the edge for a week. Files over the size RebbeHub passes on (300 MB) answer 413.', access: 'public', params: [path('id', str('A Google Drive file id', { pattern: '^[\\w-]{10,64}$' }))], ok: { description: 'The bytes', type: 'application/octet-stream' }, also: { '206': 'Part of the bytes (Range)', '404': 'No item links to this file', '413': 'Too large to pass on', '429': 'Too many files read from Drive this minute', '502': 'Google Drive did not give the file' } },
   { method: 'get', path: '/objects/{sha256}', operationId: 'getObject', tag: 'Files', summary: "A file's bytes, while its rights let it be served", description: 'Supports Range requests. `X-Credit` carries the credit the rights ask for.', access: 'public', params: [path('sha256', sha256Schema)], ok: { description: 'The bytes', type: 'application/octet-stream' }, also: { '206': 'Part of the bytes (Range)', '416': 'A range outside the file' } },
   { method: 'get', path: '/manifests/{collection}/{name}', operationId: 'getManifest', tag: 'Files', summary: 'A published manifest: reading copies, page fixes (facts about files, open like the catalog)', access: 'public', params: [path('collection', str(undefined, { pattern: '^[a-z0-9-]+$' })), path('name', str('ends in .json', { pattern: '^[a-z0-9-]+\\.json$' }))], ok: { description: 'The manifest', schema: any() } },
   { method: 'get', path: '/v1/scans/{id}/pages', operationId: 'scanPages', tag: 'Files', summary: "A served scan's page images and thumbnails, and its IIIF manifest", access: 'public', params: [idParam], ok: { description: 'Pages', schema: any() } },
@@ -175,6 +176,11 @@ const OPERATIONS: Operation[] = [
   { method: 'post', path: '/v1/suggestions/{id}/revert', operationId: 'revertSuggestion', tag: 'Suggestions', summary: 'Undo a merged suggestion (a new suggestion that reverses it)', access: 'write', params: [numberParam('id', 'The suggestion')], body: obj({ reason: str() }), ok: { description: 'The revert', schema: obj({ changeset: int(), commit: nullable(int()) }) } },
   { method: 'post', path: '/v1/suggestions/words', operationId: 'suggestWords', tag: 'Suggestions', summary: "A page's words fixed segment by segment: one segment's new words, a segment added after it or taken out, or a page's first words, sent for review", access: 'write', body: obj({ entityId: idSchema, change: { enum: ['edit', 'add', 'remove', 'start'] }, version: str(), segment: str(), text: arr(any(), 'Runs: { text, marks?, href? }, { note }, { marker }, { br: true }'), before: arr(any(), 'The segment as the person saw it; a change since answers 409'), kind: { enum: ['paragraph', 'heading', 'verse', 'item'] }, language: str(), title: str(), note: str() }, ['entityId', 'change']), ok: { status: 201, description: 'The suggestion sent for review (merged at once where its author may)', schema: any() }, also: { '409': 'The segment changed since it was opened' } },
   { method: 'post', path: '/v1/suggestions/contents-map', operationId: 'mapContents', tag: 'Suggestions', summary: 'Map pages of a publication to the unit they hold (an existing unit, a new one, or words)', access: 'write', body: obj({ publication: idSchema, pages: obj({ from: int(), to: int(), scheme: { enum: ['printed', 'pdf'] } }, ['from', 'to']), unit: idSchema, newUnit: obj({ work: idSchema, label: any(), date: str() }), label: any() }, ['publication', 'pages']), ok: { status: 201, description: 'The suggestion sent for review', schema: any() } },
+
+  // Organize
+  { method: 'get', path: '/v1/tree', operationId: 'catalogTree', tag: 'Organize', summary: 'The catalog as a tree: the top sets (or one set or sefer), the sets and items under them, and how much each holds', access: 'public', params: [query('root', idSchema, 'A set or a sefer (work); left out, the top sets'), query('depth', int(undefined, { minimum: 0, maximum: 4, default: 1 }), 'How many levels down'), limitParam(500, 100)], ok: { description: 'The tree', schema: obj({ root: nullable(ref('TreeNode')), children: arr(ref('TreeNode')), more: int('Children left out past the limit') }, ['root', 'children', 'more']) } },
+  { method: 'post', path: '/v1/organize/preview', operationId: 'previewOrganize', tag: 'Organize', summary: 'What a plan of moves, renames, orderings, new sets and merges would change, item by item, saved nowhere', access: 'write', body: ref('OrganizePlan'), ok: { description: 'The change', schema: ref('OrganizePreview') } },
+  { method: 'post', path: '/v1/organize', operationId: 'organize', tag: 'Organize', summary: 'Organize the catalog: a plan becomes one suggestion, sent for review (apply: true approves it at once where you may approve it yourself)', description: 'Operations: move, move-up, rename, reorder, create-set, delete-set, merge, split. Every old path redirects once it is approved; a merged item\'s paths lead to the item it was merged into.', access: 'write', body: ref('OrganizePlan'), ok: { status: 201, description: 'The suggestion, whether it was merged, and the change', schema: obj({ suggestion: ref('Suggestion'), merged: bool(), mayApprove: bool('Whether you may approve it yourself'), preview: ref('OrganizePreview') }, ['suggestion', 'merged', 'preview']) } },
 
   // Talk
   { method: 'get', path: '/v1/entities/{id}/talk', operationId: 'itemTalk', tag: 'Talk', summary: "An item's talk page: the conversation about it", access: 'public', params: [idParam], ok: { description: 'Comments, oldest first, replies by parent', schema: obj({ talk: arr(ref('Comment')) }, ['talk']) } },
@@ -238,7 +244,18 @@ const OPERATIONS: Operation[] = [
   // Tokens (site only: a token never makes tokens)
   { method: 'get', path: '/v1/tokens', operationId: 'listTokens', tag: 'Tokens', summary: 'Your API tokens (their prefixes only), revoked ones marked', access: 'site', ok: { description: 'Tokens', schema: obj({ tokens: arr(ref('ApiToken')) }, ['tokens']) } },
   { method: 'post', path: '/v1/tokens', operationId: 'createToken', tag: 'Tokens', summary: 'Make an API token; the token itself is shown this once', access: 'site', body: obj({ name: str('What uses it', { minLength: 1, maxLength: 80 }), scopes: arr({ enum: ['read', 'write'] }, 'Default: read'), expiresInDays: int(undefined, { minimum: 1, maximum: 3650 }) }, ['name']), ok: { status: 201, description: 'The token, and what is kept of it', schema: { allOf: [ref('ApiToken'), obj({ token: str('rhp_… - keep it secret') }, ['token'])] } } },
-  { method: 'delete', path: '/v1/tokens/{id}', operationId: 'revokeToken', tag: 'Tokens', summary: 'Revoke a token; it stops working at once', access: 'site', params: [path('id', str(undefined, { pattern: '^tok-[\\w-]+$' }))], ok: { description: 'Revoked', schema: OK } },
+  { method: 'delete', path: '/v1/tokens/{id}', operationId: 'revokeToken', tag: 'Tokens', summary: 'Revoke a token, or end a connected app; it stops working at once', access: 'site', params: [path('id', str('tok-… for a token, oac-… for a connected app', { pattern: '^(tok|oac)-[\\w-]+$' }))], ok: { description: 'Revoked', schema: OK } },
+
+  // Connecting an app with OAuth 2.1 (Claude and other MCP clients)
+  { method: 'get', path: '/.well-known/oauth-protected-resource', operationId: 'protectedResource', tag: 'OAuth', summary: "The API's Protected Resource Metadata (RFC 9728): which authorization server gives its tokens", access: 'public', ok: { description: 'Metadata', schema: ref('ProtectedResource') } },
+  { method: 'get', path: '/.well-known/oauth-protected-resource/mcp', operationId: 'mcpProtectedResource', tag: 'OAuth', summary: "The MCP server's Protected Resource Metadata (RFC 9728), named in its 401's WWW-Authenticate", access: 'public', ok: { description: 'Metadata', schema: ref('ProtectedResource') } },
+  { method: 'get', path: '/.well-known/oauth-authorization-server', operationId: 'authorizationServer', tag: 'OAuth', summary: 'Authorization Server Metadata (RFC 8414): the endpoints, scopes read and write, PKCE S256, registration and Client ID Metadata Documents', access: 'public', ok: { description: 'Metadata', schema: any() } },
+  { method: 'post', path: '/oauth/register', operationId: 'oauthRegister', tag: 'OAuth', summary: 'Register an app (RFC 7591): its name and redirect addresses; a secret only if it asks for one', access: 'public', body: obj({ client_name: str(), client_uri: str(), redirect_uris: arr(str(), "https, http://localhost, or an app's own scheme"), token_endpoint_auth_method: { enum: ['none', 'client_secret_post', 'client_secret_basic'] }, grant_types: arr(str()), response_types: arr(str()) }, ['redirect_uris']), ok: { status: 201, description: 'The app, with its client_id', schema: any() } },
+  { method: 'get', path: '/oauth/authorize', operationId: 'oauthAuthorize', tag: 'OAuth', summary: "Start connecting (authorization code with PKCE): the person is sent to the site's consent page, then back to the app", access: 'public', params: [query('response_type', { enum: ['code'] }, undefined, true), query('client_id', str("A registered client_id, or the https address of the app's Client ID Metadata Document"), undefined, true), query('redirect_uri', str()), query('scope', str('read, write or both, space separated (default both; the person may allow reading only)')), query('state', str()), query('code_challenge', str('base64url sha256 of the verifier'), undefined, true), query('code_challenge_method', { enum: ['S256'] }, undefined, true), query('resource', str('RFC 8707: https://api.rebbehub.org/mcp (the MCP server) or https://api.rebbehub.org (the whole API)')), query('ui_locales', str('en for the consent page in English'))], ok: { status: 302, description: 'To the consent page, or back to the app with an error' } },
+  { method: 'post', path: '/oauth/token', operationId: 'oauthToken', tag: 'OAuth', summary: 'Trade a code (with its PKCE verifier) or a refresh token for an access token (an hour) and a new refresh token', access: 'public', body: { raw: 'application/x-www-form-urlencoded', description: 'grant_type, client_id, and code, code_verifier, redirect_uri, resource; or refresh_token (and scope, resource)' }, ok: { description: 'Tokens', schema: obj({ access_token: str('rho_…'), token_type: { const: 'Bearer' }, expires_in: int(), refresh_token: str('rhr_…'), scope: str() }, ['access_token', 'token_type', 'expires_in', 'refresh_token', 'scope']) }, also: { '401': 'invalid_client: the app is not known, or its secret is wrong' } },
+  { method: 'post', path: '/oauth/revoke', operationId: 'oauthRevoke', tag: 'OAuth', summary: 'Revoke an access or refresh token (RFC 7009): the whole connection ends', access: 'public', body: { raw: 'application/x-www-form-urlencoded', description: 'token (and token_type_hint, client_id)' }, ok: { description: 'Done, whether or not the token was known' } },
+  { method: 'get', path: '/v1/oauth/requests/{id}', operationId: 'oauthRequest', tag: 'OAuth', summary: "An app's request to connect, for the consent page: the app, where it sends the person back, the scopes", access: 'site', params: [path('id', str(undefined, { pattern: '^oar-[\\w-]+$' }))], ok: { description: 'The request', schema: any() } },
+  { method: 'post', path: '/v1/oauth/requests/{id}', operationId: 'oauthDecide', tag: 'OAuth', summary: "The person's answer to an app's request to connect; answers where to send the browser", access: 'site', params: [path('id', str(undefined, { pattern: '^oar-[\\w-]+$' }))], body: obj({ approve: bool(), scopes: arr({ enum: ['read', 'write'] }, 'Allowed; never more than asked') }, ['approve']), ok: { description: 'Where to go', schema: obj({ redirect: str() }, ['redirect']) } },
 
   // Mirrors and dumps
   { method: 'get', path: '/v1/mirrors', operationId: 'mirrors', tag: 'Mirrors', summary: 'Everything a mirror needs: the git mirror, the release keys, every edition and its dumps', access: 'public', ok: { description: 'Mirrors', schema: any() } },
@@ -252,7 +269,7 @@ const OPERATIONS: Operation[] = [
   { method: 'post', path: '/oai', operationId: 'oaiPost', tag: 'Libraries', summary: 'OAI-PMH, the same arguments sent as a form', access: 'public', body: { raw: 'application/x-www-form-urlencoded', description: 'verb and the other arguments' }, ok: { description: 'OAI-PMH XML', type: 'text/xml' } },
 
   // Agents
-  { method: 'post', path: '/mcp', operationId: 'mcp', tag: 'Agents', summary: 'The Model Context Protocol server (Streamable HTTP, JSON answers, no sessions)', description: 'Tools: search, get_item, list_children, get_text, suggest_fix (with a write token). Send JSON-RPC 2.0; see docs/developers/agents.md.', access: 'optional', body: any('A JSON-RPC 2.0 message, or a batch'), ok: { description: 'The JSON-RPC answer', schema: any() }, also: { '202': 'Only notifications were sent: nothing to answer' } },
+  { method: 'post', path: '/mcp', operationId: 'mcp', tag: 'Agents', summary: 'The Model Context Protocol server (Streamable HTTP, JSON answers, no sessions)', description: 'Tools: search, get_item, list_children, get_text, suggest_fix, list_issues, open_issue. Send JSON-RPC 2.0. Reading needs no account. A writing tool without a token answers 401 with WWW-Authenticate naming the Protected Resource Metadata (so MCP clients such as claude.ai ask the person to connect with OAuth), and with a read-only token 403 insufficient_scope. See docs/developers/agents.md.', access: 'optional', body: any('A JSON-RPC 2.0 message, or a batch'), ok: { description: 'The JSON-RPC answer', schema: any() }, also: { '202': 'Only notifications were sent: nothing to answer', '401': 'A writing tool without a token: WWW-Authenticate says where to connect', '403': 'A writing tool with a read-only token: insufficient_scope' } },
   { method: 'get', path: '/mcp', operationId: 'mcpStream', tag: 'Agents', summary: 'Not offered: this server opens no event stream', access: 'public', ok: { status: 405, description: 'POST only' } },
   { method: 'delete', path: '/mcp', operationId: 'mcpEnd', tag: 'Agents', summary: 'Not offered: there are no sessions to end', access: 'public', ok: { status: 405, description: 'POST only' } },
 
@@ -287,16 +304,17 @@ const OPERATIONS: Operation[] = [
 // ------------------------------------------------------------------ shared schemas
 
 const SCHEMAS: Record<string, Schema> = {
+  Via: obj({ kind: { enum: ['token', 'oauth'], description: 'A personal API token, or an app connected with OAuth' }, id: str('The token (tok-…) or the connection (oac-…)'), name: str("The token's name, or the app's (Claude)"), client: str("A connected app's client id") }, ['kind', 'id', 'name'], { description: 'Sent by an agent for its author, not by their own hands; null otherwise. The site shows it as "Claude · for @person".' }),
   ApiError: obj(
     {
-      error: { enum: ['bad-request', 'unauthorized', 'forbidden', 'not-found', 'conflict', 'invalid', 'rate-limited', 'internal', 'state'], description: 'What kind of error, for programs' },
+      error: { enum: ['bad-request', 'unauthorized', 'forbidden', 'not-found', 'conflict', 'invalid', 'rate-limited', 'internal', 'state', 'too-large', 'upstream'], description: 'What kind of error, for programs' },
       message: str('What went wrong, for people'),
       detail: { description: 'More, when there is more (a check that failed, the clashes of a merge)' },
       conflicts: arr(any(), 'For a merge that clashes'),
     },
     ['error', 'message'],
   ),
-  About: obj({ name: str(), version: str(), head: int('The latest commit\'s seq'), docs: str(), developers: str(), mcp: str(), licence: any() }, ['name', 'version', 'head']),
+  About: obj({ name: str(), version: str(), head: int('The latest commit\'s seq'), docs: str(), developers: str(), mcp: str('The MCP server'), licence: any() }, ['name', 'version', 'head']),
   Item: obj(
     {
       id: idSchema,
@@ -310,13 +328,83 @@ const SCHEMAS: Record<string, Schema> = {
     ['id', 'type', 'path', 'rev', 'data'],
   ),
   ItemPage: obj({ items: arr(ref('Item')), next: nullable(str('Pass back as cursor for the next page; null on the last')) }, ['items', 'next']),
-  Commit: obj({ seq: int(), at: str(undefined, { format: 'date-time' }), message: str(), mergedBy: str(), author: str(), changes: arr(obj({ id: idSchema, type: str(), path: nullable(str()), rev: int(), data: nullable(any()) })) }, ['seq', 'at', 'message', 'mergedBy', 'author', 'changes']),
+  Commit: obj({ seq: int(), at: str(undefined, { format: 'date-time' }), message: str(), mergedBy: str(), author: str(), via: nullable(ref('Via')), changes: arr(obj({ id: idSchema, type: str(), path: nullable(str()), rev: int(), data: nullable(any()) })) }, ['seq', 'at', 'message', 'mergedBy', 'author', 'changes']),
+  TreeNode: obj(
+    {
+      id: idSchema,
+      type: str(),
+      path: nullable(str()),
+      name: nullable(any('Its name, Hebrew and English')),
+      order: nullable(str('Its sort key among its siblings, when it has one')),
+      counts: obj({ sets: int('Sets under it'), items: int('Items in it (a set)'), units: int('Units of it (a sefer)') }),
+      children: arr(ref('TreeNode')),
+      more: int('Children left out past the limit'),
+    },
+    ['id', 'type', 'path', 'name', 'counts'],
+  ),
+  OrganizeOperation: {
+    type: 'object',
+    description:
+      'One step of a plan. Items are ids (rh-…), or new:<key> for a set made earlier in the same plan. Positions are "start", "end", { after: id } or { before: id }.\n' +
+      '- move { items, to, from?, mode?: add | only, position? }: into a set (a sefer joins it, leaving `from` when given); `to: null` with `from` takes it out; a set under a set or to the top (to: null); a unit to another work, a printing to a work, a scan to a printing, a recording to an event.\n' +
+      '- move-up { items, from? }: a set to its parent\'s parent; an item out of a set into that set\'s parent.\n' +
+      '- rename { item, name?: { he?, en? }, slug?, path? }: old paths redirect, and paths made from it (a sefer\'s units) move along.\n' +
+      '- reorder { items, parent?, position? }: without position, the items take the places they hold in the order given.\n' +
+      '- create-set { key?, name: { he, en? }, slug, parent?, description?, items? }\n' +
+      '- delete-set { item }: only a set that holds nothing.\n' +
+      '- merge { from, into }: everything under or pointing at `from` moves to `into`; `from` is deleted and its paths lead to `into`.\n' +
+      '- split { work, units? | range: { from, to }, title: { he, en? }, slug }: units into a new sefer.',
+    properties: {
+      op: { enum: ['move', 'move-up', 'rename', 'reorder', 'create-set', 'delete-set', 'merge', 'split'] },
+      items: arr(str()),
+      item: str(),
+      to: nullable(str()),
+      from: str(),
+      into: str(),
+      mode: { enum: ['add', 'only'] },
+      position: { oneOf: [{ enum: ['start', 'end'] }, obj({ after: str() }, ['after']), obj({ before: str() }, ['before'])] },
+      parent: nullable(str()),
+      name: any('{ he, en }'),
+      title: any('{ he, en }'),
+      slug: str(undefined, { pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' }),
+      path: str(),
+      key: str(),
+      description: any('{ he, en }'),
+      work: str(),
+      units: arr(str()),
+      range: obj({ from: str(), to: str() }, ['from', 'to']),
+    },
+    required: ['op'],
+  },
+  OrganizePlan: obj(
+    {
+      operations: arr(ref('OrganizeOperation'), 'Done in order, each seeing what the ones before it did'),
+      title: str('The suggestion\'s title; made from the operations when left out', { maxLength: 200 }),
+      description: str(),
+      draft: bool('Keep it a draft instead of sending it for review (organize only)'),
+      apply: bool('Approve it at once where you may approve it yourself (organize only)'),
+    },
+    ['operations'],
+  ),
+  OrganizePreview: obj(
+    {
+      title: str(),
+      summary: arr(str(), 'One line per operation'),
+      items: arr(obj({ id: idSchema, type: str(), name: str(), isNew: bool(), deleted: bool(), pathBefore: nullable(str()), path: nullable(str()), changes: arr(obj({ path: str(), before: {}, after: {} })) }, ['id', 'type', 'changes'])),
+      redirects: arr(obj({ id: idSchema, from: str(), to: nullable(str()) }), 'Old paths and where they lead once approved'),
+      forwards: arr(obj({ from: idSchema, to: idSchema }), 'Items merged into others'),
+      warnings: arr(str()),
+      created: any('The new sets, by their key'),
+    },
+    ['title', 'summary', 'items', 'redirects', 'forwards', 'warnings'],
+  ),
   Suggestion: obj(
     {
       id: int(),
       title: str(),
       description: nullable(str()),
       author: str(),
+      via: nullable(ref('Via')),
       status: { enum: ['draft', 'open', 'merged', 'sent_back', 'withdrawn'] },
       kind: str(),
       project_id: nullable(int()),
@@ -330,7 +418,7 @@ const SCHEMAS: Record<string, Schema> = {
     },
     ['id', 'title', 'author', 'status'],
   ),
-  SuggestionListItem: obj({ id: int(), number: int(), title: str(), status: { enum: ['draft', 'open', 'merged', 'sent_back', 'withdrawn'] }, kind: str(), author: str(), createdAt: str(), submittedAt: nullable(str()), closedAt: nullable(str()), comments: int(), reviewers: arr(str()), approvals: int(), changesRequested: bool(), fixes: arr(int(), 'Issues it closes, by number') }, ['id', 'number', 'title', 'status', 'author']),
+  SuggestionListItem: obj({ id: int(), number: int(), title: str(), status: { enum: ['draft', 'open', 'merged', 'sent_back', 'withdrawn'] }, kind: str(), author: str(), createdAt: str(), submittedAt: nullable(str()), closedAt: nullable(str()), comments: int(), reviewers: arr(str()), approvals: int(), changesRequested: bool(), fixes: arr(int(), 'Issues it closes, by number'), via: nullable(ref('Via')) }, ['id', 'number', 'title', 'status', 'author']),
   Issue: obj(
     {
       id: int(),
@@ -343,6 +431,7 @@ const SCHEMAS: Record<string, Schema> = {
       body: nullable(str()),
       private: bool(),
       author: nullable(str('An account id; null for a reader without an account')),
+      via: nullable(ref('Via')),
       entity: nullable(any()),
       set: nullable(str()),
       labels: arr(obj({ name: str(), description: nullable(str()), color: str() })),
@@ -395,7 +484,8 @@ const SCHEMAS: Record<string, Schema> = {
     },
     ['file', 'page', 'machine', 'image', 'thumb'],
   ),
-  ApiToken: obj({ id: str(), name: str(), prefix: str('Its first characters, to recognise it'), scopes: arr({ enum: ['read', 'write'] }), createdAt: str(), lastUsedAt: nullable(str()), expiresAt: nullable(str()), revokedAt: nullable(str()) }, ['id', 'name', 'prefix', 'scopes', 'createdAt']),
+  ApiToken: obj({ id: str(), kind: { enum: ['personal', 'oauth'], description: "A personal token, or an app connected with OAuth (its name is the app's)" }, name: str(), prefix: str('Its first characters, to recognise it'), scopes: arr({ enum: ['read', 'write'] }), createdAt: str(), lastUsedAt: nullable(str()), expiresAt: nullable(str()), revokedAt: nullable(str()), client: obj({ id: str(), name: str(), uri: nullable(str()), host: nullable(str()) }, ['id', 'name']) }, ['id', 'kind', 'name', 'prefix', 'scopes', 'createdAt']),
+  ProtectedResource: obj({ resource: str(), authorization_servers: arr(str()), scopes_supported: arr(str()), bearer_methods_supported: arr(str()), resource_name: str(), resource_documentation: str() }, ['resource', 'authorization_servers']),
 };
 
 // ------------------------------------------------------------------ the document
@@ -478,6 +568,7 @@ export const API_TAGS = [
   { name: 'Media', description: 'Transcripts and their sync' },
   { name: 'Files', description: 'File bytes (while their rights allow), page images, uploads' },
   { name: 'Suggestions', description: 'Every change is a suggestion, checked and reviewed' },
+  { name: 'Organize', description: 'Moving, renaming, ordering, merging and splitting: the catalog\'s tree put in order, as suggestions' },
   { name: 'Talk', description: 'The conversation on each page' },
   { name: 'Reports', description: 'Reporting a problem, takedowns, families\' requests' },
   { name: 'Issues', description: 'Reports kept like issues: titles, labels, assignees, comments, closing' },
@@ -486,7 +577,8 @@ export const API_TAGS = [
   { name: 'Projects', description: 'Group efforts through a gap, the Missing board' },
   { name: 'Personal', description: 'What you follow, where you stopped' },
   { name: 'Webhooks', description: 'Every merge posted to your address, signed' },
-  { name: 'Tokens', description: 'Personal API tokens, made on the account page' },
+  { name: 'Tokens', description: 'Personal API tokens, made on the account page, and apps connected with OAuth' },
+  { name: 'OAuth', description: 'Connecting an app (Claude, other MCP clients) as a person: OAuth 2.1 with PKCE, registration and metadata' },
   { name: 'Mirrors', description: 'Editions and their signed dumps' },
   { name: 'Libraries', description: 'OAI-PMH and IIIF' },
   { name: 'Agents', description: 'llms.txt and the MCP server' },
@@ -511,7 +603,7 @@ export const OPENAPI = {
   tags: API_TAGS,
   components: {
     securitySchemes: {
-      token: { type: 'http', scheme: 'bearer', bearerFormat: 'rhp_…', description: 'A personal API token from the account page, with the read or write scope.' },
+      token: { type: 'http', scheme: 'bearer', bearerFormat: 'rhp_… or rho_…', description: 'A personal API token from the account page, or an OAuth access token given to a connected app, with the read or write scope.' },
       session: { type: 'apiKey', in: 'cookie', name: '__Host-rh_session', description: "The site's own session, from its own pages only." },
     },
     schemas: SCHEMAS,

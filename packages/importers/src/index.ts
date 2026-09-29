@@ -2,6 +2,7 @@ export { applyPatch, idForKey, ref, runImport, type ImportData, type ImportOptio
 export { GENRE_NAMES, readSichosKodeshWorks, sichosKodeshWorksImporter, type SichosKodeshWorksInput } from './sichosKodeshWorks.js';
 export {
   audioUrl,
+  driveOrigin,
   FARBRENGENS_SET,
   occasionDate,
   pdfUrl,
@@ -10,11 +11,12 @@ export {
   sichosKodeshOccasionsImporter,
   type CatalogEntry,
 } from './sichosKodeshOccasions.js';
+export { driveLink, proxiedDriveFile, relinkDrive, type DriveFileRef } from './driveLinks.js';
 export { articleOf, htmlToPageVersion, sourceFooter, type HtmlToPageOptions, type SourceFooter } from './htmlToPageText.js';
 export { REBBEHUB_API, textUrl, fetchTexts } from './sichosKodeshTexts.js';
 export { MAFTEIACH, driveFileId, mafteiachBody, mafteiachLinks, mafteiachPage, readMafteiachCrawl, type MafteiachRecord } from './mafteiachIndex.js';
 export { CHABAD_LIBRARY, LIBRARY_CREDIT, chabadLibraryImporter, crawlChabadLibrary, libraryHtml, libraryWorks, readChabadLibrary, renderLibraryPage, type LibraryTree } from './chabadLibrary.js';
-export { OTZROS_FOLDER, OTZROS_SET, driveLibraryImporter, driveViewUrl, listDriveFolder, parseFolderView, type DriveFolder } from './driveLibrary.js';
+export { OTZROS_FOLDER, OTZROS_SET, driveLibraryImporter, otzrosFolderSetKey, driveViewUrl, listDriveFolder, parseFolderView, type DriveFolder } from './driveLibrary.js';
 export { HEBREWBOOKS, HEBREWBOOKS_SET, genreOfTitle, hebrewBooksImporter, placeLikeCommitted, printedAt, readHebrewBooks, type HebrewBooksInput, type HebrewBooksShelf } from './hebrewBooks.js';
 export { IGROS_WORK, igrosImporter, letterDate, letterKey, readIgrosBuild, type IgrosLetterRecord } from './igros.js';
 export { ASHREINU, JEM_SET, jemDate, jemFilename, jemImporter, jemKind, jemPlayerUrl, matchFarbrengens, partName, readJemIndex, type JemIndex, type JemInput, type JemNode, type JemRecording } from './jem.js';

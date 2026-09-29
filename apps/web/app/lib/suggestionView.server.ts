@@ -65,6 +65,8 @@ export interface SuggestionView {
   title: string;
   description: string | null;
   author: string;
+  /** Sent by an agent for its author (a token, a connected app). */
+  via: SuggestionDetail['changeset']['via'] | null;
   status: SuggestionDetail['changeset']['status'];
   createdAt: string;
   submittedAt: string | null;
@@ -245,6 +247,7 @@ export async function suggestionView(api: RebbeHubApi, detail: SuggestionDetail,
     title: cs.title,
     description: cs.description,
     author: cs.author,
+    via: cs.via ?? null,
     status: cs.status,
     createdAt: cs.created_at,
     submittedAt: cs.submitted_at,

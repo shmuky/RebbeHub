@@ -3,7 +3,10 @@ import { join } from 'node:path';
 import { isValidDateKey } from '@rebbehub/hebrew';
 import type { EventLink, EventLinkKind, LocalName } from '@rebbehub/model';
 import { ref, type ImportRecord, type Importer } from './importer.js';
+import { SICHOS_KODESH_MEDIA_PROXY } from './driveLinks.js';
 import { mafteiachBody, mafteiachLinks, type MafteiachRecord } from './mafteiachIndex.js';
+
+export { SICHOS_KODESH_MEDIA_PROXY };
 
 /**
  * Every farbrengen Sichos-Kodesh knows, with its recordings and its
@@ -11,8 +14,10 @@ import { mafteiachBody, mafteiachLinks, type MafteiachRecord } from './mafteiach
  * (apps/web/src/catalog/data/<year>.json, made by its packages/catalog from
  * the mafteiach.app crawl). Read from a Sichos-Kodesh checkout at run time -
  * RebbeHub keeps no copy - and turned into events, one recording per part,
- * and links to the PDFs. The audio and the PDFs stay where they are and are
- * reached through Sichos-Kodesh's media proxy, as its app reaches them.
+ * and links to the PDFs. The audio and the PDFs stay where they are: each
+ * PDF is linked at its own address on Google Drive (driveLinks.ts), which
+ * the site reads through RebbeHub's API; the recordings play through
+ * Sichos-Kodesh's media proxy, as its app plays them.
  */
 
 /** Sichos-Kodesh's catalog schema 1 (its packages/catalog/src/types.ts), as far as this reads it. */
@@ -39,9 +44,6 @@ export interface CatalogEntry {
   audio: CatalogAudio[];
   pdfs: CatalogPdf[];
 }
-
-/** Where Sichos-Kodesh's app fetches its recordings and PDFs (its apps/web/src/config.ts). */
-export const SICHOS_KODESH_MEDIA_PROXY = 'https://sichos-kodesh-media-proxy.shmuky.workers.dev';
 
 export const FARBRENGENS_SET = { key: 'rebbehub-set:farbrengens', path: '/sets/farbrengens', name: { he: 'התוועדויות', en: 'Farbrengens' } } as const;
 
@@ -76,6 +78,7 @@ export const driveOrigin = (pdf: Pick<CatalogPdf, 'driveFileId' | 'resourceKey'>
 
 export const audioUrl = (file: string, proxy = SICHOS_KODESH_MEDIA_PROXY) => `${proxy}/jem-audio/${encodeURIComponent(file)}`;
 
+/** A PDF's address on the media proxy, as imports before stored it (`rebbehub relink-drive` replaces these with `driveOrigin`). */
 export const pdfUrl = (pdf: Pick<CatalogPdf, 'driveFileId' | 'resourceKey'>, proxy = SICHOS_KODESH_MEDIA_PROXY) =>
   `${proxy}/drive/${encodeURIComponent(pdf.driveFileId)}?filename=${encodeURIComponent(pdf.driveFileId)}.pdf${pdf.resourceKey ? `&resourcekey=${encodeURIComponent(pdf.resourceKey)}` : ''}`;
 
@@ -121,9 +124,10 @@ export function sichosKodeshOccasionsImporter(
         if (!when) continue; // a date mafteiach itself could not place
         const key = `mafteiach-occasion:${entry.occasionId}`;
         const record = index.get(entry.occasionId);
-        const drive = (driveFileId: string, url: string) => pdfUrl({ driveFileId, resourceKey: new URL(url).searchParams.get('resourcekey') ?? undefined }, proxy);
+        const drive = (driveFileId: string, url: string) => driveOrigin({ driveFileId, resourceKey: new URL(url).searchParams.get('resourcekey') ?? undefined });
         const links: EventLink[] = [
-          ...entry.pdfs.map((pdf) => ({ kind: LINK_KINDS[pdf.section] ?? 'other', label: localName(pdf.label), url: pdfUrl(pdf, proxy), source: 'mafteiach' as const, origin: driveOrigin(pdf) })),
+          // The file on Drive, as the mafteiach links it, is both where it is read from and its origin.
+          ...entry.pdfs.map((pdf) => ({ kind: LINK_KINDS[pdf.section] ?? 'other', label: localName(pdf.label), url: driveOrigin(pdf), source: 'mafteiach' as const, origin: driveOrigin(pdf) })),
           ...(record ? mafteiachLinks(record, new Set(entry.pdfs.map((p) => p.driveFileId)), drive) : []),
         ].sort((a, b) => LINK_ORDER.indexOf(a.kind) - LINK_ORDER.indexOf(b.kind));
         const body = record ? mafteiachBody(record) : null;

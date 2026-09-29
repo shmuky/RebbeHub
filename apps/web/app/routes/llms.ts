@@ -24,7 +24,7 @@ Ids (rh-7k2m9q4d) are permanent; paths (/likkutei-sichos/12/3, /events/5742-05-1
 
 - [OpenAPI 3.1](${api}/openapi.json): every route
 - [Interactive reference](${site}/developers/reference)
-- [MCP server](${api}/mcp): Streamable HTTP, tools search, get_item, list_children, get_text, suggest_fix, list_issues, open_issue (suggesting and opening issues need a token with the write scope: Authorization: Bearer rhp_…)
+- [MCP server](${api}/mcp): Streamable HTTP, tools search, get_item, list_children, get_text, suggest_fix, list_issues, open_issue. Reading needs no account; suggesting and opening issues need the person's account with the write scope: the server answers 401 with WWW-Authenticate so clients connect with OAuth (the person approves on rebbehub.org), or send a personal token (Authorization: Bearer rhp_…)
 - [Everything in one file](${site}/llms-full.txt)
 
 ## Docs

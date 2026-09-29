@@ -95,6 +95,7 @@ describe('errors, CORS and caching', () => {
     expect(mayUseEdgeCache(request('/v1/auth/me'))).toBe(false);
     expect(mayUseEdgeCache(request('/v1/entities/rh-7k2m9q4d', { headers: { 'Cache-Control': 'no-cache' } }))).toBe(false);
     expect(mayUseEdgeCache(request('/mcp'))).toBe(false);
+    for (const path of ['/oauth/authorize?client_id=x', '/.well-known/oauth-authorization-server', '/.well-known/oauth-protected-resource/mcp', '/v1/oauth/requests/oar-x']) expect(mayUseEdgeCache(request(path)), path).toBe(false);
     expect(mayUseEdgeCache(request('/objects/abc', { headers: { Range: 'bytes=0-99' } }))).toBe(false);
   });
 });

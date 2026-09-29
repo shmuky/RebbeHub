@@ -43,6 +43,8 @@ On Workers, from `wrangler.toml` and the Worker's settings; with
 | `FILES_BASE_URL` | no | where file bytes are served, when not the API itself |
 | `RATE_LIMIT_ADDRESS`, `RATE_LIMIT_TOKEN`, `RATE_LIMIT_SEARCH` (bindings) | - | rate limits per address, per API token, and for searching per address ([developers/rate-limits](developers/rate-limits.md)); without them nothing is counted |
 | `RATE_LIMIT_ADDRESS_PER_MINUTE`, `RATE_LIMIT_TOKEN_PER_MINUTE`, `RATE_LIMIT_SEARCH_PER_MINUTE` | no | what those bindings allow, for the `RateLimit-Policy` header; keep them equal to the bindings' limits |
+| `RATE_LIMIT_DRIVE` (binding) | - | Google Drive files read for the site per address a minute (`GET /v1/drive/<id>`, 120), on top of the address's allowance; without it they are not counted apart |
+| `DRIVE_MAX_MB` | no | the largest Drive file `GET /v1/drive/<id>` passes on, in MB (default 300) |
 
 Under Node only: `PORT`, `HOST`, `PGLITE_DIR`, `DEV_ACCOUNT` (signs every
 request in as one account, on localhost only), `DEV_EMAIL=1` (prints
@@ -74,17 +76,25 @@ from a file outside the repository, never set as a variable here
 
 ## Upstream addresses
 
-A few public addresses belong to Sichos-Kodesh, not to a deployment, and
-are written in the code and in the catalog's own data (recordings' and
-PDFs' URLs):
+A few public addresses belong to others, not to a deployment:
 
+- Google Drive (`drive.google.com`, `drive.usercontent.google.com`): the
+  catalog stores each PDF on Drive at its own address
+  (`https://drive.google.com/file/d/<id>/view`, the mafteiach's and
+  Otzros HaRebbe's link), and the API reads it for the site's reader and
+  player (`GET /v1/drive/<id>`, `services/api/src/drive.ts`): only files an
+  item links to, with CORS and Range, a whole file kept at Cloudflare's
+  edge for a week, up to `DRIVE_MAX_MB`, counted by `RATE_LIMIT_DRIVE`.
 - `https://sichos-kodesh-media-proxy.shmuky.workers.dev`: Sichos-Kodesh's
-  media proxy, which the recordings and linked PDFs the importers bring
-  are played and read through (`SICHOS_KODESH_MEDIA_PROXY` in
-  `packages/importers`, and the site's reader);
-- `https://sichos-kodesh-pack-api.shmuky.workers.dev/v1/objects.json`:
-  Sichos-Kodesh's archive list, which `rebbehub reading-copies` reads
-  (`--archive` names another).
+  media proxy. JEM's recordings still play through it (`/jem-audio/<file>`,
+  `SICHOS_KODESH_MEDIA_PROXY` in `packages/importers`): they are JEM's, on
+  its own servers, not on Drive. Imports before stored Drive PDFs on it
+  too; `rebbehub relink-drive` ([operations](operations.md#drive-links))
+  suggests their Drive links instead, and until then the site reads those
+  through `GET /v1/drive/<id>` as well.
+- The `sichos-kodesh-archive` R2 bucket: Sichos-Kodesh's archive, which
+  `rebbehub reading-copies make` copies scans from, and whose own
+  `objects.json` lists them (`--archive` names another list).
 
-Should they move, they change together with Sichos-Kodesh
+Should the proxy or the archive move, they change together with Sichos-Kodesh
 ([sichos-kodesh](sichos-kodesh.md)).

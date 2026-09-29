@@ -19,7 +19,7 @@ import { Icon } from '../ui/Icon.js';
 import { ReviewBox, type ReviewChoice } from '../ui/ReviewBox.js';
 import { Timeline, TimelineBlock, TimelineComment } from '../ui/Timeline.js';
 import { Avatar, Breadcrumbs, EmptyState, Label, MachineLabel, Skeleton, StatusBadge, type State } from '../ui/primitives.js';
-import { Conversation, FollowToggle, Person, When } from '../views/Conversation.js';
+import { Conversation, FollowToggle, Person, When, Author } from '../views/Conversation.js';
 
 /**
  * One Report, numbered with the suggestions (#12), as an issue's page is
@@ -182,7 +182,7 @@ export default function IssuePage({ loaderData }: Route.ComponentProps) {
               </span>
             ) : null}
             <span>
-              {issue.author ? <Person id={issue.author} people={people} lang={lang} /> : <b>{w(lang, 'guest')}</b>} {w(lang, 'opened')} <When at={issue.createdAt} lang={lang} /> · {issue.comments} {w(lang, 'comments')}
+              {issue.author ? <Author id={issue.author} people={people} lang={lang} via={issue.via} /> : <b>{w(lang, 'guest')}</b>} {w(lang, 'opened')} <When at={issue.createdAt} lang={lang} /> · {issue.comments} {w(lang, 'comments')}
             </span>
             {author?.bot && issue.type === 'wrong-text' ? (
               <MachineLabel lang={lang} size="sm">
@@ -203,7 +203,7 @@ export default function IssuePage({ loaderData }: Route.ComponentProps) {
               mine={Boolean(viewer && viewer === issue.author)}
               header={
                 <>
-                  {issue.author ? <Person id={issue.author} people={people} lang={lang} /> : <b>{w(lang, 'guest')}</b>} <span className="muted">{w(lang, 'wrote')}</span> <When at={issue.createdAt} lang={lang} anchor="description" />
+                  {issue.author ? <Author id={issue.author} people={people} lang={lang} via={issue.via} /> : <b>{w(lang, 'guest')}</b>} <span className="muted">{w(lang, 'wrote')}</span> <When at={issue.createdAt} lang={lang} anchor="description" />
                 </>
               }
             >

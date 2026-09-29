@@ -2,6 +2,7 @@ export { Catalog, PRIVATE_REASONS, isoWeekTag, type ArchiveGapRow, type ChangeEn
 export { CatalogError, type CatalogErrorCode } from './errors.js';
 export { ExportGate } from './gate.js';
 export { derivedRights, fileFromDrive, getDerivations, isCoverProfile, getFile, getPageFix, recordDerivation, recordPageFix, registerFile, setRights, storageTierFor, type DerivationRow, type FileRow, type NewDerivation, type NewFile, type NewPageFix, type PageFixRow, type PageFixVerdict } from './files.js';
+export { driveFileOf, driveFilesOf, knownDriveFile, type DriveFileLink } from './driveFiles.js';
 export { diffData, resolveConflicts, threeWayMerge, UnresolvedConflictError, type Conflict, type FieldChange, type Json, type MergeResult, type Resolution } from './merge.js';
 export { LIVE_TYPES, STEWARD_TYPES, TRUST_THRESHOLD, UPLOAD_HOLD_HOURS, UPLOAD_LIMITS, canApprove, canSuggest, earnedTrust, mayGoLive, uploadAllowance, type Account, type SetInfo } from './permissions.js';
 export { searchTextOf, toTsQuery } from './searchText.js';
@@ -116,6 +117,8 @@ export {
   type UploadProposal,
 } from './print.js';
 export { MAX_TOKENS_PER_PERSON, TOKEN_PREFIX, TOKEN_SCOPES, createApiToken, listApiTokens, looksLikeToken, revokeAllApiTokens, revokeApiToken, tokenGrant, type ApiTokenView, type TokenGrant, type TokenScope } from './tokens.js';
+export { ACCESS_PREFIX, ACCESS_SECONDS, OAuthError, REFRESH_PREFIX, authenticateClient, authorizationRequest, canonicalResource, decideAuthorization, exchangeCode, getClient, isMetadataClientId, listConnections, oauthGrant, parseScopes, redirectMatches, redirectUriProblem, refreshTokens, registerClient, revokeConnection, revokeOAuthToken, startAuthorization, type AuthorizationView, type MetadataFetch, type OAuthClient, type TokenAnswer } from './oauth.js';
+export { actingVia, currentVia, type Via } from './via.js';
 export {
   COVER_ENCODER,
   COVER_SAMPLE_PAGES,
@@ -227,3 +230,20 @@ export { inbox, markRead, unreadCount, type InboxFilter, type InboxLine } from '
 export { inboxHref, inboxText } from './notify.js';
 export { profile, type Profile, type ProfileActivity } from './profiles.js';
 export { SITEMAP_PAGE_SIZE, SITEMAP_TYPES, sitemapChunks, sitemapPage, type SitemapChunk, type SitemapEntry } from './sitemap.js';
+export {
+  MAX_ORGANIZE_ITEMS,
+  MOVE_FIELDS,
+  applyOrganize,
+  catalogTree,
+  keysBetween,
+  nameOfData,
+  previewOrganize,
+  rekey,
+  type OrganizeItem,
+  type OrganizeOperation,
+  type OrganizePlan,
+  type OrganizePosition,
+  type OrganizePreview,
+  type OrganizeRef,
+  type TreeNode,
+} from './organize.js';

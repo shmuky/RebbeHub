@@ -45,7 +45,8 @@ on the site can be done through the API, with the same review.
 - **API tokens**: made and revoked on your account page, read or read and
   write; suggestions sent with one are reviewed like any other.
 - **AI agents**: an MCP server at `https://api.rebbehub.org/mcp` (search,
-  items, texts, suggesting a fix), and
+  items, texts, suggesting a fix) that Claude and other clients connect
+  to with OAuth, approved on the site (reading needs no account), and
   [`/llms.txt`](https://rebbehub.org/llms.txt).
 - **A typed TypeScript client**: [packages/client](packages/client).
 - **The whole catalog**, as signed dumps and a git mirror, for anyone to

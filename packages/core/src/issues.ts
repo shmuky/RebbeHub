@@ -6,6 +6,7 @@ import { badState, forbidden, invalid, notFound } from './errors.js';
 import { canSuggest } from './permissions.js';
 import { keepersOfSet, noteWriting, notify, reportStateChanged, subscribe, threadEvent } from './threads.js';
 import { idsOfUsernames } from './usernames.js';
+import type { Via } from './via.js';
 
 /**
  * A Report kept as an issue (the plan, section 7: "Report a problem"
@@ -66,6 +67,8 @@ export interface Issue {
   closedBy: string | null;
   /** The suggestion that closed it, by number. */
   closedBySuggestion: number | null;
+  /** Sent by an agent for its author (via.ts). */
+  via: Via | null;
 }
 
 /** What the person asking may do with an issue. */
@@ -103,10 +106,11 @@ interface ReportRow {
   labels: IssueLabel[] | null;
   assignees: string[] | null;
   comments: number;
+  via: Via | null;
 }
 
 const ISSUE_SELECT = `
-  SELECT r.id, r.number, r.title, r.reason, r.status, r.note, r.private, r.reporter, r.entity_id, r.set_id, r.created_at, r.updated_at, r.closed_at, r.resolved_by,
+  SELECT r.id, r.number, r.title, r.reason, r.status, r.note, r.private, r.reporter, r.entity_id, r.set_id, r.created_at, r.updated_at, r.closed_at, r.resolved_by, r.via,
          (SELECT c.number FROM changeset c WHERE c.id = r.resolution_changeset) AS resolution_number,
          e.type AS entity_type, e.path AS entity_path,
          coalesce(v.data->'title', v.data->'name', v.data->'label') AS entity_name,
@@ -140,6 +144,7 @@ function issueOf(r: ReportRow): Issue {
     closedAt: iso(r.closed_at),
     closedBy: r.status === 'open' ? null : r.resolved_by,
     closedBySuggestion: r.resolution_number === null ? null : Number(r.resolution_number),
+    via: r.via ?? null,
   };
 }
 

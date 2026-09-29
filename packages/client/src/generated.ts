@@ -5,9 +5,21 @@
 /** The API version this client was generated from. */
 export const API_VERSION = "1.0.0";
 
+/** Sent by an agent for its author, not by their own hands; null otherwise. The site shows it as "Claude · for @person". */
+export type Via = {
+  /** A personal API token, or an app connected with OAuth */
+  kind: "token" | "oauth";
+  /** The token (tok-…) or the connection (oac-…) */
+  id: string;
+  /** The token's name, or the app's (Claude) */
+  name: string;
+  /** A connected app's client id */
+  client?: string;
+};
+
 export type ApiError = {
   /** What kind of error, for programs */
-  error: "bad-request" | "unauthorized" | "forbidden" | "not-found" | "conflict" | "invalid" | "rate-limited" | "internal" | "state";
+  error: "bad-request" | "unauthorized" | "forbidden" | "not-found" | "conflict" | "invalid" | "rate-limited" | "internal" | "state" | "too-large" | "upstream";
   /** What went wrong, for people */
   message: string;
   /** More, when there is more (a check that failed, the clashes of a merge) */
@@ -23,6 +35,7 @@ export type About = {
   head: number;
   docs?: string;
   developers?: string;
+  /** The MCP server */
   mcp?: string;
   licence?: Record<string, unknown>;
 };
@@ -53,6 +66,7 @@ export type Commit = {
   message: string;
   mergedBy: string;
   author: string;
+  via?: Via | null;
   changes: Array<{
     /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
     id?: string;
@@ -63,11 +77,114 @@ export type Commit = {
   }>;
 };
 
+export type TreeNode = {
+  /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+  id: string;
+  type: string;
+  path: string | null;
+  name: Record<string, unknown> | null;
+  order?: string | null;
+  counts: {
+    /** Sets under it */
+    sets?: number;
+    /** Items in it (a set) */
+    items?: number;
+    /** Units of it (a sefer) */
+    units?: number;
+  };
+  children?: Array<TreeNode>;
+  /** Children left out past the limit */
+  more?: number;
+};
+
+/** One step of a plan. Items are ids (rh-…), or new:<key> for a set made earlier in the same plan. Positions are "start", "end", { after: id } or { before: id }. - move { items, to, from?, mode?: add | only, position? }: into a set (a sefer joins it, leaving `from` when given); `to: null` with `from` takes it out; a set under a set or to the top (to: null); a unit to another work, a printing to a work, a scan to a printing, a recording to an event. - move-up { items, from? }: a set to its parent's parent; an item out of a set into that set's parent. - rename { item, name?: { he?, en? }, slug?, path? }: old paths redirect, and paths made from it (a sefer's units) move along. - reorder { items, parent?, position? }: without position, the items take the places they hold in the order given. - create-set { key?, name: { he, en? }, slug, parent?, description?, items? } - delete-set { item }: only a set that holds nothing. - merge { from, into }: everything under or pointing at `from` moves to `into`; `from` is deleted and its paths lead to `into`. - split { work, units? | range: { from, to }, title: { he, en? }, slug }: units into a new sefer. */
+export type OrganizeOperation = {
+  op: "move" | "move-up" | "rename" | "reorder" | "create-set" | "delete-set" | "merge" | "split";
+  items?: Array<string>;
+  item?: string;
+  to?: string | null;
+  from?: string;
+  into?: string;
+  mode?: "add" | "only";
+  position?: "start" | "end" | {
+    after: string;
+  } | {
+    before: string;
+  };
+  parent?: string | null;
+  /** { he, en } */
+  name?: Record<string, unknown>;
+  /** { he, en } */
+  title?: Record<string, unknown>;
+  slug?: string;
+  path?: string;
+  key?: string;
+  /** { he, en } */
+  description?: Record<string, unknown>;
+  work?: string;
+  units?: Array<string>;
+  range?: {
+    from: string;
+    to: string;
+  };
+};
+
+export type OrganizePlan = {
+  /** Done in order, each seeing what the ones before it did */
+  operations: Array<OrganizeOperation>;
+  /** The suggestion's title; made from the operations when left out */
+  title?: string;
+  description?: string;
+  /** Keep it a draft instead of sending it for review (organize only) */
+  draft?: boolean;
+  /** Approve it at once where you may approve it yourself (organize only) */
+  apply?: boolean;
+};
+
+export type OrganizePreview = {
+  title: string;
+  /** One line per operation */
+  summary: Array<string>;
+  items: Array<{
+    /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+    id: string;
+    type: string;
+    name?: string;
+    isNew?: boolean;
+    deleted?: boolean;
+    pathBefore?: string | null;
+    path?: string | null;
+    changes: Array<{
+      path?: string;
+      before?: unknown;
+      after?: unknown;
+    }>;
+  }>;
+  /** Old paths and where they lead once approved */
+  redirects: Array<{
+    /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+    id?: string;
+    from?: string;
+    to?: string | null;
+  }>;
+  /** Items merged into others */
+  forwards: Array<{
+    /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+    from?: string;
+    /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+    to?: string;
+  }>;
+  warnings: Array<string>;
+  /** The new sets, by their key */
+  created?: Record<string, unknown>;
+};
+
 export type Suggestion = {
   id: number;
   title: string;
   description?: string | null;
   author: string;
+  via?: Via | null;
   status: "draft" | "open" | "merged" | "sent_back" | "withdrawn";
   kind?: string;
   project_id?: number | null;
@@ -100,6 +217,7 @@ export type SuggestionListItem = {
   changesRequested?: boolean;
   /** Issues it closes, by number */
   fixes?: Array<number>;
+  via?: Via | null;
 };
 
 export type Issue = {
@@ -117,6 +235,7 @@ export type Issue = {
   body?: string | null;
   private: boolean;
   author?: string | null;
+  via?: Via | null;
   entity?: Record<string, unknown> | null;
   set?: string | null;
   labels: Array<{
@@ -237,6 +356,8 @@ export type Cover = {
 
 export type ApiToken = {
   id: string;
+  /** A personal token, or an app connected with OAuth (its name is the app's) */
+  kind: "personal" | "oauth";
   name: string;
   /** Its first characters, to recognise it */
   prefix: string;
@@ -245,6 +366,21 @@ export type ApiToken = {
   lastUsedAt?: string | null;
   expiresAt?: string | null;
   revokedAt?: string | null;
+  client?: {
+    id: string;
+    name: string;
+    uri?: string | null;
+    host?: string | null;
+  };
+};
+
+export type ProtectedResource = {
+  resource: string;
+  authorization_servers: Array<string>;
+  scopes_supported?: Array<string>;
+  bearer_methods_supported?: Array<string>;
+  resource_name?: string;
+  resource_documentation?: string;
 };
 
 /** Every operation: what it takes and what it answers. */
@@ -322,6 +458,28 @@ export interface Operations {
     };
     output: {
       commit?: number | null;
+    };
+  };
+  /** Authorization Server Metadata (RFC 8414): the endpoints, scopes read and write, PKCE S256, registration and Client ID Metadata Documents */
+  authorizationServer: {
+    input: Record<string, never>;
+    output: Record<string, unknown>;
+  };
+  /** The catalog as a tree: the top sets (or one set or sefer), the sets and items under them, and how much each holds */
+  catalogTree: {
+    input: {
+      /** A set or a sefer (work); left out, the top sets */
+      root?: string;
+      /** How many levels down */
+      depth?: number;
+      /** How many (at most 500) */
+      limit?: number;
+    };
+    output: {
+      root: TreeNode | null;
+      children: Array<TreeNode>;
+      /** Children left out past the limit */
+      more: number;
     };
   };
   /** Before an upload: whether we have it (its sha256, a few page hashes) and what it likely is */
@@ -526,6 +684,13 @@ export interface Operations {
     output: {
       ok: true;
     };
+  };
+  /** A Google Drive file the catalog links to (a hanacha's PDF, an Otzros scan), read for the site's reader and player */
+  driveFile: {
+    input: {
+      id: string;
+    };
+    output: Response;
   };
   /** What a PDF on Google Drive needs to read straight, by its Drive id, or the reading copy to open instead */
   driveFix: {
@@ -1159,6 +1324,11 @@ export interface Operations {
     };
     output: Record<string, unknown>;
   };
+  /** The MCP server's Protected Resource Metadata (RFC 9728), named in its 401's WWW-Authenticate */
+  mcpProtectedResource: {
+    input: Record<string, never>;
+    output: ProtectedResource;
+  };
   /** Everything a mirror needs: the git mirror, the release keys, every edition and its dumps */
   mirrors: {
     input: Record<string, never>;
@@ -1202,6 +1372,62 @@ export interface Operations {
     };
     output: string;
   };
+  /** Start connecting (authorization code with PKCE): the person is sent to the site's consent page, then back to the app */
+  oauthAuthorize: {
+    input: {
+      response_type: "code";
+      client_id: string;
+      redirect_uri?: string;
+      scope?: string;
+      state?: string;
+      code_challenge: string;
+      code_challenge_method: "S256";
+      resource?: string;
+      ui_locales?: string;
+    };
+    output: Response;
+  };
+  /** Register an app (RFC 7591): its name and redirect addresses; a secret only if it asks for one */
+  oauthRegister: {
+    input: {
+      body: {
+        client_name?: string;
+        client_uri?: string;
+        /** https, http://localhost, or an app's own scheme */
+        redirect_uris: Array<string>;
+        token_endpoint_auth_method?: "none" | "client_secret_post" | "client_secret_basic";
+        grant_types?: Array<string>;
+        response_types?: Array<string>;
+      };
+    };
+    output: Record<string, unknown>;
+  };
+  /** Revoke an access or refresh token (RFC 7009): the whole connection ends */
+  oauthRevoke: {
+    input: {
+      body: Blob | ArrayBuffer | Uint8Array | ReadableStream;
+      /** The body's type (audio/mpeg, application/pdf…); default application/x-www-form-urlencoded */
+      contentType?: string;
+    };
+    output: Response;
+  };
+  /** Trade a code (with its PKCE verifier) or a refresh token for an access token (an hour) and a new refresh token */
+  oauthToken: {
+    input: {
+      body: Blob | ArrayBuffer | Uint8Array | ReadableStream;
+      /** The body's type (audio/mpeg, application/pdf…); default application/x-www-form-urlencoded */
+      contentType?: string;
+    };
+    output: {
+      /** rho_… */
+      access_token: string;
+      token_type: "Bearer";
+      expires_in: number;
+      /** rhr_… */
+      refresh_token: string;
+      scope: string;
+    };
+  };
   /** This document */
   openapi: {
     input: Record<string, never>;
@@ -1223,6 +1449,19 @@ export interface Operations {
     };
     output: Issue;
   };
+  /** Organize the catalog: a plan becomes one suggestion, sent for review (apply: true approves it at once where you may approve it yourself) */
+  organize: {
+    input: {
+      body?: OrganizePlan;
+    };
+    output: {
+      suggestion: Suggestion;
+      merged: boolean;
+      /** Whether you may approve it yourself */
+      mayApprove?: boolean;
+      preview: OrganizePreview;
+    };
+  };
   /** Read a Hebrew date as people write it */
   parseDate: {
     input: {
@@ -1235,6 +1474,13 @@ export interface Operations {
       he?: string;
       en?: string;
     };
+  };
+  /** What a plan of moves, renames, orderings, new sets and merges would change, item by item, saved nowhere */
+  previewOrganize: {
+    input: {
+      body?: OrganizePlan;
+    };
+    output: OrganizePreview;
   };
   /** Before adding something new: the machine's guess of what it is and where it belongs, from its name (a date in it, words of a title), and files already held that look like it */
   proposeUpload: {
@@ -1249,6 +1495,11 @@ export interface Operations {
       };
     };
     output: Record<string, unknown>;
+  };
+  /** The API's Protected Resource Metadata (RFC 9728): which authorization server gives its tokens */
+  protectedResource: {
+    input: Record<string, never>;
+    output: ProtectedResource;
   };
   /** Add or change one item in a draft suggestion (data null deletes it) */
   putSuggestionItem: {
@@ -1908,6 +2159,8 @@ export const OPERATIONS = {
   addTranslation: {"method":"POST","path":"/v1/units/{id}/translations","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   anchorSync: {"method":"POST","path":"/v1/recordings/{id}/sync/anchor","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   approveSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/approve","pathParams":["id"],"query":[],"body":"json","answer":"json"},
+  authorizationServer: {"method":"GET","path":"/.well-known/oauth-authorization-server","pathParams":[],"query":[],"body":null,"answer":"json"},
+  catalogTree: {"method":"GET","path":"/v1/tree","pathParams":[],"query":["root","depth","limit"],"body":null,"answer":"json"},
   checkUpload: {"method":"POST","path":"/v1/uploads/check","pathParams":[],"query":[],"body":"json","answer":"json"},
   claimNext: {"method":"POST","path":"/v1/projects/{slug}/next","pathParams":["slug"],"query":[],"body":null,"answer":"json"},
   closeProject: {"method":"POST","path":"/v1/projects/{slug}/close","pathParams":["slug"],"query":[],"body":null,"answer":"json"},
@@ -1925,6 +2178,7 @@ export const OPERATIONS = {
   createSuggestion: {"method":"POST","path":"/v1/suggestions","pathParams":[],"query":[],"body":"json","answer":"json"},
   createWebhook: {"method":"POST","path":"/v1/webhooks","pathParams":[],"query":[],"body":"json","answer":"json"},
   deleteWebhook: {"method":"DELETE","path":"/v1/webhooks/{id}","pathParams":["id"],"query":[],"body":null,"answer":"json"},
+  driveFile: {"method":"GET","path":"/v1/drive/{id}","pathParams":["id"],"query":[],"body":null,"answer":"raw"},
   driveFix: {"method":"GET","path":"/v1/page-fixes/drive/{id}","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   editComment: {"method":"PATCH","path":"/v1/comments/{id}","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   editionChecksums: {"method":"GET","path":"/v1/editions/{tag}/SHA256SUMS","pathParams":["tag"],"query":[],"body":null,"answer":"text"},
@@ -1979,14 +2233,22 @@ export const OPERATIONS = {
   mapContents: {"method":"POST","path":"/v1/suggestions/contents-map","pathParams":[],"query":[],"body":"json","answer":"json"},
   markInboxRead: {"method":"POST","path":"/v1/inbox/read","pathParams":[],"query":[],"body":"json","answer":"json"},
   mcp: {"method":"POST","path":"/mcp","pathParams":[],"query":[],"body":"json","answer":"json"},
+  mcpProtectedResource: {"method":"GET","path":"/.well-known/oauth-protected-resource/mcp","pathParams":[],"query":[],"body":null,"answer":"json"},
   mirrors: {"method":"GET","path":"/v1/mirrors","pathParams":[],"query":[],"body":null,"answer":"json"},
   missing: {"method":"GET","path":"/v1/missing","pathParams":[],"query":["kind","within","limit"],"body":null,"answer":"json"},
   oai: {"method":"GET","path":"/oai","pathParams":[],"query":["verb","metadataPrefix","identifier","from","until","set","resumptionToken"],"body":null,"answer":"text"},
   oaiPost: {"method":"POST","path":"/oai","pathParams":[],"query":[],"body":"application/x-www-form-urlencoded","answer":"text"},
+  oauthAuthorize: {"method":"GET","path":"/oauth/authorize","pathParams":[],"query":["response_type","client_id","redirect_uri","scope","state","code_challenge","code_challenge_method","resource","ui_locales"],"body":null,"answer":"raw"},
+  oauthRegister: {"method":"POST","path":"/oauth/register","pathParams":[],"query":[],"body":"json","answer":"json"},
+  oauthRevoke: {"method":"POST","path":"/oauth/revoke","pathParams":[],"query":[],"body":"application/x-www-form-urlencoded","answer":"raw"},
+  oauthToken: {"method":"POST","path":"/oauth/token","pathParams":[],"query":[],"body":"application/x-www-form-urlencoded","answer":"json"},
   openapi: {"method":"GET","path":"/openapi.json","pathParams":[],"query":[],"body":null,"answer":"json"},
   openIssue: {"method":"POST","path":"/v1/issues","pathParams":[],"query":[],"body":"json","answer":"json"},
+  organize: {"method":"POST","path":"/v1/organize","pathParams":[],"query":[],"body":"json","answer":"json"},
   parseDate: {"method":"GET","path":"/v1/dates/parse","pathParams":[],"query":["q"],"body":null,"answer":"json"},
+  previewOrganize: {"method":"POST","path":"/v1/organize/preview","pathParams":[],"query":[],"body":"json","answer":"json"},
   proposeUpload: {"method":"POST","path":"/v1/uploads/propose","pathParams":[],"query":[],"body":"json","answer":"json"},
+  protectedResource: {"method":"GET","path":"/.well-known/oauth-protected-resource","pathParams":[],"query":[],"body":null,"answer":"json"},
   putSuggestionItem: {"method":"PUT","path":"/v1/suggestions/{id}/items","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   recordingHanacha: {"method":"GET","path":"/v1/recordings/{id}/hanacha","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   recordingTranscript: {"method":"GET","path":"/v1/recordings/{id}/transcript","pathParams":["id"],"query":[],"body":null,"answer":"json"},
@@ -2069,6 +2331,16 @@ export abstract class GeneratedMethods {
   /** Approve and merge (keepers of its sets, stewards) (POST /v1/suggestions/{id}/approve) */
   approveSuggestion(input: Operations['approveSuggestion']['input']): Promise<Operations['approveSuggestion']['output']> {
     return this.call('approveSuggestion', input ?? {} as Operations['approveSuggestion']['input']);
+  }
+
+  /** Authorization Server Metadata (RFC 8414): the endpoints, scopes read and write, PKCE S256, registration and Client ID Metadata Documents (GET /.well-known/oauth-authorization-server) */
+  authorizationServer(): Promise<Operations['authorizationServer']['output']> {
+    return this.call('authorizationServer', {} as Operations['authorizationServer']['input']);
+  }
+
+  /** The catalog as a tree: the top sets (or one set or sefer), the sets and items under them, and how much each holds (GET /v1/tree) */
+  catalogTree(input?: Operations['catalogTree']['input']): Promise<Operations['catalogTree']['output']> {
+    return this.call('catalogTree', input ?? {} as Operations['catalogTree']['input']);
   }
 
   /** Before an upload: whether we have it (its sha256, a few page hashes) and what it likely is (POST /v1/uploads/check) */
@@ -2154,6 +2426,11 @@ export abstract class GeneratedMethods {
   /** Remove a webhook (DELETE /v1/webhooks/{id}) */
   deleteWebhook(input: Operations['deleteWebhook']['input']): Promise<Operations['deleteWebhook']['output']> {
     return this.call('deleteWebhook', input ?? {} as Operations['deleteWebhook']['input']);
+  }
+
+  /** A Google Drive file the catalog links to (a hanacha's PDF, an Otzros scan), read for the site's reader and player (GET /v1/drive/{id}) */
+  driveFile(input: Operations['driveFile']['input']): Promise<Operations['driveFile']['output']> {
+    return this.call('driveFile', input ?? {} as Operations['driveFile']['input']);
   }
 
   /** What a PDF on Google Drive needs to read straight, by its Drive id, or the reading copy to open instead (GET /v1/page-fixes/drive/{id}) */
@@ -2426,6 +2703,11 @@ export abstract class GeneratedMethods {
     return this.call('mcp', input ?? {} as Operations['mcp']['input']);
   }
 
+  /** The MCP server's Protected Resource Metadata (RFC 9728), named in its 401's WWW-Authenticate (GET /.well-known/oauth-protected-resource/mcp) */
+  mcpProtectedResource(): Promise<Operations['mcpProtectedResource']['output']> {
+    return this.call('mcpProtectedResource', {} as Operations['mcpProtectedResource']['input']);
+  }
+
   /** Everything a mirror needs: the git mirror, the release keys, every edition and its dumps (GET /v1/mirrors) */
   mirrors(): Promise<Operations['mirrors']['output']> {
     return this.call('mirrors', {} as Operations['mirrors']['input']);
@@ -2446,6 +2728,26 @@ export abstract class GeneratedMethods {
     return this.call('oaiPost', input ?? {} as Operations['oaiPost']['input']);
   }
 
+  /** Start connecting (authorization code with PKCE): the person is sent to the site's consent page, then back to the app (GET /oauth/authorize) */
+  oauthAuthorize(input: Operations['oauthAuthorize']['input']): Promise<Operations['oauthAuthorize']['output']> {
+    return this.call('oauthAuthorize', input ?? {} as Operations['oauthAuthorize']['input']);
+  }
+
+  /** Register an app (RFC 7591): its name and redirect addresses; a secret only if it asks for one (POST /oauth/register) */
+  oauthRegister(input: Operations['oauthRegister']['input']): Promise<Operations['oauthRegister']['output']> {
+    return this.call('oauthRegister', input ?? {} as Operations['oauthRegister']['input']);
+  }
+
+  /** Revoke an access or refresh token (RFC 7009): the whole connection ends (POST /oauth/revoke) */
+  oauthRevoke(input: Operations['oauthRevoke']['input']): Promise<Operations['oauthRevoke']['output']> {
+    return this.call('oauthRevoke', input ?? {} as Operations['oauthRevoke']['input']);
+  }
+
+  /** Trade a code (with its PKCE verifier) or a refresh token for an access token (an hour) and a new refresh token (POST /oauth/token) */
+  oauthToken(input: Operations['oauthToken']['input']): Promise<Operations['oauthToken']['output']> {
+    return this.call('oauthToken', input ?? {} as Operations['oauthToken']['input']);
+  }
+
   /** This document (GET /openapi.json) */
   openapi(): Promise<Operations['openapi']['output']> {
     return this.call('openapi', {} as Operations['openapi']['input']);
@@ -2456,14 +2758,29 @@ export abstract class GeneratedMethods {
     return this.call('openIssue', input ?? {} as Operations['openIssue']['input']);
   }
 
+  /** Organize the catalog: a plan becomes one suggestion, sent for review (apply: true approves it at once where you may approve it yourself) (POST /v1/organize) */
+  organize(input?: Operations['organize']['input']): Promise<Operations['organize']['output']> {
+    return this.call('organize', input ?? {} as Operations['organize']['input']);
+  }
+
   /** Read a Hebrew date as people write it (GET /v1/dates/parse) */
   parseDate(input: Operations['parseDate']['input']): Promise<Operations['parseDate']['output']> {
     return this.call('parseDate', input ?? {} as Operations['parseDate']['input']);
   }
 
+  /** What a plan of moves, renames, orderings, new sets and merges would change, item by item, saved nowhere (POST /v1/organize/preview) */
+  previewOrganize(input?: Operations['previewOrganize']['input']): Promise<Operations['previewOrganize']['output']> {
+    return this.call('previewOrganize', input ?? {} as Operations['previewOrganize']['input']);
+  }
+
   /** Before adding something new: the machine's guess of what it is and where it belongs, from its name (a date in it, words of a title), and files already held that look like it (POST /v1/uploads/propose) */
   proposeUpload(input: Operations['proposeUpload']['input']): Promise<Operations['proposeUpload']['output']> {
     return this.call('proposeUpload', input ?? {} as Operations['proposeUpload']['input']);
+  }
+
+  /** The API's Protected Resource Metadata (RFC 9728): which authorization server gives its tokens (GET /.well-known/oauth-protected-resource) */
+  protectedResource(): Promise<Operations['protectedResource']['output']> {
+    return this.call('protectedResource', {} as Operations['protectedResource']['input']);
   }
 
   /** Add or change one item in a draft suggestion (data null deletes it) (PUT /v1/suggestions/{id}/items) */

@@ -133,7 +133,9 @@ rebbehub reading-copies make --from ../Sichos-Kodesh --work .data/reading-copies
 rebbehub reading-copies publish --from ../Sichos-Kodesh --work .data/reading-copies
 ```
 
-`make` copies each scan from the archive into `rebbehub-public`
+`make` reads the archive's list of what it holds (`objects.json` in the
+archive's own bucket; `--archive` names another), copies each scan from
+the archive into `rebbehub-public`
 (`objects/<sha256>`) and puts its reading copy next to it; a run that
 stops goes on where it left off. `publish` writes the manifest -
 `manifests/reading-copies/sichos-kodesh.json`, served at
@@ -188,6 +190,54 @@ page-fixes register`, which records each PDF as a file RebbeHub knows but
 does not hold (a publisher's scan: link only, stored nowhere) with its
 page fix. `GET /v1/page-fixes/drive/<Drive id>` answers the reader: the
 turns, or the reading copy to open instead when RebbeHub serves one.
+
+## Drive links
+
+The catalog stores each PDF on Google Drive at its own address
+(`https://drive.google.com/file/d/<id>/view`, as the mafteiach and
+Otzros HaRebbe link it), and the site reads it through the API's own
+route, `GET /v1/drive/<id>` (`services/api/src/drive.ts`), in place of
+Sichos-Kodesh's media proxy:
+
+- it answers only for files an item on main links to (the `drive_file`
+  table, kept with every merge, `packages/core/src/driveFiles.ts`), so it
+  is not a way to fetch any file from Drive; a file linked with a resource
+  key is fetched with it;
+- it passes a `Range` on to Drive and answers the part (the player seeks);
+  a whole file is kept at Cloudflare's edge for a week;
+- a file over `DRIVE_MAX_MB` (300) is refused (413), and `RATE_LIMIT_DRIVE`
+  counts files read per address (120 a minute), on top of the address's
+  allowance ([configuration](configuration.md));
+- Drive answers a file it will not give (too many downloads today, no
+  longer shared) with a page: the API says 502, and the reader shows its
+  error with the link to the file on Drive.
+
+Imports before this stored Drive PDFs on the media proxy
+(`https://sichos-kodesh-media-proxy.shmuky.workers.dev/drive/<id>?…`): a
+farbrengen's hanachos, and an Otzros page's reading copy beside its Drive
+copy. The reader still opens those through the API, and one job turns
+them into Drive links:
+
+```sh
+rebbehub relink-drive --dry-run      # counts what it would change, by type
+rebbehub relink-drive [--chunk 500]  # one bot Suggestion per 500 items, for review
+```
+
+or the **Upkeep (manual)** workflow's `relink-drive-dry-run` and
+`relink-drive`. Each link on the proxy becomes the file's Drive link
+(with its resource key); a link's `origin`, label and the rest stay as
+they are; an Otzros page's reading copy, then the same as its Drive copy,
+is dropped. Each Suggestion is the relink bot's (`bot:relink-drive`,
+labelled a bot) and is approved like any import: by a steward or the
+keepers of the affected Sets. Running it again sends only what is still on
+the proxy and not already waiting in one of its Suggestions; once all are
+approved it finds nothing. JEM's recordings (`/jem-audio/<file>`) are not
+on Drive and stay on the proxy.
+
+On the catalog as the Sichos-Kodesh checkout builds it, that is about
+3,300 farbrengens (some 14,000 hanacha links, more with the mafteiach
+index's own Drive links) and about 5,400 Otzros pages: some 18
+Suggestions. The dry run says the real numbers.
 
 ## Text and sync
 
@@ -329,6 +379,7 @@ API or Postgres.
 | API sums of the whole catalog (`/v1/stats`, `/v1/health`, `/v1/community`, `/v1/refcounts`) | as above | 10 minutes, then stale for an hour | `platform.ts` (`PUBLIC_SUMMARY`) |
 | `/v1/sitemap…`, `/openapi.json`, `/llms.txt` | as above | an hour / 5 minutes / an hour | - |
 | File bytes (`/objects/<sha256>`: covers, page images, audio) | edge (whole files) and browsers | a day | `services/api/src/app.ts` |
+| Google Drive files the catalog links to (`/v1/drive/<id>`) | edge (whole files) and browsers | a week at the edge, a day in browsers (`immutable`: a Drive id's bytes do not change) | `services/api/src/drive.ts` |
 | Reads with a token or a session, and every change | nowhere | - | - |
 
 Each Worker has two entrypoints (`[exports]` in its `wrangler.toml`): the

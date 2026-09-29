@@ -37,6 +37,9 @@ export default [
   route('_/steward/*', 'routes/admin-pass.ts'),
   // People and conversations: @mentions, #numbers, reviews, issues and the inbox.
   route('_/threads/*', 'routes/threads-pass.ts'),
+  // Organizing the catalog: moving, renaming, ordering and merging, as one suggestion.
+  route('organize', 'routes/organize.tsx'),
+  route('_/organize/*', 'routes/organize-pass.ts'),
   route('admin', 'routes/admin.tsx'),
   route('review', 'routes/review.tsx'),
   route('missing', 'routes/missing.tsx'),
@@ -52,6 +55,9 @@ export default [
   route('mirrors', 'routes/mirrors.tsx'),
   route('projects/:slug', 'routes/project.tsx'),
   route('signin', 'routes/signin.tsx'),
+  // Connecting an app (Claude, another MCP client) to your account: the API's OAuth sends you here to say yes or no.
+  route('oauth/consent', 'routes/oauth-consent.tsx'),
+  route('_/oauth/*', 'routes/oauth-pass.ts'),
   // Suggestions as conversations and Reports as Issues, numbered together (#12), like pull requests and issues.
   route('suggestions', 'routes/suggestions-list.tsx'),
   route('suggestions/:number', 'routes/suggestion.tsx'),

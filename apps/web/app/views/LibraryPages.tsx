@@ -90,6 +90,7 @@ const W = {
   knowPrinting: { he: 'יודעים על הדפסה, סריקה או הקלטה שחסרה כאן?', en: 'Know of a printing, scan or recording that is missing here?' },
   addIt: { he: 'הוסיפו אותה', en: 'Add it' },
   tellUs: { he: 'ספרו לנו', en: 'Tell us' },
+  organize: { he: 'סידור', en: 'Organize' },
 } as const;
 
 const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
@@ -110,6 +111,16 @@ function HelpNote({ lang, title, to, action }: { lang: Lang; title: string; to: 
         {action}
       </Link>
     </div>
+  );
+}
+
+/** Into the organizing view of this set or sefer: move, rename, reorder and merge what is in it. */
+function OrganizeLink({ id, lang }: { id: string; lang: Lang }) {
+  return (
+    <Link className="btn" to={href('/organize', lang, { root: id })}>
+      <Icon name="layers" />
+      {w(lang, 'organize')}
+    </Link>
   );
 }
 
@@ -134,6 +145,7 @@ export function SetPage({ entity, view, lang }: { entity: Entity; view: ItemView
         ].filter((f): f is NonNullable<typeof f> => f !== null) as never,
         tabs: [{ key: 'page', label: t(lang, 'seforim'), icon: 'book', to: href(itemPath(entity), lang), count: works.length || undefined }, ...commonTabs(entity, view, lang)],
         tab: 'page',
+        actions: <OrganizeLink id={entity.id} lang={lang} />,
       }}
       side={
         <>
@@ -355,6 +367,7 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
         desc: d.description ? <p>{nameOf(d.description, lang)}</p> : undefined,
         actions: (
           <>
+            <OrganizeLink id={entity.id} lang={lang} />
             {toc?.read.scanFile ? (
               <Link className="btn" to={href(`/files/${toc.read.scanFile}`, lang)}>
                 <Icon name="down" />
