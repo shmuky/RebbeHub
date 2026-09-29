@@ -56,6 +56,20 @@ const OUTLINE: PageText = {
   versions: [{ id: 'he', language: 'he', segments: [{ id: 'contents', kind: 'section', text: [{ text: 'תוכן ענינים' }], children: [{ id: 'contents.1', kind: 'item', n: 1, text: [{ text: 'נושא ראשון' }] }, { id: 'contents.2', kind: 'item', n: 2, text: [{ text: '<script>alert(1)</script>' }] }] }] }],
 };
 
+const LIBRARY: PageText = {
+  profile: 'chabad-library',
+  versions: [
+    {
+      id: 'he',
+      language: 'he',
+      credit: 'ספריית ליובאוויטש',
+      url: 'https://chabadlibrary.org/books/11',
+      segments: [{ id: 'p1', kind: 'paragraph', text: [{ text: 'סוף' }, { marker: "עמ' לח" }, { text: ' התחלה' }, { note: 'n1' }] }],
+      notes: [{ id: 'n1', kind: 'note', n: 1, text: [{ text: 'הערה' }] }],
+    },
+  ],
+};
+
 beforeAll(async () => {
   if (!existsSync(`${webRoot}/build/server/index.js`)) execFileSync('npx', ['react-router', 'build'], { cwd: webRoot, stdio: 'ignore' });
   const build = (await import(`${webRoot}/build/server/index.js`)) as ServerBuild;
@@ -69,6 +83,14 @@ beforeAll(async () => {
     'unit',
     { work, position: [{ level: 'chapter', value: '1' }], order: 'V', label: { he: 'פרק א', en: 'Chapter 1' }, body: SEFARIA as never, bodySource: { source: 'sefaria', via: 'sefaria', licence: 'cc-by-nc', credit: 'Sefaria: Test Edition', rights: 'credit' } },
     '/sample/1',
+  );
+  ids.library = await add(
+    catalog,
+    'mendy',
+    'keeper',
+    'unit',
+    { work, position: [{ level: 'chapter', value: '2' }], order: 'W', label: { he: 'פרק ב' }, body: LIBRARY as never, bodySource: { source: 'chabadlibrary', via: 'chabadlibrary', credit: 'ספריית ליובאוויטש', rights: 'credit' } },
+    '/sample/2',
   );
   ids.event = await add(catalog, 'mendy', 'keeper', 'event', { kind: 'farbrengen', title: { he: 'התוועדות' }, date: '5742-05-10', sets: [set], body: OUTLINE as never }, '/events/5742-05-10');
   const api = createApp({ catalog, reportSalt: 'test' });
@@ -94,6 +116,15 @@ describe("a page's words", () => {
     expect(page).toContain('rel="noopener nofollow">The third letter</a>');
     // The Hebrew is set right to left whatever the page's language.
     expect(await html('/sample/1?lang=en')).toMatch(/<div class="words-cell" lang="he" dir="rtl">/);
+  });
+
+  it("draws the Chabad Library's texts with their notes, old pages, and the library's credit linking back to the page", async () => {
+    const page = await html('/sample/2');
+    expect(page).toContain('class="words words-chabad-library"');
+    expect(page).toContain('<span class="words-marker">עמ&#x27; לח</span>');
+    expect(page).toContain('id="n-he-n1"');
+    expect(page).toMatch(/<a href="https:\/\/chabadlibrary\.org\/books\/11"[^>]*>ספריית ליובאוויטש · chabadlibrary\.org<\/a>/);
+    expect(await html('/sample/2?lang=en')).toMatch(/>The Lubavitch Library · chabadlibrary\.org<\/a>/);
   });
 
   it("draws a farbrengen's outline as numbered items, and words that look like markup only as words", async () => {

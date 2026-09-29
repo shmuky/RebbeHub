@@ -17,6 +17,7 @@ const WORDS = {
   machine: { he: 'נכתב בידי מכונה ועדיין לא נבדק בידי אדם - הקטעים שלא נבדקו מסומנים.', en: 'Made by a machine and not yet checked by a person - the segments nobody has checked are marked.' },
   segmentLink: { he: 'קישור לקטע', en: 'Link to this segment' },
   fixHint: { he: 'לחיצה לתיקון', en: 'Click to fix' },
+  library: { he: 'ספריית ליובאוויטש', en: 'The Lubavitch Library' },
 } as const;
 
 const RTL = new Set(['he', 'yi', 'ar']);
@@ -277,8 +278,27 @@ function noteLabels(version: PageVersion): (id: string) => string {
   return (id) => labels.get(id) ?? '*';
 }
 
-/** The credit line of a version: its edition, its licence and where it is read at its source (Sefaria asks for it on every page that uses its texts). */
-function Credit({ version }: { version: PageVersion }) {
+/**
+ * The credit line of a version: its edition, its licence and where it is
+ * read at its source (Sefaria asks for it on every page that uses its
+ * texts). The Chabad Library's texts are shown on the condition of its
+ * credit: the library's name in the reader's language, linking back to
+ * the page there (docs/rights.md).
+ */
+function Credit({ version, profile, lang }: { version: PageVersion; profile?: TextProfile; lang?: Lang }) {
+  if (profile === 'chabad-library' && lang) {
+    return (
+      <p className="words-credit row-sub" lang={lang} dir={dirOf(lang)}>
+        {version.url ? (
+          <a href={version.url} target="_blank" rel="noopener">
+            {`${WORDS.library[lang]} · chabadlibrary.org`}
+          </a>
+        ) : (
+          WORDS.library[lang]
+        )}
+      </p>
+    );
+  }
   const parts = [version.credit ?? version.title, version.licence ? (LICENCES[version.licence] ?? version.licence) : undefined].filter(Boolean);
   let site: string | null = null;
   try {
@@ -310,7 +330,7 @@ function VersionView({ version, profile, lang, edit }: { version: PageVersion; p
     <div className={`words words-${profile}${version.origin && !version.origin.checked ? ' machine' : ''}`} lang={version.language} dir={dirOf(version.language)}>
       <Segments list={version.segments} depth={0} ctx={ctx} />
       <Notes ctx={ctx} />
-      {profile === 'sefaria' || profile === 'sichos-kodesh' ? <Credit version={version} /> : null}
+      {profile === 'sefaria' || profile === 'sichos-kodesh' || profile === 'chabad-library' ? <Credit version={version} profile={profile} lang={lang} /> : null}
     </div>
   );
 }
@@ -384,6 +404,10 @@ const versionName = (v: PageVersion, lang: Lang) => (v.language === 'he' || v.la
  *   side or one at a time, each version's credit and licence;
  * - sichos-kodesh: paragraphs and headings as Sichos-Kodesh's app sets
  *   them, a letter's lines at the end side, versions one at a time;
+ * - chabad-library: chabadlibrary.org's texts, paragraphs and headings
+ *   like sichos-kodesh, its footnotes and haoros as notes, the printed
+ *   edition's old page numbers as markers, and the library's credit line
+ *   linking back to the page there;
  * - outline: a farbrengen's contents, numbered items under titles;
  * - plain: what people wrote here.
  *

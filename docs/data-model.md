@@ -97,8 +97,13 @@ the `pageText` schema):
   the Hebrew), footnotes, the Hebrew and English side by side or one at a
   time, each version's credit and licence. `sichos-kodesh`: the texts
   Sichos-Kodesh publishes, paragraphs and headings, versions one at a
-  time. `outline`: a farbrengen's contents from the Mafteiach, numbered
-  items under titles. `plain`: what people write here.
+  time. `chabad-library`: chabadlibrary.org's texts, paragraphs and
+  headings like `sichos-kodesh`, its footnotes and haoros as notes, the
+  printed edition's old page numbers as markers, and the credit line
+  "ספריית ליובאוויטש" ("The Lubavitch Library") linking back to the page
+  on chabadlibrary.org, as docs/rights.md requires. `outline`: a
+  farbrengen's contents from the Mafteiach, numbered items under titles.
+  `plain`: what people write here.
 - `bodySource` records where the words were imported from, with the copy
   RebbeHub keeps and the rights that decide whether they are shown.
 

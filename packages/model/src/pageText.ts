@@ -16,11 +16,14 @@ import type { Language, MachineOrigin } from './entities.js';
  * (the texts Sichos-Kodesh publishes: paragraphs, headings, a letter's
  * lines set to the end side, versions one at a time), `outline` (a
  * farbrengen's contents from the Mafteiach: numbered items under
- * headings), and `plain` (what people write on RebbeHub itself).
+ * headings), `chabad-library` (the texts of chabadlibrary.org: paragraphs
+ * and headings, its footnotes and haoros as notes, the printed edition's
+ * old page numbers as markers, and the library's credit line linking back
+ * to the page there), and `plain` (what people write on RebbeHub itself).
  */
 
-export type TextProfile = 'plain' | 'sefaria' | 'sichos-kodesh' | 'outline';
-export const TEXT_PROFILES: readonly TextProfile[] = ['plain', 'sefaria', 'sichos-kodesh', 'outline'];
+export type TextProfile = 'plain' | 'sefaria' | 'sichos-kodesh' | 'outline' | 'chabad-library';
+export const TEXT_PROFILES: readonly TextProfile[] = ['plain', 'sefaria', 'sichos-kodesh', 'outline', 'chabad-library'];
 
 /** The marks a run of words may carry: bold, italic, underline, small, raised, lowered. Nothing else. */
 export type PageMark = 'b' | 'i' | 'u' | 'small' | 'sup' | 'sub';

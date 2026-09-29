@@ -21,7 +21,7 @@ workflow crawls what it can first ([deploy](deploy.md)).
 | `sichos-kodesh-occasions` | the checkout (`MAFTEIACH_DATA` optional) | farbrengens, recordings, hanachos |
 | `otzros` | the checkout | the Otzros scans |
 | `hebrewbooks` | the checkout (`HEBREWBOOKS_SHELF` optional) | HebrewBooks' Chabad shelf, link-only |
-| `chabadlibrary` | `CHABADLIBRARY_TREE` | a page per chapter of chabadlibrary.org, with its words where `crawl-library --texts` kept them, credited to the library |
+| `chabadlibrary` | `CHABADLIBRARY_TREE` | a page per chapter of chabadlibrary.org, with its words where `crawl-library --texts` kept them (the `chabad-library` profile), credited to the library |
 | `jem` | `JEM_DB` | JEM's recordings |
 | `sefaria` | `SEFARIA_DATA` | Sefaria's Chabad books Sichos-Kodesh does not publish |
 | `igros` | `IGROS_DATA` | the letters' dates |
@@ -37,6 +37,24 @@ with its HebrewBooks id, place and year printed, and a link to
 hebrewbooks.org. Nothing is copied: HebrewBooks is link-only
 ([rights](rights.md)). A series Sichos-Kodesh places in a work joins that
 work; the rest become works of their own, in the HebrewBooks Set.
+
+## chabadlibrary
+
+Reads the contents `crawl-library` crawled from chabadlibrary.org
+(`CHABADLIBRARY_TREE`) and makes a page for every chapter, letter and
+sicha of the works Sichos-Kodesh's registry places there. Where
+`crawl-library --texts` kept a page's text, its words go on the page in
+the `chabad-library` profile ([data model](data-model.md)). The library
+writes its own marks in square brackets, read for what they mean:
+`[ftnref_…]` a footnote's marker and `[ftn_…]` where that note begins
+(in the text or its haoros, which all become the page's notes),
+`[cup]` and `[dibur_maschil]` opening words in bold, `[mafteach_gopage …]`
+an index's page reference, `[oldpage_…]` where a page of the printed
+edition begins (a marker), and links to the web kept as links. Every page
+carries the credit line "ספריית ליובאוויטש" linking back to its page on
+chabadlibrary.org, the condition its words are shown on
+([rights](rights.md)). A text kept in an older form is read again on the
+next `--texts` crawl.
 
 ## jem
 
