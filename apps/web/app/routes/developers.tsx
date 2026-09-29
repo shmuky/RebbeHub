@@ -114,7 +114,7 @@ export default function Developers({ loaderData }: Route.ComponentProps) {
                 <h2 className="dv-map-h">For AI agents and machines</h2>
                 <p>
                   Hand an agent <a href="/llms.txt">/llms.txt</a> (where everything is) or <a href="/llms-full.txt">/llms-full.txt</a> (every page here and every route, in one file), or connect it to the{' '}
-                  <Link to={href('/developers/agents', lang)}>MCP server</Link>.
+                  <Link to={href('/developers/agents', lang)}>MCP server</Link>. Not a developer? <Link to={href('/connect', lang)}>Connect Claude or ChatGPT in a minute</Link>.
                 </p>
                 <MachineLinks apiBase={apiBase} />
               </section>

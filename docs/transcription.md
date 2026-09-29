@@ -69,6 +69,16 @@ secrets.
 Its transcripts, like any machine output, stay labelled until people
 check them.
 
+## How a recording gets transcribed
+
+Every night the *Machine transcription* workflow takes the recordings
+people asked for (the button under a farbrengen's parts, the API, the
+`ask_machine` MCP tool, `rebbehub machine ask`), then the newest
+recordings with no transcript, `TRANSCRIBE_NIGHTLY` in all, always with
+the local engine. With `GITHUB_DISPATCH_TOKEN` set on the API, a request
+starts the workflow at once for what was asked ([deploy](deploy.md#7-machine-ocr-and-transcription)).
+A rented GPU is never started this way: each GPU run waits for a person.
+
 ## Next
 
 1. Run the local engine over a year of farbrengens and sync their

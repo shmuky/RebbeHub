@@ -5,7 +5,7 @@ import { DOC_PAGES } from '../lib/developerDocs.js';
 import { SITEMAP_LIMIT, sitemapName, urlEntries, urlset, xmlResponse } from '../lib/sitemap.js';
 
 /** The site's own pages worth finding: the lists, the docs for developers, and what the site is. */
-const PAGES = ['/', '/sets', '/calendar', '/projects', '/missing', '/health', '/status', '/issues', '/suggestions', '/about', '/help', '/takedown', '/mirrors', '/developers/reference'];
+const PAGES = ['/', '/sets', '/calendar', '/projects', '/missing', '/health', '/status', '/issues', '/suggestions', '/about', '/help', '/takedown', '/mirrors', '/connect', '/developers/reference'];
 
 /** One sitemap: the site's own pages, or one page of one kind of item, each in Hebrew with its English beside it. */
 export async function loader({ params, context }: Route.LoaderArgs) {

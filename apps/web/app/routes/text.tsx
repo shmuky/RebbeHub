@@ -10,6 +10,7 @@ import { href, itemPath } from '../lib/links.js';
 import { postJson } from '../lib/post.js';
 import { pageMeta } from '../lib/seo.js';
 import { useAccount } from '../lib/useAccount.js';
+import { AskMachine } from '../components/AskMachine.js';
 import { Icon } from '../ui/Icon.js';
 import { Breadcrumbs, EmptyState, MachineLabel, MachineNote, Panel, StatusBadge, cx } from '../ui/primitives.js';
 import { PageThumb } from '../ui/Shaar.js';
@@ -443,7 +444,10 @@ export default function Text({ loaderData }: Route.ComponentProps) {
 
       <div className="wrap page stack">
         {!text ? (
-          <EmptyState icon="scan" title={t(lang, 'notReadYet')} actions={reader ? <Link className="btn" to={reader}>{t(lang, 'openScanAtPage')}</Link> : undefined} />
+          <>
+            <EmptyState icon="scan" title={t(lang, 'notReadYet')} actions={reader ? <Link className="btn" to={reader}>{t(lang, 'openScanAtPage')}</Link> : undefined} />
+            <AskMachine kind="ocr" item={scan.id} lang={lang} />
+          </>
         ) : (
           <>
             {unchecked ? (

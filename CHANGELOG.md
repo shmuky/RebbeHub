@@ -18,6 +18,16 @@ any time. `@rebbehub/client` carries the API's version.
   of each and the latest incidents; checked every five minutes, and still
   answering while the database does not. `GET /v1/status` gives the same
   as JSON.
+- **Asking the machines.** Anyone signed in can ask for a scan to be read
+  by OCR or a recording transcribed: a button on a scan's text page and
+  under a farbrengen's parts without a transcript, `POST
+  /v1/machine/requests`, the `ask_machine` MCP tool and `rebbehub machine
+  ask`. `GET /v1/machine`, `GET /v1/machine/requests` and `machine_queue`
+  show the queue, each request's place in line, and what is left. The
+  free nightly jobs take requests first, then the newest items not done
+  yet; the transcription job now runs nightly too, with the local engine
+  only. What the machines make stays labelled until people check it.
+
 - **Adding items through the MCP server.** `suggest_items` adds new items,
   or changes or deletes many at once, as one suggestion (200 items a call,
   kept adding to one draft over several calls); `approve_suggestion`
