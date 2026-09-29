@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import type { Lang } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
+import { Icon } from '../ui/Icon.js';
+import { Box, ChoiceList, EmptyState, Label } from '../ui/primitives.js';
 
 /**
  * For developers and agents: personal API tokens (docs/developers/auth.md).
@@ -41,6 +43,9 @@ const WORDS = {
     used: 'שימוש אחרון',
     unused: 'לא נעשה בו שימוש',
     made: 'נוצר',
+    none: 'אין עדיין טוקנים.',
+    scopes: 'הרשאות',
+    newToken: 'טוקן חדש',
   },
   en: {
     title: 'For developers: API tokens',
@@ -62,6 +67,9 @@ const WORDS = {
     used: 'last used',
     unused: 'never used',
     made: 'made',
+    none: 'No tokens yet.',
+    scopes: 'What it may do',
+    newToken: 'A new token',
   },
 } as const;
 
@@ -93,48 +101,72 @@ export function ApiTokens({ lang }: { lang: Lang }) {
   const state = (t: Token) => (t.revokedAt ? w.revoked : t.expiresAt && new Date(t.expiresAt) < new Date() ? w.expired : null);
 
   return (
-    <details className="report" id="api-tokens">
-      <summary>{w.title}</summary>
-      <p className="row-sub">
-        {w.intro} <Link to={href('/developers/auth', lang)}>{w.docs}</Link>
-      </p>
-      <ul className="rows">
-        {tokens.map((t) => (
-          <li key={t.id} className="row">
-            <span className="row-main">
-              <span className="row-title">
-                {t.name} <code dir="ltr">{t.prefix}…</code>
+    <Box
+      as="section"
+      id="api-tokens"
+      className="set-box"
+      header={
+        <>
+          <Icon name="key" />
+          <h2>{w.title}</h2>
+          <span className="end">
+            <Link to={href('/developers/auth', lang)}>{w.docs}</Link>
+          </span>
+        </>
+      }
+    >
+      <p className="set-intro">{w.intro}</p>
+      {tokens.length === 0 ? (
+        <EmptyState compact icon="key" title={w.none} />
+      ) : (
+        <ul className="rows">
+          {tokens.map((t) => (
+            <li key={t.id} className="row">
+              <Icon name="key" />
+              <span className="row-main">
+                <span className="row-title">
+                  {t.name} <code dir="ltr">{t.prefix}…</code> {state(t) ? <Label size="sm">{state(t)}</Label> : null}
+                </span>
+                <span className="row-sub">
+                  {t.scopes.join(' + ')} · {w.made} {date(t.createdAt)} · {t.lastUsedAt ? `${w.used} ${date(t.lastUsedAt)}` : w.unused}
+                  {t.expiresAt && !t.revokedAt ? ` · ${w.expires} ${date(t.expiresAt)}` : ''}
+                </span>
               </span>
-              <span className="row-sub">
-                {t.scopes.join(' + ')} · {w.made} {date(t.createdAt)} · {t.lastUsedAt ? `${w.used} ${date(t.lastUsedAt)}` : w.unused}
-                {t.expiresAt && !t.revokedAt ? ` · ${w.expires} ${date(t.expiresAt)}` : ''}
-                {state(t) ? ` · ${state(t)}` : ''}
-              </span>
-            </span>
-            {state(t) ? null : (
-              <button type="button" className="link-button" onClick={async () => void (await call(`tokens/${t.id}`, 'DELETE').then(load))}>
-                {w.revoke}
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
+              {state(t) ? null : (
+                <button type="button" className="btn sm danger" onClick={async () => void (await call(`tokens/${t.id}`, 'DELETE').then(load))}>
+                  {w.revoke}
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
       {made ? (
-        <p className="note" role="status">
-          {w.shown} <code dir="ltr">{made}</code>{' '}
-          <button
-            type="button"
-            className="link-button"
-            onClick={async () => {
-              await navigator.clipboard?.writeText(made).catch(() => undefined);
-              setCopied(true);
-            }}
-          >
-            {copied ? w.copied : w.copy}
-          </button>
-        </p>
+        <div className="set-pad">
+          <div className="alert positive" role="status">
+            <Icon name="check" />
+            <div className="grow">
+              {w.shown}
+              <div className="secret-line">
+                <code dir="ltr">{made}</code>
+                <button
+                  type="button"
+                  className="btn sm"
+                  onClick={async () => {
+                    await navigator.clipboard?.writeText(made).catch(() => undefined);
+                    setCopied(true);
+                  }}
+                >
+                  <Icon name={copied ? 'check' : 'copy'} />
+                  {copied ? w.copied : w.copy}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : null}
       <form
+        className="form stack set-form"
         onSubmit={async (e) => {
           e.preventDefault();
           setError(null);
@@ -149,32 +181,39 @@ export function ApiTokens({ lang }: { lang: Lang }) {
           }
         }}
       >
-        <label>
+        <h3 className="set-sub">{w.newToken}</h3>
+        <label className="field">
           {w.name}
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required />
         </label>
-        <label>
-          <input type="checkbox" checked disabled /> {w.read}
-        </label>
-        <label>
-          <input type="checkbox" checked={write} onChange={(e) => setWrite(e.target.checked)} /> {w.write}
-        </label>
-        <label>
-          {w.expires}
-          <select value={days} onChange={(e) => setDays(e.target.value)}>
-            <option value="">{w.never}</option>
-            {[30, 90, 365].map((n) => (
-              <option key={n} value={n}>
-                {w.days(n)}
-              </option>
-            ))}
-          </select>
-        </label>
-        {error ? <p role="alert">{error}</p> : null}
-        <div>
-          <button type="submit">{w.make}</button>
+        <fieldset className="field">
+          <legend>{w.scopes}</legend>
+          <label className="check-line">
+            <input type="checkbox" checked disabled /> {w.read}
+          </label>
+          <label className="check-line">
+            <input type="checkbox" checked={write} onChange={(e) => setWrite(e.target.checked)} /> {w.write}
+          </label>
+        </fieldset>
+        <div className="field">
+          <span className="field-label" aria-hidden="true">
+            {w.expires}
+          </span>
+          <ChoiceList name="token-expires" inline value={days} onChange={setDays} legend={w.expires} options={[{ value: '', label: w.never }, ...[30, 90, 365].map((n) => ({ value: String(n), label: w.days(n) }))]} />
+        </div>
+        {error ? (
+          <div className="alert negative" role="alert">
+            <Icon name="warn" />
+            <div>{error}</div>
+          </div>
+        ) : null}
+        <div className="form-actions">
+          <button type="submit" className="btn primary">
+            <Icon name="plus" />
+            {w.make}
+          </button>
         </div>
       </form>
-    </details>
+    </Box>
   );
 }

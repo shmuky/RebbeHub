@@ -4,7 +4,7 @@ import type { Lang } from '../../lib/i18n.js';
 import { href } from '../../lib/links.js';
 import { ago, fullTime, labelInk, personPath, suggestionState, type IssueLabel, type People, type SuggestionListItem } from '../../lib/threads.js';
 import { tt } from '../../lib/threadStrings.js';
-import '../../threads.css';
+import '../../styles/pages/people.css';
 
 /**
  * The small pieces every conversation page shares: a person by their

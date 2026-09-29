@@ -1,31 +1,36 @@
-import { Bell, CircleUserRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { t, type Lang } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
 import { tt } from '../lib/threadStrings.js';
 import { useAccount } from '../lib/useAccount.js';
-import '../threads.css';
+import { Icon } from '../ui/Icon.js';
+import { Avatar } from '../ui/primitives.js';
+import '../styles/pages/people.css';
 
-/** The top bar's corner: "sign in", or the signed-in person's inbox and name, filled in by the browser. */
+/**
+ * A corner of a bar: "sign in", or the signed-in person's inbox and name,
+ * filled in by the browser. Drawn with the header's own parts (an icon
+ * link with its count, the person's initials), so it sits in any bar.
+ */
 export function AccountLink({ lang }: { lang: Lang }) {
   const account = useAccount();
   const { pathname, search } = useLocation();
   if (account === undefined) return <span className="account-link" aria-hidden="true" />;
   if (!account)
     return (
-      <Link className="account-link" to={href('/signin', lang, { return: pathname === '/signin' ? undefined : `${pathname}${search}` })}>
+      <Link className="sign-in-link" to={href('/signin', lang, { return: pathname === '/signin' ? undefined : `${pathname}${search}` })}>
         {t(lang, 'signIn')}
       </Link>
     );
   return (
-    <>
+    <span className="account-link">
       <InboxLink lang={lang} first={account.unread} />
-      <Link className="account-link signed-in" to={href('/account', lang)}>
-        <CircleUserRound size={16} aria-hidden="true" />
-        {account.person.displayName}
+      <Link className="account-link-me" to={href('/account', lang)}>
+        <Avatar name={account.person.displayName} id={account.person.id} size="sm" />
+        <span>{account.person.displayName}</span>
       </Link>
-    </>
+    </span>
   );
 }
 
@@ -52,9 +57,9 @@ function InboxLink({ lang, first }: { lang: Lang; first: number }) {
   }, [pathname]);
   const label = unread ? `${tt(lang, 'inboxTitle')} (${unread} ${tt(lang, 'unread')})` : tt(lang, 'inboxTitle');
   return (
-    <Link className="th-inbox-link" to={href('/inbox', lang)} aria-label={label} title={label}>
-      <Bell size={18} aria-hidden="true" />
-      {unread ? <span className="th-unread-dot">{unread > 99 ? '99+' : unread}</span> : null}
+    <Link className="icon-link" to={href('/inbox', lang)} aria-label={label} title={label}>
+      <Icon name="bell" />
+      {unread ? <span className="dot-count">{unread > 99 ? '99+' : unread}</span> : null}
     </Link>
   );
 }
