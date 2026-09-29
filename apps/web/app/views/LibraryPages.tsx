@@ -339,7 +339,18 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
         ),
         title: partLabel ? `${title}, ${partLabel}` : title,
         torah: true,
-        sub: [GENRES[d.genre]?.[lang], authors.map((a) => nameOf((a.data as D).name, lang)).join(', ')].filter(Boolean).join(' · ') || undefined,
+        sub:
+          GENRES[d.genre] || authors.length ? (
+            <>
+              {GENRES[d.genre]?.[lang]}
+              {authors.map((a, i) => (
+                <span key={a.id}>
+                  {i === 0 ? (GENRES[d.genre] ? ' · ' : '') : ', '}
+                  <Link to={href(itemPath(a), lang)}>{nameOf((a.data as D).name, lang)}</Link>
+                </span>
+              ))}
+            </>
+          ) : undefined,
         facts,
         desc: d.description ? <p>{nameOf(d.description, lang)}</p> : undefined,
         actions: (

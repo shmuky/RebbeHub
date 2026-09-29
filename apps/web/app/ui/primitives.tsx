@@ -2,6 +2,8 @@ import { Children, Fragment, isValidElement, useId, type CSSProperties, type Rea
 import { Link } from 'react-router';
 import type { Lang } from '../lib/i18n.js';
 import { tu } from '../lib/i18nUi.js';
+import { initials, tintOf } from '../lib/initials.js';
+import { LABEL_TONES, type LabelTone } from '../lib/suggestions.js';
 import { Icon, type IconName } from './Icon.js';
 
 /**
@@ -10,35 +12,12 @@ import { Icon, type IconName } from './Icon.js';
  * hands (entity pages, the inbox, uploads) come out looking the same.
  */
 
+export { initials, LABEL_TONES, tintOf, type LabelTone };
+
 const cx = (...names: Array<string | false | null | undefined>) => names.filter(Boolean).join(' ');
 
 /* ------------------------------------------------------------ avatar */
 
-/**
- * A person as their initials, never a photo: "ש. טראקסלער" is ש״ט, "Mendy
- * Goldberg" MG. The tint is fixed by the person's id, so the same person
- * looks the same on every page.
- */
-export function initials(name: string): string {
-  const words = name
-    .replace(/[״"'׳.,()]/g, ' ')
-    .split(/\s+/)
-    .filter((w) => w && !/^(ר|רב|הרב|r|rabbi|mr|mrs|dr)$/i.test(w));
-  if (words.length === 0) return '?';
-  const letters = (words.length === 1 ? [words[0]!.slice(0, 2)] : [words[0]!, words[words.length - 1]!]).map((w) => [...w][0]!).join('');
-  const hebrew = /[֐-׿]/.test(letters);
-  if (hebrew) {
-    const chars = [...(words.length === 1 ? words[0]!.slice(0, 2) : letters)];
-    return chars.length > 1 ? `${chars[0]}״${chars[1]}` : chars[0]!;
-  }
-  return letters.toUpperCase();
-}
-
-export function tintOf(key: string): number {
-  let h = 0;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
-  return Math.abs(h) % 6;
-}
 
 export function Avatar({ name, id, size, bot, className }: { name: string; id?: string; size?: 'xs' | 'sm' | 'lg' | 'xl'; bot?: boolean; className?: string }) {
   return (
@@ -50,9 +29,6 @@ export function Avatar({ name, id, size, bot, className }: { name: string; id?: 
 
 /* ------------------------------------------------------------ labels and status */
 
-/** Label colours by what a report or suggestion is about. */
-export const LABEL_TONES = ['text', 'source', 'scan', 'date', 'meta', 'audio', 'translation', 'sync'] as const;
-export type LabelTone = (typeof LABEL_TONES)[number];
 
 /** A quiet squared label with a coloured swatch: "טקסט", "סריקה". */
 export function Label({ children, tone, color, to, size, className }: { children: ReactNode; tone?: LabelTone; color?: string; to?: string; size?: 'sm'; className?: string }) {

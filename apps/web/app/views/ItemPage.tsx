@@ -1,5 +1,5 @@
 import { Link, useSearchParams } from 'react-router';
-import type { LocalName } from '@rebbehub/model';
+import { isPageText, type LocalName } from '@rebbehub/model';
 import { AudioPlayer } from '../components/AudioPlayer.js';
 import { EventPage } from './EventPage.js';
 import { AuthorPage, SetPage, WorkPage } from './LibraryPages.js';
@@ -238,12 +238,15 @@ function UnitBody({ entity, view, lang }: { entity: Entity; view: ItemView; lang
   const tab = params.get('tab');
   if (tab === 'suggestions') return <ThreadRows threads={view.about} lang={lang} empty={<EmptyState icon="suggest" title={w(lang, 'noSuggestions')} compact />} />;
   const texts = view.lists.texts ?? [];
+  // A chapter brought with its own words (a Sefaria page) has a text even with no text item.
+  const body = (entity.data as { body?: unknown }).body;
+  const hasWords = isPageText(body) && body.versions.some((v) => v.segments.length);
   return (
     <>
       {texts.length ? (
         // Its words, one language at a time, with its translations and "Add a translation".
         <UnitTexts unit={entity} texts={texts} segments={view.segments} lang={lang} />
-      ) : (
+      ) : hasWords ? null : (
         <div className="box">
           <EmptyState icon="file" title={w(lang, 'noText')} actions={<Link className="btn sm" to={href('/add', lang, { what: 'hanacha', for: entity.id })}>{ps(lang, 'addHanacha')}</Link>} />
         </div>

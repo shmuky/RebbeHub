@@ -1,9 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Composer } from '../components/threads/Composer.js';
 import { RichText } from '../components/threads/RichText.js';
 import type { Lang } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
+import { LABELS } from '../lib/suggestions.js';
 import { fullTime, personPath, threadPath, threads, type IssueLabel, type People, type TimelineItem } from '../lib/threads.js';
 import { tt } from '../lib/threadStrings.js';
 import { Icon, type IconName } from '../ui/Icon.js';
@@ -317,8 +318,8 @@ function EventItem({ event, people, lang, labels = [] }: ConversationProps & { e
     ) : null;
   const chips = (names: string[]) =>
     names.map((name) => (
-      <Label key={name} color={`#${(labels.find((l) => l.name === name)?.color ?? '6e7781').replace('#', '')}`} size="sm" to={href('/issues', lang, { q: `label:${name}` })}>
-        {name}
+      <Label key={name} color={`#${(labels.find((l) => l.name === name)?.color ?? '6e7781').replace('#', '')}`} size="sm" to={href('/issues', lang, { label: name })}>
+        {LABELS[name]?.[lang] ?? name}
       </Label>
     ));
 
@@ -480,3 +481,24 @@ function EventItem({ event, people, lang, labels = [] }: ConversationProps & { e
 }
 
 export { TimelineBlock };
+
+/** Following a suggestion or a report: every comment and change comes to the inbox. */
+export function FollowToggle({ kind, id, on: initial, lang }: { kind: 'changeset' | 'report'; id: number; on: boolean; lang: Lang }) {
+  const [on, setOn] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setOn(initial), [initial]);
+  async function toggle() {
+    setBusy(true);
+    try {
+      const response = await fetch('/_/follows', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ kind, id: String(id), on: !on }) });
+      if (response.ok) setOn(!on);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <button type="button" className="link-btn" onClick={() => void toggle()} disabled={busy} aria-pressed={on} title={tt(lang, on ? 'subscribedNote' : 'notSubscribedNote')}>
+      <Icon name={on ? 'bellon' : 'eye'} size={14} /> {lang === 'he' ? (on ? 'במעקב' : 'מעקב') : on ? 'Following' : 'Follow'}
+    </button>
+  );
+}

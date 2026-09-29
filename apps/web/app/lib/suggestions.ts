@@ -1,7 +1,10 @@
 import type { SuggestionDetail, SuggestionEntry } from './api.js';
 import type { Lang } from './i18n.js';
 import { wordDiff, type DiffPart } from './wordDiff.js';
-import type { LabelTone } from '../ui/primitives.js';
+
+/** Label colours by what a report or suggestion is about. */
+export const LABEL_TONES = ['text', 'source', 'scan', 'date', 'meta', 'audio', 'translation', 'sync'] as const;
+export type LabelTone = (typeof LABEL_TONES)[number];
 
 /**
  * How suggestions and reports are shown in lists and feeds: what kind of

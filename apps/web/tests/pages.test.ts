@@ -55,7 +55,7 @@ describe("every item's own page", () => {
     const page = await get('/shaar-sample');
     expect(page.status).toBe(200);
     expect(page.html).toContain(`https://files.rebbehub.test/objects/${sha('b')}`);
-    expect(page.html).toContain('cover shaar');
+    expect(page.html).toContain('class="shaar-img"');
     expect(page.html).toContain('נבחר על ידי מחשב');
     expect(page.html).toContain('id="cover"');
     // The set's shelf shows the cover's thumbnail.
@@ -86,7 +86,7 @@ describe("every item's own page", () => {
     expect(page.html).toContain('https://www.chabad.org/multimedia/media_cdo/aid/12345');
     expect(page.html).toContain(`/files/${sha('d')}`);
     // Anyone may follow it.
-    expect(page.html).toContain('item-actions');
+    expect(page.html).toContain('class="phead-acts"');
   });
 
   it("gives a person a page of facts, not raw data", async () => {

@@ -636,12 +636,12 @@ main#main {
 
 /* ------------------------------------------------------------ the day, under the header (home) */
 
-.ctx {
+.daybar {
   background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
 
-.ctx .wrap {
+.daybar .wrap {
   display: flex;
   align-items: center;
   gap: 28px;
@@ -653,38 +653,38 @@ main#main {
   white-space: nowrap;
 }
 
-.ctx .wrap::-webkit-scrollbar {
+.daybar .wrap::-webkit-scrollbar {
   display: none;
 }
 
-.ctx b {
+.daybar b {
   color: var(--text);
   font-weight: 600;
 }
 
-.ctx a {
+.daybar a {
   color: inherit;
 }
 
-.ctx a:hover b {
+.daybar a:hover b {
   color: var(--accent);
 }
 
-.ctx .sep {
+.daybar .sep {
   width: 1px;
   height: 16px;
   background: var(--border);
   flex: none;
 }
 
-.ctx span {
+.daybar span {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
 @media (max-width: 720px) {
-  .ctx .wrap {
+  .daybar .wrap {
     gap: 16px;
   }
 }

@@ -22,7 +22,7 @@ import { Icon } from '../ui/Icon.js';
 import { ReviewBox, reviewChoices } from '../ui/ReviewBox.js';
 import { Timeline, TimelineBlock, TimelineComment } from '../ui/Timeline.js';
 import { Avatar, Breadcrumbs, EmptyState, Label, MachineLabel, Skeleton, StatusBadge, Tabs, cx, type State } from '../ui/primitives.js';
-import { Conversation, Person, When } from '../views/Conversation.js';
+import { Conversation, FollowToggle, Person, When } from '../views/Conversation.js';
 
 /**
  * One suggestion, as a pull request's page is (the plan: "a Suggestion is
@@ -100,8 +100,6 @@ const W = {
   project: { he: 'פרויקט', en: 'Project' },
   checkedOf: { he: '{d} מתוך {t} נבדקו', en: '{d} of {t} done' },
   whatChanges: { he: 'מה זה משנה', en: 'What this changes' },
-  follow: { he: 'מעקב', en: 'Follow' },
-  following: { he: 'במעקב', en: 'Following' },
   linkTo: { he: 'קישור לסעיף', en: 'Link to the passage' },
   youKeep: { he: 'את/ה אחראי/ת על האוסף הזה, ואישורך מכניס את השינוי.', en: 'You keep this set; your approval puts the change in.' },
   onlyKeepers: { he: 'רק אחראי האוסף מאשרים או מחזירים. כל אחד יכול להגיב.', en: 'Only the set’s keepers approve or send back. Anyone may comment.' },
@@ -509,7 +507,7 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
             </section>
           ) : null}
           <section className="side-acts">
-            {account && talk ? <FollowThread id={id!} on={talk.subscribed} lang={lang} /> : null}
+            {account && talk ? <FollowToggle kind="changeset" id={id!} on={talk.subscribed} lang={lang} /> : null}
             {view.where ? (
               <Link to={href(view.where.path, lang)}>
                 <Icon name="link" size={14} /> {w(lang, 'linkTo')}
@@ -821,23 +819,3 @@ function ChangeWithComments({
   );
 }
 
-/** Following the conversation: every comment and change comes to the inbox. */
-function FollowThread({ id, on: initial, lang }: { id: number; on: boolean; lang: Lang }) {
-  const [on, setOn] = useState(initial);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => setOn(initial), [initial]);
-  async function toggle() {
-    setBusy(true);
-    try {
-      const response = await fetch('/_/follows', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ kind: 'changeset', id: String(id), on: !on }) });
-      if (response.ok) setOn(!on);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <button type="button" className="link-btn" onClick={() => void toggle()} disabled={busy} aria-pressed={on} title={tt(lang, on ? 'subscribedNote' : 'notSubscribedNote')}>
-      <Icon name={on ? 'bellon' : 'eye'} size={14} /> {w(lang, on ? 'following' : 'follow')}
-    </button>
-  );
-}

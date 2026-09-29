@@ -63,6 +63,7 @@ export function ReviewBox({
   extra?: ReactNode;
 }) {
   const [note, setNote] = useState('');
+  const [failed, setFailed] = useState<string | null>(null);
   const [choice, setChoice] = useState(initial ?? choices?.[0]?.value ?? 'comment');
   const picked = choices?.find((c) => c.value === choice);
   const tone = picked?.tone ?? 'primary';
@@ -73,7 +74,14 @@ export function ReviewBox({
       onSubmit={(e) => {
         e.preventDefault();
         if (blocked) return;
-        void Promise.resolve(onSubmit(choice, note.trim())).then(() => setNote(''));
+        setFailed(null);
+        // A refused submit keeps the words and says why; the caller may say it too, through `error`.
+        Promise.resolve()
+          .then(() => onSubmit(choice, note.trim()))
+          .then(
+            () => setNote(''),
+            (e: unknown) => setFailed(e instanceof Error ? e.message : String(e)),
+          );
       }}
     >
       <div className="rb-h">
@@ -98,9 +106,9 @@ export function ReviewBox({
           ))}
         </fieldset>
       ) : null}
-      {error ? (
+      {error || failed ? (
         <p className="rb-error" role="alert">
-          <Icon name="warn" /> {error}
+          <Icon name="warn" /> {error ?? failed}
         </p>
       ) : null}
       <div className="rb-f">

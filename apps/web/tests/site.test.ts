@@ -76,9 +76,9 @@ describe('the public site', () => {
     const page = await get('/');
     expect(page.status).toBe(200);
     expect(page.html).toContain('<html lang="he" dir="rtl">');
-    expect(page.html).toContain('class="home-parsha"');
+    expect(page.html).toContain('class="daybar"'); // the day, its chag or the coming parsha
     expect(page.html).toContain('התוועדויות'); // the farbrengens tab
-    expect(page.html).toContain('class="needs"'); // what the community can help with
+    expect(page.html).toContain('class="box needs"'); // what the community can help with
     expect(page.html).toContain('href="/help"');
   });
 
@@ -131,7 +131,9 @@ describe('the public site', () => {
     expect(page.html).toContain(`href="https://files.rebbehub.test/objects/${'b'.repeat(64)}"`);
     expect(page.html).toContain(`href="/read?src=https%3A%2F%2Ffiles.rebbehub.test%2Fobjects%2F${'b'.repeat(64)}`);
     expect(page.html).toContain('© The families');
-    expect(page.html).toContain('3–8');
+    // What it reproduces, from which page and on how many.
+    expect(page.html).toContain('<span class="pg num">3</span>');
+    expect(page.html).toContain('6 עמודים');
   });
 
   it('keeps every link working: permanent ids and old paths redirect to the current path', async () => {
@@ -211,7 +213,9 @@ describe('the public site', () => {
   });
 
   it('has pages for suggestions, issues and the inbox, filled in by the browser', async () => {
-    for (const path of ['/suggestions', '/suggestions/1', '/issues', '/issues/new', '/issues/1', '/inbox']) expect((await get(path)).status).toBe(200);
+    for (const path of ['/suggestions', '/suggestions/1', '/issues', '/issues/new', '/inbox']) expect((await get(path)).status).toBe(200);
+    // Suggestions and reports share one numbering: a suggestion's number asked for as a report goes to its own page.
+    expect(await get('/issues/1')).toMatchObject({ status: 302, location: '/suggestions/1' });
     expect((await get('/issues/not-a-number')).status).toBe(404);
   });
 

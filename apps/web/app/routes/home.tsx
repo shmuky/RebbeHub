@@ -255,7 +255,7 @@ const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
 function DayStrip({ lang, week, civil, weekday, year, yearCount }: { lang: Lang; week: Route.ComponentProps['loaderData']['week']; civil: string | null; weekday: number; year: number | null; yearCount: number }) {
   const civilShort = civil ? civil.split('-').map(Number).reverse().join('.') : null;
   return (
-    <div className="ctx">
+    <div className="daybar">
       <div className="wrap">
         <span>
           <Icon name="cal" />

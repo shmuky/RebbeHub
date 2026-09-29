@@ -9,32 +9,8 @@
   margin-top: 8px;
 }
 
-.tsearch-row {
-  display: flex;
-  gap: 8px;
-  align-items: stretch;
+.phead .tsearch-row {
   margin-top: 20px;
-}
-
-.tsearch-row > .tsearch-field {
-  flex: 1;
-  min-width: 0;
-}
-
-.tsearch-row > .btn {
-  height: 38px;
-  flex: none;
-}
-
-.tsearch-row > .btn.on {
-  color: var(--attention);
-  border-color: var(--attention);
-}
-
-.tsearch-hint {
-  color: var(--faint);
-  font-size: 12.5px;
-  white-space: nowrap;
 }
 
 .saved-row {
@@ -264,4 +240,22 @@ details.pick .pop.down {
   .row-side .comments:empty {
     display: none;
   }
+}
+
+
+/* A new report: the kinds as rows inside their box, then the words. */
+.new-report .box > .choices {
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+}
+
+.new-report .choice b {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.new-report .about-field .row-line {
+  gap: 4px;
 }

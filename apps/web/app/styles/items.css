@@ -582,3 +582,13 @@ ul.list > li:first-child {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
+
+
+/* The line under an item's name: its author is a link, though it reads as the line does. */
+.lede a {
+  color: inherit;
+}
+
+.lede a:hover {
+  color: var(--accent);
+}

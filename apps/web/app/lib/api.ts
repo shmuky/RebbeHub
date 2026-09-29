@@ -1,4 +1,4 @@
-import type { Issue, IssueLabel, IssueTemplate, People, SuggestionListItem } from './threads.js';
+import type { Issue, IssueLabel, IssueRights, IssueTemplate, People, SuggestionListItem, TimelineItem } from './threads.js';
 import type { EntityType, LocalName } from '@rebbehub/model';
 
 /**
@@ -616,6 +616,16 @@ export class RebbeHubApi {
   async peopleByIds(ids: readonly string[]) {
     if (!ids.length) return [];
     return (await this.get<{ people: Array<{ id: string; username: string | null; displayName: string; bot: boolean }> }>('/v1/people', { ids: [...new Set(ids)].join(',') }).catch(() => ({ people: [] }))).people;
+  }
+
+  /** One issue with its conversation, as someone not signed in sees it; null when there is none (or it is private). */
+  issue(number: number) {
+    return this.maybe(
+      this.get<{ issue: Issue; rights: IssueRights; timeline: TimelineItem[]; people: People; fixedBy: Array<{ number: number; title: string; status: string }>; subscribed: boolean }>(`/v1/issues/${number}`).catch((error: unknown) => {
+        if (error instanceof ApiError && error.status === 403) return null;
+        throw error;
+      }),
+    );
   }
 
   /** What #n is: a suggestion or an issue (they share one numbering); null when nothing has it. */

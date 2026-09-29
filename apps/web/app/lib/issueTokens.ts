@@ -92,3 +92,12 @@ export function apiParams(q: IssueQuery, me: string | null): Record<string, stri
   if (q.text) out.q = q.text;
   return out;
 }
+
+/** A kind's questions in one line, as its choice's hint: "מה כתוב · איפה (עמוד, שורה או פסקה)". */
+export function questionsOf(template: string): string {
+  return template
+    .split('\n')
+    .map((l) => l.replace(/^[#>*\-\s]+/, '').replace(/[:：]\s*$/, '').trim())
+    .filter(Boolean)
+    .join(' · ');
+}

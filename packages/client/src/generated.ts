@@ -1530,6 +1530,8 @@ export interface Operations {
     input: {
       /** What follows the @ */
       q?: string;
+      /** Account ids, comma separated (at most 100): who each is, instead of a search */
+      ids?: string;
       /** changeset:<id> or report:<id> */
       thread?: string;
       /** How many (at most 20) */
@@ -1977,7 +1979,7 @@ export const OPERATIONS = {
   scanText: {"method":"GET","path":"/v1/scans/{id}/text","pathParams":["id"],"query":["page"],"body":null,"answer":"json"},
   search: {"method":"GET","path":"/v1/search","pathParams":[],"query":["q","type","limit"],"body":null,"answer":"json"},
   searchMoments: {"method":"GET","path":"/v1/search/moments","pathParams":[],"query":["q","limit"],"body":null,"answer":"json"},
-  searchPeople: {"method":"GET","path":"/v1/people","pathParams":[],"query":["q","thread","limit"],"body":null,"answer":"json"},
+  searchPeople: {"method":"GET","path":"/v1/people","pathParams":[],"query":["q","ids","thread","limit"],"body":null,"answer":"json"},
   searchSimilar: {"method":"GET","path":"/v1/search/similar","pathParams":[],"query":["q","types","limit"],"body":null,"answer":"json"},
   searchThreads: {"method":"GET","path":"/v1/threads","pathParams":[],"query":["q","limit"],"body":null,"answer":"json"},
   seedScanText: {"method":"POST","path":"/v1/scans/{id}/text/seed","pathParams":["id"],"query":[],"body":"json","answer":"json"},

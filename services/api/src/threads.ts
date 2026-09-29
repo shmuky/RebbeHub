@@ -120,7 +120,10 @@ export function threadRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context)
     if (ids !== undefined) {
       const list = ids.split(',').map((id) => id.trim()).filter(Boolean).slice(0, 100);
       const tags = await peopleOf(db, list);
-      return c.json({ people: list.filter((id) => tags[id]).map((id) => ({ id, username: tags[id]!.username, displayName: tags[id]!.name, bot: tags[id]!.bot })) });
+      // Only ids someone has: a made-up id is not a person.
+      const { rows } = await db.query<{ id: string }>('SELECT id FROM account WHERE id = ANY($1::text[]) UNION SELECT id FROM auth.person WHERE id = ANY($1::text[])', [list]);
+      const known = new Set(rows.map((r) => r.id));
+      return c.json({ people: list.filter((id) => tags[id] && known.has(id)).map((id) => ({ id, username: tags[id]!.username, displayName: tags[id]!.name, bot: tags[id]!.bot })) });
     }
     const thread = /^(changeset|report):(\d+)$/.exec(c.req.query('thread') ?? '');
     let participants: string[] = [];

@@ -2461,3 +2461,31 @@ a.when:hover {
 .block {
   display: block;
 }
+
+/* The search line's row: the field, and any button beside it (save the search). */
+.tsearch-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.tsearch-row > .tsearch-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.tsearch-row > .btn {
+  height: 38px;
+  flex: none;
+}
+
+.tsearch-row > .btn.on {
+  color: var(--attention);
+  border-color: var(--attention);
+}
+
+.tsearch-hint {
+  color: var(--faint);
+  font-size: 12.5px;
+  white-space: nowrap;
+}

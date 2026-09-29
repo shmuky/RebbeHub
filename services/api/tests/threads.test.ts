@@ -75,6 +75,16 @@ describe('handles', () => {
     const all = await call('GET', `/v1/people?q=&thread=report:1`);
     expect(all.body.people.length).toBe(4);
   });
+
+  it('are named by their ids, in the order asked, leaving out ids nobody has', async () => {
+    const found = await call('GET', '/v1/people?ids=chaim,nobody,mendy');
+    expect(found.status).toBe(200);
+    expect(found.body.people).toEqual([
+      { id: 'chaim', username: 'chaim', displayName: 'Chaim', bot: false },
+      { id: 'mendy', username: 'Mendy', displayName: 'Mendy', bot: false },
+    ]);
+    expect((await call('GET', '/v1/people?ids=')).body.people).toEqual([]);
+  });
 });
 
 describe('suggestions as pull requests', () => {
