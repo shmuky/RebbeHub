@@ -31,7 +31,7 @@ export function SubscribeBox({ lang, kind, id, subscribed, signedIn }: { lang: L
   return (
     <section>
       <h2>{tt(lang, on ? 'unsubscribe' : 'subscribe')}</h2>
-      <button type="button" className="secondary" onClick={() => void toggle()} disabled={busy} style={{ inlineSize: '100%' }}>
+      <button type="button" className="btn" onClick={() => void toggle()} disabled={busy} style={{ inlineSize: '100%' }}>
         {on ? <BellOff size={14} aria-hidden="true" /> : <Bell size={14} aria-hidden="true" />} {tt(lang, on ? 'unsubscribe' : 'subscribe')}
       </button>
       <p className="th-hint">{tt(lang, on ? 'subscribedNote' : 'notSubscribedNote')}</p>

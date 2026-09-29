@@ -213,10 +213,14 @@ details.pick .pop.down {
 }
 
 @media (max-width: 760px) {
-  .tsearch-row {
+  /* The saved-search button goes under the field, which keeps its height. */
+  .phead .tsearch-row {
     flex-direction: column;
   }
-  .tsearch-row > .btn {
+  .phead .tsearch-row > .tsearch-field {
+    flex: none;
+  }
+  .phead .tsearch-row > .btn {
     align-self: flex-start;
   }
   .list-bar .menus {

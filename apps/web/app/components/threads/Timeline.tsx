@@ -187,7 +187,7 @@ function CommentCard(props: TimelineProps & { comment: Comment; replies: Comment
             <div className="th-card-body" style={{ borderBlockStart: '1px solid var(--border)' }}>
               {replying ? (
                 <Composer lang={lang} value={draft} onChange={setDraft} onSubmit={() => void send()} submitLabel={tt(lang, 'reply')} busy={busy} thread={thread} autoFocus error={error}>
-                  <button type="button" className="secondary" onClick={() => setReplying(false)}>
+                  <button type="button" className="btn" onClick={() => setReplying(false)}>
                     {tt(lang, 'cancel')}
                   </button>
                 </Composer>
@@ -238,7 +238,7 @@ function CommentBody({ comment, lang, viewer, thread, changed, bare }: TimelineP
     return (
       <div className={bare ? '' : 'th-card-body'}>
         <Composer lang={lang} value={draft} onChange={setDraft} onSubmit={() => void save()} submitLabel={tt(lang, 'save')} busy={busy} thread={thread} autoFocus error={error}>
-          <button type="button" className="secondary" onClick={() => setEditing(false)}>
+          <button type="button" className="btn" onClick={() => setEditing(false)}>
             {tt(lang, 'cancel')}
           </button>
         </Composer>

@@ -142,7 +142,7 @@ export function SetPage({ entity, view, lang }: { entity: Entity; view: ItemView
         </>
       }
     >
-      {works.length ? <Books works={works} lang={lang} grid covers={view.covers} meta={(wk) => (counts[wk.id] ? `${num(counts[wk.id]!, lang)} ${t(lang, 'unitsShort')}` : undefined)} /> : null}
+      {works.length ? <Books works={works} lang={lang} covers={view.covers} meta={(wk) => (counts[wk.id] ? `${num(counts[wk.id]!, lang)} ${t(lang, 'unitsShort')}` : undefined)} /> : null}
       <SeeAll id={entity.id} group={view.linked.find((g) => g.field === 'sets' && g.type === 'work')} shown={works.length} lang={lang} />
       {others.length ? (
         <section className="stack">
@@ -503,7 +503,7 @@ export function AuthorPage({ entity, view, lang }: { entity: Entity; view: ItemV
       lang={lang}
       head={{
         crumbs: [{ label: t(lang, 'tabLibrary'), to: href('/sets', lang) }],
-        cover: <RebbePortrait author={entity} index={d.rebbe ? d.rebbe + 1 : 0} lang={lang} size={96} />,
+        cover: <RebbePortrait author={entity} lang={lang} size={96} />,
         title: nameOf(d.name, lang),
         torah: true,
         sub: d.description ? nameOf(d.description as LocalName, lang) : undefined,
@@ -512,7 +512,7 @@ export function AuthorPage({ entity, view, lang }: { entity: Entity; view: ItemV
         tab: 'page',
       }}
     >
-      {works.length ? <Books works={works} lang={lang} grid covers={view.covers} meta={(wk) => (counts[wk.id] ? `${num(counts[wk.id]!, lang)} ${t(lang, 'unitsShort')}` : undefined)} /> : null}
+      {works.length ? <Books works={works} lang={lang} covers={view.covers} meta={(wk) => (counts[wk.id] ? `${num(counts[wk.id]!, lang)} ${t(lang, 'unitsShort')}` : undefined)} /> : null}
       <SeeAll id={entity.id} group={view.linked.find((g) => g.field === 'authors' && g.type === 'work')} shown={works.length} lang={lang} />
     </ItemShell>
   );

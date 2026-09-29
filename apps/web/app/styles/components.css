@@ -1453,7 +1453,8 @@ a.row-title:hover {
 .field input,
 .field textarea,
 .field select,
-.field .choices {
+.field .choices,
+.field .th-composer {
   font-weight: 400;
 }
 
@@ -2488,4 +2489,858 @@ a.when:hover {
   color: var(--faint);
   font-size: 12.5px;
   white-space: nowrap;
+}
+
+/* ================================================================== conversation pieces (from threads.css) */
+
+/*
+ * The parts the suggestion, issue and talk pages (and a new Report) still
+ * draw with their own markup (components/threads): state badges, labels,
+ * the timeline and its cards, written words with @people and #numbers,
+ * the writing box, lists and the side column. Here rather than with the
+ * people pages, which not every one of them loads. Kept under their `th-`
+ * names until those pages are drawn with the design system's parts.
+ */
+
+.th-page {
+  display: grid;
+  gap: 16px;
+}
+
+.th-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.th-head h1 {
+  margin: 0;
+  font-size: var(--fs-2xl);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.th-number {
+  color: var(--subtle);
+  font-weight: 400;
+}
+
+.th-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  color: var(--muted);
+  font-size: var(--fs-md);
+}
+
+/* A state badge: Open, Closed, Approved, Changes requested. */
+.th-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 14px;
+  color: #fff;
+  font: 600 var(--fs-md) / 1 var(--ui);
+  white-space: nowrap;
+}
+
+.th-state.open {
+  background: var(--open-strong);
+}
+
+.th-state.closed {
+  background: var(--closed-strong);
+}
+
+.th-state.merged,
+.th-state.done {
+  background: var(--approved-strong);
+}
+
+.th-state.attention {
+  background: var(--attention);
+}
+
+.th-state.small {
+  height: 20px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.th-icon {
+  flex: none;
+}
+
+.th-icon.open {
+  color: var(--open);
+}
+
+.th-icon.closed {
+  color: var(--closed);
+}
+
+.th-icon.merged,
+.th-icon.done {
+  color: var(--approved);
+}
+
+.th-icon.attention {
+  color: var(--attention);
+}
+
+.th-label {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--r-sm);
+  font: 500 12px / 1 var(--ui);
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.th-private {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 0 7px;
+  font: 500 12px / 1 var(--ui);
+  color: var(--muted);
+}
+
+/* The page: the conversation, and a side column beside it on wide screens. */
+.th-layout {
+  display: grid;
+  gap: 24px;
+}
+
+@media (min-width: 960px) {
+  .th-layout {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+}
+
+.th-side {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+}
+
+.th-side section {
+  border-block-end: 1px solid var(--border);
+  padding-block: 12px;
+  font-size: var(--fs-md);
+}
+
+.th-side h2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 8px;
+  font: 600 13px / 1.4 var(--ui);
+  color: var(--text);
+}
+
+.th-side ul {
+  display: grid;
+  gap: 6px;
+}
+
+.th-side .th-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.th-gear {
+  background: none;
+  border: 0;
+  padding: 2px;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+
+.th-gear:hover,
+.th-gear:focus-visible {
+  color: var(--accent);
+  background: var(--sunken);
+}
+
+/* The timeline. */
+.th-timeline {
+  position: relative;
+  display: grid;
+  gap: 12px;
+}
+
+.th-timeline::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 18px;
+  border-inline-start: 2px solid var(--border);
+  z-index: 0;
+}
+
+.th-timeline > li {
+  position: relative;
+  z-index: 1;
+}
+
+.th-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.th-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 8px 14px;
+  background: var(--canvas);
+  border-block-end: 1px solid var(--border);
+  font-size: var(--fs-md);
+  color: var(--muted);
+}
+
+.th-card-head .th-who {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.th-spacer {
+  flex: 1;
+}
+
+.th-card-body {
+  padding: 12px 14px;
+}
+
+.th-card.approve {
+  border-color: var(--open);
+}
+
+.th-card.send_back {
+  border-color: var(--attention);
+}
+
+.th-card.resolved .th-card-body {
+  opacity: 0.7;
+}
+
+.th-replies {
+  border-block-start: 1px solid var(--border);
+}
+
+.th-replies > li {
+  padding: 8px 14px;
+  border-block-end: 1px solid var(--border);
+}
+
+.th-replies > li:last-child {
+  border-block-end: 0;
+}
+
+.th-event {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-inline-start: 6px;
+  font-size: var(--fs-md);
+  color: var(--muted);
+}
+
+.th-event-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--sunken);
+  border: 2px solid var(--bg);
+  color: var(--muted);
+  flex: none;
+}
+
+.th-event-icon.merged {
+  background: var(--approved-strong);
+  color: #fff;
+}
+
+.th-event-icon.closed {
+  background: var(--closed-strong);
+  color: #fff;
+}
+
+.th-event-icon.open {
+  background: var(--open-strong);
+  color: #fff;
+}
+
+.th-event-icon.attention {
+  background: var(--attention);
+  color: #fff;
+}
+
+.th-event .th-who {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.th-anchor {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-sm);
+  background: var(--accent-soft);
+  border-radius: var(--r-sm);
+  padding: 0 6px;
+  color: var(--text);
+}
+
+.th-time {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.th-time:hover {
+  text-decoration: underline;
+}
+
+/* Written words: @people, #numbers and items as links. */
+.th-rich {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
+
+.th-rich p {
+  margin: 0 0 10px;
+}
+
+.th-rich p:last-child {
+  margin-block-end: 0;
+}
+
+.th-rich code {
+  font-size: 0.9em;
+  background: var(--sunken);
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+}
+
+.th-mention {
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.th-mention:hover {
+  text-decoration: underline;
+}
+
+.th-ref {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.th-ref:hover {
+  text-decoration: underline;
+}
+
+.th-empty {
+  color: var(--subtle);
+  font-style: italic;
+}
+
+/* The writing box. */
+.th-composer {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg);
+}
+
+.th-composer-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px 0;
+  background: var(--canvas);
+  border-block-end: 1px solid var(--border);
+  border-start-start-radius: var(--r);
+  border-start-end-radius: var(--r);
+}
+
+.th-composer-tabs button {
+  background: none;
+  border: 1px solid transparent;
+  border-block-end: 0;
+  border-radius: var(--r) var(--r) 0 0;
+  padding: 6px 12px;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--fs-md);
+  margin-block-end: -1px;
+}
+
+.th-composer-tabs button[aria-selected='true'] {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.th-composer-field {
+  position: relative;
+  padding: 8px;
+}
+
+.th-composer textarea {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  font: inherit;
+  line-height: 1.55;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.th-composer textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.th-composer-preview {
+  min-height: 96px;
+  padding: 8px;
+}
+
+.th-composer-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px 8px;
+}
+
+.th-hint {
+  font-size: var(--fs-sm);
+  color: var(--subtle);
+}
+
+.th-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.th-error {
+  display: block;
+  color: var(--closed);
+  background: var(--closed-soft);
+  border: 1px solid var(--del-line);
+  border-radius: var(--r);
+  padding: 8px 12px;
+  font-size: var(--fs-md);
+}
+
+/* Suggestions under the writing box and in pickers. */
+.th-popup {
+  position: absolute;
+  z-index: 20;
+  inset-inline-start: 8px;
+  min-width: 256px;
+  max-width: calc(100% - 16px);
+  max-height: 256px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--overlay);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+}
+
+.th-popup li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--r);
+  cursor: pointer;
+  font-size: var(--fs-md);
+}
+
+.th-popup li[aria-selected='true'] {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.th-dim {
+  color: var(--subtle);
+}
+
+.th-picker {
+  position: relative;
+}
+
+.th-picker .th-popup {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  inset-block-start: 28px;
+  width: 288px;
+  padding: 0;
+}
+
+.th-picker input[type='search'] {
+  width: 100%;
+  border: 0;
+  border-block-end: 1px solid var(--border);
+  padding: 8px 10px;
+  font: inherit;
+  background: transparent;
+  color: var(--text);
+}
+
+.th-picker .th-popup ul {
+  padding: 4px;
+}
+
+.th-check {
+  width: 16px;
+  flex: none;
+}
+
+/* Lists of suggestions and issues. */
+.th-list {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.th-list-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 10px 16px;
+  background: var(--canvas);
+  border-block-end: 1px solid var(--border);
+  font-size: var(--fs-md);
+}
+
+.th-list-head a,
+.th-list-head button.link-like {
+  color: var(--muted);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.th-list-head a[aria-current='page'] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.th-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 16px;
+  border-block-end: 1px solid var(--border);
+}
+
+.th-row:last-child {
+  border-block-end: 0;
+}
+
+.th-row:hover {
+  background: var(--canvas);
+}
+
+.th-row-title {
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  margin-inline-end: 6px;
+}
+
+.th-row-title:hover {
+  color: var(--accent);
+}
+
+.th-row .th-meta {
+  font-size: var(--fs-sm);
+  margin-block-start: 2px;
+}
+
+.th-row-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: var(--fs-md);
+}
+
+.th-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.th-filters input[type='search'] {
+  flex: 1 1 224px;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.th-chip-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-md);
+  cursor: pointer;
+}
+
+.th-chip-button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.th-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 28px;
+  font-weight: 600;
+  flex: none;
+}
+
+.th-avatar.small {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+}
+
+/* The review box. */
+.th-review-box {
+  display: grid;
+  gap: 8px;
+}
+
+.th-verdicts {
+  display: grid;
+  gap: 6px;
+}
+
+.th-verdicts label {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 8px;
+  align-items: baseline;
+  cursor: pointer;
+}
+
+.th-verdicts label small {
+  grid-column: 2;
+  color: var(--subtle);
+}
+
+.th-verdicts label[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* The changes, with a comment box under any field. */
+.th-change {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.th-change-head {
+  padding: 8px 14px;
+  background: var(--canvas);
+  border-block-end: 1px solid var(--border);
+  font-weight: 600;
+}
+
+.th-fields {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-md);
+}
+
+.th-fields th,
+.th-fields td {
+  padding: 6px 10px;
+  border-block-end: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.th-fields .was {
+  background: var(--del-bg);
+  color: var(--del-fg);
+  text-decoration: line-through;
+}
+
+.th-fields .now {
+  background: var(--add-bg);
+  color: var(--add-fg);
+}
+
+.th-fields tr.th-field-thread > td {
+  background: var(--canvas);
+  padding: 8px;
+}
+
+.th-add-comment {
+  opacity: 0.35;
+}
+
+.th-fields tr:hover .th-add-comment,
+.th-add-comment:focus-visible {
+  opacity: 1;
+}
+
+.th-tabs {
+  display: flex;
+  gap: 4px;
+  border-block-end: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.th-tabs button,
+.th-tabs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px 11px;
+  border: 0;
+  border-block-end: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  margin-block-end: -1px;
+  white-space: nowrap;
+}
+
+.th-tabs [aria-selected='true'],
+.th-tabs [aria-current='page'] {
+  color: var(--text);
+  border-block-end-color: var(--accent);
+  font-weight: 600;
+}
+
+.th-count {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 7px;
+  border-radius: 9px;
+  background: var(--sunken);
+  color: var(--muted);
+  font: 500 12px / 1.5 var(--ui);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.th-type-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(192px, 1fr));
+}
+
+.th-type-grid button {
+  display: grid;
+  gap: 3px;
+  text-align: start;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.th-type-grid button:hover,
+.th-type-grid button:focus-visible {
+  border-color: var(--accent);
+}
+
+.th-type-grid small {
+  color: var(--subtle);
+}
+
+.th-form {
+  display: grid;
+  gap: 12px;
+}
+
+.th-form > label {
+  display: grid;
+  gap: 4px;
+  font-weight: 600;
+  font-size: var(--fs-md);
+}
+
+.th-form input[type='text'] {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-weight: 400;
+}
+
+.th-title-input {
+  font-size: var(--fs-xl) !important;
 }

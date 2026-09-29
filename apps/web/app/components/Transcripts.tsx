@@ -152,7 +152,7 @@ function Para({
           >
             {t(lang, 'sendForReview')}
           </button>
-          <button type="button" className="secondary" onClick={() => setEditing(null)}>
+          <button type="button" className="btn" onClick={() => setEditing(null)}>
             {t(lang, 'cancel')}
           </button>
         </div>
@@ -211,7 +211,7 @@ function ConfirmSync({ recording, lang }: { recording: string; lang: Lang }) {
     <p className="confirm-page">
       <button
         type="button"
-        className="secondary"
+        className="btn"
         onClick={async () => {
           try {
             await postJson(`recordings/${recording}/sync/confirm`);

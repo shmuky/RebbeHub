@@ -36,7 +36,7 @@ export function ScanViewer({
       <div className="notice">
         <p>{t(lang, 'scanLinkOnly')}</p>
         {sourceLink ? (
-          <a className="button secondary" href={sourceLink} rel="noopener" target="_blank">
+          <a className="btn" href={sourceLink} rel="noopener" target="_blank">
             {t(lang, 'openAtSource')}
           </a>
         ) : null}
@@ -66,7 +66,7 @@ export function ScanViewer({
         }}
       >
         {images.length ? (
-          <button type="button" className="secondary" aria-label={st(lang, 'previousPage')} disabled={page <= 1} onClick={() => setPage(page - 1)}>
+          <button type="button" className="btn" aria-label={st(lang, 'previousPage')} disabled={page <= 1} onClick={() => setPage(page - 1)}>
             <Back size={18} aria-hidden="true" />
           </button>
         ) : null}
@@ -76,11 +76,11 @@ export function ScanViewer({
           {last ? ` ${st(lang, 'pageOf')} ${last}` : ''}
         </label>
         {images.length ? (
-          <button type="button" className="secondary" aria-label={st(lang, 'nextPage')} disabled={last !== null && page >= last} onClick={() => setPage(page + 1)}>
+          <button type="button" className="btn" aria-label={st(lang, 'nextPage')} disabled={last !== null && page >= last} onClick={() => setPage(page + 1)}>
             <Forward size={18} aria-hidden="true" />
           </button>
         ) : (
-          <button type="submit" className="secondary">
+          <button type="submit" className="btn">
             →
           </button>
         )}
@@ -111,7 +111,7 @@ export function ScanViewer({
           ))}
         </ol>
       ) : null}
-      <Link className="button read-button" to={readHref({ url: file.url, title, page }, lang)}>
+      <Link className="btn read-button" to={readHref({ url: file.url, title, page }, lang)}>
         <BookOpen size={20} aria-hidden="true" /> {t(lang, 'readScan')} {page > 1 ? `(${t(lang, 'page')} ${page})` : ''}
       </Link>
     </div>

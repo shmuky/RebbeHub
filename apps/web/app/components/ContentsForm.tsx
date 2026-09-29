@@ -31,7 +31,7 @@ function Pick({ type, lang, chosen, onChoose }: { type: 'unit' | 'work'; lang: L
     return (
       <p>
         <strong>{chosen.label}</strong>{' '}
-        <button type="button" className="secondary" onClick={() => onChoose(null)}>
+        <button type="button" className="btn" onClick={() => onChoose(null)}>
           ✕
         </button>
       </p>
@@ -53,14 +53,14 @@ function Pick({ type, lang, chosen, onChoose }: { type: 'unit' | 'work'; lang: L
           dir="auto"
         />
       </label>
-      <button type="button" className="secondary" onClick={() => void search()}>
+      <button type="button" className="btn" onClick={() => void search()}>
         {t(lang, 'search')}
       </button>
       {found.length ? (
         <ul className="lookup-results">
           {found.map((item) => (
             <li key={item.id}>
-              <button type="button" className="secondary" onClick={() => onChoose(item)}>
+              <button type="button" className="btn" onClick={() => onChoose(item)}>
                 {item.label}
               </button>
             </li>

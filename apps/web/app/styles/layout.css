@@ -738,6 +738,11 @@ main#main {
   max-width: 760px;
 }
 
+/* A head that ends with its lede, with no tabs under it, keeps a margin above its rule. */
+.phead .wrap > .lede:last-child {
+  padding-bottom: 24px;
+}
+
 .phead .tabs {
   margin-top: 24px;
   border-bottom: 0;

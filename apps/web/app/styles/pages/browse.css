@@ -38,20 +38,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* A thing's marks at the end of a row: a scan or hanacha, a recording. */
-.row .has {
-  display: inline-grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 16px;
-  gap: 8px;
-  color: var(--subtle);
-  flex: none;
-}
-
-.row .has > i {
-  display: block;
-}
-
 /* ================================================================== the library (/sets) */
 
 .lib-search {
@@ -114,43 +100,6 @@
   text-overflow: ellipsis;
 }
 
-/* The sefarim people look for first, as their title pages. */
-.shaar-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
-  gap: 24px 16px;
-}
-
-.shaar-row .shaar {
-  --w: 124px;
-}
-
-.shaar-row li {
-  display: flex;
-  justify-content: center;
-}
-
-.shaar-row .shaar-fig {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin: 0;
-}
-
-.shaar-row .shaar-cap {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  max-width: 120px;
-}
-
-.shaar-row .shaar-cap b {
-  color: var(--text);
-  font-size: var(--fs-lg);
-  font-weight: 600;
-  line-height: 1.3;
-}
-
 .rebbe-list li {
   gap: 10px;
 }
@@ -172,20 +121,6 @@
 @media (max-width: 720px) {
   .lib-search {
     padding-bottom: 18px;
-  }
-  .shaar-row {
-    display: flex;
-    overflow-x: auto;
-    gap: 14px;
-    margin-inline: calc(var(--gutter) * -1);
-    padding: 2px var(--gutter) 8px;
-    scrollbar-width: none;
-  }
-  .shaar-row::-webkit-scrollbar {
-    display: none;
-  }
-  .shaar-row li {
-    flex: none;
   }
 }
 
