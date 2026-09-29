@@ -45,23 +45,19 @@ import_into() {
   DATABASE_URL=$1 rebbehub page-fixes register
 }
 
-DATABASE_URL=$live rebbehub migrate
-if [ "$(DATABASE_URL=$live rebbehub rebuildable | tail -n 1)" != "rebuildable" ]; then
-  echo "People have added to the live catalog: updating it in place."
-  import_into "$live"
-  exit 0
-fi
+# Postgres's own tools, as new as the live server (Neon runs a newer Postgres than
+# the runner's): PG_TOOLS_IMAGE runs them from that Postgres image.
+pgtool() {
+  if [ -n "${PG_TOOLS_IMAGE:-}" ]; then docker run --rm -i --network host "$PG_TOOLS_IMAGE" "$@"; else "$@"; fi
+}
 
-: "${BUILD_DATABASE_URL:?BUILD_DATABASE_URL is not set}"
-echo "Everything in the live catalog came from importers: rebuilding it here, then copying it in whole."
-DATABASE_URL=$BUILD_DATABASE_URL rebbehub migrate
-import_into "$BUILD_DATABASE_URL"
-
-# Every table is dropped whole and made again from the dump (pg_dump's own
-# --clean cannot drop a partitioned table's constraints one by one).
-{
-  rebbehub rebuildable --guard
-  cat <<'SQL'
+# Every table in public is dropped whole and made again from a dump of the build
+# (pg_dump's own --clean cannot drop a partitioned table's constraints one by one),
+# after $1: SQL that stops the transaction when the live catalog may not be replaced.
+copy_build_to_live() {
+  {
+    printf '%s\n' "$1"
+    cat <<'SQL'
 SET client_min_messages = warning;
 DO $$ DECLARE t text; BEGIN
   FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
@@ -69,7 +65,29 @@ DO $$ DECLARE t text; BEGIN
   END LOOP;
 END $$;
 SQL
-  # People's accounts, passkeys and sessions (the auth schema) are never the catalog's to replace.
-  pg_dump --no-owner --no-privileges --exclude-schema=auth "$BUILD_DATABASE_URL"
-} | psql "$live" --quiet --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --output /dev/null
+    # People's accounts, passkeys and sessions (the auth schema) are never the catalog's to replace.
+    pgtool pg_dump --no-owner --no-privileges --exclude-schema=auth "$BUILD_DATABASE_URL"
+  } | pgtool psql "$live" --quiet --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --output /dev/null
+}
+
+: "${BUILD_DATABASE_URL:?BUILD_DATABASE_URL is not set}"
+DATABASE_URL=$live rebbehub migrate
+if [ "$(DATABASE_URL=$live rebbehub rebuildable | tail -n 1)" != "rebuildable" ]; then
+  # Item by item across the internet an import takes hours. So the catalog as it is,
+  # people's work and all, is copied here; the import runs next to it; and the result
+  # is copied back in one transaction, only if the live catalog still has the mark it
+  # had when it was copied: anything anyone did meanwhile stops the copy, never lost.
+  echo "People have added to the live catalog: importing next to a copy of it, then copying it back."
+  mark=$(DATABASE_URL=$live rebbehub rebuildable --mark | tail -n 1)
+  pgtool pg_dump --no-owner --no-privileges --exclude-schema=auth "$live" | pgtool psql "$BUILD_DATABASE_URL" --quiet --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --output /dev/null
+  import_into "$BUILD_DATABASE_URL"
+  copy_build_to_live "$(DATABASE_URL=$live rebbehub rebuildable --guard-mark "$mark")"
+  echo "Copied: the live catalog is the import's result, with everything people had made."
+  exit 0
+fi
+
+echo "Everything in the live catalog came from importers: rebuilding it here, then copying it in whole."
+DATABASE_URL=$BUILD_DATABASE_URL rebbehub migrate
+import_into "$BUILD_DATABASE_URL"
+copy_build_to_live "$(rebbehub rebuildable --guard)"
 echo "Copied: the live catalog is the new build."
