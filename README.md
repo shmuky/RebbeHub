@@ -1,5 +1,8 @@
 # RebbeHub
 
+[![CI](https://github.com/shmuky/RebbeHub/actions/workflows/ci.yml/badge.svg)](https://github.com/shmuky/RebbeHub/actions/workflows/ci.yml)
+[![Licence: AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue.svg)](LICENSE)
+
 **The open, community-built index of Chabad Torah and media.** Every sefer
 and every printing of it, every scan, the text of each, every farbrengen
 and every recording synced to its words - from the Baal Shem Tov and the
@@ -27,10 +30,6 @@ The site is [rebbehub.org](https://rebbehub.org). The full plan is in
 [docs/plans/rebbehub.md](docs/plans/rebbehub.md); what is built so far, and
 what comes next: [docs/roadmap.md](docs/roadmap.md); what changed in each
 release: [CHANGELOG.md](CHANGELOG.md).
-
-<!-- Screenshots: the home page, a sicha with its scan and text side by
-side, a farbrengen with its recording synced to the words, and the review
-page. Added with the redesign. -->
 
 ## For developers and AI agents
 
@@ -112,7 +111,8 @@ deployment of its own changes.
 
 ## Licences
 
-- Code: [AGPL-3.0](LICENSE), so hosted copies stay open.
+- Code: [AGPL-3.0](LICENSE), so hosted copies stay open. The API client
+  ([packages/client](packages/client)) is under the same licence.
 - Security problems: privately, as [SECURITY.md](SECURITY.md) says.
 - Catalog facts: CC0. Community text, corrections and sync: CC BY-SA 4.0.
   Texts from other sources keep their own licence.
