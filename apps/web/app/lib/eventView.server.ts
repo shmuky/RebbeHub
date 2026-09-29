@@ -62,15 +62,15 @@ export async function eventView(api: RebbeHubApi, units: Entity[], recordings: E
   const list = units.slice(0, 12);
   // Each unit's work (and volume), where it is printed, and its texts.
   const works = await api.entities([...new Set(list.map((u) => String((u.data as D).work ?? '')).filter(Boolean))]).catch(() => new Map<string, Entity>());
-  const [maps, textLinks, syncOfRecording] = await Promise.all([
-    Promise.all(list.map((u) => api.backlinks(u.id, { field: 'unit', type: 'contents-map' }).catch(() => []))),
-    Promise.all(list.map((u) => api.backlinks(u.id, { field: 'unit', type: 'text' }).catch(() => []))),
-    // All the parts' synced hanachos in one request (a farbrengen may have forty parts).
+  // Where each sicha is printed and its texts, one request each for all of them; and all the parts' synced
+  // hanachos in one (a farbrengen may have forty parts, and a dozen sichos).
+  const ids = list.map((u) => u.id);
+  const [mapsOf, textsOf, syncOfRecording] = await Promise.all([
+    api.linkedOfEach(ids, { field: 'unit', type: 'contents-map', limit: 20 }).catch(() => new Map<string, Entity[]>()),
+    api.linkedOfEach(ids, { field: 'unit', type: 'text', limit: 20 }).catch(() => new Map<string, Entity[]>()),
     api.hanachaSyncs(recordings.map((r) => r.id)).catch(() => new Map<string, HanachaSync>()),
   ]);
   const syncs = recordings.map((r) => syncOfRecording.get(r.id) ?? null);
-  const mapItems = await api.entities(maps.flat().map((l) => l.from)).catch(() => new Map<string, Entity>());
-  const textItems = await api.entities(textLinks.flat().map((l) => l.from)).catch(() => new Map<string, Entity>());
 
   // Where each synced paragraph is heard, by segment id.
   const heard = new Map<string, { recording: string; startMs: number | null; endMs: number | null; checked: boolean }>();
@@ -82,6 +82,16 @@ export async function eventView(api: RebbeHubApi, units: Entity[], recordings: E
     for (const p of s.paragraphs) heard.set(p.id, { recording, startMs: p.startMs, endMs: p.endMs, checked: p.checked });
   });
 
+  // Each sicha's words to show (its edition, else its hanacha or transcript) and their English, chosen first so
+  // that every text's paragraphs come in one request.
+  const chosen = list.map((u) => {
+    const own = textsOf.get(u.id) ?? [];
+    const original = own.find((t) => (t.data as D).kind === 'edition') ?? own.find((t) => (t.data as D).kind === 'hanacha') ?? own.find((t) => (t.data as D).kind === 'transcript');
+    const translation = original ? own.find((t) => (t.data as D).kind === 'translation' && (t.data as D).language === 'en' && ((t.data as D).translationOf === original.id || !(t.data as D).translationOf)) : undefined;
+    return { original, translation };
+  });
+  const paragraphsOf = await api.linkedOfEach(chosen.flatMap((c) => [c.original?.id, c.translation?.id].filter((id): id is string => Boolean(id))), { field: 'text', type: 'segment', limit: MAX_PARAGRAPHS }).catch(() => new Map<string, Entity[]>());
+
   const said: SaidRow[] = [];
   const texts: EventText[] = [];
   const shown = new Set<string>();
@@ -90,19 +100,15 @@ export async function eventView(api: RebbeHubApi, units: Entity[], recordings: E
     const work = d.work ? works.get(d.work) : undefined;
     const volume = d.position && d.position.length > 1 ? d.position[0] : undefined;
     const source = work ? [labelOf(work, lang), volume ? nameOf(volume.label, lang) || volume.value : null].filter(Boolean).join(' ') : null;
-    const map = maps[i]!.map((l) => mapItems.get(l.from)).find(Boolean);
+    const map = (mapsOf.get(u.id) ?? [])[0];
     const page = (map?.data as { pages?: { from: number } } | undefined)?.pages?.from ?? null;
-    const own = textLinks[i]!.map((l) => textItems.get(l.from)).filter((t): t is Entity => Boolean(t));
-    const original = own.find((t) => (t.data as D).kind === 'edition') ?? own.find((t) => (t.data as D).kind === 'hanacha') ?? own.find((t) => (t.data as D).kind === 'transcript');
+    const { original, translation } = chosen[i]!;
     const kind = original ? String((original.data as D).kind) : null;
-    const translation = original ? own.find((t) => (t.data as D).kind === 'translation' && (t.data as D).language === 'en' && ((t.data as D).translationOf === original.id || !(t.data as D).translationOf)) : undefined;
 
     let first: SaidRow['at'] = null;
     if (original) {
-      const [segments, english] = await Promise.all([
-        api.children(original.id, 'text', 'segment', { limit: MAX_PARAGRAPHS }).then((r) => r.items).catch(() => [] as Entity[]),
-        translation ? api.children(translation.id, 'text', 'segment', { limit: MAX_PARAGRAPHS }).then((r) => r.items).catch(() => [] as Entity[]) : Promise.resolve(null),
-      ]);
+      const segments = paragraphsOf.get(original.id) ?? [];
+      const english = translation ? (paragraphsOf.get(translation.id) ?? []) : null;
       const paragraphs = segments
         .filter((s) => (s.data as D).kind !== 'heading')
         .map((s) => {

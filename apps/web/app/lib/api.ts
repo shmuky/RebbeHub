@@ -518,6 +518,28 @@ export class RebbeHubApi {
     return (await this.get<{ items: Entity[] }>(`/v1/works/${encodeURIComponent(id)}/parts/${encodeURIComponent(part)}`)).items;
   }
 
+  /** One group of what points at each of several items, a few of each, in one request (a sefer's sichos' texts): by item, in the group's order. */
+  async linkedOfEach(ids: readonly string[], options: { field: string; type?: string; limit?: number }): Promise<Map<string, Entity[]>> {
+    const unique = [...new Set(ids)].filter((id) => /^rh-[0-9a-z]+$/.test(id));
+    const out = new Map<string, Entity[]>();
+    for (let i = 0; i < unique.length; i += 200) {
+      const { linked } = await this.get<{ linked: Record<string, Entity[]> }>('/v1/entities/batch/linked', { ids: unique.slice(i, i + 200).join(','), ...options });
+      for (const [id, items] of Object.entries(linked)) out.set(id, items);
+    }
+    return out;
+  }
+
+  /** How many paragraphs each of several texts has and how many a person checked, in one request; texts without any are left out. */
+  async textsProgress(ids: readonly string[]): Promise<Map<string, { paragraphs: number; checked: number }>> {
+    const unique = [...new Set(ids)].filter((id) => /^rh-[0-9a-z]+$/.test(id));
+    const out = new Map<string, { paragraphs: number; checked: number }>();
+    for (let i = 0; i < unique.length; i += 200) {
+      const { progress } = await this.get<{ progress: Record<string, { paragraphs: number; checked: number }> }>('/v1/texts/batch/progress', { ids: unique.slice(i, i + 200).join(',') });
+      for (const [id, p] of Object.entries(progress)) out.set(id, p);
+    }
+    return out;
+  }
+
   async backlinks(id: string, options: { field?: string; type?: string } = {}) {
     return (await this.get<{ backlinks: Backlink[] }>(`/v1/entities/${encodeURIComponent(id)}/backlinks`, options)).backlinks;
   }

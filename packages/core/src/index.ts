@@ -147,7 +147,7 @@ export {
   type NewCover,
   type PageLook,
 } from './covers.js';
-export { linkedCounts, linkedPage, type LinkGroup } from './linked.js';
+export { linkedCounts, linkedOfEach, linkedPage, textsProgress, type LinkGroup } from './linked.js';
 export {
   HANACHA_TEXT_RIGHTS,
   MAX_HANACHA_PARAGRAPHS,

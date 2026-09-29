@@ -11,8 +11,9 @@ import { RIGHTS_BY_LICENCE, mayExport, type EntityId, type Licence, type RightsS
  * file. Files themselves are never in the exports, only their hashes.
  */
 export class ExportGate {
-  private readonly texts = new Map<string, string | null>();
-  private readonly layers = new Map<string, string | null>();
+  // What was asked is kept as the promise of its answer, so twenty segments of one text asked at once read it once.
+  private readonly texts = new Map<string, Promise<string | null>>();
+  private readonly layers = new Map<string, Promise<string | null>>();
 
   /** `at`: the commit whose rights apply; leave it out for main as it is now. */
   constructor(
@@ -49,24 +50,29 @@ export class ExportGate {
   }
 
   /** Why a text's words are withheld, or null when they may be exported. */
-  async textWithheld(textId: EntityId, data?: TextData): Promise<string | null> {
-    if (this.texts.has(textId)) return this.texts.get(textId)!;
-    const text = data ?? ((await this.view(textId))?.data as unknown as TextData | undefined);
-    let reason: string | null = null;
-    if (text?.licence && !mayExport(RIGHTS_BY_LICENCE[text.licence as Licence])) reason = `its source's terms (${text.licence}) do not allow copies`;
-    this.texts.set(textId, reason);
-    return reason;
+  textWithheld(textId: EntityId, data?: TextData): Promise<string | null> {
+    const known = this.texts.get(textId);
+    if (known) return known;
+    const asked = (async () => {
+      const text = data ?? ((await this.view(textId))?.data as unknown as TextData | undefined);
+      if (text?.licence && !mayExport(RIGHTS_BY_LICENCE[text.licence as Licence])) return `its source's terms (${text.licence}) do not allow copies`;
+      return null;
+    })();
+    this.texts.set(textId, asked);
+    return asked;
   }
 
   /** Why a text layer's pages are withheld, or null. */
-  async layerWithheld(layerId: EntityId): Promise<string | null> {
-    if (this.layers.has(layerId)) return this.layers.get(layerId)!;
-    let reason: string | null = null;
-    const layer = (await this.view(layerId))?.data as unknown as TextLayerData | undefined;
-    const scan = layer ? ((await this.view(layer.scan))?.data as unknown as ScanData | undefined) : undefined;
-    const file = scan ? await getFile(this.catalog.db, scan.file) : null;
-    if (!file || !mayExport(file.rights_state)) reason = `the scan's rights (${file?.rights_state ?? 'unknown'}) do not allow copies`;
-    this.layers.set(layerId, reason);
-    return reason;
+  layerWithheld(layerId: EntityId): Promise<string | null> {
+    const known = this.layers.get(layerId);
+    if (known) return known;
+    const asked = (async () => {
+      const layer = (await this.view(layerId))?.data as unknown as TextLayerData | undefined;
+      const scan = layer ? ((await this.view(layer.scan))?.data as unknown as ScanData | undefined) : undefined;
+      const file = scan ? await getFile(this.catalog.db, scan.file) : null;
+      return !file || !mayExport(file.rights_state) ? `the scan's rights (${file?.rights_state ?? 'unknown'}) do not allow copies` : null;
+    })();
+    this.layers.set(layerId, asked);
+    return asked;
   }
 }

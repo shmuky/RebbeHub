@@ -51,14 +51,26 @@ beforeAll(async () => {
   const set = fresh.set;
   ids.set = set;
 
-  // A sefer of thirty sichos, printed once, with a scan we hold.
-  ids.work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'שיחות לדוגמה', en: 'Sample Sichos' }, slug: 'igros-sample', authors: [], genre: 'sichos', levels: ['sicha'], sets: [set] }, '/igros-sample');
+  // A sefer of two volumes, thirty sichos in the first, printed once with a scan we hold; the first sichos have
+  // their words (an edition, one with its English), and the printing says where the first is.
+  ids.work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'שיחות לדוגמה', en: 'Sample Sichos' }, slug: 'igros-sample', authors: [], genre: 'sichos', levels: ['volume', 'sicha'], sets: [set] }, '/igros-sample');
   const units: EntityId[] = [];
-  for (let i = 1; i <= 30; i++) units.push(await add(catalog, 'mendy', 'keeper', 'unit', { work: ids.work, position: [{ level: 'sicha', value: String(i) }], order: `a${String(i).padStart(2, '0')}`, label: { he: `שיחה ${i}` } }));
+  const volume = (n: number) => ({ level: 'volume', value: String(n), label: { he: `חלק ${n}`, en: `Volume ${n}` } });
+  for (let i = 1; i <= 30; i++) units.push(await add(catalog, 'mendy', 'keeper', 'unit', { work: ids.work, position: [volume(1), { level: 'sicha', value: String(i) }], order: `a${String(i).padStart(2, '0')}`, label: { he: `שיחה ${i}` } }));
+  for (let i = 1; i <= 3; i++) await add(catalog, 'mendy', 'keeper', 'unit', { work: ids.work, position: [volume(2), { level: 'sicha', value: String(i) }], order: `b${String(i).padStart(2, '0')}`, label: { he: `שיחה ${i}` } });
   ids.unit = units[0]!;
-  ids.pub = await add(catalog, 'mendy', 'keeper', 'publication', { kind: 'book-volume', title: { he: 'דפוס ראשון' }, work: ids.work, sets: [set] });
+  for (const [i, u] of units.slice(0, 4).entries()) {
+    const edition = await add(catalog, 'mendy', 'keeper', 'text', { kind: 'edition', unit: u, language: 'he' });
+    for (let p = 0; p < 4; p++) await add(catalog, 'mendy', 'keeper', 'segment', { text: edition, order: `V${p}`, kind: 'paragraph', content: `פסקה ${p} של שיחה ${i + 1}`, proofread: p === 0 ? 1 : 0 });
+    if (i === 0) {
+      const english = await add(catalog, 'mendy', 'keeper', 'text', { kind: 'translation', unit: u, language: 'en', translationOf: edition });
+      await add(catalog, 'mendy', 'keeper', 'segment', { text: english, order: 'V0', kind: 'paragraph', content: 'Paragraph 0 of sicha 1', proofread: 0 });
+    }
+  }
+  ids.pub = await add(catalog, 'mendy', 'keeper', 'publication', { kind: 'book-volume', title: { he: 'דפוס ראשון' }, work: ids.work, volume: '1', sets: [set] });
   await registerFile(catalog.db, { sha256: sha('a'), bytes: 5000, mime: 'application/pdf', source: 'contribution', licence: 'cc0', held: true });
   ids.scan = await add(catalog, 'mendy', 'keeper', 'scan', { publication: ids.pub, file: sha('a'), completeness: 'complete' });
+  await add(catalog, 'mendy', 'keeper', 'contents-map', { publication: ids.pub, pages: { from: 7, to: 12, scheme: 'printed' }, unit: ids.unit });
 
   // A farbrengen of six parts, three with files, two sichos said at it, and a hanacha synced to the first part.
   ids.event = await add(catalog, 'mendy', 'keeper', 'event', yudShvat(set), '/events/5742-05-10');
@@ -153,20 +165,22 @@ describe("each page's statements and API calls stay within its ceiling", () => {
     within(await page('/farbrengens'), 'a set', { statements: 22, calls: 15 });
   });
   it('the calendar', async () => within(await page('/calendar'), '/calendar', { statements: 3, calls: 2 }));
-  it('a sefer, and a sicha in it', async () => {
-    within(await page('/igros-sample'), 'a sefer', { statements: 45, calls: 22 });
-    within(await page(await pathOf(ids.unit)), 'a sicha', { statements: 40, calls: 20 });
+  it('a sefer, one volume of it however many sichos, and a sicha in it', async () => {
+    within(await page('/igros-sample'), 'a sefer', { statements: 40, calls: 22 });
+    // A volume's page is the site's fullest: a request may pass through 32 Workers in all, so this stays well under.
+    within(await page('/igros-sample?part=1'), 'a volume', { statements: 45, calls: 28 });
+    within(await page(await pathOf(ids.unit)), 'a sicha', { statements: 40, calls: 22 });
   });
   it('a printing and its scan', async () => {
     within(await page(await pathOf(ids.pub)), 'a printing', { statements: 40, calls: 20 });
     within(await page(await pathOf(ids.scan)), 'a scan', { statements: 40, calls: 20 });
   });
-  it('a farbrengen, whatever its number of parts, and one part', async () => {
-    within(await page('/events/5742-05-10'), 'a farbrengen', { statements: 40, calls: 28 });
+  it('a farbrengen, whatever its number of parts or sichos, and one part', async () => {
+    within(await page('/events/5742-05-10'), 'a farbrengen', { statements: 45, calls: 24 });
     within(await page(await pathOf(ids.recording)), 'a recording', { statements: 40, calls: 20 });
   });
   it('search, suggestions and review', async () => {
-    within(await page(`/search?q=${encodeURIComponent('שיחה')}`), 'search', { statements: 5, calls: 5 });
+    within(await page(`/search?q=${encodeURIComponent('שיחה')}`), 'search', { statements: 15, calls: 6 });
     within(await page('/suggestions'), '/suggestions', { statements: 8, calls: 3 });
     within(await page(`/suggestions/${suggestion}`), 'a suggestion', { statements: 18, calls: 8 });
     within(await page('/review'), '/review', { statements: 2, calls: 2 });

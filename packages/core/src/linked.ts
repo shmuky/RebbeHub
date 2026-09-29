@@ -56,6 +56,57 @@ const decode = (cursor: string) => {
 };
 
 /**
+ * One group of what points at each of several items (through `field`, of
+ * `type` when given), in the group's order, at most `limit` for each: a
+ * sefer's page asks once for all its sichos' texts and a farbrengen's once
+ * for its sichos' words, where each used to ask for every row (a volume
+ * of Igros Kodesh made 166 requests). One statement, however many items.
+ */
+export async function linkedOfEach(db: Db, ids: readonly EntityId[], options: { field: string; type?: EntityType; limit?: number }): Promise<Map<EntityId, EntityView[]>> {
+  if (!FIELD.test(options.field)) throw invalid('say which field points here (field=work)');
+  const out = new Map<EntityId, EntityView[]>();
+  const wanted = [...new Set(ids)].slice(0, 200);
+  if (!wanted.length) return out;
+  const limit = Math.min(Math.max(options.limit ?? 50, 1), 500);
+  const params: unknown[] = [wanted, options.field];
+  const typed = options.type ? `AND e.type = $${params.push(options.type)}` : '';
+  const { rows } = await db.query<RevisionRow & { to: EntityId; n: number }>(
+    `SELECT * FROM (
+       SELECT x.to_id AS "to", r.*, row_number() OVER (PARTITION BY x.to_id ORDER BY ${SORT_KEY}) AS n
+       FROM entity_ref x JOIN entity e ON e.id = x.from_id AND NOT e.deleted AND e.main_rev IS NOT NULL JOIN revision r ON r.id = e.main_rev
+       WHERE x.to_id = ANY($1::text[]) AND x.field = $2 ${typed}
+     ) l WHERE l.n <= ${limit} ORDER BY l."to", l.n`,
+    params,
+  );
+  for (const r of rows) {
+    const list = out.get(r.to) ?? out.set(r.to, []).get(r.to)!;
+    list.push({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! });
+  }
+  return out;
+}
+
+/**
+ * What a list says of each of several texts without reading their words:
+ * how many paragraphs each has (headings aside) and how many of them a
+ * person checked (`proofread`). One statement.
+ */
+export async function textsProgress(db: Db, texts: readonly EntityId[]): Promise<Map<EntityId, { paragraphs: number; checked: number }>> {
+  const out = new Map<EntityId, { paragraphs: number; checked: number }>();
+  const wanted = [...new Set(texts)].slice(0, 200);
+  if (!wanted.length) return out;
+  const { rows } = await db.query<{ text: EntityId; paragraphs: number; checked: number }>(
+    `SELECT x.to_id AS text,
+            count(*) FILTER (WHERE coalesce(r.data->>'kind', '') <> 'heading')::int AS paragraphs,
+            count(*) FILTER (WHERE coalesce(r.data->>'kind', '') <> 'heading' AND coalesce((r.data->>'proofread')::int, 0) >= 1)::int AS checked
+     FROM entity_ref x JOIN entity e ON e.id = x.from_id AND e.type = 'segment' AND NOT e.deleted AND e.main_rev IS NOT NULL JOIN revision r ON r.id = e.main_rev
+     WHERE x.to_id = ANY($1::text[]) AND x.field = 'text' GROUP BY x.to_id`,
+    [wanted],
+  );
+  for (const r of rows) out.set(r.text, { paragraphs: r.paragraphs, checked: r.checked });
+  return out;
+}
+
+/**
  * One page of what points at an item through `field` (and is of `type`,
  * when given), in order, with how many there are in all and the cursor
  * for the next page (null on the last).
