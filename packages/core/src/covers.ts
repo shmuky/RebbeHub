@@ -15,10 +15,14 @@ import { invalid } from './errors.js';
  * a page, which they do through a suggestion that sets the work's `cover`
  * (reviewed like any other); the jobs then draw the page the person chose.
  *
- * Covers come only from PDFs RebbeHub may serve (open or credit, in the
- * public bucket), and are derivations of them, so a takedown takes the
- * cover down with the file (docs/rights.md). A book RebbeHub only links to
- * keeps its drawn cover.
+ * Covers come from PDFs RebbeHub serves (open or credit, in the public
+ * bucket) and, failing those, from PDFs it only links to (`link`: the
+ * Otzros library on Drive, HebrewBooks). A linked PDF is fetched from its
+ * link and kept in the preservation bucket, never served; its cover is
+ * RebbeHub's own picture and is served, and the sefer's page still links
+ * to the source for the PDF (the owner's decision, 2026-09-29: "we store
+ * everything; link in public"). Either way a cover is a derivation of its
+ * PDF, so a takedown takes the cover down with the file (docs/rights.md).
  */
 
 /** The covers' version, as their derivations' `encoder`: bumped whenever a cover would come out differently. */
@@ -173,28 +177,35 @@ export function chooseTitlePage(looks: readonly PageLook[]): { page: number; sco
 /** A PDF a sefer's cover can be drawn from, best first. */
 export interface CoverSource {
   sha256: string;
-  /** Through a scan of one of its printings, or a PDF linked from one of its units. */
-  via: 'scan' | 'unit';
-  /** The scan or unit. */
+  /** Through a scan of one of its printings, a PDF linked from one of its units, or a printing's HebrewBooks scan. */
+  via: 'scan' | 'unit' | 'publication';
+  /** The scan, unit or publication. */
   item: EntityId;
+  /** Only linked (`link`): not served, so the jobs fetch it from its link (or the preservation bucket) to draw the cover. */
+  linked: boolean;
 }
 
-/** Served PDFs (open or credit, in the public bucket): the only ones a cover is drawn from. */
-const SERVED = `f.mime = 'application/pdf' AND f.storage_tier = 'public' AND f.rights_state IN ('open', 'credit')`;
+/** Where HebrewBooks gives a scan's PDF, by its HebrewBooks id. */
+export const hebrewBooksPdfUrl = (id: string | number) => `https://download.hebrewbooks.org/downloadhandler.ashx?req=${id}`;
+
+/** PDFs a cover may be drawn from: served ones (open or credit, in the public bucket), and linked ones. Never a preserved one: a takedown ends its cover. */
+const COVERABLE = `f.mime = 'application/pdf' AND ((f.storage_tier = 'public' AND f.rights_state IN ('open', 'credit')) OR f.rights_state = 'link')`;
 
 /**
- * Every served PDF of each work in `works`: the scans of its printings
- * (the preferred first, then complete ones, then the oldest printing),
- * then the PDFs its units link to that RebbeHub holds (a unit's edition
- * on Google Drive whose file the catalog registered), in the units' order.
+ * Every PDF of each work in `works` a cover may be drawn from, served ones
+ * before linked ones, and within each: the scans of its printings (the
+ * preferred first, then complete ones, then the oldest printing), then
+ * the PDFs its units link to that the catalog knows (a unit's edition on
+ * Google Drive whose file the catalog registered), in the units' order,
+ * then its printings' HebrewBooks scans the jobs have fetched.
  */
 function sourcesSql(works: string): string {
   return `
     WITH drive AS (
       SELECT DISTINCT ON (substring(s.url from '/file/d/([A-Za-z0-9_-]{10,})')) substring(s.url from '/file/d/([A-Za-z0-9_-]{10,})') AS drive_id, f.sha256
       FROM file_source s JOIN file f ON f.sha256 = s.sha256
-      WHERE s.url LIKE 'https://drive.google.com/file/d/%' AND ${SERVED}
-      ORDER BY 1, s.created_at
+      WHERE s.url LIKE 'https://drive.google.com/file/d/%' AND ${COVERABLE}
+      ORDER BY 1, (f.rights_state = 'link'), s.created_at
     ), found AS (
       SELECT x.to_id AS work, 'scan' AS via, sc.id AS item, sr.data->>'file' AS sha256,
              CASE WHEN (sr.data->>'preferred')::boolean IS TRUE THEN 0 WHEN sr.data->>'completeness' = 'complete' THEN 1 ELSE 2 END AS rank,
@@ -211,17 +222,60 @@ function sourcesSql(works: string): string {
       CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(ur.data->'editions') = 'array' THEN ur.data->'editions' ELSE '[]'::jsonb END) ed
       JOIN drive d ON d.drive_id = substring(ed->>'url' from '/(?:drive|file/d)/([A-Za-z0-9_-]{10,})')
       WHERE x.field = 'work' AND x.to_id IN (${works})
+      UNION ALL
+      SELECT x.to_id, 'publication', p.id, s.sha256, 4, coalesce(pr.data->>'date', '9999')
+      FROM entity_ref x
+      JOIN entity p ON p.id = x.from_id AND p.type = 'publication' AND NOT p.deleted AND p.main_rev IS NOT NULL JOIN revision pr ON pr.id = p.main_rev
+      JOIN file_source s ON s.url = '${hebrewBooksPdfUrl('')}' || (pr.data->'identifiers'->>'hebrewbooks')
+      WHERE x.field = 'work' AND x.to_id IN (${works}) AND pr.data->'identifiers'->>'hebrewbooks' ~ '^[0-9]+$'
     )
-    SELECT found.work, found.via, found.item, found.sha256 FROM found JOIN file f ON f.sha256 = found.sha256
-    WHERE ${SERVED}
-    ORDER BY found.work, found.rank, found.sub COLLATE "C", found.item`;
+    SELECT found.work, found.via, found.item, found.sha256, f.rights_state = 'link' AS linked FROM found JOIN file f ON f.sha256 = found.sha256
+    WHERE ${COVERABLE}
+    ORDER BY found.work, (f.rights_state = 'link'), found.rank, found.sub COLLATE "C", found.item`;
+}
+
+/** The machine_pass job that remembers a HebrewBooks scan that could not be fetched, at its publication's revision. */
+export const COVERS_FETCH_PASS = 'covers-fetch';
+
+/**
+ * The HebrewBooks scans of each work in `works` that the jobs have not
+ * fetched yet (none of the catalog's files came from their link), the
+ * oldest printing first. A scan that could not be fetched is not tried
+ * again until its publication changes (COVERS_FETCH_PASS).
+ */
+function toFetchSql(works: string): string {
+  return `
+    SELECT x.to_id AS work, p.id AS item, pr.data->'identifiers'->>'hebrewbooks' AS hebrewbooks
+    FROM entity_ref x
+    JOIN entity p ON p.id = x.from_id AND p.type = 'publication' AND NOT p.deleted AND p.main_rev IS NOT NULL JOIN revision pr ON pr.id = p.main_rev
+    WHERE x.field = 'work' AND x.to_id IN (${works}) AND pr.data->'identifiers'->>'hebrewbooks' ~ '^[0-9]+$'
+      AND NOT EXISTS (SELECT 1 FROM file_source s WHERE s.url = '${hebrewBooksPdfUrl('')}' || (pr.data->'identifiers'->>'hebrewbooks'))
+      AND NOT EXISTS (SELECT 1 FROM machine_pass m WHERE m.job = '${COVERS_FETCH_PASS}' AND m.entity_id = p.id AND m.rev = p.main_rev)
+    ORDER BY x.to_id, coalesce(pr.data->>'date', '9999') COLLATE "C", p.id`;
+}
+
+/** Remembers that a publication's HebrewBooks scan could not be fetched, until the publication changes. */
+export async function coverFetchFailed(db: Db, publication: EntityId): Promise<void> {
+  await db.query(
+    `INSERT INTO machine_pass (job, entity_id, rev) SELECT $1, id, main_rev FROM entity WHERE id = $2 AND main_rev IS NOT NULL
+     ON CONFLICT (job, entity_id) DO UPDATE SET rev = EXCLUDED.rev, at = now()`,
+    [COVERS_FETCH_PASS, publication],
+  );
 }
 
 /** The PDFs a work's cover can be drawn from, best first, each file once. */
 export async function coverSources(db: Db, work: EntityId): Promise<CoverSource[]> {
-  const { rows } = await db.query<{ via: 'scan' | 'unit'; item: EntityId; sha256: string }>(sourcesSql('$1'), [work]);
+  const { rows } = await db.query<{ via: CoverSource['via']; item: EntityId; sha256: string; linked: boolean }>(sourcesSql('$1'), [work]);
   const seen = new Set<string>();
-  return rows.filter((r) => !seen.has(r.sha256) && seen.add(r.sha256)).map((r) => ({ sha256: r.sha256, via: r.via, item: r.item }));
+  return rows.filter((r) => !seen.has(r.sha256) && seen.add(r.sha256)).map((r) => ({ sha256: r.sha256, via: r.via, item: r.item, linked: r.linked }));
+}
+
+/** A printing's scan on HebrewBooks, not fetched yet: where a cover can come from once the jobs fetch it. */
+export interface CoverToFetch {
+  /** The publication (a printing) whose `identifiers.hebrewbooks` it is. */
+  item: EntityId;
+  source: 'hebrewbooks';
+  url: string;
 }
 
 /** A work that wants its cover drawn: what a person chose, if anything, and where the pages can come from. */
@@ -230,11 +284,14 @@ export interface CoverWanted {
   /** The page a person chose (the work's `cover`), when they chose one. */
   chosen: { file: string; page: number } | null;
   sources: CoverSource[];
+  /** Linked scans still to be fetched, for when there is no PDF above. */
+  toFetch: CoverToFetch[];
 }
 
 /**
  * Works whose cover is still to be drawn, a batch at a time: those with a
- * served PDF and no cover yet, those whose person-chosen page is not the
+ * PDF a cover may come from (served, linked, or a HebrewBooks scan still
+ * to fetch) and no cover yet, those whose person-chosen page is not the
  * one drawn, and (with `again`) those drawn by an older version of the tool.
  */
 export async function coversWanted(db: Db, options: { work?: EntityId; limit?: number; again?: boolean } = {}): Promise<CoverWanted[]> {
@@ -248,12 +305,16 @@ export async function coversWanted(db: Db, options: { work?: EntityId; limit?: n
             OR (r.data ? 'cover' AND (c.chosen_by <> 'person' OR c.src_sha256 <> r.data->'cover'->>'file' OR c.page <> (r.data->'cover'->>'page')::int))
             OR (NOT r.data ? 'cover' AND c.chosen_by = 'person')
             ${stale})`;
-  const { rows } = await db.query<{ work: EntityId }>(`SELECT DISTINCT s.work FROM (${sourcesSql(wanted)}) s ORDER BY s.work LIMIT ${limit}`, params);
+  const { rows } = await db.query<{ work: EntityId }>(
+    `SELECT DISTINCT u.work FROM (SELECT s.work FROM (${sourcesSql(wanted)}) s UNION ALL SELECT t.work FROM (${toFetchSql(wanted)}) t) u ORDER BY u.work LIMIT ${limit}`,
+    params,
+  );
   const out: CoverWanted[] = [];
   for (const { work } of rows) {
     const row = await one<{ chosen: { file?: unknown; page?: unknown } | null }>(db, "SELECT r.data->'cover' AS chosen FROM entity e JOIN revision r ON r.id = e.main_rev WHERE e.id = $1", [work]);
     const chosen = row?.chosen && typeof row.chosen.file === 'string' && Number.isInteger(row.chosen.page) ? { file: row.chosen.file, page: row.chosen.page as number } : null;
-    out.push({ work, chosen, sources: await coverSources(db, work) });
+    const { rows: fetch } = await db.query<{ item: EntityId; hebrewbooks: string }>(toFetchSql('$1'), [work]);
+    out.push({ work, chosen, sources: await coverSources(db, work), toFetch: fetch.map((f) => ({ item: f.item, source: 'hebrewbooks' as const, url: hebrewBooksPdfUrl(f.hebrewbooks) })) });
   }
   return out;
 }
@@ -322,7 +383,7 @@ export interface CoverView {
   credit: string | null;
 }
 
-/** The covers of these items that may be shown: those whose pictures are still served (a takedown hides them). */
+/** The covers of these items that may be shown: those whose PDF is served or linked and whose pictures are served (a takedown hides them). */
 export async function coversOf(db: Db, ids: readonly string[]): Promise<Record<string, CoverView>> {
   if (ids.length === 0) return {};
   const { rows } = await db.query<{
@@ -342,7 +403,7 @@ export async function coversOf(db: Db, ids: readonly string[]): Promise<Record<s
     `SELECT c.*, src.credit FROM cover c
      JOIN file src ON src.sha256 = c.src_sha256 JOIN file i ON i.sha256 = c.image_sha256 JOIN file t ON t.sha256 = c.thumb_sha256
      WHERE c.entity_id = ANY($1::text[])
-       AND src.rights_state IN ('open', 'credit') AND i.rights_state IN ('open', 'credit') AND i.storage_tier = 'public' AND t.rights_state IN ('open', 'credit') AND t.storage_tier = 'public'`,
+       AND src.rights_state IN ('open', 'credit', 'link') AND i.rights_state IN ('open', 'credit') AND i.storage_tier = 'public' AND t.rights_state IN ('open', 'credit') AND t.storage_tier = 'public'`,
     [[...new Set(ids)].slice(0, 500)],
   );
   return Object.fromEntries(

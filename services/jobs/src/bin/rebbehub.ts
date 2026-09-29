@@ -86,9 +86,11 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 none (the IIIF manifests and the site's viewer show them),
                                                 into R2 (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
   rebbehub covers [--work <id>] [--limit <n>] [--again] [--files <url>] [--bucket rebbehub-public]
-                                                each sefer's cover from the title page of its best served
-                                                PDF (or the page a keeper chose), into R2
-                                                (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
+                  [--preservation-bucket rebbehub-preservation]
+                                                each sefer's cover from the title page of its best PDF
+                                                (or the page a keeper chose), into R2; a PDF only linked
+                                                (Drive, HebrewBooks) is fetched and kept in the
+                                                preservation bucket (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
   rebbehub fingerprints [--limit <n>] [--files <url>] [--preservation-bucket rebbehub-preservation]
                                                 page hashes and audio fingerprints of held files not
                                                 measured yet (recordings need ffmpeg), so the same scan
@@ -222,7 +224,7 @@ try {
       await pageImagesCommand(ctx, { scan: values.scan, limit: number(values.limit), files: values.files, bucket: values.bucket });
       break;
     case 'covers':
-      await coversCommand(ctx, { work: values.work, limit: number(values.limit), again: values.again, files: values.files, bucket: values.bucket });
+      await coversCommand(ctx, { work: values.work, limit: number(values.limit), again: values.again, files: values.files, bucket: values.bucket, preservationBucket: values['preservation-bucket'] });
       break;
     case 'fingerprints':
       await fingerprintsCommand(ctx, { limit: number(values.limit), files: values.files, preservationBucket: values['preservation-bucket'] });

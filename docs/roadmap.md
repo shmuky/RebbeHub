@@ -174,11 +174,14 @@ inside talk pages' wiki text, and a steward's page to edit labels.
   the typed client `@rebbehub/client`. The rate limits need the
   `[[ratelimits]]` bindings deployed ([configuration](configuration.md)).
 - **Covers from the shaar** ✅: `rebbehub covers` draws a sefer's cover
-  from the title page of its best served PDF (past blank pages and cover
+  from the title page of its best PDF (past blank pages and cover
   sheets, by ink and words), labelled as the machine's choice; a keeper
-  chooses another page through a suggestion. Linked-only PDFs keep the
-  drawn cloth cover. Not yet in a workflow; needs the R2 keys
-  ([operations](operations.md)).
+  chooses another page through a suggestion. A sefer whose PDF is only
+  linked (the Otzros library, HebrewBooks) gets a cover too: the PDF is
+  fetched and kept in the preservation bucket, the cover served, the PDF
+  still linked ([rights](rights.md)). Runs from the **Upkeep (manual)**
+  workflow, with `convert-bodies` and `page-images`; needs the R2 keys
+  ([operations](operations.md), [deploy](deploy.md)).
 - **Adding what the catalog lacks** ✅: `/add` takes a new hanacha (PDF
   or words), a recording, or a sefer, letter or document; the machine
   proposes where it belongs from its name, the person confirms or names

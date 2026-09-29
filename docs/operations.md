@@ -245,10 +245,11 @@ ever shown as a guess.
 
 ## Covers from the shaar
 
-A sefer's cover on the site is its **title page** (the shaar), where one
-of its PDFs is served: `rebbehub covers` samples the first ten pages of
-the best one (a preferred, complete scan of its printings first, then a
-sicha's PDF on Drive that RebbeHub holds), reads their ink and their
+A sefer's cover on the site is its **title page** (the shaar), from one
+of its PDFs: `rebbehub covers` samples the first ten pages of the best
+one (a PDF the site serves before one it only links to; within each, a
+preferred, complete scan of its printings first, then a sicha's PDF on
+Drive, then a printing's scan on HebrewBooks), reads their ink and their
 words (the PDF's own, or the machine OCR of the scan), skips blank pages
 and dark cover sheets, and takes the page that looks most like a shaar:
 little ink, a few centred lines, "ספר", a publisher, a year. Failing
@@ -263,13 +264,27 @@ another page as the title page"), a suggestion that sets the work's
 and keeps it as the person's choice. A cover the machine chose says so.
 
 ```sh
-export CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=…   # R2 edit rights on rebbehub-public
+export CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=…   # R2 edit rights on rebbehub-public and rebbehub-preservation
 rebbehub covers --limit 200                              # or --work <id>; --again after the tool changes
 ```
 
-Only PDFs the site serves (`open` or `credit`, in the public bucket) give
-covers: a linked-only PDF (the Otzros library, HebrewBooks) keeps the
-drawn cloth cover. The command is not in any workflow yet.
+A sefer whose PDFs are only linked (`link`: the Otzros library on Drive,
+a printing's scan on HebrewBooks) gets its cover too. The job fetches
+the PDF from its link (Drive as it gives files to anyone with the link;
+HebrewBooks from `download.hebrewbooks.org`), checks it against the
+sha256 the catalog has, and keeps it in `rebbehub-preservation`, never
+served, as the file's copy (a HebrewBooks scan becomes a file of its
+own, from its publication's HebrewBooks id, credited to HebrewBooks.org).
+The cover goes into the public bucket and is served; the sefer's page
+still links to the source for the PDF ([rights](rights.md)). A PDF
+already kept is read back from the preservation bucket, not fetched
+again. Without the preservation bucket those sefarim wait, and the log
+says how many. A HebrewBooks scan that cannot be fetched is not asked
+for again until its publication changes; a PDF whose rights keep no copy
+is not fetched, and the log says so.
+
+It runs from the **Upkeep (manual)** workflow ([deploy](deploy.md)),
+`covers` job.
 
 ## The API
 

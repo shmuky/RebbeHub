@@ -34,8 +34,9 @@ from the Otzaria catalog (`apps/mobile/src/catalog/data/works/shelf.json`
 in the checkout). `HEBREWBOOKS_SHELF` names a fresher one; the workflow
 reads it from the latest Otzaria release. Each scan becomes a publication
 with its HebrewBooks id, place and year printed, and a link to
-hebrewbooks.org. Nothing is copied: HebrewBooks is link-only
-([rights](rights.md)). A series Sichos-Kodesh places in a work joins that
+hebrewbooks.org. The importer copies nothing: HebrewBooks is link-only
+([rights](rights.md)); `rebbehub covers` later keeps a private copy of a
+scan it draws a sefer's cover from ([operations](operations.md#covers-from-the-shaar)). A series Sichos-Kodesh places in a work joins that
 work; the rest become works of their own, in the HebrewBooks Set.
 
 ## chabadlibrary

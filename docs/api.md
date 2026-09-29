@@ -77,9 +77,11 @@ route's examples and a reference to try them in, are at
   one of those groups in its own order (order key, date, part, page), up
   to 500 at a time, with `total` and `next` (null at the end).
 - `GET /v1/covers?ids=rh-…,rh-…` (up to 200): sefarim's covers, drawn
-  from their title pages, while their PDFs are served; `machine: true`
-  until a person chose the page. `GET /v1/works/<id>/cover`: one sefer's
-  cover, the page chosen, and the PDFs it may be chosen from.
+  from their title pages, while their PDFs are served or linked (a cover
+  of a linked PDF is served; the PDF is not); `machine: true` until a
+  person chose the page. `GET /v1/works/<id>/cover`: one sefer's cover,
+  the page chosen, and the PDFs it may be chosen from (`linked: true` for
+  one RebbeHub only links to).
 - `GET /v1/files/<sha256>/about`: a file's own page: rights, where it
   came from, what was made from it and measured in it, the covers drawn
   from it, and the items that use it (`usedBy.total` and the first of

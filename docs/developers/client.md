@@ -5,7 +5,9 @@ typed client for the API, generated from its OpenAPI document: one method
 per operation, named by its `operationId`, taking one object of its path
 and query parameters (and `body`), and answering the typed JSON. It has
 no dependencies and runs wherever `fetch` does: Node 18+, browsers,
-Workers, Deno, Bun.
+Workers, Deno, Bun. Its licence is the site's own,
+[AGPL-3.0](https://github.com/shmuky/RebbeHub/blob/main/LICENSE), and the
+package carries a copy.
 
 ```ts
 import { RebbeHub, RebbeHubError } from '@rebbehub/client';

@@ -54,8 +54,8 @@ const PAGE_STRINGS = {
   coverPerson: { he: 'נבחר על ידי אדם', en: 'chosen by a person' },
   chooseCover: { he: 'בחירת עמוד אחר לשער', en: 'Choose another page as the title page' },
   chooseCoverHow: {
-    he: 'העמוד נלקח מקובץ PDF שמוצג באתר. בחרו את הקובץ ואת מספר העמוד (כמו בקובץ, לא כמו המודפס). ההצעה נשלחת לשומרי האוסף.',
-    en: "The page is taken from a PDF the site serves. Choose the file and the page number (the PDF's own, not the printed one). The suggestion goes to the set's keepers.",
+    he: 'העמוד נלקח מקובץ PDF של הספר, שמוצג באתר או שהאתר מקשר אליו. בחרו את הקובץ ואת מספר העמוד (כמו בקובץ, לא כמו המודפס). ההצעה נשלחת לשומרי האוסף.',
+    en: "The page is taken from one of the sefer's PDFs, one the site serves or one it links to. Choose the file and the page number (the PDF's own, not the printed one). The suggestion goes to the set's keepers.",
   },
   pageNumber: { he: 'עמוד', en: 'Page' },
   send: { he: 'שליחה לבדיקה', en: 'Send for review' },
