@@ -70,8 +70,8 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           repository: shmuky/Sichos-Kodesh
           token: ${{ secrets.SICHOS_KODESH_TOKEN }}
