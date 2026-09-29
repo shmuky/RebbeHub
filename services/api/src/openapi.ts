@@ -75,6 +75,7 @@ const usernameParam = path('username', str('A handle, without the @', { pattern:
 const slugParam = path('slug', str('A project\'s short name', { pattern: '^[a-z0-9-]+$' }));
 const limitParam = (max: number, fallback: number) => query('limit', int(undefined, { minimum: 1, maximum: max, default: fallback }), `How many (at most ${max})`);
 
+const appSchemaParam = path('schema', str('The catalog schema: v1 the farbrengens (the web app), v2 with the library, v3 with the works (the phone)', { enum: ['v1', 'v2', 'v3'] }));
 const OK = obj({ ok: { const: true } }, ['ok']);
 const ENTITY_TYPES_NOTE = 'set, author, work, unit, event, publication, scan, contents-map, text-layer, text-page, text, segment, recording, alignment, alignment-span, relation, person, place, topic, source, schema';
 
@@ -259,6 +260,14 @@ const OPERATIONS: Operation[] = [
 
   // Mirrors and dumps
   { method: 'get', path: '/v1/mirrors', operationId: 'mirrors', tag: 'Mirrors', summary: 'Everything a mirror needs: the git mirror, the release keys, every edition and its dumps', access: 'public', ok: { description: 'Mirrors', schema: any() } },
+  // The Sichos Kodesh apps' catalog (appCatalog.ts): the paths and shapes of their own catalog API, under /v1/app
+  { method: 'get', path: '/v1/app/{schema}/catalog/manifest.json', operationId: 'appCatalogManifest', tag: 'Apps', summary: "The Sichos Kodesh apps' catalog manifest: the served release's version, size, sha256 and address", description: 'The same fields as Sichos-Kodesh\'s own catalog API (its `CatalogManifest`). The version is `2.<commit>.0`; a release missing a part the app needs (listed in `missing`) is numbered `0.<commit>.0`, so no app takes it.', access: 'public', params: [appSchemaParam], ok: { description: 'The manifest', schema: ref('AppCatalogManifest') } },
+  { method: 'get', path: '/v1/app/{schema}/catalog/changelog.json', operationId: 'appCatalogChangelog', tag: 'Apps', summary: "The apps' catalog changelog alone", access: 'public', params: [appSchemaParam], ok: { description: 'Changelog entries, newest first', schema: arr(obj({ version: str(), date: str(), en: arr(str()), he: arr(str()) }, ['version', 'date', 'en', 'he'])) } },
+  { method: 'get', path: '/v1/app/{schema}/catalog/latest/catalog.json', operationId: 'appCatalogLatest', tag: 'Apps', summary: "Redirects to the served release's catalog.json", access: 'public', params: [appSchemaParam], ok: { status: 302, description: 'To /v1/app/{schema}/catalog/{version}/catalog.json' } },
+  { method: 'get', path: '/v1/app/{schema}/catalog/{version}/catalog.json', operationId: 'appCatalogRelease', tag: 'Apps', summary: "The apps' catalog: the farbrengens by year (v1), with the library (v2) and the works (v3)", description: 'Byte for byte what the manifest\'s sha256 describes (also the ETag). Only the served version is found.', access: 'public', params: [appSchemaParam, path('version', str('The version the manifest names', { pattern: '^\\d+\\.\\d+\\.\\d+$' }))], ok: { description: "Sichos-Kodesh's CatalogRelease, LibraryRelease or WorksRelease", schema: any() } },
+  { method: 'get', path: '/v1/app/v3/texts/{sha256}', operationId: 'appSourceText', tag: 'Apps', summary: 'A text of a sefer, where the apps look for it (the same as /v1/texts/{sha256})', access: 'public', params: [path('sha256', sha256Schema)], ok: { description: 'HTML, shown as a document (sandboxed)', type: 'text/html' } },
+  { method: 'get', path: '/v1/app/v1/app/android/latest.json', operationId: 'appAndroidLatest', tag: 'Apps', summary: "The phone app's newest release: redirects to Sichos-Kodesh's app server", access: 'public', ok: { status: 307, description: 'To api.sk.shmuky.dev' } },
+  { method: 'get', path: '/v1/app/v1/app/android/download/{abi}', operationId: 'appAndroidDownload', tag: 'Apps', summary: "The phone app's APK: redirects to Sichos-Kodesh's app server", access: 'public', params: [path('abi', str(undefined, { enum: ['arm64-v8a', 'armeabi-v7a', 'universal'] }))], ok: { status: 307, description: 'To api.sk.shmuky.dev' } },
   { method: 'get', path: '/v1/editions', operationId: 'editions', tag: 'Mirrors', summary: 'Catalog editions (dated snapshots) and their dumps, each with its size, sha256 and address', access: 'public', ok: { description: 'Editions', schema: obj({ editions: arr(any()) }, ['editions']) } },
   { method: 'get', path: '/v1/editions/{tag}/manifest.json', operationId: 'editionManifest', tag: 'Mirrors', summary: "An edition's signed manifest (Ed25519), exactly as signed", access: 'public', params: [path('tag', str(undefined, { examples: ['2026.40'] }))], ok: { description: 'The manifest', schema: any() } },
   { method: 'get', path: '/v1/editions/{tag}/SHA256SUMS', operationId: 'editionChecksums', tag: 'Mirrors', summary: "An edition's checksums, for sha256sum -c", access: 'public', params: [path('tag', str())], ok: { description: 'Checksums', type: 'text/plain' } },
@@ -328,6 +337,23 @@ const SCHEMAS: Record<string, Schema> = {
     ['id', 'type', 'path', 'rev', 'data'],
   ),
   ItemPage: obj({ items: arr(ref('Item')), next: nullable(str('Pass back as cursor for the next page; null on the last')) }, ['items', 'next']),
+  AppCatalogManifest: obj(
+    {
+      schemaVersion: int('1, 2 or 3'),
+      version: str('X.Y.Z: 2.<commit>.0, or 0.<commit>.0 while a part is missing'),
+      releasedAt: str(undefined, { format: 'date-time' }),
+      url: str('Where its catalog.json is'),
+      bytes: int(),
+      sha256: str(undefined, { pattern: '^[0-9a-f]{64}$' }),
+      years: arr(int()),
+      occasions: int(),
+      changelog: arr(obj({ version: str(), date: str(), en: arr(str()), he: arr(str()) }, ['version', 'date', 'en', 'he'])),
+      collections: { type: 'object', additionalProperties: { type: 'integer' }, description: 'v2 and v3: items per library collection' },
+      works: obj({ works: int(), units: int() }, ['works', 'units'], { description: 'v3: how many works, and how many units their contents have' }),
+      missing: arr(str(), 'Parts RebbeHub does not hold yet (farbrengens, library, works)'),
+    },
+    ['schemaVersion', 'version', 'releasedAt', 'url', 'bytes', 'sha256', 'years', 'occasions', 'changelog'],
+  ),
   Commit: obj({ seq: int(), at: str(undefined, { format: 'date-time' }), message: str(), mergedBy: str(), author: str(), via: nullable(ref('Via')), changes: arr(obj({ id: idSchema, type: str(), path: nullable(str()), rev: int(), data: nullable(any()) })) }, ['seq', 'at', 'message', 'mergedBy', 'author', 'changes']),
   TreeNode: obj(
     {
@@ -580,6 +606,7 @@ export const API_TAGS = [
   { name: 'Tokens', description: 'Personal API tokens, made on the account page, and apps connected with OAuth' },
   { name: 'OAuth', description: 'Connecting an app (Claude, other MCP clients) as a person: OAuth 2.1 with PKCE, registration and metadata' },
   { name: 'Mirrors', description: 'Editions and their signed dumps' },
+  { name: 'Apps', description: "The Sichos Kodesh apps' catalog, at the paths and in the shapes they read" },
   { name: 'Libraries', description: 'OAI-PMH and IIIF' },
   { name: 'Agents', description: 'llms.txt and the MCP server' },
   { name: 'Sign-in', description: "The site's own sign-in; listed for completeness, not for other clients" },
