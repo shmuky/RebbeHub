@@ -123,9 +123,14 @@ gathered with nobody doing it by hand:
    Each recording is wholly in `train` or wholly in `test`, by a hash of
    its id that never changes (one in ten is `test`), so a version is never
    scored on audio it learned from.
-4. **When there is enough, train.** `GET /v1/machine/training?since=<the
-   last version's date>` (or the `training_data` MCP tool) says how many
-   new hours people have checked. Training still waits for Shmuly's OK
+4. **When there is enough, train.** The goal for the next version is
+   written in `TRAINING_GOAL` (core/trainingClips.ts): for V4, ten
+   farbrengens checked through, about 34 hours, counted from the day V3
+   was trained, never the held-out recordings. It is shown above every
+   transcript to people signed in, with the farbrengens to check next
+   (before 5740 first, where the model is weakest), in
+   `GET /v1/machine/training` (its `goal`) and in the `training_data` MCP
+   tool. Training still waits for Shmuly's OK
    for each paid GPU run; the clips go in with the booklets' and 5742's
    (`train.py --clips clips-5742.jsonl clips-booklets.jsonl
    clips-site.jsonl`), and the version is published to R2 only when it

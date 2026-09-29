@@ -99,14 +99,14 @@ describe('the training data', () => {
   it('reports it and gives the clips as JSON lines, to anyone, and as an MCP tool', async () => {
     const summary = await call('GET', '/v1/machine/training?since=2026-01-01');
     expect(summary.status).toBe(200);
-    expect(summary.body).toMatchObject({ clips: 0, hours: 0, newHours: 0, skipped: {} });
+    expect(summary.body).toMatchObject({ clips: 0, hours: 0, newHours: 0, skipped: {}, goal: { model: 'V4', hours: { done: 0, target: 34 }, farbrengens: { done: 0, target: 10 }, next: [] } });
     expect((await call('GET', '/v1/machine/training?since=soon')).status).toBe(400);
     const clips = await app.request('/v1/machine/training/clips');
     expect(clips.status).toBe(200);
     expect(clips.headers.get('Content-Type')).toMatch(/ndjson/);
     expect(await clips.text()).toBe('');
     const tool = (await (await app.request('/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'training_data', arguments: {} } }) })).json()) as any;
-    expect(tool.result.content[0].text).toMatch(/^0 clips, 0 hours/);
+    expect(tool.result.content[0].text).toMatch(/^Next model \(V4\): 0 of 10 farbrengens reviewed, 0 of 34 hours/);
   });
 });
 

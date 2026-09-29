@@ -472,13 +472,16 @@ function machineTools(site: string): Tool[] {
     {
       name: 'training_data',
       title: "See the next Rebbe Whisper's training data",
-      description: 'How much training data people have made by checking transcripts: clips and hours (gold: words and timing checked by a person; silver: words checked, timing by machine), train and test hours, what was left out and why. With since, the hours checked since then (what a new training round would add). The clips themselves: GET /v1/machine/training/clips.',
+      description: 'How near the next transcription model is (farbrengens and hours people have checked since the last one, against the goal, and which farbrengens to check next, those before 5740 most wanted), and how much training data people have made by checking transcripts: clips and hours (gold: words and timing checked by a person; silver: words checked, timing by machine), train and test hours, what was left out and why. With since, the hours checked since then (what a new training round would add). The clips themselves: GET /v1/machine/training/clips.',
       inputSchema: { type: 'object', properties: { since: { type: 'string', description: 'A date, like 2026-09-29' } }, additionalProperties: false },
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
       async run(args, call) {
         const since = typeof args.since === 'string' ? `?since=${encodeURIComponent(args.since)}` : '';
         const s = await need(call, 'GET', `/v1/machine/training${since}`);
+        const g = s.goal;
         const text = [
+          `Next model (${g.model}): ${g.farbrengens.done} of ${g.farbrengens.target} farbrengens reviewed, ${g.hours.done} of ${g.hours.target} hours, since ${g.since}. Training waits for a person's OK even then.`,
+          ...(g.next as any[]).map((f) => `  check next${f.mostWanted ? ' (most wanted, before 5740)' : ''}: ${f.title?.he ?? f.event} ${f.date ?? ''}, ${f.checked} of ${f.paragraphs} paragraphs checked (${f.event})`),
           `${s.clips} clips, ${s.hours} hours from ${s.recordings} recordings (${s.gold} gold, ${s.silver} silver); train ${s.trainHours} h, test ${s.testHours} h.`,
           ...(s.newHours === null ? [] : [`${s.newHours} hours checked since ${args.since}.`]),
           ...Object.entries(s.skipped as Record<string, number>).map(([reason, n]) => `Left out, ${reason}: ${n}.`),

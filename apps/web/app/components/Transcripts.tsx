@@ -57,6 +57,62 @@ async function get<T>(path: string): Promise<T> {
   return json;
 }
 
+interface Goal {
+  model: string;
+  hours: { done: number; target: number };
+  farbrengens: { done: number; target: number };
+  next: Array<{ event: string; path: string | null; title: { he: string; en?: string } | null; date: string | null; paragraphs: number; checked: number; mostWanted: boolean }>;
+}
+
+/**
+ * What checking teaches: the next transcription model is trained once
+ * people have checked enough farbrengens (core/trainingClips.ts), so the
+ * goal is shown where they check, with the farbrengens most wanted next.
+ */
+function TrainingGoalBar({ lang }: { lang: Lang }) {
+  const [goal, setGoal] = useState<Goal | null>(null);
+  useEffect(() => {
+    let live = true;
+    void get<{ goal: Goal }>('machine/training')
+      .then((r) => live && setGoal(r.goal))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+  if (!goal) return null;
+  const hours = (n: number) => (Math.round(n * 10) / 10).toLocaleString(lang);
+  return (
+    <div className="training-goal">
+      <p className="row-sub">
+        {t(lang, 'trainingGoal')
+          .replace('{model}', goal.model)
+          .replace('{done}', goal.farbrengens.done.toLocaleString(lang))
+          .replace('{target}', goal.farbrengens.target.toLocaleString(lang))
+          .replace('{hours}', hours(goal.hours.done))
+          .replace('{targetHours}', hours(goal.hours.target))}
+      </p>
+      <progress max={goal.hours.target} value={Math.min(goal.hours.done, goal.hours.target)} />
+      {goal.next.length ? (
+        <details>
+          <summary>{t(lang, 'trainingNext')}</summary>
+          <ul>
+            {goal.next.map((f) => (
+              <li key={f.event}>
+                {f.path ? <Link to={href(f.path, lang)}>{f.title?.[lang === 'en' ? 'en' : 'he'] ?? f.title?.he ?? f.event}</Link> : (f.title?.he ?? f.event)}{' '}
+                <span className="row-sub">
+                  {f.checked.toLocaleString(lang)}/{f.paragraphs.toLocaleString(lang)}
+                  {f.mostWanted ? ` · ${t(lang, 'mostWanted')}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
 /** Where the audio is, in milliseconds, updated many times a second while this recording plays, for word by word highlighting. */
 function useNowMs(playing: boolean): number {
   const player = usePlayer();
@@ -333,6 +389,7 @@ export function Transcripts({ tracks, lang }: { tracks: Track[]; lang: Lang }) {
       <h2 className="section-header">{t(lang, 'transcript')}</h2>
       {unchecked ? <p className="note machine-note">{t(lang, 'machineTranscript')}</p> : null}
       {syncUnchecked ? <p className="note machine-note">{t(lang, 'machineSync')}</p> : null}
+      {unchecked && account ? <TrainingGoalBar lang={lang} /> : null}
       {transcripts.map((tr) => {
         const index = tracks.findIndex((track) => track.id === tr.recording);
         const playing = player.current?.id === tr.recording;

@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { EntityId } from '@rebbehub/model';
-import { anchorSync, fixParagraph, piecesOf, splitOf, summariseTraining, trainingClips, type Catalog, type Json } from '@rebbehub/core';
+import { anchorSync, fixParagraph, piecesOf, splitOf, summariseTraining, trainingClips, trainingGoal, type Catalog, type Json } from '@rebbehub/core';
 import { add, freshCatalog, yudShvat } from './helpers.js';
 
 /** The retraining cycle's data (trainingClips.ts): checked transcript paragraphs become clips for the next model. */
 
 const word = (from: number, to: number, startMs: number, endMs: number) => ({ from, to, startMs, endMs });
 
-async function transcribed(catalog: Catalog, set: EntityId, url: string) {
-  const event = await add(catalog, 'mendy', 'keeper', 'event', yudShvat(set));
+async function transcribed(catalog: Catalog, set: EntityId, url: string, date?: string) {
+  const event = await add(catalog, 'mendy', 'keeper', 'event', { ...yudShvat(set), ...(date ? { date } : {}) });
   const recording = await add(catalog, 'mendy', 'keeper', 'recording', { event, title: { he: 'שיחה א׳' }, url, sets: [set] });
   await catalog.createAccount({ id: 'bot:transcribe', displayName: 'Machine transcription', isBot: true });
   const cs = await catalog.createChangeset('bot:transcribe', { title: 'Transcript' });
@@ -35,8 +35,35 @@ async function transcribed(catalog: Catalog, set: EntityId, url: string) {
   }
   await catalog.submit(cs.id, 'bot:transcribe');
   await catalog.merge(cs.id, 'shmuly');
-  return { recording, segments };
+  return { event, recording, segments };
 }
+
+describe('the goal for the next model', () => {
+  it('counts hours and fully checked farbrengens, and names the most wanted to check next', async () => {
+    const { catalog, set } = await freshCatalog();
+    const newer = await transcribed(catalog, set, 'https://example.org/a.mp3');
+    const older = await transcribed(catalog, set, 'https://example.org/b.mp3', '5733-07-10');
+    const heldOut = await transcribed(catalog, set, 'https://sichos-kodesh-media-proxy.shmuky.workers.dev/jem-audio/JEMSK3113.mp3');
+    let goal = await trainingGoal(catalog, await trainingClips(catalog));
+    expect(goal).toMatchObject({ model: 'V4', hours: { done: 0, target: 34 }, farbrengens: { done: 0, target: 10 } });
+    // The held-out farbrengen is never asked for; the one before 5740 comes first.
+    expect(goal.next.map((f) => [f.event, f.mostWanted])).toEqual([
+      [older.event, true],
+      [newer.event, false],
+    ]);
+
+    // Every paragraph checked as heard.
+    const check = async (segment: EntityId) => {
+      const { content } = (await catalog.get(segment))!.data as { content: string };
+      await catalog.merge((await fixParagraph(catalog, 'chaim', { segment, content })).id, 'keeper');
+    };
+    for (const segment of [...newer.segments, ...heldOut.segments]) await check(segment);
+    goal = await trainingGoal(catalog, await trainingClips(catalog));
+    expect(goal.farbrengens.done).toBe(1);
+    expect(goal.hours.done).toBeCloseTo(52 / 3600, 2);
+    expect(goal.next.map((f) => f.event)).toEqual([older.event]);
+  });
+});
 
 describe('training clips from checked transcripts', () => {
   it('uses only paragraphs a person checked, in the training script format', async () => {

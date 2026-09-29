@@ -12,6 +12,11 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **The next model's goal.** Above every transcript, people signed in
+  see how near the next transcription model is (for V4: 10 farbrengens
+  checked through, about 34 hours) and which farbrengens to check next,
+  those before 5740 most wanted; also `goal` in `GET /v1/machine/training`
+  and the `training_data` MCP tool.
 - **Every answer says what it cost.** The API's and the site's answers
   carry a `Server-Timing` header: the API's says how many statements its
   request sent the database and how long they took (`db`) and the whole
