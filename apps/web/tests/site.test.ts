@@ -3,7 +3,8 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { ServerBuild } from 'react-router';
-import { createPerson, registerFile, setUsername } from '@rebbehub/core';
+import { Catalog, createPerson, registerFile, setUsername } from '@rebbehub/core';
+import { measured } from '@rebbehub/db';
 import type { EntityId } from '@rebbehub/model';
 import { createApp } from '../../../services/api/src/app.js';
 import { add, freshCatalog } from '../../../packages/core/tests/helpers.js';
@@ -63,7 +64,9 @@ beforeAll(async () => {
   const levi = await createPerson(catalog.db, 'Levi Yitzchak', 'levi');
   await setUsername(catalog.db, levi.id, 'levi-y');
 
-  const api = createApp({ catalog, reportSalt: 'test', filesBaseUrl: 'https://files.rebbehub.test' });
+  // The API as on Workers: its database counted, so each answer says what it cost.
+  const db = measured(catalog.db);
+  const api = createApp({ catalog: new Catalog(db), cost: () => db.cost, reportSalt: 'test', filesBaseUrl: 'https://files.rebbehub.test' });
   handle = createSiteHandler(build, { apiUrl: 'http://api.test', siteUrl: SITE, fetch: (input, init) => Promise.resolve(api.request(input, init)) });
 }, 120_000);
 
@@ -260,6 +263,18 @@ describe('the public site', () => {
     const openSearch = await get('/opensearch.xml');
     expect(openSearch.type).toContain('application/opensearchdescription+xml');
     expect(openSearch.html).toContain(`template="${SITE}/search?q={searchTerms}"`);
+  });
+
+  it('says on every page what it cost: the API calls, the statements behind them, and the whole (Server-Timing)', async () => {
+    const page = await handle(new Request(`${SITE}/sample`));
+    const timing = page.headers.get('Server-Timing')!;
+    expect(timing).toMatch(/^api;dur=\d+(\.\d)?;desc="\d+ calls", db;dur=\d+(\.\d)?;desc="\d+ statements", total;dur=\d+(\.\d)?$/);
+    const calls = Number(/"(\d+) calls"/.exec(timing)![1]);
+    const statements = Number(/"(\d+) statements"/.exec(timing)![1]);
+    expect(calls).toBeGreaterThan(3);
+    expect(statements).toBeGreaterThan(calls);
+    // A redirect asks nothing.
+    expect((await handle(new Request(`${SITE}/sample/`))).headers.get('Server-Timing')).toMatch(/^api;dur=0\.0;desc="0 calls", db;dur=0\.0;desc="0 statements", total;dur=/);
   });
 
   it('tells browsers to keep to HTTPS and not guess types, and says where to report a security problem', async () => {

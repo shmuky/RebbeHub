@@ -1,6 +1,6 @@
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { Catalog, adviseSuggestions, deliverWebhooks, embedderFromEnv, sendNotifications } from '@rebbehub/core';
-import { connectPostgres } from '@rebbehub/db';
+import { connectPostgres, measured } from '@rebbehub/db';
 import { createApp, turnstileVerifier, type FileStore } from './app.js';
 import { AppReleases } from './appCatalog.js';
 import { DEFAULT_IP_PER_MINUTE, DEFAULT_KEY_PER_MINUTE, DEFAULT_SEARCH_PER_MINUTE, mayUseEdgeCache, type RateLimiter } from './platform.js';
@@ -187,9 +187,11 @@ export class CachedApi extends WorkerEntrypoint<Env> {
 }
 
 async function answer(request: Request, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): Promise<Response> {
-  const db = connectPostgres(env.HYPERDRIVE.connectionString, { max: 1 });
+  // The request's own connection, counted: its answer says what it cost (Server-Timing).
+  const db = measured(connectPostgres(env.HYPERDRIVE.connectionString, { max: 1 }));
   const app = createApp({
     catalog: new Catalog(db),
+    cost: () => db.cost,
     reportSalt: env.REPORT_SALT,
     verifyCaptcha: env.TURNSTILE_SECRET ? turnstileVerifier(env.TURNSTILE_SECRET) : undefined,
     filesBaseUrl: env.FILES_BASE_URL,

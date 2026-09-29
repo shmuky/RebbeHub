@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono';
+import type { DbCost } from '@rebbehub/db';
 import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, getDerivations, getDerivationsOf, getFile, getFiles, getPageFix, getPageFixes, hanachaSyncs, itemsUsingFile, listWebhooks, pageImageCounts, printingsOf, projectTodo, recordingTranscript, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type FileRow, type Mailer, type PageFixRow, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
 import { peopleOf } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
@@ -13,7 +14,7 @@ import { oaiRoutes, type OaiOptions } from './oai.js';
 import { mirrorRoutes, type MirrorOptions } from './mirrors.js';
 import { readingRoutes } from './reading.js';
 import { tokenGate, tokenGrantOf, tokenRoutes } from './tokens.js';
-import { ERROR_CODES, PUBLIC_SUMMARY, caching, cors, cursor, nextLink, type RateLimits } from './platform.js';
+import { ERROR_CODES, PUBLIC_SUMMARY, caching, cors, cursor, nextLink, serverTiming, type RateLimits } from './platform.js';
 import { mcpRoutes } from './mcp.js';
 import { statusRoutes, type StatusStore } from './status.js';
 import { oauthRoutes } from './oauth.js';
@@ -37,6 +38,8 @@ import { machineRoutes, type MachineDispatch } from './machine.js';
 
 export interface ApiOptions {
   catalog: Catalog;
+  /** What the request's database has been asked so far (`measured` in @rebbehub/db), for the Server-Timing header on every answer. */
+  cost?: () => DbCost;
   /** The account a request is signed in as, or null. Unset, the passkey session cookie (with `auth`). */
   authenticate?: (c: Context) => Promise<string | null> | string | null;
   /** Passkey sign-in: where the site is, which passkeys and sessions belong to. Unset, nobody can sign in. */
@@ -175,6 +178,7 @@ export function createApp(options: ApiOptions): Hono {
     return c.json({ error: 'internal', message: 'something went wrong on our side' }, 500);
   });
 
+  app.use('*', serverTiming(options.cost));
   app.use('*', cors());
   app.use('*', caching());
   app.use('*', tokenGate(catalog, options.rateLimits));

@@ -457,8 +457,12 @@ COMMIT included, against 100,000 a day; past that, every query errors
 until midnight UTC and the site is down (a 500 on every page and API read
 not already at the edge). The plan's other limits bite the same way: a
 Worker may make 50 subrequests a request (service-binding calls to the
-API count) and use 10 ms of CPU. The jobs (`services/jobs`) connect to
-Postgres directly and do not count.
+API count) and use 10 ms of CPU (Cloudflare lets a request over now and
+then, and cuts off a Worker that is over steadily: error 1102). One limit
+holds on every plan: a request may pass through 32 Worker invocations in
+all, and each of the site's calls to the API is one, so a page keeps well
+under 32 calls whatever the plan. The jobs (`services/jobs`) connect to
+Postgres directly and count against none of these.
 
 So every page has a budget, and the budget is a test:
 `apps/web/tests/budget.test.ts` renders each page through the site and
@@ -467,7 +471,9 @@ matter (a sefer of thirty sichos, a farbrengen of six parts with a synced
 hanacha, open suggestions of twenty items), counting every statement the
 API sends and every request the site makes, and fails when a page goes
 past its ceiling. A PR that needs more raises the ceiling in the test, on
-purpose, saying why; the test prints each page's counts when it runs.
+purpose, saying why; run alone with console output shown
+(`npx vitest run apps/web/tests/budget.test.ts --reporter=verbose --silent=false`) it
+prints each page's counts and every request the page made.
 The same harness over a full catalog (`.data/measure.ts` in a checkout,
 not in git: the test's counting wrapper over a PGlite catalog imported
 from Sichos Kodesh) gave the counts of 29 Elul 5786 (before and after
@@ -503,6 +509,19 @@ statements are round trips to Postgres in Virginia, one after the other.
 Smart Placement (`[placement]` in each `wrangler.toml`) runs the Workers
 next to the database; pages and the API's public reads stay cached at
 the edge near the reader.
+
+Every answer says what it cost, in production too, in a `Server-Timing`
+header (the Timing tab of a browser's DevTools shows it; so does
+`curl -sI https://rebbehub.org/ | grep -i server-timing`). The API's
+says `db;dur=<ms>;desc="<n> statements"` (its request's own connection,
+counted: `measured` in `@rebbehub/db`) and `total`; a page's says `api`
+(how many times it asked the API and how long it waited, summed, so side
+by side asks can exceed the whole), `db` (the statements and time those
+answers report, an answer the edge already had counted as from the edge)
+and `total`. An answer the edge serves carries the header of the time it
+was made, with `cf-cache-status: HIT`. When a page is slow, this says
+whether the time is in the database, in the trips to the API, or in
+making the page.
 
 ### Crawlers
 

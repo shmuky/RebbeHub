@@ -35,24 +35,81 @@ export const SECURITY_HEADERS: Record<string, string> = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
 };
 
-function secured(response: Response): Response {
+function secured(response: Response, timing: string): Response {
   const out = new Response(response.body, response);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) if (!out.headers.has(name)) out.headers.set(name, value);
+  out.headers.set('Server-Timing', timing);
   return out;
+}
+
+type Send = NonNullable<SiteOptions['fetch']>;
+
+/**
+ * What a page cost, for whoever looks (the Timing tab of a browser's
+ * DevTools, or `curl -sI`; docs/operations.md, "The statement budget"):
+ * how many times it asked the API and how long it waited on those answers
+ * together (`api`; some are asked side by side, so this can exceed the
+ * whole), what the API says those answers cost the database (`db`: the
+ * statements and their time, summed from each answer's own Server-Timing;
+ * an answer the edge had already is counted as from the edge and cost
+ * nothing now), and the whole (`total`), in milliseconds.
+ */
+class Meter {
+  calls = 0;
+  fromEdge = 0;
+  apiMs = 0;
+  statements = 0;
+  dbMs = 0;
+
+  wrap(send: Send): Send {
+    return async (input, init) => {
+      this.calls++;
+      const started = performance.now();
+      try {
+        const response = await send(input, init);
+        this.read(response.headers);
+        return response;
+      } finally {
+        this.apiMs += performance.now() - started;
+      }
+    };
+  }
+
+  private read(headers: Headers): void {
+    if (headers.get('cf-cache-status') === 'HIT') {
+      this.fromEdge++;
+      return;
+    }
+    const said = /\bdb;dur=([\d.]+);desc="(\d+) statements"/.exec(headers.get('server-timing') ?? '');
+    if (!said) return;
+    this.dbMs += Number(said[1]);
+    this.statements += Number(said[2]);
+  }
+
+  header(started: number): string {
+    const calls = `${this.calls} calls${this.fromEdge ? `, ${this.fromEdge} from the edge` : ''}`;
+    return `api;dur=${this.apiMs.toFixed(1)};desc="${calls}", db;dur=${this.dbMs.toFixed(1)};desc="${this.statements} statements", total;dur=${(performance.now() - started).toFixed(1)}`;
+  }
 }
 
 /** The site as one fetch handler: the same on Node, on Workers and in tests. */
 export function createSiteHandler(build: ServerBuild, options: SiteOptions, mode: 'production' | 'development' = 'production') {
   const handle = createRequestHandler(build, mode);
   const base = options.apiUrl.replace(/\/$/, '');
-  const api = new RebbeHubApi(base, options.fetch);
-  // Someone signed in may have just changed what they are looking at: their pages ask the API past its edge cache.
-  const send = options.fetch ?? ((input: string, init?: RequestInit) => fetch(input, init));
-  const fresh = new RebbeHubApi(base, (input, init) => {
-    const headers = new Headers(init?.headers);
-    headers.set('Cache-Control', 'no-cache');
-    return send(input, { ...init, headers });
-  });
-  return async (request: Request) =>
-    secured(withoutTrailingSlash(request) ?? withCachePolicy(request, await handle(request, { site: { api: hasSession(request) ? fresh : api, siteUrl: options.siteUrl } })));
+  const reach: Send = options.fetch ?? ((input, init) => fetch(input, init));
+  return async (request: Request) => {
+    const started = performance.now();
+    // The request's own count of what it asks the API, so its answer can say what it cost.
+    const meter = new Meter();
+    const send = meter.wrap(reach);
+    const api = new RebbeHubApi(base, send);
+    // Someone signed in may have just changed what they are looking at: their pages ask the API past its edge cache.
+    const fresh = new RebbeHubApi(base, (input, init) => {
+      const headers = new Headers(init?.headers);
+      headers.set('Cache-Control', 'no-cache');
+      return send(input, { ...init, headers });
+    });
+    const response = withoutTrailingSlash(request) ?? withCachePolicy(request, await handle(request, { site: { api: hasSession(request) ? fresh : api, siteUrl: options.siteUrl } }));
+    return secured(response, meter.header(started));
+  };
 }
