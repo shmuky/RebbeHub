@@ -352,6 +352,8 @@ a.card:hover {
 
 .in-catalog a {
   color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 @media (max-width: 1180px) {

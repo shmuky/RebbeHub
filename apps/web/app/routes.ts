@@ -79,6 +79,9 @@ export default [
   route('llms.txt', 'routes/llms.ts', { id: 'llms' }),
   route('llms-full.txt', 'routes/llms.ts', { id: 'llms-full' }),
   route('robots.txt', 'routes/robots.ts'),
+  // Where to report a security problem, and the site as a search engine of the browser's own.
+  route('.well-known/security.txt', 'routes/security-txt.ts'),
+  route('opensearch.xml', 'routes/opensearch.ts'),
   route('sitemap.xml', 'routes/sitemap-index.ts'),
   // Sitemaps: the site's own pages, and each kind of item a page at a time (`/sitemaps/unit-3.xml`).
   route('sitemaps/:name.xml', 'routes/sitemap.ts'),

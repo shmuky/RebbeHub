@@ -396,6 +396,7 @@ API or Postgres.
 | What | Where it is kept | For how long | Code |
 | --- | --- | --- | --- |
 | Pages (HTML, and the `.data` React Router fetches) for anyone not signed in | Cloudflare's Workers cache in front of the site's `CachedSite` entrypoint; browsers | 5 minutes at the edge, then served stale for an hour while made again; 1 minute in browsers | `apps/web/server/worker.ts`, `server/cachePolicy.ts`, `app/root.tsx` |
+| An item's page (`ITEM_PAGE`), for anyone not signed in | as above | an hour at the edge, then stale for a day while made again (it changes only when a Suggestion about it is approved) | `app/routes/item.tsx` |
 | Pages for someone signed in (the `rh_session` cookie) | nowhere (`private, no-cache`) | - | `server/cachePolicy.ts` |
 | A page that is not there (404) | as any page | as any page | - |
 | `robots.txt`, sitemaps | edge | a day / an hour | `app/routes/robots.ts`, `app/routes/sitemap*.ts` |
@@ -418,7 +419,8 @@ a page made fresh still finds most of its API reads already at the edge.
 A merged change shows at once to whoever made it (they are signed in, so
 their pages are never served from the cache, and the site asks the API
 for them with `Cache-Control: no-cache`, which the API's edge does not
-answer), and to everyone else within about five minutes. A new deploy starts with an empty cache (each version has its
+answer), and to everyone else within about five minutes, an item's own
+page within about an hour. A new deploy starts with an empty cache (each version has its
 own).
 
 ### What reaches Postgres
@@ -467,6 +469,28 @@ it) and caches reads for a minute by default: keep its caching on.
   the server; nothing on an item's page needs JavaScript to be read.
 - `/llms.txt` and `/llms-full.txt` are for AI agents: what RebbeHub is,
   the OpenAPI document, the MCP server and every developer page.
+- **A budget for crawlers.** A page no one has asked for lately costs the
+  database one to two dozen reads, and a crawler asks for tens of
+  thousands. So when a bot (`isbot`) asks for a page the edge does not
+  have, `CachedSite` counts it: each search engine (Googlebot, Bingbot,
+  Applebot, DuckDuckBot, Yandex and a few more) has its own budget
+  (`RATE_LIMIT_CRAWL_SEARCH`, 6 pages a minute), and every other bot, AI
+  crawlers among them, shares one (`RATE_LIMIT_CRAWL`, 2 a minute). Over
+  it, the crawler is answered 503 with `Retry-After: 120`, which search
+  engines read as "slow down", never as a missing page. Pages already at
+  the edge, `robots.txt`, the sitemaps and `llms*.txt` are never counted,
+  and people never are. The numbers (in `apps/web/wrangler.toml`) are set
+  for Hyperdrive's free 100,000 queries a day, where Google alone could
+  otherwise use a day's reads in hours; on a paid plan raise them.
+- The API has its own `robots.txt`: crawlers may read its `llms.txt`,
+  `openapi.json`, files (`/objects/`, a shaar for link previews) and what
+  the Sichos Kodesh apps read (`/v1/app/`), not the other `/v1` routes, which the site's pages already show.
+- `/.well-known/security.txt` says where to report a security problem
+  (the same private reporting as SECURITY.md), and `/opensearch.xml`
+  lets a browser's address bar search the catalog.
+- Every answer says `nosniff`, HTTPS only (`Strict-Transport-Security`, a
+  year), `strict-origin-when-cross-origin` and no camera, microphone or
+  location (`server/handler.ts`; `public/_headers` for the site's files).
 
 ### Outside the code
 

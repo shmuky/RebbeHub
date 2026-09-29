@@ -1,6 +1,6 @@
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import type { ServerBuild } from 'react-router';
-import { edgeCacheable, forEdge } from './cachePolicy.js';
+import { crawlBudget, crawlLater, edgeCacheable, forEdge } from './cachePolicy.js';
 import { createSiteHandler } from './handler.js';
 // @ts-ignore - made by `react-router build`
 import * as build from '../build/server/index.js';
@@ -17,13 +17,24 @@ import * as build from '../build/server/index.js';
  * it is made again). Pages for anyone go through `CachedSite`, so a burst
  * of readers or a crawler is answered from the edge; a signed-in person's
  * pages, and everything that is not a GET, are made here, fresh.
+ *
+ * `CachedSite` runs only when the edge has no copy, so that is where a
+ * crawler's pages are counted against its budget (cachePolicy.ts,
+ * crawlBudget): what is already at the edge is free and never counted.
  */
 interface Env {
   API_URL: string;
   SITE_URL: string;
   API?: { fetch: (input: string, init?: RequestInit) => Promise<Response> };
   /** Searches per address a minute ([[ratelimits]] in wrangler.toml); without it, none are counted. */
-  RATE_LIMIT_SEARCH?: { limit(input: { key: string }): Promise<{ success: boolean }> };
+  RATE_LIMIT_SEARCH?: RateLimit;
+  /** Pages made for each search engine's crawler a minute, and for all other bots together (wrangler.toml). */
+  RATE_LIMIT_CRAWL_SEARCH?: RateLimit;
+  RATE_LIMIT_CRAWL?: RateLimit;
+}
+
+interface RateLimit {
+  limit(input: { key: string }): Promise<{ success: boolean }>;
 }
 
 interface Ctx {
@@ -46,7 +57,10 @@ function site(env: Env) {
 const SEARCHING = /^\/(search|_\/find|_\/lookup)$/;
 
 export class CachedSite extends WorkerEntrypoint<Env> {
-  fetch(request: Request): Promise<Response> {
+  async fetch(request: Request): Promise<Response> {
+    const crawler = crawlBudget(request);
+    const budget = crawler && (crawler.searchEngine ? this.env.RATE_LIMIT_CRAWL_SEARCH : this.env.RATE_LIMIT_CRAWL);
+    if (crawler && budget && !(await budget.limit({ key: crawler.key })).success) return crawlLater();
     return site(this.env)(request);
   }
 }

@@ -18,6 +18,20 @@ any time. `@rebbehub/client` carries the API's version.
   of each and the latest incidents; checked every five minutes, and still
   answering while the database does not. `GET /v1/status` gives the same
   as JSON.
+- **Ready for search engines and AI crawlers without draining the
+  database.** Crawlers get a budget of pages a minute when the edge has no
+  copy (each search engine its own, all other bots one between them), and
+  are told 503 with Retry-After beyond it; an item's page is kept at the
+  edge an hour instead of five minutes. The API has a `robots.txt` that
+  keeps crawlers to its guides and files. The site now has
+  `/.well-known/security.txt`, `/opensearch.xml` (search the catalog from
+  the address bar), `Organization` data beside `WebSite` on the home page,
+  and security headers on every answer (`nosniff`, HSTS, a referrer
+  policy). An accessibility scan (axe) of the main pages, light and dark,
+  phone and desktop, now finds nothing: links in sentences are underlined,
+  faint hints have enough contrast, headings go in order, and the
+  calendar's sideways scroll is reachable by keyboard.
+
 - **Asking the machines.** Anyone signed in can ask for a scan to be read
   by OCR or a recording transcribed: a button on a scan's text page and
   under a farbrengen's parts without a transcript, `POST

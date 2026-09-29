@@ -204,7 +204,7 @@ export function EmptyState({ icon = 'info', title, children, actions, compact }:
   return (
     <div className={cx('empty', compact && 'compact')}>
       <Icon name={icon} size={compact ? 20 : 24} />
-      <h3>{title}</h3>
+      <h2 className="empty-title">{title}</h2>
       {children ? <p>{children}</p> : null}
       {actions ? <div className="btn-row">{actions}</div> : null}
     </div>

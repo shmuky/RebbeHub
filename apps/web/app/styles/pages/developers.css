@@ -1303,3 +1303,9 @@ h3:hover > .dv-anchor,
     font-size: 21px;
   }
 }
+
+/* Links inside a sentence are told apart by more than their colour. */
+.dv-agents p a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

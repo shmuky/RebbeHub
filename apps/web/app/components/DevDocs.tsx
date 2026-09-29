@@ -140,7 +140,7 @@ export function DocsShell({ lang, current, apiBase, toc, children }: { lang: Lan
         </p>
       ) : null}
       <div className="dv-grid" dir="ltr" lang="en">
-        <aside className="dv-nav">
+        <aside className="dv-nav" aria-label={w.pages}>
           <details className="dv-menu">
             <summary>
               <Icon name="menu" />

@@ -33,6 +33,8 @@ export const links: LinksFunction = () => [
   // Installable as an app, with an offline shell (public/sw.js, registered in lib/pwa.ts).
   { rel: 'manifest', href: '/manifest.webmanifest' },
   { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
+  // The address bar can search the catalog (routes/opensearch.ts).
+  { rel: 'search', type: 'application/opensearchdescription+xml', title: 'RebbeHub', href: '/opensearch.xml' },
 ];
 
 export async function loader({ request, context }: Route.LoaderArgs) {

@@ -354,12 +354,12 @@
 }
 
 :root[data-theme='dark'] .year-list a[aria-current='page'] {
-  color: var(--text);
+  color: #fff;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .year-list a[aria-current='page'] {
-    color: var(--text);
+    color: #fff;
   }
 }
 

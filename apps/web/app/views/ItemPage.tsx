@@ -627,7 +627,7 @@ export function ItemSideEnd({ entity, view, lang }: { entity: Entity; view: Item
       <Linked entity={entity} groups={view.linked ?? []} lang={lang} />
       <Sources data={(entity.data ?? {}) as Record<string, unknown>} lang={lang} />
       <section className="permalink">
-        <h4>{p(lang, 'permanent')}</h4>
+        <h2>{p(lang, 'permanent')}</h2>
         <Link to={href(`/${entity.id}`, lang)} className="num">
           {entity.id}
         </Link>
