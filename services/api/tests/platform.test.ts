@@ -80,7 +80,7 @@ describe('errors, CORS and caching', () => {
 
   it('keeps crawlers to the guides and the files: the routes are read through the site', async () => {
     const robots = await app.request('/robots.txt');
-    expect(await robots.text()).toBe('User-agent: *\nAllow: /llms.txt\nAllow: /openapi.json\nAllow: /objects/\nDisallow: /\n');
+    expect(await robots.text()).toBe('User-agent: *\nAllow: /llms.txt\nAllow: /openapi.json\nAllow: /objects/\nAllow: /v1/app/\nDisallow: /\n');
     expect(robots.headers.get('Cache-Control')).toMatch(/^public, .*s-maxage=86400/);
   });
 

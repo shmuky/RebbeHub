@@ -1015,10 +1015,12 @@ export const API_VERSION = '1.0.0';
 
 /**
  * What crawlers may read on the API: the guides for agents, and the files
- * (a sefer's shaar is the picture its page is shared with); not the routes,
- * which the site's pages already show, made once and kept at the edge.
+ * (a sefer's shaar is the picture its page is shared with), and what the
+ * Sichos Kodesh apps read (`/v1/app/`: they are not crawlers, but some
+ * fetchers heed robots.txt); not the other routes, which the site's pages
+ * already show, made once and kept at the edge.
  */
-export const API_ROBOTS_TXT = ['User-agent: *', 'Allow: /llms.txt', 'Allow: /openapi.json', 'Allow: /objects/', 'Disallow: /', ''].join('\n');
+export const API_ROBOTS_TXT = ['User-agent: *', 'Allow: /llms.txt', 'Allow: /openapi.json', 'Allow: /objects/', 'Allow: /v1/app/', 'Disallow: /', ''].join('\n');
 
 /** The API's own /llms.txt: a pointer for agents that land here first. */
 function apiLlmsTxt(api: string, site: string): string {

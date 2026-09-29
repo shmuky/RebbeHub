@@ -457,8 +457,8 @@ it) and caches reads for a minute by default: keep its caching on.
   for Hyperdrive's free 100,000 queries a day, where Google alone could
   otherwise use a day's reads in hours; on a paid plan raise them.
 - The API has its own `robots.txt`: crawlers may read its `llms.txt`,
-  `openapi.json` and files (`/objects/`, a shaar for link previews), not
-  the `/v1` routes, which the site's pages already show.
+  `openapi.json`, files (`/objects/`, a shaar for link previews) and what
+  the Sichos Kodesh apps read (`/v1/app/`), not the other `/v1` routes, which the site's pages already show.
 - `/.well-known/security.txt` says where to report a security problem
   (the same private reporting as SECURITY.md), and `/opensearch.xml`
   lets a browser's address bar search the catalog.
