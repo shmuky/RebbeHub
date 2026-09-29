@@ -1,4 +1,5 @@
 import { WorkerEntrypoint } from 'cloudflare:workers';
+import { readerFor, type ReadsEnv } from '@rebbehub/api';
 import type { ServerBuild } from 'react-router';
 import { crawlBudget, crawlLater, edgeCacheable, forEdge } from './cachePolicy.js';
 import { createSiteHandler } from './handler.js';
@@ -7,8 +8,13 @@ import * as build from '../build/server/index.js';
 
 /**
  * The site on Cloudflare Workers. Static assets (build/client) are served
- * by the Workers assets binding before this runs; the API is reached
- * through the API service binding when there is one, else over HTTPS.
+ * by the Workers assets binding before this runs. A page's reads of the
+ * API are answered in this Worker, by the API itself over one connection
+ * to Postgres the page opens and closes (`readerFor` in @rebbehub/api:
+ * the HYPERDRIVE and R2 bindings in wrangler.toml, the same as the API
+ * Worker's); what the page cannot answer itself, and everything signed
+ * in, goes through the API service binding when there is one, else over
+ * HTTPS.
  *
  * Two entrypoints (wrangler.toml, [exports]): this default one runs on
  * every request and is never cached; `CachedSite` renders pages and sits
@@ -22,7 +28,7 @@ import * as build from '../build/server/index.js';
  * crawler's pages are counted against its budget (cachePolicy.ts,
  * crawlBudget): what is already at the edge is free and never counted.
  */
-interface Env {
+interface Env extends ReadsEnv {
   API_URL: string;
   SITE_URL: string;
   API?: { fetch: (input: string, init?: RequestInit) => Promise<Response> };
@@ -42,7 +48,7 @@ interface Ctx {
   exports?: { CachedSite?: { fetch(request: Request): Promise<Response> } };
 }
 
-let handler: ((request: Request) => Promise<Response>) | null = null;
+let handler: ReturnType<typeof createSiteHandler> | null = null;
 
 function site(env: Env) {
   handler ??= createSiteHandler(build as unknown as ServerBuild, {
@@ -53,6 +59,17 @@ function site(env: Env) {
   return handler;
 }
 
+/** A page, made with a reader of its own when this Worker has a database; the reader's connection is closed once the page is sent. */
+async function page(env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }, request: Request): Promise<Response> {
+  const reader = readerFor(env, (work) => ctx.waitUntil(work));
+  if (!reader) return site(env)(request);
+  try {
+    return await site(env)(request, reader);
+  } finally {
+    ctx.waitUntil(reader.close());
+  }
+}
+
 /** Search asks the database (and, by meaning, a model) something new each time: an address may search a limited number of times a minute. */
 const SEARCHING = /^\/(search|_\/find|_\/lookup)$/;
 
@@ -61,7 +78,7 @@ export class CachedSite extends WorkerEntrypoint<Env> {
     const crawler = crawlBudget(request);
     const budget = crawler && (crawler.searchEngine ? this.env.RATE_LIMIT_CRAWL_SEARCH : this.env.RATE_LIMIT_CRAWL);
     if (crawler && budget && !(await budget.limit({ key: crawler.key })).success) return crawlLater();
-    return site(this.env)(request);
+    return page(this.env, this.ctx, request);
   }
 }
 
@@ -73,6 +90,6 @@ export default {
     }
     const cached = ctx.exports?.CachedSite;
     if (cached && edgeCacheable(request)) return cached.fetch(forEdge(request));
-    return site(env)(request);
+    return page(env, ctx, request);
   },
 };

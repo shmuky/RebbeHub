@@ -431,8 +431,25 @@ Each Worker has two entrypoints (`[exports]` in its `wrangler.toml`): the
 default one runs on every request, is never cached, and sends what anyone
 may have on to the cached one. The cache keeps each answer as long as its
 `Cache-Control` says, and collapses a burst of the same request into one
-run of the Worker. The site reads the API through its service binding, so
-a page made fresh still finds most of its API reads already at the edge.
+run of the Worker.
+
+A page made fresh reads the API a dozen or two times, and the site's
+Worker answers those reads itself: the API (`createApp`, the same routes
+and answers) runs inside it, over one connection to Postgres the page
+opens when it starts and closes when it is sent, up to four at once for
+the reads a page makes side by side (`readerFor` in
+`services/api/src/reads.ts`; `apps/web/server/worker.ts`; the site's
+`wrangler.toml` binds the same Hyperdrive config and buckets as the
+API's). Before, each read was a Worker invocation of its own through the
+service binding, with a connection of its own, and a page was one and a
+dozen invocations against the 32 a request may pass through. What a page
+cannot answer itself goes through the binding as before: anything signed
+in (a cookie or a token: sessions and passkeys live in the API's Worker),
+anything that is not a read, search by meaning (Workers AI), the apps'
+catalog and Drive files. A page's `Server-Timing` says how many of its
+calls were answered here (`api;desc="17 calls, 16 answered here"`), and
+`db` is what the page's own connection did, counted whole, plus what each
+answer sent on said it cost.
 
 A merged change shows at once to whoever made it (they are signed in, so
 their pages are never served from the cache, and the site asks the API

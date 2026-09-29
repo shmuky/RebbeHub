@@ -13,6 +13,12 @@ the repository through its GitHub app.
 | `rebbehub-api` | `npm run build && npm run rebbehub -- migrate` | `npx wrangler deploy -c services/api/wrangler.toml` |
 | `rebbehub-web` | `npm run build && npm run build:web` | `npx wrangler deploy -c apps/web/wrangler.toml` |
 
+Both Workers bind the same Hyperdrive config and the public and archive
+buckets (`[[hyperdrive]]`, `[[r2_buckets]]` in each `wrangler.toml`): the
+site answers a page's reads itself, with the API running inside it over
+one connection a page (docs/operations.md, "Traffic and crawlers"), and
+goes through the `API` service binding for the rest.
+
 The API's build migrates the database before its deploy, so the schema is
 always ahead of the code that uses it - for builds of `main` only. Cloudflare
 also builds every other branch as a preview; those skip the migration, so

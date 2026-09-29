@@ -1,7 +1,8 @@
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { Catalog, adviseSuggestions, deliverWebhooks, embedderFromEnv, sendNotifications } from '@rebbehub/core';
 import { connectPostgres, measured } from '@rebbehub/db';
-import { createApp, turnstileVerifier, type FileStore } from './app.js';
+import { createApp, turnstileVerifier } from './app.js';
+import { r2Store, r2Writer, statusStore, type R2Bucket } from './r2.js';
 import { AppReleases } from './appCatalog.js';
 import { DEFAULT_IP_PER_MINUTE, DEFAULT_KEY_PER_MINUTE, DEFAULT_SEARCH_PER_MINUTE, mayUseEdgeCache, type RateLimiter } from './platform.js';
 import { authFor } from './auth.js';
@@ -39,16 +40,6 @@ import {
  * limits come from the RATE_LIMIT_ADDRESS and RATE_LIMIT_TOKEN bindings
  * (docs/configuration.md); without them nothing is counted.
  */
-interface R2ObjectBody {
-  body: ReadableStream;
-  size: number;
-}
-
-interface R2Bucket {
-  get(key: string, options?: { range?: { offset: number; length?: number } }): Promise<(R2ObjectBody & { text(): Promise<string> }) | null>;
-  put(key: string, value: ArrayBuffer | string, options?: { httpMetadata?: { contentType?: string; cacheControl?: string } }): Promise<unknown>;
-}
-
 interface Env {
   HYPERDRIVE: { connectionString: string };
   /** The site's Worker (a service binding), for the status checks; without it they ask SITE_URL over the internet. */
@@ -123,19 +114,6 @@ const appReleases = new AppReleases();
 const mailerOf = (env: Env) => (env.RESEND_API_KEY ? resendMailer({ apiKey: env.RESEND_API_KEY, from: env.EMAIL_FROM }) : undefined);
 
 const list = (value: string | undefined) => (value ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-
-function r2Writer(bucket: R2Bucket) {
-  return { put: async (key: string, bytes: ArrayBuffer, mime: string) => void (await bucket.put(key, bytes, { httpMetadata: { contentType: mime } })) };
-}
-
-function r2Store(bucket: R2Bucket): FileStore {
-  return {
-    async get(key, range) {
-      const object = await bucket.get(key, range ? { range } : undefined);
-      return object ? { body: object.body, size: object.size } : null;
-    },
-  };
-}
 
 export default {
   /**
@@ -230,16 +208,6 @@ async function answer(request: Request, env: Env, ctx: { waitUntil(promise: Prom
   } finally {
     ctx.waitUntil(db.close());
   }
-}
-
-/** The report kept in the public bucket, for GET /v1/status. */
-function statusStore(bucket: R2Bucket): StatusStore {
-  return {
-    async read() {
-      const object = await bucket.get(STATUS_KEY);
-      return object ? (JSON.parse(await object.text()) as StatusReport) : null;
-    },
-  };
 }
 
 /**
