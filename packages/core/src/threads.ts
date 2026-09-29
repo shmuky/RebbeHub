@@ -353,6 +353,15 @@ export async function suggestionWithdrawn(db: Db, input: { id: number; by: strin
   await announce(db, thread, input.by, 'state', { detail: { event: 'withdrawn' } });
 }
 
+/** A withdrawn suggestion is open again: said in its timeline, the keepers asked to look again, its followers told. */
+export async function suggestionReopened(db: Db, input: { id: number; by: string; keepers: readonly string[] }): Promise<void> {
+  const thread: ThreadRef = { kind: 'changeset', id: input.id };
+  if ((await threadInfo(db, thread))?.number == null) return;
+  await threadEvent(db, thread, input.by, 'reopened');
+  const asked = await requestReviewers(db, thread.id, SYSTEM_ACCOUNT, input.keepers.filter((k) => k !== input.by), { auto: true });
+  await announce(db, thread, input.by, 'state', { detail: { event: 'reopened' }, except: asked });
+}
+
 /** A merged suggestion was undone by another (a revert): said in its timeline, its followers told. */
 export async function suggestionReverted(db: Db, input: { id: number; by: string; revert: number }): Promise<void> {
   const thread: ThreadRef = { kind: 'changeset', id: input.id };

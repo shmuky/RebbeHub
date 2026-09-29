@@ -1804,6 +1804,13 @@ export interface Operations {
       ok: true;
     };
   };
+  /** Undo a withdrawal: your suggestion is open for review again (its checks run again) */
+  reopenSuggestion: {
+    input: {
+      id: number;
+    };
+    output: Suggestion;
+  };
   /** Report a problem (no account needed: a captcha and an hourly limit instead) */
   report: {
     input: {
@@ -2571,6 +2578,7 @@ export const OPERATIONS = {
   refCounts: {"method":"GET","path":"/v1/refcounts","pathParams":[],"query":["field","type"],"body":null,"answer":"json"},
   releaseClaim: {"method":"POST","path":"/v1/projects/{slug}/release","pathParams":["slug"],"query":[],"body":"json","answer":"json"},
   removeReviewRequest: {"method":"DELETE","path":"/v1/suggestions/{id}/review-requests/{username}","pathParams":["id","username"],"query":[],"body":null,"answer":"json"},
+  reopenSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/reopen","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   report: {"method":"POST","path":"/v1/reports","pathParams":[],"query":[],"body":"json","answer":"json"},
   requestMachineWork: {"method":"POST","path":"/v1/machine/requests","pathParams":[],"query":[],"body":"json","answer":"json"},
   requestReview: {"method":"POST","path":"/v1/suggestions/{id}/review-requests","pathParams":["id"],"query":[],"body":"json","answer":"json"},
@@ -3193,6 +3201,11 @@ export abstract class GeneratedMethods {
   /** Stop asking someone to review (DELETE /v1/suggestions/{id}/review-requests/{username}) */
   removeReviewRequest(input: Operations['removeReviewRequest']['input']): Promise<Operations['removeReviewRequest']['output']> {
     return this.call('removeReviewRequest', input ?? {} as Operations['removeReviewRequest']['input']);
+  }
+
+  /** Undo a withdrawal: your suggestion is open for review again (its checks run again) (POST /v1/suggestions/{id}/reopen) */
+  reopenSuggestion(input: Operations['reopenSuggestion']['input']): Promise<Operations['reopenSuggestion']['output']> {
+    return this.call('reopenSuggestion', input ?? {} as Operations['reopenSuggestion']['input']);
   }
 
   /** Report a problem (no account needed: a captcha and an hourly limit instead) (POST /v1/reports) */

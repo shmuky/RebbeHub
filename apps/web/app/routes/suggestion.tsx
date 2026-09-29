@@ -253,6 +253,29 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
     />
   ) : null;
 
+  // Undo what was done: a withdrawn suggestion reopens, a merged one is reverted (put back as it was).
+  const post = async (path: string, payload: unknown = {}) => {
+    const response = await fetch(`/_/suggestions/${id}/${path}`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', accept: 'application/json' }, body: JSON.stringify(payload) });
+    if (!response.ok) throw new Error(((await response.json().catch(() => ({}))) as { message?: string }).message ?? response.statusText);
+  };
+  const undoBar =
+    mayEdit && (view.status === 'withdrawn' || view.status === 'merged') ? (
+      <p className="note undo-note">
+        <Icon name="back" size={14} /> {tt(lang, view.status === 'withdrawn' ? 'reopenNote' : 'undoNote')}{' '}
+        <button
+          type="button"
+          className="btn"
+          disabled={busy}
+          onClick={() => {
+            if (view.status === 'merged' && !window.confirm(tt(lang, 'undoConfirm'))) return;
+            void act(() => post(view.status === 'withdrawn' ? 'reopen' : 'revert'));
+          }}
+        >
+          {tt(lang, view.status === 'withdrawn' ? 'reopen' : 'undoChange')}
+        </button>
+      </p>
+    ) : null;
+
   const reviewBox = !account ? (
     <p className="note sign-note">
       <Icon name="lock" /> <Link to={href('/signin', lang, { return: `/suggestions/${number}` })}>{w(lang, 'signIn')}</Link>
@@ -279,8 +302,7 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
             disabled={busy}
             onClick={() =>
               void act(async () => {
-                const response = await fetch(`/_/suggestions/${id}/withdraw`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', accept: 'application/json' }, body: '{}' });
-                if (!response.ok) throw new Error(((await response.json().catch(() => ({}))) as { message?: string }).message ?? response.statusText);
+                await post('withdraw');
               })
             }
           >
@@ -372,6 +394,7 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
               <TimelineBlock>
                 <Checks checks={view.checks} lang={lang} />
               </TimelineBlock>
+              {undoBar ? <TimelineBlock>{undoBar}</TimelineBlock> : null}
               {reviewBox ? <TimelineBlock className="tl-end">{reviewBox}</TimelineBlock> : null}
             </Timeline>
           ) : tab === 'changes' ? (
@@ -379,6 +402,7 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
               {view.entries.map((e) => (
                 <ChangeWithComments key={e.entityId} entry={e} lang={lang} talk={talk} conversation={talk ? { people, viewer, id: id!, detail } : null} signedIn={Boolean(account)} onPending={(p) => setPending([...pending, p])} changed={() => void load()} />
               ))}
+              {undoBar}
               {reviewBox}
             </div>
           ) : tab === 'scan' ? (

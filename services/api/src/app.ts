@@ -1047,6 +1047,11 @@ export function createApp(options: ApiOptions): Hono {
     return c.json({ ok: true });
   });
 
+  app.post('/v1/suggestions/:id/reopen', async (c) => {
+    const by = await signedIn(c);
+    return c.json(await catalog.reopen(intParam(c.req.param('id'), 'id')!, by));
+  });
+
   app.post('/v1/suggestions/:id/revert', async (c) => {
     const by = await signedIn(c);
     const input = await body<{ reason?: string }>(c).catch(() => ({}) as { reason?: string });
