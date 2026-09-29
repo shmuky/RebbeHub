@@ -28,8 +28,26 @@ const MAX_CHARS_PER_SECOND = 30;
 /** One recording in ten is held out for scoring. */
 const TEST_SHARE = 10;
 
-/** Recordings the training script already scores on (the held-out farbrengens), by JEM file: always `test`. */
-export const HELD_OUT_AUDIO: readonly string[] = [];
+/**
+ * Recordings the training script already scores on, by JEM file: always
+ * `test`, so no version learns them. The four held-out farbrengens of 5742
+ * (Tzom Gedaliah, Taanis Esther, Lag BaOmer, 17 Tammuz) and 11 Nissan 5733.
+ */
+export const HELD_OUT_AUDIO: readonly string[] = [
+  'JEMSK2863.mp3',
+  'JEMSK3002.mp3',
+  'JEMSK3053.mp3',
+  'JEMSK3054.mp3',
+  'JEMSK3113.mp3',
+  'AR0015492.mp3',
+  'AR0015494.mp3',
+  'AR0015496.mp3',
+  'AR0015498.mp3',
+  'AR0015508.mp3',
+  'AR0015510.mp3',
+  'AR0015512.mp3',
+  'AR0015515.mp3',
+];
 
 export type ClipQuality = 'gold' | 'silver';
 

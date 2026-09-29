@@ -98,5 +98,7 @@ describe('training clips from checked transcripts', () => {
     expect(tests.length).toBeGreaterThan(5);
     expect(tests.length).toBeLessThan(40);
     expect(ids.map((id) => splitOf(id, 'a.mp3'))).toEqual(ids.map((id) => splitOf(id, 'a.mp3')));
+    // The farbrengens the training script scores on are never trained on.
+    expect(ids.every((id) => splitOf(id, 'JEMSK3113.mp3') === 'test')).toBe(true);
   });
 });
