@@ -25,12 +25,7 @@ export async function transcribeCommand(ctx: Context, input: { approveAs: string
       requestedOnly: input.requestedOnly,
       shard,
       log: ctx.log,
-      async fetchAudio({ file, url }) {
-        const from = file ? `${base}/objects/${file}` : url!;
-        const response = await fetch(from);
-        if (!response.ok) throw new Error(`${from}: ${response.status}`);
-        return new Uint8Array(await response.arrayBuffer());
-      },
+      fetchAudio: (recording) => fetchAudio(base, recording),
     });
     ctx.log(`transcribed ${done.length} recordings, ${done.reduce((n, d) => n + d.paragraphs, 0)} paragraphs`);
   });
@@ -52,15 +47,34 @@ export async function alignCommand(ctx: Context, input: { approveAs: string; rec
       limit: input.limit,
       linked: input.linked,
       log: ctx.log,
-      async fetchAudio({ file, url }) {
-        const from = file ? `${base}/objects/${file}` : url!;
-        const response = await fetch(from);
-        if (!response.ok) throw new Error(`${from}: ${response.status}`);
-        return new Uint8Array(await response.arrayBuffer());
-      },
+      fetchAudio: (recording) => fetchAudio(base, recording),
     });
     ctx.log(`aligned ${done.length} recordings, ${done.reduce((n, d) => n + d.words, 0)} words, ${done.reduce((n, d) => n + d.hanacha, 0)} hanacha paragraphs`);
   });
+}
+
+/**
+ * A recording's audio: its served file, or where it is heard. A dropped
+ * connection or a busy server (many workers side by side fetch at once)
+ * is tried again, three times in all, before the recording is given up.
+ */
+export async function fetchAudio(base: string, { file, url }: { file: string | null; url: string | null }, options: { tries?: number; wait?: (ms: number) => Promise<void>; fetch?: typeof fetch } = {}): Promise<Uint8Array> {
+  const from = file ? `${base}/objects/${file}` : url!;
+  const tries = options.tries ?? 3;
+  const wait = options.wait ?? ((ms: number) => new Promise<void>((done) => setTimeout(done, ms)));
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const response = await (options.fetch ?? fetch)(from);
+      if (response.ok) return new Uint8Array(await response.arrayBuffer());
+      const error = new Error(`${from}: ${response.status}`);
+      // Not there, or not allowed: asking again will not change it.
+      if (response.status < 500 && response.status !== 429) throw Object.assign(error, { final: true });
+      throw error;
+    } catch (error) {
+      if ((error as { final?: boolean }).final || attempt >= tries) throw error;
+      await wait(2000 * 2 ** (attempt - 1));
+    }
+  }
 }
 
 /** The Whisper that hears: on Workers AI (the default), or `local`, on this machine. */
