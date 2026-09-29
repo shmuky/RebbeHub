@@ -65,7 +65,24 @@ export interface RevisionRow {
  * in a few kilobytes rather than eight hundred, and the page that lists
  * them is not a megabyte (docs/operations.md, "The statement budget").
  */
-export const FACTS = `r.id, r.entity_id, r.entity_type, r.parent_rev, r.merge_rev, r.data - 'body' AS data, r.path, r.hash, r.changeset_id, r.author, r.schema_version, r.created_at`;
+export const FACTS = factsWith("r.data - 'body'");
+
+/** The same columns with `data` as an expression over `r.data`: a list that carries even less of each item. */
+export function factsWith(data: string): string {
+  return `r.id, r.entity_id, r.entity_type, r.parent_rev, r.merge_rev, ${data} AS data, r.path, r.hash, r.changeset_id, r.author, r.schema_version, r.created_at`;
+}
+
+/**
+ * An event's facts with each link's kind alone: its links (where it is
+ * printed, each with its label and pages) are most of it, and a calendar
+ * row shows whether it has a hanacha. A year of farbrengens is 123 kB with
+ * them and 49 without.
+ */
+const EVENT_ROW_FACTS = factsWith(
+  `CASE WHEN jsonb_typeof(r.data->'links') = 'array'
+     THEN jsonb_set(r.data - 'body', '{links}', coalesce((SELECT jsonb_agg(jsonb_build_object('kind', l->>'kind')) FROM jsonb_array_elements(r.data->'links') l), '[]'::jsonb))
+     ELSE r.data - 'body' END`,
+);
 
 export type ChangesetStatus = 'draft' | 'open' | 'merged' | 'sent_back' | 'withdrawn';
 export type ChangesetKind = 'suggestion' | 'import' | 'revert' | 'live';
@@ -415,9 +432,10 @@ export class Catalog {
   /**
    * Events on main by date: within a year or month, on a day of any year
    * (`05-10`, or several days for a week), or on exact dates. Each comes
-   * with how many recordings it has, so a list can show which can be heard.
+   * with how many recordings it has, so a list can show which can be heard;
+   * `brief` keeps of its links each one's kind alone.
    */
-  async events(options: { within?: string; day?: string | string[]; dates?: string[]; missing?: 'recordings' | 'texts'; limit?: number }): Promise<Array<EntityView & { recordings: number }>> {
+  async events(options: { within?: string; day?: string | string[]; dates?: string[]; missing?: 'recordings' | 'texts'; limit?: number; brief?: boolean }): Promise<Array<EntityView & { recordings: number }>> {
     const params: unknown[] = [];
     const where = ["e.type = 'event'", 'NOT e.deleted'];
     if (options.within !== undefined) {
@@ -443,7 +461,7 @@ export class Catalog {
       where.push("NOT EXISTS (SELECT 1 FROM entity_ref x JOIN entity f ON f.id = x.from_id AND f.type = 'recording' AND NOT f.deleted WHERE x.to_id = e.id AND x.field = 'event')");
     if (options.missing === 'texts') where.push("coalesce(jsonb_array_length(r.data->'links'), 0) = 0");
     const { rows } = await this.db.query<RevisionRow & { recordings: number }>(
-      `SELECT ${FACTS}, (SELECT count(*)::int FROM entity_ref x JOIN entity f ON f.id = x.from_id AND NOT f.deleted
+      `SELECT ${options.brief ? EVENT_ROW_FACTS : FACTS}, (SELECT count(*)::int FROM entity_ref x JOIN entity f ON f.id = x.from_id AND NOT f.deleted
                     WHERE x.to_id = e.id AND x.field = 'event' AND f.type = 'recording') AS recordings
        FROM entity e JOIN revision r ON r.id = e.main_rev WHERE ${where.join(' AND ')}
        ORDER BY r.data->>'date' COLLATE "C", coalesce((r.data->>'order')::int, 0), e.id LIMIT ${Math.min(Math.max(options.limit ?? 500, 1), 2000)}`,

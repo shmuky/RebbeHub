@@ -12,6 +12,12 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **`GET /v1/events?brief=1`: each event's facts with each link's kind
+  alone.** A farbrengen's links (where it is printed, each with its label
+  and pages) are most of it, and a calendar's row shows whether it has a
+  hanacha: a year of farbrengens is 49 kB brief, not 123. The site's
+  calendar, home page and farbrengen pages ask so.
+
 - **The status page shows the servers' load.** For each Worker, today's
   requests, how many the runtime stopped for going over the CPU allowance
   (error 1102, a page nobody got), and the CPU a request takes at the

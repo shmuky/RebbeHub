@@ -1304,6 +1304,8 @@ export interface Operations {
       dates?: string;
       /** Only those without */
       missing?: "recordings" | "texts";
+      /** With 1: each event's facts with each link's kind alone, not its label and pages, for a calendar's rows (well under half the bytes) */
+      brief?: "1";
       /** How many (at most 2000) */
       limit?: number;
     };
@@ -2529,7 +2531,7 @@ export const OPERATIONS = {
   linkedOfEach: {"method":"GET","path":"/v1/entities/batch/linked","pathParams":[],"query":["ids","field","type","limit"],"body":null,"answer":"json"},
   listChildren: {"method":"GET","path":"/v1/entities/{id}/children","pathParams":["id"],"query":["field","type","after","limit","cursor"],"body":null,"answer":"json","items":"items"},
   listCommits: {"method":"GET","path":"/v1/commits","pathParams":[],"query":["since","limit","changes","cursor"],"body":null,"answer":"json","items":"commits"},
-  listEvents: {"method":"GET","path":"/v1/events","pathParams":[],"query":["within","day","dates","missing","limit"],"body":null,"answer":"json"},
+  listEvents: {"method":"GET","path":"/v1/events","pathParams":[],"query":["within","day","dates","missing","brief","limit"],"body":null,"answer":"json"},
   listFollows: {"method":"GET","path":"/v1/follows","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
   listIssues: {"method":"GET","path":"/v1/issues","pathParams":[],"query":["state","label","type","set","entity","assignee","author","q","before","limit","cursor"],"body":null,"answer":"json","items":"items"},
   listItems: {"method":"GET","path":"/v1/entities","pathParams":[],"query":["type","set","after","limit","cursor"],"body":null,"answer":"json","items":"items"},

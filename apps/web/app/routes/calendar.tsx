@@ -91,7 +91,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     throw redirect(href(`/calendar/${toYear}`, lang, { q: rest || undefined }));
   }
   // The year's farbrengens as rows (their name, date, what they have), not whole: the page carries them all, hidden, for the filter.
-  const all = (await api.events({ within: month ? `${year}-${month}` : String(year), limit: 2000 })).map(eventRow);
+  const all = (await api.events({ within: month ? `${year}-${month}` : String(year), limit: 2000, brief: true })).map(eventRow);
   return { lang, siteUrl, year, month: month ?? null, months: monthTokens, all, q, asked: Boolean(asked) };
 }
 

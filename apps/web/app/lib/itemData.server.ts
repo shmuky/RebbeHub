@@ -163,7 +163,7 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
       view.event = await orNone(eventView(api, view.lists.units, recordings, url.searchParams.get('lang') === 'en' ? 'en' : 'he'), { said: [], texts: [] });
       const date = typeof d.date === 'string' ? d.date : '';
       const day = /^\d{4}-(\w{2,3}-\d{2})$/.exec(date)?.[1];
-      const [otherYears, sameYear] = await Promise.all([day ? api.events({ day, limit: 50 }) : [], date ? api.events({ within: date.slice(0, 4), limit: 2000 }) : []]);
+      const [otherYears, sameYear] = await Promise.all([day ? api.events({ day, limit: 50, brief: true }) : [], date ? api.events({ within: date.slice(0, 4), limit: 2000, brief: true }) : []]);
       view.lists.otherYears = otherYears.filter((e) => e.id !== entity.id).map(eventRow);
       // The farbrengens before and after it, in date order within its year.
       const at = sameYear.findIndex((e) => e.id === entity.id);
