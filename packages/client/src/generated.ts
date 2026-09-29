@@ -96,6 +96,9 @@ export type Commit = {
   mergedBy: string;
   author: string;
   via?: Via | null;
+  /** How many items it changed in all */
+  changed: number;
+  types: Array<string>;
   changes: Array<{
     /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
     id?: string;
@@ -954,6 +957,16 @@ export interface Operations {
     };
     output: File;
   };
+  /** Several files at once, in the order asked (missing ones left out) */
+  getFiles: {
+    input: {
+      /** The files */
+      ids: string;
+    };
+    output: {
+      items: Array<File>;
+    };
+  };
   /** An issue, its timeline, what the reader may do, and the suggestions that close it */
   getIssue: {
     input: {
@@ -1184,6 +1197,8 @@ export interface Operations {
       since?: number;
       /** How many (at most 100) */
       limit?: number;
+      /** Carry only so many of each commit's changes (an import's has thousands); `changed` and `types` still count them all */
+      changes?: number;
       /** The `next` of the page before */
       cursor?: string;
     };
@@ -1347,6 +1362,8 @@ export interface Operations {
       reviewer?: string;
       /** With state: words in the title, or #number */
       q?: string;
+      /** With state: only suggestions that change these items, or what is in them (a sefer's sichos and their texts, a sicha's paragraphs, a farbrengen's sichos) */
+      about?: string;
       /** true: live changes waiting to be reviewed after */
       postReview?: "true" | "false";
       /** How many (at most 500) */
@@ -1647,6 +1664,16 @@ export interface Operations {
       id: string;
     };
     output: Record<string, unknown>;
+  };
+  /** Several recordings' synced hanachos at once (a farbrengen's parts), by recording; those with none are left out */
+  recordingsHanacha: {
+    input: {
+      /** The recordings */
+      ids: string;
+    };
+    output: {
+      items: Record<string, Record<string, unknown>>;
+    };
   };
   /** A recording's transcript, with its sync by paragraph and word */
   recordingTranscript: {
@@ -2345,6 +2372,7 @@ export const OPERATIONS = {
   forgetPlace: {"method":"DELETE","path":"/v1/places","pathParams":[],"query":["kind","key"],"body":null,"answer":"json"},
   getDump: {"method":"GET","path":"/dumps/{tag}/{name}","pathParams":["tag","name"],"query":[],"body":null,"answer":"raw"},
   getFile: {"method":"GET","path":"/v1/files/{sha256}","pathParams":["sha256"],"query":[],"body":null,"answer":"json"},
+  getFiles: {"method":"GET","path":"/v1/files/batch","pathParams":[],"query":["ids"],"body":null,"answer":"json"},
   getIssue: {"method":"GET","path":"/v1/issues/{number}","pathParams":["number"],"query":[],"body":null,"answer":"json"},
   getItem: {"method":"GET","path":"/v1/entities/{id}","pathParams":["id"],"query":["at"],"body":null,"answer":"json"},
   getItems: {"method":"GET","path":"/v1/entities/batch","pathParams":[],"query":["ids"],"body":null,"answer":"json"},
@@ -2367,7 +2395,7 @@ export const OPERATIONS = {
   itemTalk: {"method":"GET","path":"/v1/entities/{id}/talk","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   linkedCounts: {"method":"GET","path":"/v1/entities/{id}/linked/counts","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   listChildren: {"method":"GET","path":"/v1/entities/{id}/children","pathParams":["id"],"query":["field","type","after","limit","cursor"],"body":null,"answer":"json","items":"items"},
-  listCommits: {"method":"GET","path":"/v1/commits","pathParams":[],"query":["since","limit","cursor"],"body":null,"answer":"json","items":"commits"},
+  listCommits: {"method":"GET","path":"/v1/commits","pathParams":[],"query":["since","limit","changes","cursor"],"body":null,"answer":"json","items":"commits"},
   listEvents: {"method":"GET","path":"/v1/events","pathParams":[],"query":["within","day","dates","missing","limit"],"body":null,"answer":"json"},
   listFollows: {"method":"GET","path":"/v1/follows","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
   listIssues: {"method":"GET","path":"/v1/issues","pathParams":[],"query":["state","label","type","set","entity","assignee","author","q","before","limit","cursor"],"body":null,"answer":"json","items":"items"},
@@ -2377,7 +2405,7 @@ export const OPERATIONS = {
   listPlaces: {"method":"GET","path":"/v1/places","pathParams":[],"query":["kind","key","limit"],"body":null,"answer":"json"},
   listProjects: {"method":"GET","path":"/v1/projects","pathParams":[],"query":["status"],"body":null,"answer":"json"},
   listReports: {"method":"GET","path":"/v1/reports","pathParams":[],"query":["set","status"],"body":null,"answer":"json"},
-  listSuggestions: {"method":"GET","path":"/v1/suggestions","pathParams":[],"query":["status","state","author","reviewer","q","postReview","limit","cursor"],"body":null,"answer":"json","items":"suggestions"},
+  listSuggestions: {"method":"GET","path":"/v1/suggestions","pathParams":[],"query":["status","state","author","reviewer","q","about","postReview","limit","cursor"],"body":null,"answer":"json","items":"suggestions"},
   listWebhooks: {"method":"GET","path":"/v1/webhooks","pathParams":[],"query":[],"body":null,"answer":"json"},
   llmsTxt: {"method":"GET","path":"/llms.txt","pathParams":[],"query":[],"body":null,"answer":"text"},
   machineRequests: {"method":"GET","path":"/v1/machine/requests","pathParams":[],"query":["kind","status","item","items","limit"],"body":null,"answer":"json"},
@@ -2403,6 +2431,7 @@ export const OPERATIONS = {
   protectedResource: {"method":"GET","path":"/.well-known/oauth-protected-resource","pathParams":[],"query":[],"body":null,"answer":"json"},
   putSuggestionItem: {"method":"PUT","path":"/v1/suggestions/{id}/items","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   recordingHanacha: {"method":"GET","path":"/v1/recordings/{id}/hanacha","pathParams":["id"],"query":[],"body":null,"answer":"json"},
+  recordingsHanacha: {"method":"GET","path":"/v1/recordings/batch/hanacha","pathParams":[],"query":["ids"],"body":null,"answer":"json"},
   recordingTranscript: {"method":"GET","path":"/v1/recordings/{id}/transcript","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   refCounts: {"method":"GET","path":"/v1/refcounts","pathParams":[],"query":["field","type"],"body":null,"answer":"json"},
   releaseClaim: {"method":"POST","path":"/v1/projects/{slug}/release","pathParams":["slug"],"query":[],"body":"json","answer":"json"},
@@ -2702,6 +2731,11 @@ export abstract class GeneratedMethods {
     return this.call('getFile', input ?? {} as Operations['getFile']['input']);
   }
 
+  /** Several files at once, in the order asked (missing ones left out) (GET /v1/files/batch) */
+  getFiles(input: Operations['getFiles']['input']): Promise<Operations['getFiles']['output']> {
+    return this.call('getFiles', input ?? {} as Operations['getFiles']['input']);
+  }
+
   /** An issue, its timeline, what the reader may do, and the suggestions that close it (GET /v1/issues/{number}) */
   getIssue(input: Operations['getIssue']['input']): Promise<Operations['getIssue']['output']> {
     return this.call('getIssue', input ?? {} as Operations['getIssue']['input']);
@@ -2990,6 +3024,11 @@ export abstract class GeneratedMethods {
   /** The hanacha synced to this recording, paragraph by paragraph (GET /v1/recordings/{id}/hanacha) */
   recordingHanacha(input: Operations['recordingHanacha']['input']): Promise<Operations['recordingHanacha']['output']> {
     return this.call('recordingHanacha', input ?? {} as Operations['recordingHanacha']['input']);
+  }
+
+  /** Several recordings' synced hanachos at once (a farbrengen's parts), by recording; those with none are left out (GET /v1/recordings/batch/hanacha) */
+  recordingsHanacha(input: Operations['recordingsHanacha']['input']): Promise<Operations['recordingsHanacha']['output']> {
+    return this.call('recordingsHanacha', input ?? {} as Operations['recordingsHanacha']['input']);
   }
 
   /** A recording's transcript, with its sync by paragraph and word (GET /v1/recordings/{id}/transcript) */

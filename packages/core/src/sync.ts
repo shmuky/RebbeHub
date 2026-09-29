@@ -456,49 +456,74 @@ export async function confirmSync(catalog: Catalog, by: string, input: { recordi
 
 /** The hanacha of a recording's farbrengen, when the catalog has its text: kind `hanacha`, of the recording, of a unit of its event, or "based on" its event (a hanacha added for the farbrengen as a whole). */
 export async function hanachaOf(catalog: Catalog, recording: EntityId): Promise<EntityId | null> {
-  const row = await one<{ id: EntityId }>(
-    catalog.db,
-    `SELECT t.id FROM entity t JOIN revision tr ON tr.id = t.main_rev
-     WHERE t.type = 'text' AND NOT t.deleted AND tr.data->>'kind' = 'hanacha' AND (
-       tr.data->>'recording' = $1 OR EXISTS (
-         SELECT 1 FROM entity rec JOIN revision rr ON rr.id = rec.main_rev
-         JOIN entity u ON u.id = tr.data->>'unit' JOIN revision ur ON ur.id = u.main_rev
-         WHERE rec.id = $1 AND rr.data->>'event' IS NOT NULL AND ur.data->'events' ? (rr.data->>'event'))
+  return (await hanachaOfEach(catalog, [recording])).get(recording) ?? null;
+}
+
+/** The same for several recordings (a farbrengen's parts) in one statement: by recording, only those with one. */
+async function hanachaOfEach(catalog: Catalog, recordings: readonly EntityId[]): Promise<Map<EntityId, EntityId>> {
+  if (recordings.length === 0) return new Map();
+  const { rows } = await catalog.db.query<{ recording: EntityId; text: EntityId }>(
+    `SELECT DISTINCT ON (want.id) want.id AS recording, t.id AS text
+     FROM unnest($1::text[]) AS want (id)
+     LEFT JOIN entity rec ON rec.id = want.id LEFT JOIN revision rr ON rr.id = rec.main_rev
+     JOIN entity t ON t.type = 'text' AND NOT t.deleted JOIN revision tr ON tr.id = t.main_rev AND tr.data->>'kind' = 'hanacha'
+     WHERE tr.data->>'recording' = want.id
+       OR (rr.data->>'event' IS NOT NULL AND EXISTS (
+         SELECT 1 FROM entity u JOIN revision ur ON ur.id = u.main_rev WHERE u.id = tr.data->>'unit' AND ur.data->'events' ? (rr.data->>'event')))
        OR EXISTS (
          SELECT 1 FROM entity_ref a JOIN entity rel ON rel.id = a.from_id AND rel.type = 'relation' AND NOT rel.deleted JOIN revision rlr ON rlr.id = rel.main_rev
-         JOIN entity rec ON rec.id = $1 JOIN revision rr ON rr.id = rec.main_rev
-         WHERE a.to_id = t.id AND a.field = 'from' AND rlr.data->>'kind' = 'based-on' AND rlr.data->>'to' = rr.data->>'event'))
-     ORDER BY t.id LIMIT 1`,
-    [recording],
+         WHERE a.to_id = t.id AND a.field = 'from' AND rlr.data->>'kind' = 'based-on' AND rlr.data->>'to' = rr.data->>'event')
+     ORDER BY want.id, t.id`,
+    [[...new Set(recordings)]],
   );
-  return row?.id ?? null;
+  return new Map(rows.map((r) => [r.recording, r.text]));
 }
 
 /** A hanacha's paragraphs, each with where it is heard in a recording (a paragraph-level alignment), or null when there is none. */
-export async function hanachaSync(catalog: Catalog, recording: EntityId): Promise<{ text: EntityId; alignment: EntityId; paragraphs: Array<{ id: EntityId; content: string; startMs: number | null; endMs: number | null; checked: boolean }> } | null> {
-  const text = await hanachaOf(catalog, recording);
-  if (!text) return null;
-  const alignment = await one<{ id: EntityId }>(
-    catalog.db,
-    `SELECT a.id FROM entity_ref x JOIN entity a ON a.id = x.from_id AND a.type = 'alignment' AND NOT a.deleted
-     JOIN revision ar ON ar.id = a.main_rev WHERE x.to_id = $1 AND x.field = 'text' AND ar.data->>'recording' = $2 ORDER BY a.id LIMIT 1`,
-    [text, recording],
+export type HanachaSync = { text: EntityId; alignment: EntityId; paragraphs: Array<{ id: EntityId; content: string; startMs: number | null; endMs: number | null; checked: boolean }> };
+
+export async function hanachaSync(catalog: Catalog, recording: EntityId): Promise<HanachaSync | null> {
+  return (await hanachaSyncs(catalog, [recording])).get(recording) ?? null;
+}
+
+/**
+ * The same for several recordings at once, by recording, only those with a
+ * synced hanacha: a farbrengen's page asks about all its parts in one
+ * request (and two statements, plus one per sync found) where it used to
+ * ask about each part.
+ */
+export async function hanachaSyncs(catalog: Catalog, recordings: readonly EntityId[]): Promise<Map<EntityId, HanachaSync>> {
+  const out = new Map<EntityId, HanachaSync>();
+  const texts = await hanachaOfEach(catalog, recordings);
+  if (texts.size === 0) return out;
+  // The alignment of each (text, recording) pair, the lowest id when there are several.
+  const { rows: alignments } = await catalog.db.query<{ text: EntityId; recording: EntityId; id: EntityId }>(
+    `SELECT DISTINCT ON (x.to_id, ar.data->>'recording') x.to_id AS text, ar.data->>'recording' AS recording, a.id
+     FROM entity_ref x JOIN entity a ON a.id = x.from_id AND a.type = 'alignment' AND NOT a.deleted
+     JOIN revision ar ON ar.id = a.main_rev WHERE x.to_id = ANY($1::text[]) AND x.field = 'text' AND ar.data->>'recording' = ANY($2::text[])
+     ORDER BY x.to_id, ar.data->>'recording', a.id`,
+    [[...new Set(texts.values())], [...texts.keys()]],
   );
-  if (!alignment) return null;
-  const { rows } = await catalog.db.query<{ id: EntityId; content: string; order: string; sd: SpanData | null }>(
-    `SELECT s.id, sr.data->>'content' AS content, sr.data->>'order' AS "order", sp.data AS sd
-     FROM entity_ref x JOIN entity s ON s.id = x.from_id AND s.type = 'segment' AND NOT s.deleted JOIN revision sr ON sr.id = s.main_rev
-     LEFT JOIN LATERAL (
-       SELECT spr.data FROM entity_ref y JOIN entity e ON e.id = y.from_id AND e.type = 'alignment-span' AND NOT e.deleted JOIN revision spr ON spr.id = e.main_rev
-       WHERE y.to_id = s.id AND y.field = 'segment' AND spr.data->>'alignment' = $2 LIMIT 1
-     ) sp ON TRUE
-     WHERE x.to_id = $1 AND x.field = 'text'`,
-    [text, alignment.id],
-  );
-  rows.sort((a, b) => (a.order < b.order ? -1 : a.order > b.order ? 1 : 0));
-  return {
-    text,
-    alignment: alignment.id,
-    paragraphs: rows.map((r) => ({ id: r.id, content: r.content, startMs: r.sd ? r.sd.startMs : null, endMs: r.sd ? r.sd.endMs : null, checked: Boolean(r.sd?.locked || r.sd?.origin?.checked) })),
-  };
+  const alignmentOf = new Map(alignments.map((a) => [`${a.text} ${a.recording}`, a.id]));
+  for (const [recording, text] of texts) {
+    const alignment = alignmentOf.get(`${text} ${recording}`);
+    if (!alignment) continue;
+    const { rows } = await catalog.db.query<{ id: EntityId; content: string; order: string; sd: SpanData | null }>(
+      `SELECT s.id, sr.data->>'content' AS content, sr.data->>'order' AS "order", sp.data AS sd
+       FROM entity_ref x JOIN entity s ON s.id = x.from_id AND s.type = 'segment' AND NOT s.deleted JOIN revision sr ON sr.id = s.main_rev
+       LEFT JOIN LATERAL (
+         SELECT spr.data FROM entity_ref y JOIN entity e ON e.id = y.from_id AND e.type = 'alignment-span' AND NOT e.deleted JOIN revision spr ON spr.id = e.main_rev
+         WHERE y.to_id = s.id AND y.field = 'segment' AND spr.data->>'alignment' = $2 LIMIT 1
+       ) sp ON TRUE
+       WHERE x.to_id = $1 AND x.field = 'text'`,
+      [text, alignment],
+    );
+    rows.sort((a, b) => (a.order < b.order ? -1 : a.order > b.order ? 1 : 0));
+    out.set(recording, {
+      text,
+      alignment,
+      paragraphs: rows.map((r) => ({ id: r.id, content: r.content, startMs: r.sd ? r.sd.startMs : null, endMs: r.sd ? r.sd.endMs : null, checked: Boolean(r.sd?.locked || r.sd?.origin?.checked) })),
+    });
+  }
+  return out;
 }

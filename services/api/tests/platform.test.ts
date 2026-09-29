@@ -153,6 +153,12 @@ describe('cursors', () => {
     expect(commits.body.commits).toHaveLength(2);
     const after = await call('GET', `/v1/commits?limit=2&cursor=${commits.body.next}`);
     expect(after.body.commits[0].seq).toBe(commits.body.commits[1].seq + 1);
+    // A feed asks for a few of each commit's changes; each still says how many it changed in all, and of what kinds.
+    const schemas = commits.body.commits[0];
+    expect(schemas).toMatchObject({ message: 'Built-in schemas', changed: schemas.changes.length, types: ['schema'] });
+    const few = (await call('GET', '/v1/commits?limit=2&changes=2')).body.commits[0];
+    expect(few).toMatchObject({ seq: schemas.seq, changed: schemas.changed, types: ['schema'], changes: schemas.changes.slice(0, 2) });
+    expect((await call('GET', '/v1/commits?limit=1&changes=0')).body.commits[0]).toMatchObject({ changed: schemas.changed, changes: [] });
 
     const s1 = await call('GET', '/v1/suggestions?status=merged&limit=3');
     const s2 = await call('GET', `/v1/suggestions?status=merged&limit=3&cursor=${s1.body.next}`);

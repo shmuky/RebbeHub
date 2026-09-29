@@ -327,12 +327,9 @@ export class Catalog {
     if (revId === null && options.at !== undefined) {
       const row = await one<{ rev_id: number }>(db, 'SELECT rev_id FROM commit_change WHERE entity_id = $1 AND commit_seq <= $2 ORDER BY commit_seq DESC LIMIT 1', [id, options.at]);
       revId = row?.rev_id ?? null;
-    } else if (revId === null) {
-      const row = await one<{ main_rev: number | null }>(db, 'SELECT main_rev FROM entity WHERE id = $1', [id]);
-      revId = row?.main_rev ?? null;
     }
-    if (revId === null) return null;
-    const rev = await this.revision(revId, db);
+    // Main as it is now, the common case, is one statement (every statement counts where the API runs).
+    const rev = revId === null && options.at === undefined ? await one<RevisionRow>(db, 'SELECT r.* FROM entity e JOIN revision r ON r.id = e.main_rev WHERE e.id = $1', [id]) : revId === null ? null : await this.revision(revId, db);
     if (!rev || rev.data === null) return null;
     return { id: rev.entity_id, type: rev.entity_type, path: rev.path, rev: rev.id, data: rev.data };
   }
@@ -1605,18 +1602,60 @@ export class Catalog {
     return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }));
   }
 
-  /** The commits after `since`, each with the items it changed (null data: deleted), for incremental export. */
-  async commitsSince(since: number, limit = 100): Promise<Array<{ seq: number; at: string; message: string; mergedBy: string; author: string; via: Via | null; changes: Array<{ id: EntityId; type: EntityType; path: string | null; rev: number; data: Json | null }> }>> {
+  /**
+   * The commits after `since`, oldest first, each with the items it changed
+   * (as they became), what they all are, and how many: two statements for
+   * the page, however many commits. With `changes`, only that many of each
+   * commit's changes are carried (in id order; the summary still counts them
+   * all), for a feed that shows a few of each where an import changes
+   * thousands.
+   */
+  async commitsSince(since: number, limit = 100, options: { changes?: number } = {}): Promise<Array<{ seq: number; at: string; message: string; mergedBy: string; author: string; via: Via | null; changed: number; types: EntityType[]; changes: Array<{ id: EntityId; type: EntityType; path: string | null; rev: number; data: Json | null }> }>> {
     const { rows: commits } = await this.db.query<{ seq: number; at: string; message: string; merged_by: string; author: string; via: Via | null }>(
       'SELECT c.seq, c.at, c.message, c.merged_by, cs.author, cs.via FROM commit c JOIN changeset cs ON cs.id = c.changeset_id WHERE c.seq > $1 ORDER BY c.seq LIMIT $2',
       [since, limit],
     );
-    const out = [];
-    for (const c of commits) {
-      const { rows } = await this.db.query<RevisionRow>('SELECT r.* FROM commit_change cc JOIN revision r ON r.id = cc.rev_id WHERE cc.commit_seq = $1 ORDER BY cc.entity_id', [c.seq]);
-      out.push({ seq: c.seq, at: c.at, message: c.message, mergedBy: c.merged_by, author: c.author, via: c.via ?? null, changes: rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data })) });
+    if (commits.length === 0) return [];
+    const seqs = commits.map((c) => c.seq);
+    const cap = options.changes;
+    const { rows } = await this.db.query<RevisionRow & { commit_seq: number }>(
+      cap === undefined
+        ? 'SELECT cc.commit_seq, r.* FROM commit_change cc JOIN revision r ON r.id = cc.rev_id WHERE cc.commit_seq = ANY($1::bigint[]) ORDER BY cc.commit_seq, cc.entity_id'
+        : `SELECT cc.commit_seq, r.* FROM (SELECT commit_seq, entity_id, rev_id, row_number() OVER (PARTITION BY commit_seq ORDER BY entity_id) AS n FROM commit_change WHERE commit_seq = ANY($1::bigint[])) cc
+           JOIN revision r ON r.id = cc.rev_id WHERE cc.n <= $2 ORDER BY cc.commit_seq, cc.entity_id`,
+      cap === undefined ? [seqs] : [seqs, cap],
+    );
+    const changes = new Map<number, RevisionRow[]>();
+    for (const r of rows) (changes.get(Number(r.commit_seq)) ?? changes.set(Number(r.commit_seq), []).get(Number(r.commit_seq))!).push(r);
+    // What each changed in all: known from the changes themselves when all are carried, else asked in one more statement.
+    const summary = new Map<number, { changed: number; types: Set<EntityType> }>();
+    const count = (seq: number, type: EntityType, n: number) => {
+      const s = summary.get(seq) ?? summary.set(seq, { changed: 0, types: new Set() }).get(seq)!;
+      s.changed += n;
+      s.types.add(type);
+    };
+    if (cap === undefined) for (const r of rows) count(Number(r.commit_seq), r.entity_type, 1);
+    else {
+      const { rows: counts } = await this.db.query<{ commit_seq: number; entity_type: EntityType; n: number }>(
+        'SELECT cc.commit_seq, r.entity_type, count(*)::int AS n FROM commit_change cc JOIN revision r ON r.id = cc.rev_id WHERE cc.commit_seq = ANY($1::bigint[]) GROUP BY cc.commit_seq, r.entity_type ORDER BY cc.commit_seq, r.entity_type',
+        [seqs],
+      );
+      for (const r of counts) count(Number(r.commit_seq), r.entity_type, r.n);
     }
-    return out;
+    return commits.map((c) => {
+      const s = summary.get(Number(c.seq));
+      return {
+        seq: c.seq,
+        at: c.at,
+        message: c.message,
+        mergedBy: c.merged_by,
+        author: c.author,
+        via: c.via ?? null,
+        changed: s?.changed ?? 0,
+        types: [...(s?.types ?? [])],
+        changes: (changes.get(Number(c.seq)) ?? []).map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data })),
+      };
+    });
   }
 
   // ------------------------------------------------------------ checks

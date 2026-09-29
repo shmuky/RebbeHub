@@ -7,9 +7,10 @@ import { describeTargets } from './targets.server.js';
  * The conversations about an item: suggestions that change it (or what is
  * in it: a sefer's sichos, their paragraphs) and issues people opened
  * about it. For a page's "Suggestions" tab, its side's recent activity and
- * its tab counts. The API lists suggestions by number, not by item, so
- * the newest are read and matched here; enough for a page, and the full
- * list is a search away (/suggestions).
+ * its tab counts. The API finds the newest suggestions about the item in
+ * one query (`about`), and only those are opened, for their labels and
+ * where in the item they are; enough for a page, and the full list is a
+ * search away (/suggestions).
  */
 
 export interface AboutThread {
@@ -29,22 +30,22 @@ export interface AboutThread {
 }
 
 const SUGGESTIONS_READ = 15;
+const ITEMS_READ = 25;
 
 export async function threadsAbout(api: RebbeHubApi, ids: ReadonlySet<string>, lang: Lang, options: { set?: string | null } = {}): Promise<AboutThread[]> {
   const [list, issues] = await Promise.all([
-    api.conversations({ state: 'all', limit: SUGGESTIONS_READ }).catch(() => null),
+    ids.size ? api.conversations({ state: 'all', about: [...ids].slice(0, 500), limit: SUGGESTIONS_READ }).catch(() => null) : null,
     api.issues({ state: 'all', limit: 50, ...(options.set ? { set: options.set } : {}) }).catch(() => null),
   ]);
   const out: AboutThread[] = [];
   if (list) {
-    const details = await Promise.all(list.suggestions.map((s) => api.suggestion(s.id).catch(() => null)));
+    // A page of each one's items is enough for its labels and its first item's place; a big one is read no further.
+    const details = await Promise.all(list.suggestions.map((s) => api.suggestion(s.id, { limit: ITEMS_READ }).catch(() => null)));
     const present = details.filter((d): d is SuggestionDetail => d !== null);
     const targets = await describeTargets(api, present.flatMap((d) => d.entries), lang).catch(() => new Map());
     list.suggestions.forEach((s, i) => {
       const d = details[i];
       if (!d) return;
-      const touches = d.entries.some((e) => ids.has(e.entityId) || ids.has(targets.get(e.entityId)?.rootId ?? '') || ids.has(String((e.after ?? e.before ?? {})['unit'] ?? '')) || ids.has(String((e.after ?? e.before ?? {})['work'] ?? '')));
-      if (!touches) return;
       const first = d.entries[0] ? targets.get(d.entries[0].entityId) : undefined;
       out.push({
         kind: 'suggestion',

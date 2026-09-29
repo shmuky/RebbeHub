@@ -105,6 +105,11 @@ describe('suggestions as pull requests', () => {
     const number = made.body.number as number;
     expect(number).toBeGreaterThan(issue.body.number);
     expect((await call('GET', `/v1/threads/${number}`)).body).toEqual({ kind: 'suggestion', number, id });
+    // An item's page asks for the suggestions about it in one query, instead of opening the newest ones to look.
+    const about = async (ids: string) => (await call('GET', `/v1/suggestions?state=all&about=${ids}`)).body.suggestions.map((s: { number: number }) => s.number);
+    expect((await about(event))[0]).toBe(number);
+    expect((await about(`rh-zzzzzzzz,${event}`))[0]).toBe(number);
+    expect(await about('rh-zzzzzzzz')).toEqual([]);
 
     // Chaim was named; the keeper is asked to review (as a code owner would be).
     expect((await inboxOf('chaim')).items.map((l: { reason: string }) => l.reason)).toContain('mention');

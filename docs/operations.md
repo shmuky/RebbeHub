@@ -417,6 +417,50 @@ own).
 Hyperdrive pools the connections (each Worker request opens one through
 it) and caches reads for a minute by default: keep its caching on.
 
+#### The statement budget
+
+On the Workers Free plan Hyperdrive counts every statement the API Worker
+sends, cached or not, reads and writes alike, a transaction's BEGIN and
+COMMIT included, against 100,000 a day; past that, every query errors
+until midnight UTC and the site is down (a 500 on every page and API read
+not already at the edge). The plan's other limits bite the same way: a
+Worker may make 50 subrequests a request (service-binding calls to the
+API count) and use 10 ms of CPU. The jobs (`services/jobs`) connect to
+Postgres directly and do not count.
+
+So every page has a budget, and the counts are measured, not guessed:
+`.data/measure.ts` (in a checkout, not in git) renders each page through
+the site and API in one process against a PGlite catalog imported from
+Sichos Kodesh, counting statements and API calls. The counts of 29 Elul
+5786 (before and after that day's changes):
+
+| Page | Statements | API calls |
+| --- | --- | --- |
+| Home | 62 → 60 | 21 → 21 |
+| A sefer | 40 → 24 | 16 → 14 |
+| A sicha or letter | 39 → 23 | 17 → 15 |
+| A farbrengen with 40 parts | 80 → 17 | 58 → 15 |
+| A set (the farbrengens) | 36 → 12 | 14 → 10 |
+| An author | 9 → 8 | 9 → 9 |
+| Search | 3 | 4 |
+| The apps' catalog manifest (every request) | 7 → 1 | 0 |
+| `/v1/commits?limit=12` (the home feed) | 13 → 3 | 0 |
+
+What the budget rules out: opening many suggestions in full (the review
+queue once loaded 18 bot imports of 500 items each, 36,000 statements a
+view, and used the day's allowance by noon), one request per part of a
+farbrengen (58 subrequests exceeds the plan's 50: the page errored
+whatever the quota), and a commit feed that carries every change of an
+import (thousands). Batch routes exist for what pages need many of:
+`/v1/entities/batch`, `/v1/files/batch`, `/v1/recordings/batch/hanacha`,
+`/v1/suggestions?about=`, and `/v1/commits?changes=`.
+
+Latency comes from the same place: each API read is a Worker call and its
+statements are round trips to Postgres in Virginia, one after the other.
+Smart Placement (`[placement]` in each `wrangler.toml`) runs the Workers
+next to the database; pages and the API's public reads stay cached at
+the edge near the reader.
+
 ### Crawlers
 
 - `/robots.txt` lets every crawler, AI crawlers too, read items, lists and

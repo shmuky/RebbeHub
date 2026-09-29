@@ -54,6 +54,13 @@ export interface FileInfo {
   pageImages?: number;
 }
 
+/** A hanacha synced to a recording: its paragraphs, each with where it is heard (GET /v1/recordings/:id/hanacha). */
+export interface HanachaSync {
+  text: string;
+  alignment: string;
+  paragraphs: Array<{ id: string; content: string; startMs: number | null; endMs: number | null; checked: boolean }>;
+}
+
 /** A served scan's page images, and its IIIF manifest (GET /v1/scans/:id/pages). */
 export interface ScanPages {
   scan: string;
@@ -583,6 +590,14 @@ export class RebbeHubApi {
     return this.maybe(this.get<FileInfo>(`/v1/files/${sha256}`));
   }
 
+  /** Several files in one request (a farbrengen's parts, a printing's scans), by sha256; missing ones left out. */
+  async files(sha256s: readonly string[]): Promise<Map<string, FileInfo>> {
+    const ids = [...new Set(sha256s)].slice(0, 200);
+    if (ids.length === 0) return new Map();
+    const { items } = await this.get<{ items: FileInfo[] }>('/v1/files/batch', { ids: ids.join(',') });
+    return new Map(items.map((f) => [f.sha256, f]));
+  }
+
   /** A served scan's page images; null when it has none or is not served. */
   scanPages(scan: string) {
     return this.maybe(this.get<ScanPages>(`/v1/scans/${encodeURIComponent(scan)}/pages`));
@@ -631,9 +646,9 @@ export class RebbeHubApi {
     return this.maybe(this.get<SuggestionDetail>(`/v1/suggestions/${id}`, options));
   }
 
-  /** The commits after `since`, oldest first, each with the items it changed (as they became). */
-  async commits(since: number, limit = 20) {
-    return (await this.get<{ commits: Array<{ seq: number; at: string; message: string; mergedBy: string; author: string; via?: Via | null; changes: Array<{ id: string; type: string; path: string | null; rev: number; data: Record<string, unknown> | null }> }> }>('/v1/commits', { since, limit })).commits;
+  /** The commits after `since`, oldest first, each with the items it changed (as they became), or with `changes` only so many of them (`changed` and `types` count them all). */
+  async commits(since: number, limit = 20, changes?: number) {
+    return (await this.get<{ commits: Array<{ seq: number; at: string; message: string; mergedBy: string; author: string; via?: Via | null; changed?: number; types?: string[]; changes: Array<{ id: string; type: string; path: string | null; rev: number; data: Record<string, unknown> | null }> }> }>('/v1/commits', { since, limit, changes })).commits;
   }
 
   /** What a mirror needs: the git mirror, the release keys, every edition's dumps (services/api/src/mirrors.ts). */
@@ -647,8 +662,10 @@ export class RebbeHubApi {
   }
 
   /** Suggestions as conversations, newest first by number, with reviewers and approvals and open and closed counts. */
-  conversations(options: { state?: 'open' | 'closed' | 'all'; author?: string; reviewer?: string; q?: string; limit?: number; cursor?: string } = {}) {
-    return this.get<{ suggestions: SuggestionListItem[]; people: People; counts: { open: number; closed: number }; next: string | null }>('/v1/suggestions', { state: 'open', ...options });
+  conversations(options: { state?: 'open' | 'closed' | 'all'; author?: string; reviewer?: string; q?: string; about?: readonly string[]; limit?: number; cursor?: string } = {}) {
+    // `about`: only suggestions that change these items, or what is in them (the API matches them in one query).
+    const { about, ...rest } = options;
+    return this.get<{ suggestions: SuggestionListItem[]; people: People; counts: { open: number; closed: number }; next: string | null }>('/v1/suggestions', { state: 'open', ...rest, ...(about?.length ? { about: about.join(',') } : {}) });
   }
 
   /** Who these accounts are (a set's keepers): name and handle; an API from before handles gives none. */
@@ -674,7 +691,15 @@ export class RebbeHubApi {
 
   /** The hanacha synced to a recording, paragraph by paragraph with where each is heard; null when none is. */
   hanachaSync(recording: string) {
-    return this.maybe(this.get<{ text: string; alignment: string; paragraphs: Array<{ id: string; content: string; startMs: number | null; endMs: number | null; checked: boolean }> }>(`/v1/recordings/${encodeURIComponent(recording)}/hanacha`));
+    return this.maybe(this.get<HanachaSync>(`/v1/recordings/${encodeURIComponent(recording)}/hanacha`));
+  }
+
+  /** The same for several recordings (a farbrengen's parts) in one request, by recording; those with none are left out. */
+  async hanachaSyncs(recordings: readonly string[]): Promise<Map<string, HanachaSync>> {
+    const ids = [...new Set(recordings)].slice(0, 200);
+    if (ids.length === 0) return new Map();
+    const { items } = await this.get<{ items: Record<string, HanachaSync> }>('/v1/recordings/batch/hanacha', { ids: ids.join(',') });
+    return new Map(Object.entries(items));
   }
 
   /** The kinds of issue, each with the words it starts with. */

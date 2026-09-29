@@ -104,13 +104,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       whereHref: target?.path ?? null,
       entities: [...new Set(d.entries.flatMap((e) => [e.entityId, targets.get(e.entityId)?.rootId ?? '']).filter(Boolean))],
       words: wordsChanged(d),
-      items: d.entries.length,
+      items: d.total ?? d.entries.length,
     };
   });
 
   // What was approved lately, and what the importers and machines did: each with the items it touched.
   const since = Math.max(0, stats.head - 12);
-  const commits = await api.commits(since, 12).catch(() => []);
+  // Three items of each are shown; an import's commit changes thousands, which the feed only counts.
+  const commits = await api.commits(since, 12, 3).catch(() => []);
   const names = new Map(community.recent.map((c) => [c.seq, c]));
   // What each commit touched, as people say it: a paragraph is its sicha, a printing its sefer's.
   const touched = await describeTargets(api, commits.flatMap((c) => c.changes.slice(0, 3).map((x) => ({ entityId: x.id, type: x.type, before: null, after: x.data }))), lang).catch(() => new Map<string, Target>());
@@ -132,8 +133,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         via: c.via ?? null,
         by: who?.mergedByName && c.mergedBy !== c.author ? who.mergedByName : null,
         title: c.message,
-        count: c.changes.length,
-        types: [...new Set(c.changes.map((x) => x.type))],
+        count: c.changed ?? c.changes.length,
+        types: c.types ?? [...new Set(c.changes.map((x) => x.type))],
         items: [...new Map(items.map((i) => [i.label, i])).values()],
         entities: [...c.changes.map((x) => x.id), ...c.changes.map((x) => touched.get(x.id)?.rootId ?? '').filter(Boolean)],
       } as FeedItem;
