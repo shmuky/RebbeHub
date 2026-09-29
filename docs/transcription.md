@@ -64,7 +64,8 @@ Every test is from 5742; other years and poorer recordings are untested.
 
 The model (1.6 GB) is not published. It is kept in
 `rebbehub-preservation` at `models/rebbe-whisper-5742/`, and the workflow
-fetches it with the R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY secrets.
+fetches it with the R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY
+secrets.
 Its transcripts, like any machine output, stay labelled until people
 check them.
 

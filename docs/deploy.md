@@ -157,10 +157,10 @@ npm run rebbehub -- import sichos-kodesh-occasions --from ../Sichos-Kodesh --app
 
   The local engine hears best with rebbe-whisper, the model fine-tuned on
   the Rebbe's voice, kept private in `rebbehub-preservation` under
-  `models/rebbe-whisper-5742/`. To let the workflow fetch it, add
-  `CLOUDFLARE_ACCOUNT_ID` and an R2 API token that can only read that
-  bucket, as `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`. Without them it
-  uses ivrit.ai's model.
+  `models/rebbe-whisper-5742/`. To let the workflow fetch it, add the
+  bucket's S3 endpoint as `R2_ENDPOINT` (`https://<account>.r2.cloudflarestorage.com`)
+  and an R2 API token that can only read that bucket, as `R2_ACCESS_KEY_ID`
+  and `R2_SECRET_ACCESS_KEY`. Without them it uses ivrit.ai's model.
 
   Its **align** box then runs `rebbehub align` too, with the same keys:
   word timings for transcripts that have none (made before word timings,

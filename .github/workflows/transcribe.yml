@@ -10,8 +10,8 @@ name: Machine transcription (manual)
 #
 # Needs repository secrets: DATABASE_URL (as the import), and for Workers
 # AI, CLOUDFLARE_ACCOUNT_ID with CLOUDFLARE_AI_TOKEN (a token allowed only
-# Workers AI). With R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY (a token that
-# can read rebbehub-preservation) and CLOUDFLARE_ACCOUNT_ID, the local
+# Workers AI). With R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY
+# (an R2 token that can read rebbehub-preservation), the local
 # engine uses rebbe-whisper, the model fine-tuned on the Rebbe's voice,
 # kept private in R2; without them, ivrit.ai's model. See docs/deploy.md
 # and docs/transcription.md.
@@ -60,6 +60,7 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_AI_TOKEN: ${{ secrets.CLOUDFLARE_AI_TOKEN }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       REBBE_MODEL: models/rebbe-whisper-5742
@@ -100,10 +101,10 @@ jobs:
         if: inputs.engine == 'local'
         run: |
           dir="$HOME/$REBBE_MODEL"
-          if [ ! -s "$dir/model.bin" ] && [ -n "$R2_ACCESS_KEY_ID" ]; then
+          if [ ! -s "$dir/model.bin" ] && [ -n "$R2_ENDPOINT" ] && [ -n "$R2_ACCESS_KEY_ID" ]; then
             AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" AWS_DEFAULT_REGION=auto \
               aws s3 sync "s3://rebbehub-preservation/$REBBE_MODEL/" "$dir" \
-              --endpoint-url "https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com"
+              --endpoint-url "$R2_ENDPOINT"
           fi
           if [ -s "$dir/model.bin" ]; then echo "WHISPER_MODEL=$dir" >> "$GITHUB_ENV"
           else echo "::notice::No Rebbe model in R2; hearing with ivrit.ai's Yiddish Whisper."; fi
