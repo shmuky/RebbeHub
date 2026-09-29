@@ -3366,6 +3366,15 @@ body.embedded {
   margin-inline: 0.25em;
 }
 
+/* The Chabad Library's old page numbers, in brackets as the library prints them. */
+.words-chabad-library .words-marker::before {
+  content: '(';
+}
+
+.words-chabad-library .words-marker::after {
+  content: ')';
+}
+
 .words-note-ref {
   font-family: var(--font-ui);
   font-size: 0.7em;

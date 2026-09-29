@@ -231,8 +231,9 @@ const fractionalOrder = str({ pattern: '^[0-9A-Za-z]+$', maxLength: 64 });
  * 5: a page's body is structured words (pageText.ts), no longer markup.
  * 6: a sefer's cover, the page of a PDF a person chose as its title page
  * (made as a second 5 alongside the words; 6 so a catalog on either 5 takes both).
+ * 7: the `chabad-library` display profile for chabadlibrary.org's texts.
  */
-export const BUILTIN_SCHEMA_VERSION = 6;
+export const BUILTIN_SCHEMA_VERSION = 7;
 
 export const BUILTIN_SCHEMAS: Record<EntityType, JsonSchema> = {
   set: entitySchema(

@@ -25,7 +25,8 @@ export function legacyProfile(bodySource: unknown): TextProfile {
   const s = (bodySource ?? {}) as { source?: string; via?: string };
   if (s.via === 'mafteiach-index' || s.source === 'mafteiach') return 'outline';
   if (s.via === 'sefaria' || s.via === 'sefaria-index' || s.source === 'sefaria') return 'sefaria';
-  if (s.via === 'igros-index' || s.via === 'chabadlibrary' || s.source === 'igros-app' || s.source === 'chabadlibrary') return 'sichos-kodesh';
+  if (s.via === 'chabadlibrary' || s.source === 'chabadlibrary') return 'chabad-library';
+  if (s.via === 'igros-index' || s.source === 'igros-app') return 'sichos-kodesh';
   return 'plain';
 }
 
@@ -127,7 +128,7 @@ export function fromWikitext(text: string, profile: TextProfile = 'plain', langu
         open(versions.some((v) => v.id === 'en') ? `v${versions.length + 1}` : 'en', 'en', title.replace(/'''|''/g, ''));
         continue;
       }
-      if (profile === 'plain' || profile === 'sichos-kodesh') {
+      if (profile === 'plain' || profile === 'sichos-kodesh' || profile === 'chabad-library') {
         push({ id: `h${++counter}`, kind: 'heading', level: Math.min(4, heading[1]!.length - 1) as 1 | 2 | 3 | 4, text: runs });
         continue;
       }
@@ -139,7 +140,7 @@ export function fromWikitext(text: string, profile: TextProfile = 'plain', langu
       verse = 0;
     } else if (item) {
       flush();
-      if (profile === 'plain' || profile === 'sichos-kodesh') {
+      if (profile === 'plain' || profile === 'sichos-kodesh' || profile === 'chabad-library') {
         const runs = inline(item[2]!, notes);
         if (runs.length) push({ id: `p${++counter}`, kind: 'item', text: runs });
       } else {
