@@ -317,6 +317,6 @@ export function uploadRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context)
       language: typeof input.language === 'string' ? input.language : undefined,
       credit: typeof input.credit === 'string' ? input.credit : undefined,
     });
-    return c.json({ suggestion: made.suggestion.id, text: made.text, event: made.event }, 201);
+    return c.json({ suggestion: made.suggestion.id, text: made.text, event: made.event, publication: made.publication }, 201);
   });
 }
