@@ -470,6 +470,23 @@ function machineTools(site: string): Tool[] {
       },
     },
     {
+      name: 'machine_to_check',
+      title: 'See what the machines wrote that nobody checked yet',
+      description: 'Farbrengens whose machine transcripts have paragraphs no person has checked, and scans read by OCR with pages nobody proofread, the newest first, with how many in all. Checking them (suggest_fix on a paragraph or a line) is what trains the next models.',
+      inputSchema: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Rows of each list (50)' } }, additionalProperties: false },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      async run(args, call) {
+        const limit = typeof args.limit === 'number' ? `?limit=${args.limit}` : '';
+        const s = await need(call, 'GET', `/v1/machine/to-check${limit}`);
+        const text = [
+          `${s.totals.transcripts} farbrengens with ${s.totals.paragraphs} transcript paragraphs to check; ${s.totals.scans} scans with ${s.totals.pages} OCR pages to check.`,
+          ...(s.transcripts as any[]).map((f) => `  transcript: ${f.title?.he ?? f.event} ${f.date ?? ''}, ${f.checked} of ${f.paragraphs} paragraphs checked, made ${f.made.slice(0, 10)} (${f.path ?? f.event})`),
+          ...(s.scans as any[]).map((f) => `  scan: ${f.title?.he ?? f.scan}, ${f.checked} of ${f.pages} pages checked, read ${f.made.slice(0, 10)} (/text/${f.scan})`),
+        ].join('\n');
+        return { text, structured: s };
+      },
+    },
+    {
       name: 'training_data',
       title: "See the next Rebbe Whisper's training data",
       description: 'How near the next transcription model is (farbrengens and hours people have checked since the last one, against the goal, and which farbrengens to check next, those before 5740 most wanted), and how much training data people have made by checking transcripts: clips and hours (gold: words and timing checked by a person; silver: words checked, timing by machine), train and test hours, what was left out and why. With since, the hours checked since then (what a new training round would add). The clips themselves: GET /v1/machine/training/clips.',
@@ -703,7 +720,7 @@ export function mcpRoutes(app: Hono, options: { siteUrl: string; version: string
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: MCP_SERVER_NAME, title: 'RebbeHub', version: options.version, websiteUrl: `${options.siteUrl.replace(/\/+$/, '')}/developers` },
           instructions:
-            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix (write scope; you will be asked to connect your RebbeHub account) makes a suggestion under the connected person\'s account that people review before anything changes; suggest_items (write scope) adds, changes or deletes many items in one suggestion, and approve_suggestion approves one when you may; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into. ask_machine (write scope) asks for a scan to be read by OCR or a recording transcribed; machine_queue shows where those requests stand, and training_data how much training data people\'s checking has made for the next transcription model. To organize the catalog, get_tree shows it; move_items, move_up, rename_item, reorder_children, create_set, delete_set, merge_items and organize (write scope) each make one suggestion that people review; preview_organize shows the change first.',
+            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix (write scope; you will be asked to connect your RebbeHub account) makes a suggestion under the connected person\'s account that people review before anything changes; suggest_items (write scope) adds, changes or deletes many items in one suggestion, and approve_suggestion approves one when you may; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into. ask_machine (write scope) asks for a scan to be read by OCR or a recording transcribed; machine_queue shows where those requests stand, machine_to_check what the machines wrote that nobody checked yet, and training_data how much training data people\'s checking has made for the next transcription model. To organize the catalog, get_tree shows it; move_items, move_up, rename_item, reorder_children, create_set, delete_set, merge_items and organize (write scope) each make one suggestion that people review; preview_organize shows the change first.',
         };
       }
       case 'ping':

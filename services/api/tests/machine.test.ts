@@ -110,6 +110,17 @@ describe('the training data', () => {
   });
 });
 
+describe('what the machines wrote for people to check', () => {
+  it('lists it to anyone, and as an MCP tool', async () => {
+    const list = await call('GET', '/v1/machine/to-check?limit=10');
+    expect(list.status).toBe(200);
+    expect(list.body).toEqual({ transcripts: [], scans: [], totals: { transcripts: 0, paragraphs: 0, scans: 0, pages: 0 } });
+    expect((await call('GET', '/v1/machine/to-check?limit=0')).status).toBe(400);
+    const tool = (await (await app.request('/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'machine_to_check', arguments: {} } }) })).json()) as any;
+    expect(tool.result.content[0].text).toMatch(/^0 farbrengens with 0 transcript paragraphs to check; 0 scans/);
+  });
+});
+
 describe('starting the job on GitHub', () => {
   it("dispatches the kind's workflow for requests only", async () => {
     const sent: Array<{ url: string; body: any; auth: string | null }> = [];
