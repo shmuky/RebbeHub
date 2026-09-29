@@ -2,6 +2,15 @@
   "name": "@rebbehub/db",
   "version": "0.1.0",
   "description": "RebbeHub's Postgres schema (the versioned catalog of plan section 6), its migrations, and a small database interface with adapters for node-postgres (Neon, Hyperdrive) and PGlite (tests and local work, no server needed).",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shmuky/RebbeHub.git",
+    "directory": "packages/db"
+  },
+  "homepage": "https://github.com/shmuky/RebbeHub/tree/main/packages/db",
+  "bugs": {
+    "url": "https://github.com/shmuky/RebbeHub/issues"
+  },
   "license": "AGPL-3.0-only",
   "type": "module",
   "main": "./dist/index.js",

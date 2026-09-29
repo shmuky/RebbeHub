@@ -2,6 +2,14 @@
   "name": "rebbehub",
   "private": true,
   "description": "RebbeHub: the open, community-edited index of Chabad Torah and media.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shmuky/RebbeHub.git"
+  },
+  "homepage": "https://rebbehub.org",
+  "bugs": {
+    "url": "https://github.com/shmuky/RebbeHub/issues"
+  },
   "license": "AGPL-3.0-only",
   "type": "module",
   "engines": {

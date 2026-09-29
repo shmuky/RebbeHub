@@ -5,9 +5,22 @@
   "license": "AGPL-3.0-only",
   "type": "module",
   "homepage": "https://rebbehub.org/developers/client",
-  "repository": { "type": "git", "url": "git+https://github.com/shmuky/RebbeHub.git", "directory": "packages/client" },
-  "bugs": "https://github.com/shmuky/RebbeHub/issues",
-  "keywords": ["rebbehub", "chabad", "torah", "api", "client", "openapi"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shmuky/RebbeHub.git",
+    "directory": "packages/client"
+  },
+  "bugs": {
+    "url": "https://github.com/shmuky/RebbeHub/issues"
+  },
+  "keywords": [
+    "rebbehub",
+    "chabad",
+    "torah",
+    "api",
+    "client",
+    "openapi"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -16,7 +29,9 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "engines": {
     "node": ">=18"
   },

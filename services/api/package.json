@@ -2,7 +2,16 @@
   "name": "@rebbehub/api",
   "version": "0.1.0",
   "private": true,
-  "description": "RebbeHub's API (Hono, OpenAPI): the public read API over the catalog, anonymous reports, and suggestions and review for signed-in people. Runs on Cloudflare Workers (Hyperdrive to Postgres) or Node.",
+  "description": "RebbeHub's API (Hono, OpenAPI): the public read API over the catalog, anonymous reports, suggestions and review for signed-in people and their API tokens, and an MCP server for AI agents. Runs on Cloudflare Workers (Hyperdrive to Postgres) or Node.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shmuky/RebbeHub.git",
+    "directory": "services/api"
+  },
+  "homepage": "https://github.com/shmuky/RebbeHub/tree/main/services/api",
+  "bugs": {
+    "url": "https://github.com/shmuky/RebbeHub/issues"
+  },
   "license": "AGPL-3.0-only",
   "type": "module",
   "main": "./dist/index.js",
