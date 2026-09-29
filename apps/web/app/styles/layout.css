@@ -1013,7 +1013,9 @@ dl.facts dd {
   inset-inline: 0;
   bottom: 0;
   z-index: 45;
-  background: var(--bg);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  backdrop-filter: saturate(1.4) blur(14px);
   border-top: 1px solid var(--border);
   box-shadow: 0 -4px 16px rgba(20, 24, 30, 0.05);
 }
@@ -1083,6 +1085,51 @@ body:has(.player-bar) main#main {
 .pp.sm .i {
   width: 14px;
   height: 14px;
+}
+
+/* The bar's own buttons: play as a round button, the rest quiet until hovered. */
+.play-button {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--strong);
+  color: var(--bg);
+  cursor: pointer;
+  flex: none;
+  transition: transform 0.15s var(--ease);
+}
+
+.play-button:hover {
+  transform: scale(1.05);
+}
+
+.icon-button {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  flex: none;
+}
+
+.icon-button:hover {
+  background: var(--canvas);
+  color: var(--text);
+}
+
+.icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+  background: transparent;
 }
 
 .player-info {
