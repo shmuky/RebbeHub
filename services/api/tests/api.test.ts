@@ -81,6 +81,12 @@ describe('browsing', () => {
     expect(listed.map((e: { recordings: number }) => e.recordings)).toEqual([1, 0]); // each says how many recordings it has
     expect(ids((await call('GET', '/v1/events?missing=recordings')).body)).toEqual([later]);
     expect(ids((await call('GET', '/v1/events?missing=texts')).body)).toEqual([event]);
+    // Brief, each link is its kind alone (a row shows whether there is a hanacha); whole, its label and address too.
+    const brief = (await call('GET', '/v1/events?within=5742&brief=1')).body.items as Array<{ id: string; data: { links?: unknown; title: unknown } }>;
+    expect(brief.find((e) => e.id === later)!.data).toMatchObject({ title: { he: 'י״ב שבט' }, links: [{ kind: 'bilti-mugah' }] });
+    expect(brief.find((e) => e.id === event)!.data.links).toBeUndefined();
+    const whole = (await call('GET', '/v1/events?within=5742')).body.items as typeof brief;
+    expect(whole.find((e) => e.id === later)!.data.links).toEqual([{ kind: 'bilti-mugah', label: { he: 'הנחה' }, url: 'https://example.test/h.pdf' }]);
     expect(await call('GET', '/v1/events?dates=5742-05')).toMatchObject({ status: 422 });
     expect(await call('GET', '/v1/events?missing=everything')).toMatchObject({ status: 400 });
   });

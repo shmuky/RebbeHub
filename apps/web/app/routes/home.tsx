@@ -41,7 +41,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const week = thisWeek(lang);
   const matching = kviusYears(Number(week.today.slice(0, 4)));
   const [weekEvents, community, stats, works, unitCounts, projects, health, open, issues] = await Promise.all([
-    api.events({ day: week.dayTokens, limit: 2000 }),
+    api.events({ day: week.dayTokens, limit: 2000, brief: true }),
     api.community(12),
     api.stats(),
     api.list({ type: 'work', limit: 500 }),

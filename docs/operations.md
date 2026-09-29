@@ -551,7 +551,10 @@ label and page) are four fifths of it, and a row shows an icon; the
 calendar's year, the home page's week and a farbrengen's other years keep
 each farbrengen as a row (`eventRow` in apps/web/app/components/EventRow.tsx:
 its name, its date, the kinds of its links, its recordings), so a year's
-calendar carries 43 kB of them, not 108. And what a page computes counts
+calendar carries 43 kB of them, not 108; and they ask the API for that
+much (`/v1/events?brief=1`: each link's kind alone, done in the
+statement, so a year of farbrengens is 49 kB from the database and
+between the Workers, not 123, and the home page's week 78, not 189). And what a page computes counts
 like what it carries: a suggestion's page compares each item's version
 with main's to say what changed, and comparing by writing both out as
 canonical JSON, at every level of every field, was a quarter of the home

@@ -288,7 +288,7 @@ export function createApp(options: ApiOptions): Hono {
     const list = (value: string | undefined) => (value === undefined ? undefined : value.split(',').filter(Boolean));
     const missing = c.req.query('missing');
     if (missing !== undefined && missing !== 'recordings' && missing !== 'texts') throw new HttpError(400, 'missing is recordings or texts');
-    return c.json({ items: await catalog.events({ within, day: list(day), dates: list(dates), missing, limit: intParam(c.req.query('limit'), 'limit') }) });
+    return c.json({ items: await catalog.events({ within, day: list(day), dates: list(dates), missing, limit: intParam(c.req.query('limit'), 'limit'), brief: c.req.query('brief') === '1' }) });
   });
 
   // How many items point at each item through a field: `?field=work&type=unit` counts each work's units.

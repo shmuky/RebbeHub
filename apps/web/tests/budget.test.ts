@@ -221,6 +221,10 @@ describe("the API's heaviest routes", () => {
     within(await route(`/v1/recordings/batch/hanacha?ids=${parts.join(',')}`), 'hanachos', { statements: 4, kB: 5 });
     within(await route(`/v1/files/batch?ids=${[sha('1'), sha('2'), sha('3')].join(',')}`), 'files', { statements: 4, kB: 5 });
   });
+  it('a year of farbrengens is one statement, and brief a sixth of the bytes', async () => {
+    within(await route('/v1/events?within=5742&limit=2000&brief=1'), 'a year of farbrengens, brief', { statements: 1, kB: 15 });
+    within(await route('/v1/events?within=5742&limit=2000'), 'a year of farbrengens, whole', { statements: 1, kB: 60 });
+  });
   it("the apps' catalog is built once, then asked only whether anything changed", async () => {
     await route('/v1/app/v1/catalog/manifest.json');
     within(await route('/v1/app/v1/catalog/manifest.json'), 'the manifest again', { statements: 1, kB: 5 });

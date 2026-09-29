@@ -103,7 +103,7 @@ export async function workToc(api: RebbeHubApi, units: Entity[], publications: E
   const dates = [...new Set([...events.values()].map((e) => String((e.data as D).date ?? '')).filter(Boolean))];
   const recorded = new Map<string, number>();
   for (let i = 0; i < dates.length; i += 100) {
-    const found = await api.events({ dates: dates.slice(i, i + 100), limit: 2000 }).catch(() => []);
+    const found = await api.events({ dates: dates.slice(i, i + 100), limit: 2000, brief: true }).catch(() => []);
     for (const e of found) recorded.set(e.id, e.recordings);
   }
 
