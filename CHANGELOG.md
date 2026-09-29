@@ -12,6 +12,12 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Adding items through the MCP server.** `suggest_items` adds new items,
+  or changes or deletes many at once, as one suggestion (200 items a call,
+  kept adding to one draft over several calls); `approve_suggestion`
+  approves a suggestion for those who may. An agent can now do what the
+  site's editor does, not only fix one item.
+
 - **Organizing from an item's own page.** A set's and a sefer's page have
   "Edit" (for signed-in people) and "…" in their head, and a "…" on each
   row of their lists (each sefer on a set's shelf, each sicha in a sefer's

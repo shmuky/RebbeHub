@@ -50,6 +50,8 @@ describe('the MCP server', () => {
       'suggest_fix',
       'list_issues',
       'open_issue',
+      'suggest_items',
+      'approve_suggestion',
       'get_tree',
       'preview_organize',
       'organize',
@@ -136,6 +138,39 @@ describe('the MCP server', () => {
     expect(suggestion.author).toBe(me);
     // Nothing changed on main until a keeper approves.
     expect((await catalog.get(event))!.data).toMatchObject({ title: { en: 'Yud Shvat 5742' } });
+  });
+
+  it('adds many items in one suggestion, over several calls, and a steward approves it', async () => {
+    const tokenFor = async (who: string) => {
+      const made = await app.request('/v1/tokens', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Test-Account': who }, body: JSON.stringify({ name: 'agent', scopes: ['read', 'write'] }) });
+      return ((await made.json()) as { token: string }).token;
+    };
+    expect((await rpc('tools/call', { name: 'suggest_items', arguments: { items: [{ type: 'work', data: {} }] } })).status).toBe(401);
+    const token = await tokenFor((await createPerson(catalog.db, 'Indexer')).id);
+    const work = { type: 'work', path: '/an-index', data: { title: { he: 'מפתח' }, slug: 'an-index', authors: [], genre: 'sichos', levels: ['volume'], sets: [set] } };
+    const first = await tool('suggest_items', { items: [work], submit: false, title: 'An index' }, token);
+    expect(first.isError).toBe(false);
+    expect(first.structuredContent).toMatchObject({ status: 'draft', items: [{ type: 'work', path: '/an-index' }] });
+    const workId = first.structuredContent.items[0].id;
+    const suggestion = first.structuredContent.suggestion;
+    const unit = { type: 'unit', data: { work: workId, position: [{ level: 'volume', value: '1' }], order: 'V', label: { he: 'א' } } };
+    const bad = await tool('suggest_items', { items: [unit, { type: 'unit' }], suggestion, submit: false }, token);
+    expect(bad.isError).toBe(true);
+    expect(bad.content[0].text).toMatch(/item 2: give type and data \(suggestion \d+ keeps the 1 before it\)/);
+    const last = await tool('suggest_items', { items: [{ ...unit, data: { ...unit.data, label: { he: 'ב' } } }], suggestion }, token);
+    expect(last.isError).toBe(false);
+    expect(last.structuredContent.status).toBe('open');
+    expect((await catalog.proposals(suggestion)).length).toBe(3);
+    expect(await catalog.get(workId)).toBeNull();
+
+    // Only who may approve does: not its author, then a steward.
+    expect((await tool('approve_suggestion', { suggestion }, token)).isError).toBe(true);
+    const steward = (await createPerson(catalog.db, 'Steward')).id;
+    await catalog.createAccount({ id: steward, displayName: 'Steward' });
+    await catalog.db.query('UPDATE account SET is_steward = TRUE WHERE id = $1', [steward]);
+    const approved = await tool('approve_suggestion', { suggestion, note: 'Checked' }, await tokenFor(steward));
+    expect(approved.isError).toBe(false);
+    expect((await catalog.get(workId))!.data).toMatchObject({ slug: 'an-index' });
   });
 
   it('shows the tree and organizes it as suggestions, with a write token', async () => {
