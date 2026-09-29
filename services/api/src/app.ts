@@ -201,6 +201,8 @@ export function createApp(options: ApiOptions): Hono {
   app.get('/openapi.json', (c) => c.json(OPENAPI, 200, { 'Cache-Control': 'public, max-age=300' }));
   // For AI agents: what this API is and where its tools are (the site's /llms.txt says more).
   app.get('/llms.txt', (c) => c.text(apiLlmsTxt(new URL(c.req.url).origin, siteUrl), 200, { 'Cache-Control': 'public, max-age=3600' }));
+  // Crawlers read the site's pages, not the JSON behind them: each read here reaches the database, and the site's pages say it all.
+  app.get('/robots.txt', (c) => c.text(API_ROBOTS_TXT, 200, { 'Cache-Control': 'public, max-age=3600, s-maxage=86400' }));
 
   app.get('/v1', async (c) =>
     c.json({
@@ -1004,6 +1006,13 @@ export function createApp(options: ApiOptions): Hono {
 
 /** The API's version: /v1 changes only by adding (docs/developers/api.md, Stability). */
 export const API_VERSION = '1.0.0';
+
+/**
+ * What crawlers may read on the API: the guides for agents, and the files
+ * (a sefer's shaar is the picture its page is shared with); not the routes,
+ * which the site's pages already show, made once and kept at the edge.
+ */
+export const API_ROBOTS_TXT = ['User-agent: *', 'Allow: /llms.txt', 'Allow: /openapi.json', 'Allow: /objects/', 'Disallow: /', ''].join('\n');
 
 /** The API's own /llms.txt: a pointer for agents that land here first. */
 function apiLlmsTxt(api: string, site: string): string {

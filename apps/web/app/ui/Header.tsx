@@ -265,6 +265,7 @@ export function Header({ lang }: { lang: Lang }) {
           action="/search"
           method="get"
           role="search"
+          aria-label={tu(lang, 'searchShort')}
           onSubmit={(e) => {
             // With script, the box is the command palette's door.
             e.preventDefault();

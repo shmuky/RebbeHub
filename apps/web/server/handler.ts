@@ -23,6 +23,24 @@ function withoutTrailingSlash(request: Request): Response | null {
   return new Response(null, { status: 301, headers: { Location: `${path}${url.search}`, 'Cache-Control': 'public, max-age=3600, s-maxage=86400' } });
 }
 
+/**
+ * What every answer says to browsers, whatever made it: never guess a
+ * file's type, only HTTPS from now on, send other sites only our address
+ * (not the page's query), and no camera, microphone or location.
+ */
+export const SECURITY_HEADERS: Record<string, string> = {
+  'X-Content-Type-Options': 'nosniff',
+  'Strict-Transport-Security': 'max-age=31536000',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+};
+
+function secured(response: Response): Response {
+  const out = new Response(response.body, response);
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) if (!out.headers.has(name)) out.headers.set(name, value);
+  return out;
+}
+
 /** The site as one fetch handler: the same on Node, on Workers and in tests. */
 export function createSiteHandler(build: ServerBuild, options: SiteOptions, mode: 'production' | 'development' = 'production') {
   const handle = createRequestHandler(build, mode);
@@ -36,5 +54,5 @@ export function createSiteHandler(build: ServerBuild, options: SiteOptions, mode
     return send(input, { ...init, headers });
   });
   return async (request: Request) =>
-    withoutTrailingSlash(request) ?? withCachePolicy(request, await handle(request, { site: { api: hasSession(request) ? fresh : api, siteUrl: options.siteUrl } }));
+    secured(withoutTrailingSlash(request) ?? withCachePolicy(request, await handle(request, { site: { api: hasSession(request) ? fresh : api, siteUrl: options.siteUrl } })));
 }

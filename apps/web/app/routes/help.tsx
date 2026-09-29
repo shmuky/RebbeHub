@@ -151,7 +151,7 @@ export default function Help({ loaderData }: Route.ComponentProps) {
 
         <aside className="side" aria-label={W.now[lang]}>
           <section>
-            <h4>{W.now[lang]}</h4>
+            <h2>{W.now[lang]}</h2>
             <ul className="side-list help-now">
               <li>
                 <Link to={href('/review', lang)}>

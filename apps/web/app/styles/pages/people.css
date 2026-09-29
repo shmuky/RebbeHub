@@ -958,7 +958,7 @@ a.who:hover {
 /* ================================================================== small settings details */
 
 /* An empty list in a box of settings says its sentence quietly. */
-.set-box .empty h3 {
+.set-box .empty .empty-title {
   font-size: var(--fs-md);
   font-weight: 500;
   color: var(--muted);

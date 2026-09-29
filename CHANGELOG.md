@@ -12,6 +12,20 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Ready for search engines and AI crawlers without draining the
+  database.** Crawlers get a budget of pages a minute when the edge has no
+  copy (each search engine its own, all other bots one between them), and
+  are told 503 with Retry-After beyond it; an item's page is kept at the
+  edge an hour instead of five minutes. The API has a `robots.txt` that
+  keeps crawlers to its guides and files. The site now has
+  `/.well-known/security.txt`, `/opensearch.xml` (search the catalog from
+  the address bar), `Organization` data beside `WebSite` on the home page,
+  and security headers on every answer (`nosniff`, HSTS, a referrer
+  policy). An accessibility scan (axe) of the main pages, light and dark,
+  phone and desktop, now finds nothing: links in sentences are underlined,
+  faint hints have enough contrast, headings go in order, and the
+  calendar's sideways scroll is reachable by keyboard.
+
 - **Adding items through the MCP server.** `suggest_items` adds new items,
   or changes or deletes many at once, as one suggestion (200 items a call,
   kept adding to one draft over several calls); `approve_suggestion`

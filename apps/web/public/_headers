@@ -2,6 +2,12 @@
 # assets read this file (it is not served itself); docs/operations.md,
 # "Traffic and crawlers".
 
+# Every file: never guess its type, HTTPS only (as server/handler.ts says for pages).
+/*
+  X-Content-Type-Options: nosniff
+  Strict-Transport-Security: max-age=31536000
+  Referrer-Policy: strict-origin-when-cross-origin
+
 # Built by Vite and named by their content: a new build makes new names.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable

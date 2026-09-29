@@ -1252,7 +1252,8 @@ a.row-title:hover {
   margin-bottom: 6px;
 }
 
-.empty h3 {
+/* A heading under the page's own, whatever section it sits in. */
+.empty .empty-title {
   color: var(--text);
   font-size: var(--fs-lg);
   font-weight: 600;
@@ -2495,7 +2496,7 @@ a.when:hover {
 }
 
 .tsearch-hint {
-  color: var(--faint);
+  color: var(--subtle);
   font-size: 12.5px;
   white-space: nowrap;
 }
