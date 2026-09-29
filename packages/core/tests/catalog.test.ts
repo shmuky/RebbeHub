@@ -127,6 +127,31 @@ describe('merging', () => {
     expect((await catalog.get(id))!.data).toMatchObject({ date: '5742-05-12' });
   });
 
+  it('counts the clashes before Approve, and settles them all with one decision', async () => {
+    const one = await add(catalog, 'mendy', 'keeper', 'event', yudShvat(set));
+    const two = await add(catalog, 'mendy', 'keeper', 'event', { ...yudShvat(set), date: '5742-05-11' }, '/events/5742-05-11');
+    const same = await add(catalog, 'mendy', 'keeper', 'event', { ...yudShvat(set), date: '5742-05-13' }, '/events/5742-05-13');
+    const bot = await catalog.createChangeset('chaim', { title: 'Dates' });
+    await catalog.putRevision(bot.id, 'chaim', { id: one, type: 'event', data: { ...yudShvat(set), date: '5742-05-20' } });
+    await catalog.putRevision(bot.id, 'chaim', { id: two, type: 'event', data: { ...yudShvat(set), date: '5742-05-21' } });
+    await catalog.putRevision(bot.id, 'chaim', { id: same, type: 'event', data: { ...yudShvat(set), date: '5742-05-22' } });
+    await catalog.submit(bot.id, 'chaim');
+    // The site moves on under all three: two differently, one just as suggested.
+    for (const [id, date] of [[one, '5742-05-14'], [two, '5742-05-15'], [same, '5742-05-22']] as const) {
+      const cs = await catalog.createChangeset('mendy', { title: date });
+      await catalog.putRevision(cs.id, 'mendy', { id, type: 'event', data: { ...yudShvat(set), date } });
+      await catalog.submit(cs.id, 'mendy');
+      await catalog.merge(cs.id, 'keeper');
+    }
+
+    expect(await catalog.review(bot.id, { limit: 1, summary: true })).toMatchObject({ total: 3, clashes: 2, unchanged: 1 });
+    expect(await codeOf(catalog.merge(bot.id, 'keeper'))).toBe('unresolved');
+    // One decision for every item and field: keep what the site holds, except where the reviewer said otherwise for one item.
+    await catalog.merge(bot.id, 'keeper', { '*': { '*': { take: 'ours' } }, [two]: { '/date': { take: 'theirs' } } });
+    expect((await catalog.get(one))!.data).toMatchObject({ date: '5742-05-14' });
+    expect((await catalog.get(two))!.data).toMatchObject({ date: '5742-05-21' });
+  });
+
   it('keeps an old path working as a redirect', async () => {
     const id = await add(catalog, 'mendy', 'keeper', 'event', yudShvat(set), '/events/yud-shvat-5742');
     const cs = await catalog.createChangeset('mendy', { title: 'Path by date' });

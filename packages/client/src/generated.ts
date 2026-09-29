@@ -614,7 +614,7 @@ export interface Operations {
     input: {
       id: number;
       body?: {
-        /** For each item, how each clashing field is settled */
+        /** For each item, how each clashing field is settled: {item: {field: {take: "ours" (the site) | "theirs" (the suggestion)}}}; `*` stands for every item or every field not named */
         resolutions?: Record<string, unknown>;
         note?: string;
       };
@@ -1991,7 +1991,7 @@ export interface Operations {
           field: string;
           body: string;
         }>;
-        /** For each item, how each clashing field is settled */
+        /** For each item, how each clashing field is settled: {item: {field: {take: "ours" (the site) | "theirs" (the suggestion)}}}; `*` stands for every item or every field not named */
         resolutions?: Record<string, unknown>;
       };
     };
