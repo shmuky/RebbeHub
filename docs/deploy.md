@@ -166,7 +166,9 @@ npm run rebbehub -- import sichos-kodesh-occasions --from ../Sichos-Kodesh --app
   highest version there. To let the workflow fetch it, add the
   bucket's S3 endpoint as `R2_ENDPOINT` (`https://<account>.r2.cloudflarestorage.com`)
   and an R2 API token that can only read that bucket, as `R2_ACCESS_KEY_ID`
-  and `R2_SECRET_ACCESS_KEY`. Without them it uses ivrit.ai's model.
+  and `R2_SECRET_ACCESS_KEY`. Without them the run stops rather than
+  transcribe with ivrit.ai's far weaker model (a transcript is made once),
+  unless started by hand with **base_model** ticked.
 
   Its **align** box then runs `rebbehub align` too, with the same keys:
   word timings for transcripts that have none (made before word timings,

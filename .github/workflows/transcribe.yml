@@ -27,7 +27,9 @@ name: Machine transcription
 # Workers AI). With R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY
 # (an R2 token that can read rebbehub-preservation), the local
 # engine uses the newest model fine-tuned on the Rebbe's voice, kept
-# private in R2 (models/rebbehub-whisper-v<N>/); without them, ivrit.ai's model. See docs/deploy.md
+# private in R2 (models/rebbehub-whisper-v<N>/). Without one the run
+# stops rather than hear with ivrit.ai's far weaker model, unless started
+# by hand with base_model. See docs/deploy.md
 # and docs/transcription.md.
 on:
   schedule:
@@ -58,6 +60,10 @@ on:
         type: choice
         options: [local, workers-ai]
         default: local
+      base_model:
+        description: Hear with ivrit.ai's model when no Rebbe model can be fetched (far less accurate; off, the run stops instead)
+        type: boolean
+        default: false
       align:
         description: Then time the words of transcripts that have no word timings, and sync hanachos (rebbehub align)
         type: boolean
@@ -143,7 +149,7 @@ jobs:
               --endpoint-url "$R2_ENDPOINT"
           fi
           if [ -s "$dir/model.bin" ]; then echo "WHISPER_MODEL=$dir" >> "$GITHUB_ENV"
-          else echo "::notice::No Rebbe model in R2; hearing with ivrit.ai's Yiddish Whisper."; fi
+          else echo "NO_REBBE_MODEL=1" >> "$GITHUB_ENV"; fi
       - name: Install
         run: npm ci
       - name: Build
@@ -156,8 +162,14 @@ jobs:
           RECORDING: ${{ inputs.recording }}
           ALIGN: ${{ inputs.align }}
           REQUESTED: ${{ inputs.requested }}
+          BASE_MODEL: ${{ inputs.base_model }}
         run: |
           if [ "$LIMIT" = "0" ]; then echo "The nightly run is off (TRANSCRIBE_NIGHTLY is 0)."; exit 0; fi
+          # A transcript made once is not made again, so never settle for the base model by accident.
+          if [ "$ENGINE" = "local" ] && [ -n "$NO_REBBE_MODEL" ] && [ "$BASE_MODEL" != "true" ]; then
+            echo "::warning::No Rebbe model could be fetched from R2 (add R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY; docs/deploy.md). Nothing was transcribed; requests stay waiting."
+            exit 0
+          fi
           npm run rebbehub -- migrate
           args=(--approve-as "$STEWARD" --limit "$LIMIT" --engine "$ENGINE")
           if [ "$REQUESTED" = "true" ]; then args+=(--requested-only); fi
