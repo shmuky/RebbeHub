@@ -64,11 +64,21 @@ highest version there.
   was kept only where the booklet and what was heard are close, and its
   text is the booklet's.
 
-| Held out, words wrong / letters wrong | ivrit.ai Yiddish | v1 | v2 |
-| --- | --- | --- | --- |
-| Four farbrengens of 5742, 504 clips | 62% / 32% | 12% / 6% | 9.5% / 4.8% |
-| 11 Nissan 5733 (an older era), 344 clips | | 22.5% / 9.0% | 13.8% / 5.2% |
-| 17 Tammuz 5742, the whole 29 minutes, as the job runs it | 58% / 28% | 10.8% / 5.1% (the first model) | |
+- **v3**: v2 trained further for 2 epochs on the same clips, with the 5742
+  text first rewritten into the booklets' spelling. torasmoshiach writes some
+  words as they sound (`אויכעט`, `דעמולט`, `בריינגט`); most booklets write
+  them `אויך`, `דעמאלט`, `ברענגט`, so v2 had learned two spellings for one
+  word. The booklets' spelling is now the house style for training text and
+  for people correcting transcripts (packages/model/src/spelling.ts).
+
+Scored in the booklets' spelling, words wrong / letters wrong:
+
+| Held out | ivrit.ai Yiddish | v1 | v2 | v3 |
+| --- | --- | --- | --- | --- |
+| Three farbrengens of 5742, 395 clips | | | 11.8% / 5.7% | 10.1% / 5.2% |
+| 17 Tammuz 5742, 109 clips | | | 10.8% / 4.6% | 8.2% / 3.8% |
+| 11 Nissan 5733 (an older era), 344 clips | | | 13.7% / 5.2% | 13.7% / 5.1% |
+| 17 Tammuz 5742, the whole 29 minutes, as the job runs it | 58% / 28% | 13.0% / 5.9% | 11.9% / 5.3% | 11.5% / 5.5% |
 
 They spell the Loshon Kodesh right (`דברי תורה שבכתב`, `שולחן ערוך`).
 What they still miss are rarer words (`תנות` for `תענית`). They run at the
