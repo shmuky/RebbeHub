@@ -44,3 +44,4 @@ export {
   type AudioMatch,
   type GreyImage,
 } from './fingerprints.js';
+export { itemsIn, mentionsIn, referencesIn, tokenize, type Token } from './mentions.js';

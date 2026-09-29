@@ -1,4 +1,4 @@
-export { Catalog, isoWeekTag, type ArchiveGapRow, type ChangeEntry, type ChangesetKind, type ChangesetRow, type ChangesetStatus, type Check, type EntityView, type HistoryEntry, type NewRevision, type ProjectFocus, type ProjectView, type Proposal, type ReportReason, type RevisionRow } from './catalog.js';
+export { Catalog, PRIVATE_REASONS, isoWeekTag, type ArchiveGapRow, type ChangeEntry, type ChangesetKind, type ChangesetRow, type ChangesetStatus, type Check, type EntityView, type HistoryEntry, type NewRevision, type ProjectFocus, type ProjectView, type Proposal, type ReportReason, type RevisionRow } from './catalog.js';
 export { CatalogError, type CatalogErrorCode } from './errors.js';
 export { ExportGate } from './gate.js';
 export { fileFromDrive, getDerivations, getFile, getPageFix, recordDerivation, recordPageFix, registerFile, setRights, storageTierFor, type DerivationRow, type FileRow, type NewDerivation, type NewFile, type NewPageFix, type PageFixRow, type PageFixVerdict } from './files.js';
@@ -160,3 +160,65 @@ export {
   type PlaceCandidate,
 } from './contribute.js';
 export { fileAbout, type FileAbout } from './fileInfo.js';
+export {
+  RESERVED_USERNAMES,
+  USERNAME_CHANGE_HOURS,
+  USERNAME_MAX,
+  USERNAME_MIN,
+  checkUsername,
+  idsOfUsernames,
+  personByUsername,
+  searchPeople,
+  setUsername,
+  slugForUsername,
+  suggestUsername,
+  transliterate,
+  usernameMessage,
+  usernameShape,
+  usernamesOf,
+  type PersonByName,
+  type PersonHit,
+  type UsernameRefusal,
+} from './usernames.js';
+export { SYSTEM_ACCOUNT, followersOf, mayRead, noteWriting, notify, subscribe, threadByNumber, threadEvent, type NotificationReason, type Subject, type SubjectKind, type ThreadEventKind, type ThreadKind, type ThreadRef } from './threads.js';
+export {
+  commentOnSuggestion,
+  editComment,
+  editSuggestion,
+  isSubscribed,
+  listSuggestions,
+  peopleOf,
+  removeReviewRequest,
+  requestReview,
+  resolveComment,
+  reviewSuggestion,
+  suggestionLinks,
+  suggestionTimeline,
+  type PersonTag,
+  type ReviewVerdict,
+  type SuggestionListItem,
+  type TimelineItem,
+} from './conversation.js';
+export {
+  ISSUE_TYPES,
+  commentOnIssue,
+  createLabel,
+  editIssue,
+  getIssue,
+  issueRights,
+  listIssues,
+  listLabels,
+  openIssue,
+  searchThreads,
+  setIssueAssignees,
+  setIssueLabels,
+  setIssuePrivate,
+  setIssueState,
+  type Issue,
+  type IssueFilters,
+  type IssueLabel,
+  type IssueRights,
+} from './issues.js';
+export { inbox, markRead, unreadCount, type InboxFilter, type InboxLine } from './inbox.js';
+export { inboxHref, inboxText } from './notify.js';
+export { profile, type Profile, type ProfileActivity } from './profiles.js';

@@ -1,5 +1,7 @@
-import { Form, useActionData, useNavigation } from 'react-router';
+import { Form, Link, useActionData, useNavigation } from 'react-router';
 import { REPORT_REASONS, t } from '../lib/i18n.js';
+import { href } from '../lib/links.js';
+import { tt } from '../lib/threadStrings.js';
 import { useLang } from '../lib/useLang.js';
 
 export type ReportResult = { reported: true } | { reported: false; error: string } | undefined;
@@ -46,6 +48,9 @@ export function ReportForm({ entityId }: { entityId: string }) {
             {t(lang, 'reportNote')}
             <textarea name="note" rows={3} maxLength={2000} />
           </label>
+          <p className="row-sub">
+            {tt(lang, 'reportPublic')} <Link to={href('/issues/new', lang, { item: entityId })}>{tt(lang, 'fullIssue')}</Link>
+          </p>
           <div>
             <button type="submit" disabled={busy}>
               {t(lang, 'reportSend')}

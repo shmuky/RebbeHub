@@ -16,7 +16,7 @@ export function llmsTxt(site: string, api: string): string {
   const pages = DOC_PAGES.map((p) => `- [${p.title}](${site}/developers${p.slug ? `/${p.slug}` : ''}): ${p.summary}`).join('\n');
   return `# RebbeHub
 
-> The open, community-edited index of Chabad Torah and media: every sefer and printing, every sicha and letter, every farbrengen and recording, with scans and texts, from the Baal Shem Tov to today. Everything is readable without an account through a public API, and every change is a suggestion that people review.
+> The open, community-edited index of Chabad Torah and media: every sefer and printing, every sicha and letter, every farbrengen and recording, with scans and texts, from the Baal Shem Tov to today. Everything is readable without an account through a public API, and every change is a suggestion that people review, like a pull request (comments, reviews, #12 numbers). Problems are reported as issues (labels, assignees; public except reports of rights or of something offensive), and people have handles (@mendy) to mention and an inbox.
 
 Ids (rh-7k2m9q4d) are permanent; paths (/likkutei-sichos/12/3, /events/5742-05-10) are readable and may move. Dates are Hebrew date keys (5742-05-10 is 10 Shevat 5742; months count from Tishrei). Names are { he, en }. Words a machine read (OCR) or heard (transcription) are marked (checked: false, machine: true, origin) until a person checks them: say so when you quote them. Words whose rights forbid copies are listed but withheld.
 
@@ -24,7 +24,7 @@ Ids (rh-7k2m9q4d) are permanent; paths (/likkutei-sichos/12/3, /events/5742-05-1
 
 - [OpenAPI 3.1](${api}/openapi.json): every route
 - [Interactive reference](${site}/developers/reference)
-- [MCP server](${api}/mcp): Streamable HTTP, tools search, get_item, list_children, get_text, suggest_fix (suggesting needs a token: Authorization: Bearer rhp_…)
+- [MCP server](${api}/mcp): Streamable HTTP, tools search, get_item, list_children, get_text, suggest_fix, list_issues, open_issue (suggesting and opening issues need a token with the write scope: Authorization: Bearer rhp_…)
 - [Everything in one file](${site}/llms-full.txt)
 
 ## Docs

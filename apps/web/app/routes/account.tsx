@@ -11,6 +11,7 @@ import { refreshAccount, useAccount, useEmailSignIn, useGoogleSignIn, type Signe
 import { setFollow, useFollows } from '../lib/useFollows.js';
 import { Webhooks } from '../components/Webhooks.js';
 import { ApiTokens } from '../components/ApiTokens.js';
+import { HandleSettings } from '../components/threads/HandleSettings.js';
 import { useLang } from '../lib/useLang.js';
 
 /**
@@ -290,6 +291,8 @@ export default function Account() {
           {error}
         </p>
       ) : null}
+
+      <HandleSettings lang={lang} username={account.person.username} />
 
       <section>
         <h2 className="section-header">{t(lang, 'yourPasskeys')}</h2>

@@ -42,7 +42,7 @@ describe('the MCP server', () => {
     expect((await rpc('initialize', { protocolVersion: '1999-01-01' })).body.result.protocolVersion).toBe('2025-11-25');
     expect(await rpc('notifications/initialized', undefined, { notification: true })).toEqual({ status: 202, body: null });
     const { tools } = (await rpc('tools/list')).body.result;
-    expect(tools.map((t: { name: string }) => t.name)).toEqual(['search', 'get_item', 'list_children', 'get_text', 'suggest_fix']);
+    expect(tools.map((t: { name: string }) => t.name)).toEqual(['search', 'get_item', 'list_children', 'get_text', 'suggest_fix', 'list_issues', 'open_issue']);
     expect(tools.find((t: { name: string }) => t.name === 'suggest_fix').annotations.readOnlyHint).toBe(false);
     expect((await rpc('ping')).body.result).toEqual({});
     expect((await rpc('nothing/here')).body.error.code).toBe(-32601);

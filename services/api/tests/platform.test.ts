@@ -203,3 +203,38 @@ describe('personal API tokens', () => {
     expect((await call('GET', '/v1/stats', { token: theirs })).status).toBe(401);
   });
 });
+
+describe('conversations', () => {
+  it('take part with a write token (issues, comments, reviews), never change a handle, and page by cursor', async () => {
+    const me = (await createPerson(catalog.db, 'Levi')).id;
+    const writer = (await call('POST', '/v1/tokens', { as: me, body: { name: 'agent', scopes: ['read', 'write'] } })).body.token as string;
+    const reader = (await call('POST', '/v1/tokens', { as: me, body: { name: 'reader' } })).body.token as string;
+
+    const opened = await call('POST', '/v1/issues', { token: writer, body: { title: 'The date is off by a day', body: 'See the printing.', type: 'wrong-fact', entityId: event } });
+    expect(opened).toMatchObject({ status: 201, body: { number: expect.any(Number), author: me, private: false } });
+    expect((await call('POST', `/v1/issues/${opened.body.number}/comments`, { token: writer, body: { body: 'Checked it again.' } })).status).toBe(201);
+    expect(await call('POST', `/v1/issues/${opened.body.number}/comments`, { token: reader, body: { body: 'no' } })).toMatchObject({ status: 403, body: { error: 'forbidden' } });
+
+    const fixed = await call('POST', '/v1/suggestions/quick', { token: writer, body: { entityId: event, data: { ...yudShvat(set), title: { he: 'יו״ד שבט', en: 'Yud Shvat' } }, title: `Fixes #${opened.body.number}` } });
+    expect((await call('POST', `/v1/suggestions/${fixed.body.id}/comments`, { token: writer, body: { body: 'Ready.' } })).status).toBe(201);
+    // Anyone may review with a comment; approving is for those who may merge.
+    expect((await call('POST', `/v1/suggestions/${fixed.body.id}/reviews`, { token: writer, body: { verdict: 'comment', body: 'One more look.' } })).status).toBe(201);
+
+    // Handles are changed on the site only.
+    expect(await call('POST', '/v1/auth/username', { token: writer, body: { username: 'levi' } })).toMatchObject({ status: 403, body: { error: 'forbidden' } });
+
+    for (let i = 0; i < 3; i++) await call('POST', '/v1/issues', { as: me, body: { title: `Issue ${i}`, type: 'other' } });
+    const seen: number[] = [];
+    let next: string | null = null;
+    do {
+      const page: { status: number; body: { items: Array<{ number: number }>; next: string | null } } = await call('GET', `/v1/issues?state=all&limit=2${next ? `&cursor=${next}` : ''}`, { as: me });
+      expect(page.status).toBe(200);
+      seen.push(...page.body.items.map((i) => i.number));
+      next = page.body.next;
+    } while (next);
+    expect(seen).toHaveLength(4);
+    expect(new Set(seen).size).toBe(4);
+    expect(await call('GET', '/v1/issues?cursor=junk')).toMatchObject({ status: 400, body: { error: 'bad-request' } });
+    expect(await call('GET', '/v1/issues/999999')).toMatchObject({ status: 404, body: { error: 'not-found' } });
+  });
+});

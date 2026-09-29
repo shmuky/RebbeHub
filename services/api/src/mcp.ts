@@ -272,6 +272,55 @@ function tools(siteUrl: string): Tool[] {
         return { text: `Suggestion ${made.id} for ${nameOf(item)}: ${status}. ${site}/review?s=${made.id}`, structured: { suggestion: made.id, status: made.status, checks: made.checks, url: `${site}/review?s=${made.id}` } };
       },
     },
+    {
+      name: 'list_issues',
+      title: 'List issues',
+      description:
+        "Issues people opened about the catalog (a wrong fact, a missing page, a bad scan…), newest first: open ones by default, or about one item. Suggestions that fix one say \"Fixes #12\". Private issues (rights, offensive) are left out.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          state: { enum: ['open', 'closed', 'all'], default: 'open' },
+          item: { ...ID, description: 'Only issues about this item' },
+          q: { type: 'string', maxLength: 200, description: 'Words in the title, or #number' },
+          limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
+        },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      async run(args, call) {
+        const params = new URLSearchParams({ state: String(args.state ?? 'open'), limit: String(Math.min(Math.max(Number(args.limit) || 20, 1), 50)) });
+        if (typeof args.item === 'string') params.set('entity', args.item);
+        if (typeof args.q === 'string' && args.q.trim()) params.set('q', args.q.trim());
+        const page = await need(call, 'GET', `/v1/issues?${params}`);
+        const issues = (page.items as any[]).map((i) => ({ number: i.number, title: i.title ?? i.typeTitle?.en ?? i.type, type: i.type, state: i.state, labels: (i.labels ?? []).map((l: any) => l.name), item: i.entity?.id ?? null, url: `${site}/issues/${i.number}` }));
+        const text = issues.length ? issues.map((i) => `#${i.number} [${i.state}] ${i.title}${i.labels.length ? ` (${i.labels.join(', ')})` : ''} ${i.url}`).join('\n') : 'No issues.';
+        return { text, structured: { issues, counts: page.counts } };
+      },
+    },
+    {
+      name: 'open_issue',
+      title: 'Open an issue',
+      description:
+        'Open an issue about an item or the catalog: what is wrong or missing, for people to look into. It is public (reports of rights or of something offensive go to stewards only). @handles in the words are told; #12 links to that suggestion or issue. Needs a RebbeHub API token with the write scope (Authorization: Bearer rhp_…). To change an item yourself, use suggest_fix.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', minLength: 1, maxLength: 200 },
+          body: { type: 'string', maxLength: 10000, description: 'What is wrong, and the source that shows it' },
+          type: { enum: ['wrong-fact', 'missing-page', 'bad-scan', 'audio-problem', 'wrong-text', 'duplicate', 'rights', 'offensive', 'other'], default: 'other' },
+          item: { ...ID, description: 'The item it is about, if one' },
+        },
+        required: ['title'],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      async run(args, call) {
+        const made = await need(call, 'POST', '/v1/issues', { title: args.title, body: args.body, type: args.type ?? 'other', entityId: typeof args.item === 'string' ? args.item : undefined });
+        const number = made.issue?.number ?? made.number;
+        return { text: `Issue #${number} opened. ${site}/issues/${number}`, structured: { number, url: `${site}/issues/${number}` } };
+      },
+    },
   ];
 }
 
@@ -291,7 +340,7 @@ export function mcpRoutes(app: Hono, options: { siteUrl: string; version: string
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: MCP_SERVER_NAME, title: 'RebbeHub', version: options.version, websiteUrl: `${options.siteUrl.replace(/\/+$/, '')}/developers` },
           instructions:
-            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix needs an API token with the write scope and makes a suggestion that people review.',
+            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix needs an API token with the write scope and makes a suggestion that people review; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into.',
         };
       }
       case 'ping':

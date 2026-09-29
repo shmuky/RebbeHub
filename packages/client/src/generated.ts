@@ -84,6 +84,69 @@ export type Suggestion = {
   closed_at?: string | null;
 };
 
+export type SuggestionListItem = {
+  id: number;
+  number: number;
+  title: string;
+  status: "draft" | "open" | "merged" | "sent_back" | "withdrawn";
+  kind?: string;
+  author: string;
+  createdAt?: string;
+  submittedAt?: string | null;
+  closedAt?: string | null;
+  comments?: number;
+  reviewers?: Array<string>;
+  approvals?: number;
+  changesRequested?: boolean;
+  /** Issues it closes, by number */
+  fixes?: Array<number>;
+};
+
+export type Issue = {
+  id: number;
+  /** Its number, shared with suggestions: #12 */
+  number: number;
+  title?: string | null;
+  typeTitle?: {
+    he?: string;
+    en?: string;
+  };
+  type: string;
+  state: "open" | "closed";
+  stateReason?: "completed" | "not_planned" | null;
+  body?: string | null;
+  private: boolean;
+  author?: string | null;
+  entity?: Record<string, unknown> | null;
+  set?: string | null;
+  labels: Array<{
+    name?: string;
+    description?: string | null;
+    color?: string;
+  }>;
+  assignees: Array<string>;
+  comments?: number;
+  createdAt: string;
+  updatedAt?: string | null;
+  closedAt?: string | null;
+  closedBy?: string | null;
+  closedBySuggestion?: number | null;
+};
+
+export type InboxLine = {
+  id: number;
+  reason: "mention" | "review_requested" | "assigned" | "author" | "comment" | "review" | "state" | "followed";
+  /** What it is about: a suggestion or issue (number, title, state) or an item's talk page (path, name) */
+  subject: Record<string, unknown>;
+  actor?: string | null;
+  actorName?: string | null;
+  actorUsername?: string | null;
+  count: number;
+  detail?: Record<string, unknown>;
+  at: string;
+  read: boolean;
+};
+
 export type Comment = {
   id: number;
   parent?: number | null;
@@ -307,6 +370,20 @@ export interface Operations {
       ok: true;
     };
   };
+  /** Comment on an issue, or answer a comment */
+  commentOnIssue: {
+    input: {
+      number: number;
+      body: {
+        body: string;
+        /** The comment this answers */
+        parent?: number;
+      };
+    };
+    output: {
+      id: number;
+    };
+  };
   /** Comment on an item's talk page */
   commentOnItem: {
     input: {
@@ -315,6 +392,25 @@ export interface Operations {
         body: string;
         /** The comment this answers */
         parent?: number;
+      };
+    };
+    output: {
+      id: number;
+    };
+  };
+  /** Comment on a suggestion, answer a comment, or comment on one field of one item */
+  commentOnSuggestion: {
+    input: {
+      id: number;
+      body: {
+        body: string;
+        /** The comment this answers */
+        parent?: number;
+        anchor?: {
+          /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+          entity: string;
+          field: string;
+        };
       };
     };
     output: {
@@ -367,6 +463,18 @@ export interface Operations {
     output: {
       covers: Record<string, Cover>;
     };
+  };
+  /** Make a label (stewards) */
+  createLabel: {
+    input: {
+      body: {
+        name: string;
+        description?: string;
+        /** Six hex digits */
+        color?: string;
+      };
+    };
+    output: Record<string, unknown>;
   };
   /** Open a project on a gap (farbrengens without recordings or texts, recordings to sync, pages to proofread) */
   createProject: {
@@ -426,6 +534,18 @@ export interface Operations {
     };
     output: Record<string, unknown>;
   };
+  /** Change your own comment (on a talk page, a suggestion or an issue) */
+  editComment: {
+    input: {
+      id: number;
+      body: {
+        body: string;
+      };
+    };
+    output: {
+      ok: true;
+    };
+  };
   /** An edition's checksums, for sha256sum -c */
   editionChecksums: {
     input: {
@@ -446,6 +566,28 @@ export interface Operations {
     output: {
       editions: Array<Record<string, unknown>>;
     };
+  };
+  /** Change its title or words (its author, keepers, stewards) */
+  editIssue: {
+    input: {
+      number: number;
+      body?: {
+        title?: string;
+        body?: string;
+      };
+    };
+    output: Record<string, unknown>;
+  };
+  /** Change the title or description of your suggestion (@mentions and "Fixes #12" are read again) */
+  editSuggestion: {
+    input: {
+      id: number;
+      body?: {
+        title?: string;
+        description?: string;
+      };
+    };
+    output: Record<string, unknown>;
   };
   /** A family's request that a teshura not be shown (no account needed): its scans stop being served at once, and stewards review it */
   familyRequest: {
@@ -508,11 +650,11 @@ export interface Operations {
     };
     output: Suggestion;
   };
-  /** Follow or unfollow an item, set, project or suggestion */
+  /** Follow or unfollow an item, set, project, suggestion or issue */
   follow: {
     input: {
       body: {
-        kind: "entity" | "set" | "project" | "changeset";
+        kind: "entity" | "set" | "project" | "changeset" | "report";
         id: string;
         /** false to unfollow */
         on?: boolean;
@@ -548,6 +690,18 @@ export interface Operations {
     };
     output: File;
   };
+  /** An issue, its timeline, what the reader may do, and the suggestions that close it */
+  getIssue: {
+    input: {
+      number: number;
+    };
+    output: {
+      issue: Issue;
+      rights?: Record<string, unknown>;
+      timeline?: Array<Record<string, unknown>>;
+      people?: Record<string, unknown>;
+    };
+  };
   /** One item, on main or as of a commit */
   getItem: {
     input: {
@@ -581,6 +735,15 @@ export interface Operations {
       sha256: string;
     };
     output: Response;
+  };
+  /** A person's public page: who they are, their counts and recent activity (an old handle finds them too, with `movedFrom`) */
+  getProfile: {
+    input: {
+      username: string;
+      /** How many (at most 100) */
+      limit?: number;
+    };
+    output: Record<string, unknown>;
   };
   /** A project, its progress and what is left to do */
   getProject: {
@@ -637,6 +800,38 @@ export interface Operations {
       file: string;
     };
     output: Record<string, unknown>;
+  };
+  /** Your inbox, newest first: mentions, review requests, assignments and what you follow */
+  inbox: {
+    input: {
+      /** unread, all, or one reason */
+      filter?: "unread" | "all" | "mention" | "review_requested" | "assigned" | "author" | "comment" | "review" | "state" | "followed";
+      /** Deprecated: lines older than this time; use cursor */
+      before?: string;
+      /** How many (at most 100) */
+      limit?: number;
+      /** The `next` of the page before */
+      cursor?: string;
+    };
+    output: {
+      items: Array<InboxLine>;
+      unread: number;
+      next: string | null;
+    };
+  };
+  /** How many inbox lines are unread */
+  inboxCount: {
+    input: Record<string, never>;
+    output: {
+      unread: number;
+    };
+  };
+  /** The kinds of issue and the words each starts with */
+  issueTemplates: {
+    input: Record<string, never>;
+    output: {
+      templates: Array<Record<string, unknown>>;
+    };
   };
   /** Items that point at this one */
   itemBacklinks: {
@@ -759,6 +954,42 @@ export interface Operations {
       feed: Array<Record<string, unknown>>;
     };
   };
+  /** Issues, newest first, with open and closed counts; private ones only for those who may read them */
+  listIssues: {
+    input: {
+      /** open (the default), closed or all */
+      state?: "open" | "closed" | "all";
+      /** Label names, comma separated */
+      label?: string;
+      /** The kind of report */
+      type?: "wrong-fact" | "missing-page" | "bad-scan" | "audio-problem" | "wrong-text" | "duplicate" | "rights" | "offensive" | "other";
+      /** Only about items in this set */
+      set?: string;
+      /** Only about this item */
+      entity?: string;
+      /** A handle, or none */
+      assignee?: string;
+      /** A handle */
+      author?: string;
+      /** Words, or #number */
+      q?: string;
+      /** Deprecated: the same as a cursor, as a number */
+      before?: number;
+      /** How many (at most 100) */
+      limit?: number;
+      /** The `next` of the page before */
+      cursor?: string;
+    };
+    output: {
+      items: Array<Issue>;
+      people?: Record<string, unknown>;
+      counts: {
+        open: number;
+        closed: number;
+      };
+      next: string | null;
+    };
+  };
   /** Items on main, by type and set, in path order, a page at a time */
   listItems: {
     input: {
@@ -773,6 +1004,13 @@ export interface Operations {
       cursor?: string;
     };
     output: ItemPage;
+  };
+  /** Every label and how many open issues carry it */
+  listLabels: {
+    input: Record<string, never>;
+    output: {
+      labels: Array<Record<string, unknown>>;
+    };
   };
   /** One group of what points at an item, in its own order, a page at a time, with the total */
   listLinked: {
@@ -829,12 +1067,18 @@ export interface Operations {
       items: Array<Item>;
     };
   };
-  /** Suggestions, oldest sent first, by status or author */
+  /** Suggestions, oldest sent first, by status or author; with `state`, the list of conversations, newest first (numbers, reviewers, approvals, the issues each closes) with counts */
   listSuggestions: {
     input: {
       status?: "draft" | "open" | "merged" | "sent_back" | "withdrawn";
-      /** An account id */
+      /** The conversation list: open (waiting or sent back) or closed (merged or withdrawn) */
+      state?: "open" | "closed" | "all";
+      /** An account id, or (with state) a handle */
       author?: string;
+      /** With state: asked to review, or reviewed (a handle) */
+      reviewer?: string;
+      /** With state: words in the title, or #number */
+      q?: string;
       /** true: live changes waiting to be reviewed after */
       postReview?: "true" | "false";
       /** How many (at most 500) */
@@ -843,7 +1087,13 @@ export interface Operations {
       cursor?: string;
     };
     output: {
-      suggestions: Array<Suggestion>;
+      suggestions: Array<Suggestion | SuggestionListItem>;
+      /** Who is named, by account id: name and handle */
+      people?: Record<string, unknown>;
+      counts?: {
+        open?: number;
+        closed?: number;
+      };
       next: string | null;
     };
   };
@@ -882,6 +1132,25 @@ export interface Operations {
       };
     };
     output: Record<string, unknown>;
+  };
+  /** Mark inbox lines read (or unread): by id, by conversation, or all */
+  markInboxRead: {
+    input: {
+      body?: {
+        ids?: Array<number>;
+        subject?: {
+          kind: "changeset" | "report" | "entity" | "project";
+          id: string;
+        };
+        all?: boolean;
+        /** true: mark them unread */
+        unread?: boolean;
+      };
+    };
+    output: {
+      changed: number;
+      unread: number;
+    };
   };
   /** The Model Context Protocol server (Streamable HTTP, JSON answers, no sessions) */
   mcp: {
@@ -937,6 +1206,22 @@ export interface Operations {
   openapi: {
     input: Record<string, never>;
     output: Record<string, unknown>;
+  };
+  /** Open an issue (about an item, or the catalog at large) */
+  openIssue: {
+    input: {
+      body: {
+        title: string;
+        body?: string;
+        type?: "wrong-fact" | "missing-page" | "bad-scan" | "audio-problem" | "wrong-text" | "duplicate" | "rights" | "offensive" | "other";
+        /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+        entityId?: string;
+        labels?: Array<string>;
+        /** Keep it for stewards and keepers */
+        private?: boolean;
+      };
+    };
+    output: Issue;
   };
   /** Read a Hebrew date as people write it */
   parseDate: {
@@ -1020,6 +1305,16 @@ export interface Operations {
       ok: true;
     };
   };
+  /** Stop asking someone to review */
+  removeReviewRequest: {
+    input: {
+      id: number;
+      username: string;
+    };
+    output: {
+      ok: true;
+    };
+  };
   /** Report a problem (no account needed: a captcha and an hourly limit instead) */
   report: {
     input: {
@@ -1028,12 +1323,28 @@ export interface Operations {
         entityId?: string;
         reason: "wrong-fact" | "missing-page" | "bad-scan" | "audio-problem" | "wrong-text" | "duplicate" | "rights" | "offensive" | "other";
         note?: string;
+        /** A title of its own, as an issue */
+        title?: string;
         /** A Turnstile token, when not signed in */
         captcha?: string;
       };
     };
     output: {
       id: number;
+      number: number | null;
+    };
+  };
+  /** Ask people to review (asking again asks again) */
+  requestReview: {
+    input: {
+      id: number;
+      body: {
+        /** Handles */
+        reviewers: Array<string>;
+      };
+    };
+    output: {
+      requested: Array<string>;
     };
   };
   /** Ask for a file to stop being served (no account needed); stewards answer within two weeks */
@@ -1052,6 +1363,19 @@ export interface Operations {
     output: {
       id: number;
       answerWithinDays?: number;
+    };
+  };
+  /** Resolve (or unresolve) a comment on a suggestion's field */
+  resolveComment: {
+    input: {
+      id: number;
+      body?: {
+        /** false to unresolve */
+        resolved?: boolean;
+      };
+    };
+    output: {
+      ok: true;
     };
   };
   /** The item at a readable path (an old path answers with where it moved) */
@@ -1100,6 +1424,25 @@ export interface Operations {
       body: {
         verdict: "approve" | "revert";
         note?: string;
+      };
+    };
+    output: Record<string, unknown>;
+  };
+  /** Review: approve (it goes into the catalog, where you may merge it), request changes (sent back), or comment; with comments on fields */
+  reviewSuggestion: {
+    input: {
+      id: number;
+      body: {
+        verdict: "approve" | "request_changes" | "comment";
+        body?: string;
+        comments?: Array<{
+          /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+          entity: string;
+          field: string;
+          body: string;
+        }>;
+        /** For each item, how each clashing field is settled */
+        resolutions?: Record<string, unknown>;
       };
     };
     output: Record<string, unknown>;
@@ -1182,6 +1525,20 @@ export interface Operations {
       moments: Array<Record<string, unknown>>;
     };
   };
+  /** People to @mention: handles that start with, or names that contain, what is typed; those in the conversation first */
+  searchPeople: {
+    input: {
+      /** What follows the @ */
+      q?: string;
+      /** changeset:<id> or report:<id> */
+      thread?: string;
+      /** How many (at most 20) */
+      limit?: number;
+    };
+    output: {
+      people: Array<Record<string, unknown>>;
+    };
+  };
   /** Search by meaning (embeddings); every result is the machine's guess */
   searchSimilar: {
     input: {
@@ -1198,6 +1555,23 @@ export interface Operations {
       machine?: true;
       model?: string;
       results: Array<Record<string, unknown>>;
+    };
+  };
+  /** Suggestions and issues to #mention, by number or words */
+  searchThreads: {
+    input: {
+      /** What follows the # */
+      q?: string;
+      /** How many (at most 20) */
+      limit?: number;
+    };
+    output: {
+      threads: Array<{
+        kind?: "changeset" | "report";
+        number?: number;
+        title?: string;
+        state?: string;
+      }>;
     };
   };
   /** Keepers: seed the community text from this OCR layer (checked lines are kept) */
@@ -1222,6 +1596,47 @@ export interface Operations {
     output: {
       ok: true;
     };
+  };
+  /** Set who it is assigned to (yourself; others when you may triage) */
+  setIssueAssignees: {
+    input: {
+      number: number;
+      body: {
+        assignees: Array<string>;
+      };
+    };
+    output: Record<string, unknown>;
+  };
+  /** Set its labels (keepers, stewards, trusted people) */
+  setIssueLabels: {
+    input: {
+      number: number;
+      body: {
+        labels: Array<string>;
+      };
+    };
+    output: Record<string, unknown>;
+  };
+  /** Close as completed or not planned, or reopen */
+  setIssueState: {
+    input: {
+      number: number;
+      body: {
+        state: "open" | "completed" | "not_planned";
+        note?: string;
+      };
+    };
+    output: Record<string, unknown>;
+  };
+  /** Make it private or public (stewards and keepers) */
+  setIssueVisibility: {
+    input: {
+      number: number;
+      body: {
+        private: boolean;
+      };
+    };
+    output: Record<string, unknown>;
   };
   /** Held files that look like this one (the same scan or recording in other bytes): a machine's guess */
   similarFiles: {
@@ -1259,6 +1674,20 @@ export interface Operations {
     };
     output: Suggestion;
   };
+  /** A suggestion's timeline (comments, reviews, events), the reviewers asked, and the issues it closes */
+  suggestionConversation: {
+    input: {
+      id: number;
+    };
+    output: {
+      number: number;
+      timeline: Array<Record<string, unknown>>;
+      people?: Record<string, unknown>;
+      reviewRequests?: Array<Record<string, unknown>>;
+      fixes?: Array<Record<string, unknown>>;
+      subscribed?: boolean;
+    };
+  };
   /** A page's words fixed segment by segment: one segment's new words, a segment added after it or taken out, or a page's first words, sent for review */
   suggestWords: {
     input: {
@@ -1279,6 +1708,17 @@ export interface Operations {
       };
     };
     output: Record<string, unknown>;
+  };
+  /** Which of the two #12 is: a suggestion or an issue, and its id */
+  threadByNumber: {
+    input: {
+      number: number;
+    };
+    output: {
+      kind: "suggestion" | "issue";
+      number: number;
+      id: number;
+    };
   };
   /** Every kind of item and its JSON Schema */
   types: {
@@ -1440,20 +1880,26 @@ export const OPERATIONS = {
   claimNext: {"method":"POST","path":"/v1/projects/{slug}/next","pathParams":["slug"],"query":[],"body":null,"answer":"json"},
   closeProject: {"method":"POST","path":"/v1/projects/{slug}/close","pathParams":["slug"],"query":[],"body":null,"answer":"json"},
   closeReport: {"method":"POST","path":"/v1/reports/{id}/close","pathParams":["id"],"query":[],"body":"json","answer":"json"},
+  commentOnIssue: {"method":"POST","path":"/v1/issues/{number}/comments","pathParams":["number"],"query":[],"body":"json","answer":"json"},
   commentOnItem: {"method":"POST","path":"/v1/entities/{id}/talk","pathParams":["id"],"query":[],"body":"json","answer":"json"},
+  commentOnSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/comments","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   community: {"method":"GET","path":"/v1/community","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
   comparePrintings: {"method":"GET","path":"/v1/compare","pathParams":[],"query":["a","b"],"body":null,"answer":"json"},
   confirmScanPage: {"method":"POST","path":"/v1/scans/{id}/text/confirm","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   confirmSync: {"method":"POST","path":"/v1/recordings/{id}/sync/confirm","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   covers: {"method":"GET","path":"/v1/covers","pathParams":[],"query":["ids"],"body":null,"answer":"json"},
+  createLabel: {"method":"POST","path":"/v1/labels","pathParams":[],"query":[],"body":"json","answer":"json"},
   createProject: {"method":"POST","path":"/v1/projects","pathParams":[],"query":[],"body":"json","answer":"json"},
   createSuggestion: {"method":"POST","path":"/v1/suggestions","pathParams":[],"query":[],"body":"json","answer":"json"},
   createWebhook: {"method":"POST","path":"/v1/webhooks","pathParams":[],"query":[],"body":"json","answer":"json"},
   deleteWebhook: {"method":"DELETE","path":"/v1/webhooks/{id}","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   driveFix: {"method":"GET","path":"/v1/page-fixes/drive/{id}","pathParams":["id"],"query":[],"body":null,"answer":"json"},
+  editComment: {"method":"PATCH","path":"/v1/comments/{id}","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   editionChecksums: {"method":"GET","path":"/v1/editions/{tag}/SHA256SUMS","pathParams":["tag"],"query":[],"body":null,"answer":"text"},
   editionManifest: {"method":"GET","path":"/v1/editions/{tag}/manifest.json","pathParams":["tag"],"query":[],"body":null,"answer":"json"},
   editions: {"method":"GET","path":"/v1/editions","pathParams":[],"query":[],"body":null,"answer":"json"},
+  editIssue: {"method":"PATCH","path":"/v1/issues/{number}","pathParams":["number"],"query":[],"body":"json","answer":"json"},
+  editSuggestion: {"method":"PATCH","path":"/v1/suggestions/{id}","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   familyRequest: {"method":"POST","path":"/v1/teshuros/{id}/family-request","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   fileAbout: {"method":"GET","path":"/v1/files/{sha256}/about","pathParams":["sha256"],"query":["limit"],"body":null,"answer":"json"},
   fixScanLine: {"method":"POST","path":"/v1/scans/{id}/text/fix","pathParams":["id"],"query":[],"body":"json","answer":"json"},
@@ -1463,10 +1909,12 @@ export const OPERATIONS = {
   forgetPlace: {"method":"DELETE","path":"/v1/places","pathParams":[],"query":["kind","key"],"body":null,"answer":"json"},
   getDump: {"method":"GET","path":"/dumps/{tag}/{name}","pathParams":["tag","name"],"query":[],"body":null,"answer":"raw"},
   getFile: {"method":"GET","path":"/v1/files/{sha256}","pathParams":["sha256"],"query":[],"body":null,"answer":"json"},
+  getIssue: {"method":"GET","path":"/v1/issues/{number}","pathParams":["number"],"query":[],"body":null,"answer":"json"},
   getItem: {"method":"GET","path":"/v1/entities/{id}","pathParams":["id"],"query":["at"],"body":null,"answer":"json"},
   getItems: {"method":"GET","path":"/v1/entities/batch","pathParams":[],"query":["ids"],"body":null,"answer":"json"},
   getManifest: {"method":"GET","path":"/manifests/{collection}/{name}","pathParams":["collection","name"],"query":[],"body":null,"answer":"json"},
   getObject: {"method":"GET","path":"/objects/{sha256}","pathParams":["sha256"],"query":[],"body":null,"answer":"raw"},
+  getProfile: {"method":"GET","path":"/v1/people/{username}","pathParams":["username"],"query":["limit"],"body":null,"answer":"json"},
   getProject: {"method":"GET","path":"/v1/projects/{slug}","pathParams":["slug"],"query":[],"body":null,"answer":"json"},
   getRevision: {"method":"GET","path":"/v1/revisions/{rev}","pathParams":["rev"],"query":[],"body":null,"answer":"json"},
   getSourceText: {"method":"GET","path":"/v1/texts/{sha256}","pathParams":["sha256"],"query":[],"body":null,"answer":"text"},
@@ -1474,6 +1922,9 @@ export const OPERATIONS = {
   health: {"method":"GET","path":"/v1/health","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
   hideComment: {"method":"POST","path":"/v1/comments/{id}/hide","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   iiifManifest: {"method":"GET","path":"/manifests/iiif/{file}","pathParams":["file"],"query":[],"body":null,"answer":"json"},
+  inbox: {"method":"GET","path":"/v1/inbox","pathParams":[],"query":["filter","before","limit","cursor"],"body":null,"answer":"json","items":"items"},
+  inboxCount: {"method":"GET","path":"/v1/inbox/count","pathParams":[],"query":[],"body":null,"answer":"json"},
+  issueTemplates: {"method":"GET","path":"/v1/issues/templates","pathParams":[],"query":[],"body":null,"answer":"json"},
   itemBacklinks: {"method":"GET","path":"/v1/entities/{id}/backlinks","pathParams":["id"],"query":["field","type"],"body":null,"answer":"json"},
   itemHistory: {"method":"GET","path":"/v1/entities/{id}/history","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   itemRelations: {"method":"GET","path":"/v1/entities/{id}/relations","pathParams":["id"],"query":[],"body":null,"answer":"json"},
@@ -1483,21 +1934,25 @@ export const OPERATIONS = {
   listCommits: {"method":"GET","path":"/v1/commits","pathParams":[],"query":["since","limit","cursor"],"body":null,"answer":"json","items":"commits"},
   listEvents: {"method":"GET","path":"/v1/events","pathParams":[],"query":["within","day","dates","missing","limit"],"body":null,"answer":"json"},
   listFollows: {"method":"GET","path":"/v1/follows","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
+  listIssues: {"method":"GET","path":"/v1/issues","pathParams":[],"query":["state","label","type","set","entity","assignee","author","q","before","limit","cursor"],"body":null,"answer":"json","items":"items"},
   listItems: {"method":"GET","path":"/v1/entities","pathParams":[],"query":["type","set","after","limit","cursor"],"body":null,"answer":"json","items":"items"},
+  listLabels: {"method":"GET","path":"/v1/labels","pathParams":[],"query":[],"body":null,"answer":"json"},
   listLinked: {"method":"GET","path":"/v1/entities/{id}/linked","pathParams":["id"],"query":["field","type","after","limit","cursor"],"body":null,"answer":"json","items":"items"},
   listPlaces: {"method":"GET","path":"/v1/places","pathParams":[],"query":["kind","key","limit"],"body":null,"answer":"json"},
   listProjects: {"method":"GET","path":"/v1/projects","pathParams":[],"query":["status"],"body":null,"answer":"json"},
   listReports: {"method":"GET","path":"/v1/reports","pathParams":[],"query":["set","status"],"body":null,"answer":"json"},
-  listSuggestions: {"method":"GET","path":"/v1/suggestions","pathParams":[],"query":["status","author","postReview","limit","cursor"],"body":null,"answer":"json","items":"suggestions"},
+  listSuggestions: {"method":"GET","path":"/v1/suggestions","pathParams":[],"query":["status","state","author","reviewer","q","postReview","limit","cursor"],"body":null,"answer":"json","items":"suggestions"},
   listWebhooks: {"method":"GET","path":"/v1/webhooks","pathParams":[],"query":[],"body":null,"answer":"json"},
   llmsTxt: {"method":"GET","path":"/llms.txt","pathParams":[],"query":[],"body":null,"answer":"text"},
   mapContents: {"method":"POST","path":"/v1/suggestions/contents-map","pathParams":[],"query":[],"body":"json","answer":"json"},
+  markInboxRead: {"method":"POST","path":"/v1/inbox/read","pathParams":[],"query":[],"body":"json","answer":"json"},
   mcp: {"method":"POST","path":"/mcp","pathParams":[],"query":[],"body":"json","answer":"json"},
   mirrors: {"method":"GET","path":"/v1/mirrors","pathParams":[],"query":[],"body":null,"answer":"json"},
   missing: {"method":"GET","path":"/v1/missing","pathParams":[],"query":["kind","within","limit"],"body":null,"answer":"json"},
   oai: {"method":"GET","path":"/oai","pathParams":[],"query":["verb","metadataPrefix","identifier","from","until","set","resumptionToken"],"body":null,"answer":"text"},
   oaiPost: {"method":"POST","path":"/oai","pathParams":[],"query":[],"body":"application/x-www-form-urlencoded","answer":"text"},
   openapi: {"method":"GET","path":"/openapi.json","pathParams":[],"query":[],"body":null,"answer":"json"},
+  openIssue: {"method":"POST","path":"/v1/issues","pathParams":[],"query":[],"body":"json","answer":"json"},
   parseDate: {"method":"GET","path":"/v1/dates/parse","pathParams":[],"query":["q"],"body":null,"answer":"json"},
   proposeUpload: {"method":"POST","path":"/v1/uploads/propose","pathParams":[],"query":[],"body":"json","answer":"json"},
   putSuggestionItem: {"method":"PUT","path":"/v1/suggestions/{id}/items","pathParams":["id"],"query":[],"body":"json","answer":"json"},
@@ -1505,12 +1960,16 @@ export const OPERATIONS = {
   recordingTranscript: {"method":"GET","path":"/v1/recordings/{id}/transcript","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   refCounts: {"method":"GET","path":"/v1/refcounts","pathParams":[],"query":["field","type"],"body":null,"answer":"json"},
   releaseClaim: {"method":"POST","path":"/v1/projects/{slug}/release","pathParams":["slug"],"query":[],"body":"json","answer":"json"},
+  removeReviewRequest: {"method":"DELETE","path":"/v1/suggestions/{id}/review-requests/{username}","pathParams":["id","username"],"query":[],"body":null,"answer":"json"},
   report: {"method":"POST","path":"/v1/reports","pathParams":[],"query":[],"body":"json","answer":"json"},
+  requestReview: {"method":"POST","path":"/v1/suggestions/{id}/review-requests","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   requestTakedown: {"method":"POST","path":"/v1/takedowns","pathParams":[],"query":[],"body":"json","answer":"json"},
+  resolveComment: {"method":"POST","path":"/v1/comments/{id}/resolve","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   resolvePath: {"method":"GET","path":"/v1/resolve","pathParams":[],"query":["path"],"body":null,"answer":"json"},
   restoreItem: {"method":"POST","path":"/v1/entities/{id}/restore","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   revertSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/revert","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   reviewLive: {"method":"POST","path":"/v1/suggestions/{id}/review-live","pathParams":["id"],"query":[],"body":"json","answer":"json"},
+  reviewSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/reviews","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   root: {"method":"GET","path":"/","pathParams":[],"query":[],"body":null,"answer":"raw"},
   savePlace: {"method":"PUT","path":"/v1/places","pathParams":[],"query":[],"body":"json","answer":"json"},
   scanPages: {"method":"GET","path":"/v1/scans/{id}/pages","pathParams":["id"],"query":[],"body":null,"answer":"json"},
@@ -1518,14 +1977,22 @@ export const OPERATIONS = {
   scanText: {"method":"GET","path":"/v1/scans/{id}/text","pathParams":["id"],"query":["page"],"body":null,"answer":"json"},
   search: {"method":"GET","path":"/v1/search","pathParams":[],"query":["q","type","limit"],"body":null,"answer":"json"},
   searchMoments: {"method":"GET","path":"/v1/search/moments","pathParams":[],"query":["q","limit"],"body":null,"answer":"json"},
+  searchPeople: {"method":"GET","path":"/v1/people","pathParams":[],"query":["q","thread","limit"],"body":null,"answer":"json"},
   searchSimilar: {"method":"GET","path":"/v1/search/similar","pathParams":[],"query":["q","types","limit"],"body":null,"answer":"json"},
+  searchThreads: {"method":"GET","path":"/v1/threads","pathParams":[],"query":["q","limit"],"body":null,"answer":"json"},
   seedScanText: {"method":"POST","path":"/v1/scans/{id}/text/seed","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   sendBackSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/send-back","pathParams":["id"],"query":[],"body":"json","answer":"json"},
+  setIssueAssignees: {"method":"PUT","path":"/v1/issues/{number}/assignees","pathParams":["number"],"query":[],"body":"json","answer":"json"},
+  setIssueLabels: {"method":"PUT","path":"/v1/issues/{number}/labels","pathParams":["number"],"query":[],"body":"json","answer":"json"},
+  setIssueState: {"method":"POST","path":"/v1/issues/{number}/state","pathParams":["number"],"query":[],"body":"json","answer":"json"},
+  setIssueVisibility: {"method":"POST","path":"/v1/issues/{number}/visibility","pathParams":["number"],"query":[],"body":"json","answer":"json"},
   similarFiles: {"method":"GET","path":"/v1/files/{sha256}/similar","pathParams":["sha256"],"query":[],"body":null,"answer":"json"},
   stats: {"method":"GET","path":"/v1/stats","pathParams":[],"query":[],"body":null,"answer":"json"},
   submitSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/submit","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   suggestFix: {"method":"POST","path":"/v1/suggestions/quick","pathParams":[],"query":[],"body":"json","answer":"json"},
+  suggestionConversation: {"method":"GET","path":"/v1/suggestions/{id}/conversation","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   suggestWords: {"method":"POST","path":"/v1/suggestions/words","pathParams":[],"query":[],"body":"json","answer":"json"},
+  threadByNumber: {"method":"GET","path":"/v1/threads/{number}","pathParams":["number"],"query":[],"body":null,"answer":"json"},
   types: {"method":"GET","path":"/v1/types","pathParams":[],"query":[],"body":null,"answer":"json"},
   unitPrintings: {"method":"GET","path":"/v1/units/{id}/printings","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   unsubscribe: {"method":"POST","path":"/v1/auth/email/unsubscribe","pathParams":[],"query":["token"],"body":"json","answer":"json"},
@@ -1539,7 +2006,7 @@ export const OPERATIONS = {
 
 export type OperationId = keyof Operations;
 /** Operations whose answers come a page at a time. */
-export type PagedOperationId = "listChildren" | "listCommits" | "listItems" | "listLinked" | "listSuggestions";
+export type PagedOperationId = "inbox" | "listChildren" | "listCommits" | "listIssues" | "listItems" | "listLinked" | "listSuggestions";
 
 /** A typed method for every operation; the calls themselves are in client.ts. */
 export abstract class GeneratedMethods {
@@ -1590,9 +2057,19 @@ export abstract class GeneratedMethods {
     return this.call('closeReport', input ?? {} as Operations['closeReport']['input']);
   }
 
+  /** Comment on an issue, or answer a comment (POST /v1/issues/{number}/comments) */
+  commentOnIssue(input: Operations['commentOnIssue']['input']): Promise<Operations['commentOnIssue']['output']> {
+    return this.call('commentOnIssue', input ?? {} as Operations['commentOnIssue']['input']);
+  }
+
   /** Comment on an item's talk page (POST /v1/entities/{id}/talk) */
   commentOnItem(input: Operations['commentOnItem']['input']): Promise<Operations['commentOnItem']['output']> {
     return this.call('commentOnItem', input ?? {} as Operations['commentOnItem']['input']);
+  }
+
+  /** Comment on a suggestion, answer a comment, or comment on one field of one item (POST /v1/suggestions/{id}/comments) */
+  commentOnSuggestion(input: Operations['commentOnSuggestion']['input']): Promise<Operations['commentOnSuggestion']['output']> {
+    return this.call('commentOnSuggestion', input ?? {} as Operations['commentOnSuggestion']['input']);
   }
 
   /** The community page in numbers: the latest merges, reports and suggestions waiting, people, gaps (GET /v1/community) */
@@ -1620,6 +2097,11 @@ export abstract class GeneratedMethods {
     return this.call('covers', input ?? {} as Operations['covers']['input']);
   }
 
+  /** Make a label (stewards) (POST /v1/labels) */
+  createLabel(input: Operations['createLabel']['input']): Promise<Operations['createLabel']['output']> {
+    return this.call('createLabel', input ?? {} as Operations['createLabel']['input']);
+  }
+
   /** Open a project on a gap (farbrengens without recordings or texts, recordings to sync, pages to proofread) (POST /v1/projects) */
   createProject(input: Operations['createProject']['input']): Promise<Operations['createProject']['output']> {
     return this.call('createProject', input ?? {} as Operations['createProject']['input']);
@@ -1645,6 +2127,11 @@ export abstract class GeneratedMethods {
     return this.call('driveFix', input ?? {} as Operations['driveFix']['input']);
   }
 
+  /** Change your own comment (on a talk page, a suggestion or an issue) (PATCH /v1/comments/{id}) */
+  editComment(input: Operations['editComment']['input']): Promise<Operations['editComment']['output']> {
+    return this.call('editComment', input ?? {} as Operations['editComment']['input']);
+  }
+
   /** An edition's checksums, for sha256sum -c (GET /v1/editions/{tag}/SHA256SUMS) */
   editionChecksums(input: Operations['editionChecksums']['input']): Promise<Operations['editionChecksums']['output']> {
     return this.call('editionChecksums', input ?? {} as Operations['editionChecksums']['input']);
@@ -1658,6 +2145,16 @@ export abstract class GeneratedMethods {
   /** Catalog editions (dated snapshots) and their dumps, each with its size, sha256 and address (GET /v1/editions) */
   editions(): Promise<Operations['editions']['output']> {
     return this.call('editions', {} as Operations['editions']['input']);
+  }
+
+  /** Change its title or words (its author, keepers, stewards) (PATCH /v1/issues/{number}) */
+  editIssue(input: Operations['editIssue']['input']): Promise<Operations['editIssue']['output']> {
+    return this.call('editIssue', input ?? {} as Operations['editIssue']['input']);
+  }
+
+  /** Change the title or description of your suggestion (@mentions and "Fixes #12" are read again) (PATCH /v1/suggestions/{id}) */
+  editSuggestion(input: Operations['editSuggestion']['input']): Promise<Operations['editSuggestion']['output']> {
+    return this.call('editSuggestion', input ?? {} as Operations['editSuggestion']['input']);
   }
 
   /** A family's request that a teshura not be shown (no account needed): its scans stop being served at once, and stewards review it (POST /v1/teshuros/{id}/family-request) */
@@ -1685,7 +2182,7 @@ export abstract class GeneratedMethods {
     return this.call('fixTranslation', input ?? {} as Operations['fixTranslation']['input']);
   }
 
-  /** Follow or unfollow an item, set, project or suggestion (POST /v1/follows) */
+  /** Follow or unfollow an item, set, project, suggestion or issue (POST /v1/follows) */
   follow(input: Operations['follow']['input']): Promise<Operations['follow']['output']> {
     return this.call('follow', input ?? {} as Operations['follow']['input']);
   }
@@ -1703,6 +2200,11 @@ export abstract class GeneratedMethods {
   /** A file's size, rights and address, what was made from it, and its page fix (GET /v1/files/{sha256}) */
   getFile(input: Operations['getFile']['input']): Promise<Operations['getFile']['output']> {
     return this.call('getFile', input ?? {} as Operations['getFile']['input']);
+  }
+
+  /** An issue, its timeline, what the reader may do, and the suggestions that close it (GET /v1/issues/{number}) */
+  getIssue(input: Operations['getIssue']['input']): Promise<Operations['getIssue']['output']> {
+    return this.call('getIssue', input ?? {} as Operations['getIssue']['input']);
   }
 
   /** One item, on main or as of a commit (GET /v1/entities/{id}) */
@@ -1723,6 +2225,11 @@ export abstract class GeneratedMethods {
   /** A file's bytes, while its rights let it be served (GET /objects/{sha256}) */
   getObject(input: Operations['getObject']['input']): Promise<Operations['getObject']['output']> {
     return this.call('getObject', input ?? {} as Operations['getObject']['input']);
+  }
+
+  /** A person's public page: who they are, their counts and recent activity (an old handle finds them too, with `movedFrom`) (GET /v1/people/{username}) */
+  getProfile(input: Operations['getProfile']['input']): Promise<Operations['getProfile']['output']> {
+    return this.call('getProfile', input ?? {} as Operations['getProfile']['input']);
   }
 
   /** A project, its progress and what is left to do (GET /v1/projects/{slug}) */
@@ -1758,6 +2265,21 @@ export abstract class GeneratedMethods {
   /** A served scan as a IIIF Presentation 3 manifest, for any IIIF viewer (GET /manifests/iiif/{file}) */
   iiifManifest(input: Operations['iiifManifest']['input']): Promise<Operations['iiifManifest']['output']> {
     return this.call('iiifManifest', input ?? {} as Operations['iiifManifest']['input']);
+  }
+
+  /** Your inbox, newest first: mentions, review requests, assignments and what you follow (GET /v1/inbox) */
+  inbox(input?: Operations['inbox']['input']): Promise<Operations['inbox']['output']> {
+    return this.call('inbox', input ?? {} as Operations['inbox']['input']);
+  }
+
+  /** How many inbox lines are unread (GET /v1/inbox/count) */
+  inboxCount(): Promise<Operations['inboxCount']['output']> {
+    return this.call('inboxCount', {} as Operations['inboxCount']['input']);
+  }
+
+  /** The kinds of issue and the words each starts with (GET /v1/issues/templates) */
+  issueTemplates(): Promise<Operations['issueTemplates']['output']> {
+    return this.call('issueTemplates', {} as Operations['issueTemplates']['input']);
   }
 
   /** Items that point at this one (GET /v1/entities/{id}/backlinks) */
@@ -1805,9 +2327,19 @@ export abstract class GeneratedMethods {
     return this.call('listFollows', input ?? {} as Operations['listFollows']['input']);
   }
 
+  /** Issues, newest first, with open and closed counts; private ones only for those who may read them (GET /v1/issues) */
+  listIssues(input?: Operations['listIssues']['input']): Promise<Operations['listIssues']['output']> {
+    return this.call('listIssues', input ?? {} as Operations['listIssues']['input']);
+  }
+
   /** Items on main, by type and set, in path order, a page at a time (GET /v1/entities) */
   listItems(input?: Operations['listItems']['input']): Promise<Operations['listItems']['output']> {
     return this.call('listItems', input ?? {} as Operations['listItems']['input']);
+  }
+
+  /** Every label and how many open issues carry it (GET /v1/labels) */
+  listLabels(): Promise<Operations['listLabels']['output']> {
+    return this.call('listLabels', {} as Operations['listLabels']['input']);
   }
 
   /** One group of what points at an item, in its own order, a page at a time, with the total (GET /v1/entities/{id}/linked) */
@@ -1830,7 +2362,7 @@ export abstract class GeneratedMethods {
     return this.call('listReports', input ?? {} as Operations['listReports']['input']);
   }
 
-  /** Suggestions, oldest sent first, by status or author (GET /v1/suggestions) */
+  /** Suggestions, oldest sent first, by status or author; with `state`, the list of conversations, newest first (numbers, reviewers, approvals, the issues each closes) with counts (GET /v1/suggestions) */
   listSuggestions(input?: Operations['listSuggestions']['input']): Promise<Operations['listSuggestions']['output']> {
     return this.call('listSuggestions', input ?? {} as Operations['listSuggestions']['input']);
   }
@@ -1848,6 +2380,11 @@ export abstract class GeneratedMethods {
   /** Map pages of a publication to the unit they hold (an existing unit, a new one, or words) (POST /v1/suggestions/contents-map) */
   mapContents(input: Operations['mapContents']['input']): Promise<Operations['mapContents']['output']> {
     return this.call('mapContents', input ?? {} as Operations['mapContents']['input']);
+  }
+
+  /** Mark inbox lines read (or unread): by id, by conversation, or all (POST /v1/inbox/read) */
+  markInboxRead(input?: Operations['markInboxRead']['input']): Promise<Operations['markInboxRead']['output']> {
+    return this.call('markInboxRead', input ?? {} as Operations['markInboxRead']['input']);
   }
 
   /** The Model Context Protocol server (Streamable HTTP, JSON answers, no sessions) (POST /mcp) */
@@ -1878,6 +2415,11 @@ export abstract class GeneratedMethods {
   /** This document (GET /openapi.json) */
   openapi(): Promise<Operations['openapi']['output']> {
     return this.call('openapi', {} as Operations['openapi']['input']);
+  }
+
+  /** Open an issue (about an item, or the catalog at large) (POST /v1/issues) */
+  openIssue(input: Operations['openIssue']['input']): Promise<Operations['openIssue']['output']> {
+    return this.call('openIssue', input ?? {} as Operations['openIssue']['input']);
   }
 
   /** Read a Hebrew date as people write it (GET /v1/dates/parse) */
@@ -1915,14 +2457,29 @@ export abstract class GeneratedMethods {
     return this.call('releaseClaim', input ?? {} as Operations['releaseClaim']['input']);
   }
 
+  /** Stop asking someone to review (DELETE /v1/suggestions/{id}/review-requests/{username}) */
+  removeReviewRequest(input: Operations['removeReviewRequest']['input']): Promise<Operations['removeReviewRequest']['output']> {
+    return this.call('removeReviewRequest', input ?? {} as Operations['removeReviewRequest']['input']);
+  }
+
   /** Report a problem (no account needed: a captcha and an hourly limit instead) (POST /v1/reports) */
   report(input: Operations['report']['input']): Promise<Operations['report']['output']> {
     return this.call('report', input ?? {} as Operations['report']['input']);
   }
 
+  /** Ask people to review (asking again asks again) (POST /v1/suggestions/{id}/review-requests) */
+  requestReview(input: Operations['requestReview']['input']): Promise<Operations['requestReview']['output']> {
+    return this.call('requestReview', input ?? {} as Operations['requestReview']['input']);
+  }
+
   /** Ask for a file to stop being served (no account needed); stewards answer within two weeks (POST /v1/takedowns) */
   requestTakedown(input: Operations['requestTakedown']['input']): Promise<Operations['requestTakedown']['output']> {
     return this.call('requestTakedown', input ?? {} as Operations['requestTakedown']['input']);
+  }
+
+  /** Resolve (or unresolve) a comment on a suggestion's field (POST /v1/comments/{id}/resolve) */
+  resolveComment(input: Operations['resolveComment']['input']): Promise<Operations['resolveComment']['output']> {
+    return this.call('resolveComment', input ?? {} as Operations['resolveComment']['input']);
   }
 
   /** The item at a readable path (an old path answers with where it moved) (GET /v1/resolve) */
@@ -1943,6 +2500,11 @@ export abstract class GeneratedMethods {
   /** Review a live change after it went live: keep it (approve) or undo it (revert) (POST /v1/suggestions/{id}/review-live) */
   reviewLive(input: Operations['reviewLive']['input']): Promise<Operations['reviewLive']['output']> {
     return this.call('reviewLive', input ?? {} as Operations['reviewLive']['input']);
+  }
+
+  /** Review: approve (it goes into the catalog, where you may merge it), request changes (sent back), or comment; with comments on fields (POST /v1/suggestions/{id}/reviews) */
+  reviewSuggestion(input: Operations['reviewSuggestion']['input']): Promise<Operations['reviewSuggestion']['output']> {
+    return this.call('reviewSuggestion', input ?? {} as Operations['reviewSuggestion']['input']);
   }
 
   /** Redirects to /v1 (GET /) */
@@ -1980,9 +2542,19 @@ export abstract class GeneratedMethods {
     return this.call('searchMoments', input ?? {} as Operations['searchMoments']['input']);
   }
 
+  /** People to @mention: handles that start with, or names that contain, what is typed; those in the conversation first (GET /v1/people) */
+  searchPeople(input?: Operations['searchPeople']['input']): Promise<Operations['searchPeople']['output']> {
+    return this.call('searchPeople', input ?? {} as Operations['searchPeople']['input']);
+  }
+
   /** Search by meaning (embeddings); every result is the machine's guess (GET /v1/search/similar) */
   searchSimilar(input: Operations['searchSimilar']['input']): Promise<Operations['searchSimilar']['output']> {
     return this.call('searchSimilar', input ?? {} as Operations['searchSimilar']['input']);
+  }
+
+  /** Suggestions and issues to #mention, by number or words (GET /v1/threads) */
+  searchThreads(input?: Operations['searchThreads']['input']): Promise<Operations['searchThreads']['output']> {
+    return this.call('searchThreads', input ?? {} as Operations['searchThreads']['input']);
   }
 
   /** Keepers: seed the community text from this OCR layer (checked lines are kept) (POST /v1/scans/{id}/text/seed) */
@@ -1993,6 +2565,26 @@ export abstract class GeneratedMethods {
   /** Send back with a note (POST /v1/suggestions/{id}/send-back) */
   sendBackSuggestion(input: Operations['sendBackSuggestion']['input']): Promise<Operations['sendBackSuggestion']['output']> {
     return this.call('sendBackSuggestion', input ?? {} as Operations['sendBackSuggestion']['input']);
+  }
+
+  /** Set who it is assigned to (yourself; others when you may triage) (PUT /v1/issues/{number}/assignees) */
+  setIssueAssignees(input: Operations['setIssueAssignees']['input']): Promise<Operations['setIssueAssignees']['output']> {
+    return this.call('setIssueAssignees', input ?? {} as Operations['setIssueAssignees']['input']);
+  }
+
+  /** Set its labels (keepers, stewards, trusted people) (PUT /v1/issues/{number}/labels) */
+  setIssueLabels(input: Operations['setIssueLabels']['input']): Promise<Operations['setIssueLabels']['output']> {
+    return this.call('setIssueLabels', input ?? {} as Operations['setIssueLabels']['input']);
+  }
+
+  /** Close as completed or not planned, or reopen (POST /v1/issues/{number}/state) */
+  setIssueState(input: Operations['setIssueState']['input']): Promise<Operations['setIssueState']['output']> {
+    return this.call('setIssueState', input ?? {} as Operations['setIssueState']['input']);
+  }
+
+  /** Make it private or public (stewards and keepers) (POST /v1/issues/{number}/visibility) */
+  setIssueVisibility(input: Operations['setIssueVisibility']['input']): Promise<Operations['setIssueVisibility']['output']> {
+    return this.call('setIssueVisibility', input ?? {} as Operations['setIssueVisibility']['input']);
   }
 
   /** Held files that look like this one (the same scan or recording in other bytes): a machine's guess (GET /v1/files/{sha256}/similar) */
@@ -2015,9 +2607,19 @@ export abstract class GeneratedMethods {
     return this.call('suggestFix', input ?? {} as Operations['suggestFix']['input']);
   }
 
+  /** A suggestion's timeline (comments, reviews, events), the reviewers asked, and the issues it closes (GET /v1/suggestions/{id}/conversation) */
+  suggestionConversation(input: Operations['suggestionConversation']['input']): Promise<Operations['suggestionConversation']['output']> {
+    return this.call('suggestionConversation', input ?? {} as Operations['suggestionConversation']['input']);
+  }
+
   /** A page's words fixed segment by segment: one segment's new words, a segment added after it or taken out, or a page's first words, sent for review (POST /v1/suggestions/words) */
   suggestWords(input: Operations['suggestWords']['input']): Promise<Operations['suggestWords']['output']> {
     return this.call('suggestWords', input ?? {} as Operations['suggestWords']['input']);
+  }
+
+  /** Which of the two #12 is: a suggestion or an issue, and its id (GET /v1/threads/{number}) */
+  threadByNumber(input: Operations['threadByNumber']['input']): Promise<Operations['threadByNumber']['output']> {
+    return this.call('threadByNumber', input ?? {} as Operations['threadByNumber']['input']);
   }
 
   /** Every kind of item and its JSON Schema (GET /v1/types) */

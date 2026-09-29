@@ -5,6 +5,7 @@ import type { Route } from './+types/signin';
 import { langFrom, t } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
+import { UsernameField } from '../components/threads/UsernameField.js';
 import { refreshAccount, useAccount, useEmailSignIn, useGoogleSignIn } from '../lib/useAccount.js';
 import { useLang } from '../lib/useLang.js';
 
@@ -12,7 +13,8 @@ import { useLang } from '../lib/useLang.js';
  * Signing in, with a passkey: no password to choose or forget. The passkey
  * lives on the person's phone or computer, opened with their fingerprint,
  * face or screen lock, and works only on RebbeHub. New here: a name to be
- * known by, and the device makes the passkey. Or with Google, once the
+ * known by and a handle for @mentions (suggested from the name), and the
+ * device makes the passkey. Or with Google, once the
  * site has its Google sign-in keys: the browser goes to Google and back.
  * Or by a link sent by email, once the site can send email: the link comes
  * back here (`?email-token=`), and the page asks once more before using it,
@@ -47,6 +49,8 @@ function EmailLink({ token, onDone }: { token: string; onDone: () => void }) {
   const lang = useLang();
   const [info, setInfo] = useState<{ email: string; known: boolean; adding: { displayName: string } | null; suggestedName: string | null } | null>(null);
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
+  const [usernameOk, setUsernameOk] = useState(true);
   const [busy, setBusy] = useState(false);
   const [added, setAdded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +68,7 @@ function EmailLink({ token, onDone }: { token: string; onDone: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      const answer = await post<{ added?: string }>('email/verify', { token, name: name.trim() || undefined });
+      const answer = await post<{ added?: string }>('email/verify', { token, name: name.trim() || undefined, username: (!info?.known && !info?.adding && username.trim()) || undefined });
       if (answer.added) setAdded(true);
       else onDone();
     } catch (e) {
@@ -94,9 +98,10 @@ function EmailLink({ token, onDone }: { token: string; onDone: () => void }) {
               <label htmlFor="email-name">{t(lang, 'nameToShow')}</label>
               <input id="email-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required autoComplete="name" dir="auto" />
               <p className="row-sub">{t(lang, 'nameToShowHint')}</p>
+              <UsernameField lang={lang} id="email-username" value={username} onChange={setUsername} from={name} onValid={setUsernameOk} />
             </>
           ) : null}
-          <button type="submit" disabled={busy || (!info.known && !info.adding && !name.trim())}>
+          <button type="submit" disabled={busy || (!info.known && !info.adding && (!name.trim() || !usernameOk))}>
             {busy ? t(lang, 'waiting') : t(lang, 'continueButton')}
           </button>
         </form>
@@ -156,6 +161,8 @@ export default function SignIn() {
   const account = useAccount();
   const [params] = useSearchParams();
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
+  const [usernameOk, setUsernameOk] = useState(true);
   const [busy, setBusy] = useState<'in' | 'new' | null>(null);
   const google = useGoogleSignIn();
   const emailOn = useEmailSignIn();
@@ -189,9 +196,9 @@ export default function SignIn() {
     setBusy('new');
     setError(null);
     try {
-      const { challengeId, options } = await post<{ challengeId: string; options: Parameters<typeof startRegistration>[0]['optionsJSON'] }>('passkey/register/options', { name });
+      const { challengeId, options } = await post<{ challengeId: string; options: Parameters<typeof startRegistration>[0]['optionsJSON'] }>('passkey/register/options', { name, username: username.trim() || undefined });
       const response = await startRegistration({ optionsJSON: options });
-      await post('passkey/register/verify', { challengeId, name, response });
+      await post('passkey/register/verify', { challengeId, name, username: username.trim() || undefined, response });
       done();
     } catch (e) {
       failed(e);
@@ -246,8 +253,9 @@ export default function SignIn() {
               <label htmlFor="name">{t(lang, 'nameToShow')}</label>
               <input id="name" name="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required autoComplete="name" dir="auto" />
               <p className="row-sub">{t(lang, 'nameToShowHint')}</p>
+              <UsernameField lang={lang} value={username} onChange={setUsername} from={name} onValid={setUsernameOk} />
               <p className="row-sub">{t(lang, 'newAccountHint')}</p>
-              <button type="submit" disabled={busy !== null || !supported || !name.trim()}>
+              <button type="submit" disabled={busy !== null || !supported || !name.trim() || !usernameOk}>
                 {busy === 'new' ? t(lang, 'waiting') : t(lang, 'createAccount')}
               </button>
             </form>

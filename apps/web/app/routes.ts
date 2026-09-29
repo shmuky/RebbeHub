@@ -33,6 +33,8 @@ export default [
   route('files/:sha256', 'routes/file.tsx'),
   route('_/lookup', 'routes/lookup.ts'),
   route('_/steward/*', 'routes/admin-pass.ts'),
+  // People and conversations: @mentions, #numbers, reviews, issues and the inbox.
+  route('_/threads/*', 'routes/threads-pass.ts'),
   route('admin', 'routes/admin.tsx'),
   route('review', 'routes/review.tsx'),
   route('missing', 'routes/missing.tsx'),
@@ -48,6 +50,15 @@ export default [
   route('mirrors', 'routes/mirrors.tsx'),
   route('projects/:slug', 'routes/project.tsx'),
   route('signin', 'routes/signin.tsx'),
+  // Suggestions as conversations and Reports as Issues, numbered together (#12), like pull requests and issues.
+  route('suggestions', 'routes/suggestions-list.tsx'),
+  route('suggestions/:number', 'routes/suggestion.tsx'),
+  route('issues', 'routes/issues.tsx'),
+  route('issues/new', 'routes/issue-new.tsx'),
+  route('issues/:number', 'routes/issue.tsx'),
+  // A person's page by their handle, and what is waiting for the signed-in person.
+  route('u/:username', 'routes/profile.tsx'),
+  route('inbox', 'routes/inbox.tsx'),
   route('account', 'routes/account.tsx'),
   // For developers and AI agents: the docs, the interactive API reference, and llms.txt.
   route('developers/reference', 'routes/developers-reference.tsx'),

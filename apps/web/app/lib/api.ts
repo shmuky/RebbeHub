@@ -541,6 +541,24 @@ export class RebbeHubApi {
   async mirrors() {
     return this.get<MirrorsInfo>('/v1/mirrors');
   }
+
+  /** A person's page by their handle (an old handle finds them too, with `movedFrom`); null when nobody has it. */
+  person(username: string) {
+    return this.maybe(this.get<Profile>(`/v1/people/${encodeURIComponent(username)}`, { limit: 40 }));
+  }
+}
+
+export interface Profile {
+  person: { id: string; username: string; displayName: string; since: string; steward: boolean; admin: boolean; trust: 'contributor' | 'trusted'; suspended: boolean };
+  movedFrom?: string;
+  counts: { suggestions: number; merged: number; reviews: number; issues: number; comments: number };
+  activity: Array<{
+    kind: 'suggestion' | 'review' | 'issue' | 'comment';
+    at: string;
+    thread: { kind: 'changeset' | 'report' | 'entity'; id: string; number: number | null; title: string | null; state: string | null; path: string | null };
+    verdict?: string;
+    excerpt?: string;
+  }>;
 }
 
 export interface MirrorsInfo {
