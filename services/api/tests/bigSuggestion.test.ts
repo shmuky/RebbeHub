@@ -49,14 +49,18 @@ describe("a bot's large Suggestion over the API", () => {
     expect(list.body.people['bot:relink-drive']).toMatchObject({ name: 'Drive links (relink bot)', bot: true });
   });
 
-  it('gives 25 items at a time, with the total, where the next page starts, and a summary of them all', async () => {
+  it('gives 25 items at a time, with the total, where the next page starts, and a summary of them all when asked', async () => {
     const first = await call('GET', `/v1/suggestions/${bulk}`, { as: 'keeper' });
     expect(first.status).toBe(200);
     expect(first.body).toMatchObject({ total: N, offset: 0, limit: 25, next: 25, mayApprove: true });
     expect(first.body.entries).toHaveLength(25);
     expect(first.body.people['bot:relink-drive'].bot).toBe(true);
-    expect(first.body.summary).toHaveLength(1);
-    expect(first.body.summary[0]).toMatchObject({ type: 'event', count: N, fields: [{ path: '/links', before: 'link:sichos-kodesh-media-proxy.shmuky.workers.dev', after: 'link:drive.google.com' }] });
+    // A page alone reads only its items; the summary of all of them reads them all, so it comes only when asked.
+    expect(first.body.summary).toBeUndefined();
+    const summarized = await call('GET', `/v1/suggestions/${bulk}?summary=1`, { as: 'keeper' });
+    expect(summarized.body.entries).toHaveLength(25);
+    expect(summarized.body.summary).toHaveLength(1);
+    expect(summarized.body.summary[0]).toMatchObject({ type: 'event', count: N, fields: [{ path: '/links', before: 'link:sichos-kodesh-media-proxy.shmuky.workers.dev', after: 'link:drive.google.com' }] });
     const second = await call('GET', `/v1/suggestions/${bulk}?offset=${first.body.next}`);
     expect(second.body).toMatchObject({ offset: 25, next: 50 });
     const last = await call('GET', `/v1/suggestions/${bulk}?offset=50&limit=25`);

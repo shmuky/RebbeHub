@@ -86,18 +86,20 @@ describe("a bot's Suggestion of 500 items", () => {
     expect(JSON.stringify(entry.after)).toContain('drive.google.com');
   });
 
-  it('sums the 500 up as one change: links on the media proxy became links on Drive', async () => {
-    const view = await catalog.review(bulk, { limit: 25 });
+  it('sums the 500 up as one change when asked: links on the media proxy became links on Drive', async () => {
+    // A page alone is not compared whole: the summary comes only when asked for.
+    expect((await catalog.review(bulk, { limit: 25 })).summary).toBeUndefined();
+    const view = await catalog.review(bulk, { limit: 25, summary: true });
     expect(view.summary).toEqual([
       {
         type: 'event',
         kind: 'changed',
         count: N,
         fields: [{ path: '/links', before: 'link:sichos-kodesh-media-proxy.shmuky.workers.dev', after: 'link:drive.google.com' }],
-        examples: view.summary[0]!.examples,
+        examples: view.summary![0]!.examples,
       },
     ]);
-    expect(view.summary[0]!.examples).toHaveLength(3);
+    expect(view.summary![0]!.examples).toHaveLength(3);
   });
 
   it('asks whether a keeper may approve it in a few queries too', async () => {

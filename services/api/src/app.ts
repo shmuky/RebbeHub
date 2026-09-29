@@ -857,7 +857,9 @@ export function createApp(options: ApiOptions): Hono {
       const last = list.items[list.items.length - 1];
       const next = last && list.items.length === limit ? cursor.encode([last.number]) : null;
       nextLink(c, next);
-      return c.json({ suggestions: list.items, people: list.people, counts: list.counts, next });
+      // What each changes (kinds of items, the first of them), so a page can label and place it without opening it.
+      const shapes = await catalog.changeShapes(list.items.map((i) => i.id));
+      return c.json({ suggestions: list.items.map((i) => ({ ...i, types: shapes.get(i.id)?.types ?? [], first: shapes.get(i.id)?.first ?? null })), people: list.people, counts: list.counts, next });
     }
     const status = c.req.query('status');
     if (status && !STATUSES.includes(status as ChangesetStatus)) throw new HttpError(400, `status is one of ${STATUSES.join(', ')}`);
@@ -880,10 +882,11 @@ export function createApp(options: ApiOptions): Hono {
   });
 
   app.get('/v1/suggestions/:id', async (c) => {
-    // A page of its items at a time (a bot's Suggestion may change hundreds), with how many in all and a summary of them all.
+    // A page of its items at a time (a bot's Suggestion may change hundreds), with how many in all; the summary of them
+    // all only when asked (summary=1: the review page shows it; a feed that lists the suggestion does not need it).
     const offset = Math.max(intParam(c.req.query('offset'), 'offset') ?? 0, 0);
     const limit = Math.min(Math.max(intParam(c.req.query('limit'), 'limit') ?? 25, 1), 200);
-    const view = await catalog.review(intParam(c.req.param('id'), 'id')!, { offset, limit });
+    const view = await catalog.review(intParam(c.req.param('id'), 'id')!, { offset, limit, summary: c.req.query('summary') === '1' });
     const gate = new ExportGate(catalog);
     const hide = async (type: string, id: EntityId, data: Json | null) => (data === null ? null : ((await gate.redact({ id, type: type as EntityType, path: null, rev: 0, data })) as { withheld?: string }).withheld);
     for (const entry of view.entries) {

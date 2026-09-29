@@ -1,6 +1,6 @@
-import type { RebbeHubApi, SuggestionDetail } from './api.js';
+import type { Entity, RebbeHubApi, SuggestionDetail } from './api.js';
 import type { Lang } from './i18n.js';
-import { detailLabels, REPORT_LABEL } from './suggestions.js';
+import { detailLabels, REPORT_LABEL, typeLabels } from './suggestions.js';
 import { describeTargets } from './targets.server.js';
 
 /**
@@ -8,9 +8,10 @@ import { describeTargets } from './targets.server.js';
  * in it: a sefer's sichos, their paragraphs) and issues people opened
  * about it. For a page's "Suggestions" tab, its side's recent activity and
  * its tab counts. The API finds the newest suggestions about the item in
- * one query (`about`), and only those are opened, for their labels and
- * where in the item they are; enough for a page, and the full list is a
- * search away (/suggestions).
+ * one query (`about`) and says what kinds of items each changes and which
+ * comes first, which labels and places it; only the few open ones are
+ * opened, a page of items each, for exact labels. Enough for a page, and
+ * the full list is a search away (/suggestions).
  */
 
 export interface AboutThread {
@@ -30,7 +31,9 @@ export interface AboutThread {
 }
 
 const SUGGESTIONS_READ = 15;
-const ITEMS_READ = 25;
+/** The open ones are opened, for their exact labels; so many of them, and so many items of each. */
+const OPEN_READ = 5;
+const ITEMS_READ = 8;
 
 export async function threadsAbout(api: RebbeHubApi, ids: ReadonlySet<string>, lang: Lang, options: { set?: string | null } = {}): Promise<AboutThread[]> {
   const [list, issues] = await Promise.all([
@@ -39,14 +42,17 @@ export async function threadsAbout(api: RebbeHubApi, ids: ReadonlySet<string>, l
   ]);
   const out: AboutThread[] = [];
   if (list) {
-    // A page of each one's items is enough for its labels and its first item's place; a big one is read no further.
-    const details = await Promise.all(list.suggestions.map((s) => api.suggestion(s.id, { limit: ITEMS_READ }).catch(() => null)));
-    const present = details.filter((d): d is SuggestionDetail => d !== null);
-    const targets = await describeTargets(api, present.flatMap((d) => d.entries), lang).catch(() => new Map());
-    list.suggestions.forEach((s, i) => {
-      const d = details[i];
-      if (!d) return;
-      const first = d.entries[0] ? targets.get(d.entries[0].entityId) : undefined;
+    const open = list.suggestions.filter((s) => s.status === 'open' || s.status === 'draft').slice(0, OPEN_READ);
+    const [details, firsts] = await Promise.all([
+      Promise.all(open.map((s) => api.suggestion(s.id, { limit: ITEMS_READ }).catch(() => null))),
+      // Each one's first item, all at once, to say where in the item it is (a paragraph's sicha, a printing's sefer).
+      api.entities(list.suggestions.map((s) => s.first ?? '').filter(Boolean)).catch(() => new Map<string, Entity>()),
+    ]);
+    const detailOf = new Map<number, SuggestionDetail>(open.flatMap((s, i) => (details[i] ? [[s.id, details[i]!]] : [])));
+    const targets = await describeTargets(api, [...firsts.values()].map((e) => ({ entityId: e.id, type: e.type, before: null, after: e.data as Record<string, unknown> })), lang).catch(() => new Map());
+    for (const s of list.suggestions) {
+      const d = detailOf.get(s.id);
+      const first = s.first ? targets.get(s.first) : undefined;
       out.push({
         kind: 'suggestion',
         number: s.number,
@@ -55,11 +61,11 @@ export async function threadsAbout(api: RebbeHubApi, ids: ReadonlySet<string>, l
         at: s.submittedAt ?? s.createdAt,
         who: list.people[s.author]?.name ?? s.author,
         whoId: s.author,
-        labels: detailLabels(d).map((name) => ({ name })),
+        labels: (d ? detailLabels(d) : typeLabels(s.types ?? [])).map((name) => ({ name })),
         where: first ? first.label : null,
         comments: s.comments,
       });
-    });
+    }
   }
   for (const issue of issues?.items ?? []) {
     if (!issue.entity || !ids.has(issue.entity.id)) continue;
