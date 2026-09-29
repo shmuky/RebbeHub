@@ -45,3 +45,4 @@ export {
   type GreyImage,
 } from './fingerprints.js';
 export { itemsIn, mentionsIn, referencesIn, tokenize, type Token } from './mentions.js';
+export { HOUSE_SPELLING_PARTS, HOUSE_SPELLING_WORDS, spellingHints } from './spelling.js';

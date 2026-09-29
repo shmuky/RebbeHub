@@ -10,7 +10,9 @@ import { alignRecordings, localWhisper, transcribeRecordings, workersAiWhisper, 
  * (ivrit.ai's Yiddish Whisper; `pip install faster-whisper`, the model in
  * WHISPER_MODEL to change it). Served files come from `files`/objects/.
  */
-export async function transcribeCommand(ctx: Context, input: { approveAs: string; recording?: string; limit?: number; linked?: boolean; files?: string; engine?: string; requestedOnly?: boolean }): Promise<void> {
+export async function transcribeCommand(ctx: Context, input: { approveAs: string; recording?: string; limit?: number; linked?: boolean; files?: string; engine?: string; requestedOnly?: boolean; shard?: string }): Promise<void> {
+  const shard = input.shard?.split('/').map(Number) as [number, number] | undefined;
+  if (shard && !(shard.length === 2 && Number.isInteger(shard[0]) && shard[0]! >= 0 && shard[0]! < shard[1]!)) throw new Error('--shard is i/n, as 0/4');
   const transcriber = engine(input.engine);
   const base = (input.files ?? 'https://api.rebbehub.org').replace(/\/$/, '');
   await withCatalog(ctx, async (catalog) => {
@@ -21,6 +23,7 @@ export async function transcribeCommand(ctx: Context, input: { approveAs: string
       limit: input.limit,
       linked: input.linked,
       requestedOnly: input.requestedOnly,
+      shard,
       log: ctx.log,
       async fetchAudio({ file, url }) {
         const from = file ? `${base}/objects/${file}` : url!;

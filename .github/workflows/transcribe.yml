@@ -13,14 +13,20 @@ name: Machine transcription
 #   - every night: the recordings people asked for first (the site's
 #     "Transcribe" button, POST /v1/machine/requests, the ask_machine MCP
 #     tool, `rebbehub machine ask`), then the newest recordings with no
-#     transcript, TRANSCRIBE_NIGHTLY of them in all (a repository
+#     transcript, TRANSCRIBE_NIGHTLY of them for each worker (a repository
 #     variable; 1 when unset, 0 turns the nightly run off);
 #   - when someone asks, if the API has GITHUB_DISPATCH_TOKEN: only what
 #     was asked for (requested: true);
 #   - by hand, with any engine and limit.
+# A run can be split into several workers side by side (workers: 2 to 16
+# by hand, TRANSCRIBE_WORKERS for the nightly run), each taking its own
+# part of the recordings (--shard) and sharing the requests; `limit` is
+# per worker. Actions minutes are free while the repository is public.
+# The nightly run then times the words people corrected
+# (rebbehub align), so they become training clips for the next model
+# (docs/transcription.md, "The retraining cycle").
 # A runner's CPU hears about a quarter to half of the recording's length,
-# so the nightly limit is kept small while the repository is private and
-# its Actions minutes are counted.
+# so a worker gets through about six hours of recordings in a run.
 #
 # Needs repository secrets: DATABASE_URL (as the import), and for Workers
 # AI, CLOUDFLARE_ACCOUNT_ID with CLOUDFLARE_AI_TOKEN (a token allowed only
@@ -44,8 +50,13 @@ on:
         description: The steward who approves the machine's transcripts
         default: shmuly
         required: true
+      workers:
+        description: Workers side by side, each with its own recordings
+        type: choice
+        options: ["1", "2", "4", "8", "16"]
+        default: "1"
       limit:
-        description: How many recordings to transcribe this run
+        description: How many recordings each worker transcribes
         default: "3"
         required: true
       linked:
@@ -78,10 +89,16 @@ concurrency:
 
 jobs:
   transcribe:
-    name: Transcribe recordings
+    name: Transcribe recordings (worker ${{ matrix.shard }})
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 240
+    # A GitHub-hosted runner's longest job; a recording cut off is heard again next run.
+    timeout-minutes: 355
+    strategy:
+      fail-fast: false
+      matrix:
+        # Requests go to one worker; a sweep splits into `workers` parts.
+        shard: ${{ fromJSON('{"1":[0],"2":[0,1],"4":[0,1,2,3],"8":[0,1,2,3,4,5,6,7],"16":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]}')[inputs.requested && '1' || inputs.workers || vars.TRANSCRIBE_WORKERS || '1'] }}
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -160,7 +177,10 @@ jobs:
           LIMIT: ${{ github.event_name == 'schedule' && (vars.TRANSCRIBE_NIGHTLY || '1') || inputs.limit || '3' }}
           LINKED: ${{ inputs.linked }}
           RECORDING: ${{ inputs.recording }}
-          ALIGN: ${{ inputs.align }}
+          # Every night, and when asked: time the words people corrected (training clips). One worker does it.
+          ALIGN: ${{ matrix.shard == 0 && (github.event_name == 'schedule' || inputs.align) }}
+          WORKERS: ${{ inputs.requested && '1' || inputs.workers || vars.TRANSCRIBE_WORKERS || '1' }}
+          SHARD: ${{ matrix.shard }}
           REQUESTED: ${{ inputs.requested }}
           BASE_MODEL: ${{ inputs.base_model }}
         run: |
@@ -175,5 +195,7 @@ jobs:
           if [ "$REQUESTED" = "true" ]; then args+=(--requested-only); fi
           if [ "$LINKED" = "true" ]; then args+=(--linked); fi
           if [ -n "$RECORDING" ]; then args+=(--recording "$RECORDING"); fi
-          npm run rebbehub -- transcribe "${args[@]}"
+          shard=()
+          if [ "$WORKERS" != "1" ] && [ -z "$RECORDING" ]; then shard=(--shard "$SHARD/$WORKERS"); fi
+          npm run rebbehub -- transcribe "${args[@]}" "${shard[@]}"
           if [ "$ALIGN" = "true" ]; then npm run rebbehub -- align "${args[@]}"; fi

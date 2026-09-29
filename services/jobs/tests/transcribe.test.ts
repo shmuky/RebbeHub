@@ -49,6 +49,9 @@ describe('machine transcription and sync', () => {
     const linked = await add(catalog, 'mendy', 'keeper', 'recording', { event, title: { he: 'שיחה ב׳' }, url: 'https://example.org/b.mp3', sets: [set] });
     expect((await recordingsToTranscribe(catalog)).map((r) => r.id)).toEqual([served]);
     expect((await recordingsToTranscribe(catalog, { linked: true })).map((r) => r.id).sort()).toEqual([served, linked].sort());
+    // Jobs side by side each take their own part, and together all of it.
+    const parts = await Promise.all([0, 1, 2].map((i) => recordingsToTranscribe(catalog, { linked: true, shard: [i, 3] })));
+    expect(parts.flat().map((r) => r.id).sort()).toEqual([served, linked].sort());
 
     const transcriber: Transcriber = {
       name: 'fake',

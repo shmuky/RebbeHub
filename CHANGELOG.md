@@ -12,6 +12,17 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Corrections train the next transcription model.** Every transcript
+  paragraph a person checked becomes training clips, in the training
+  script's own format: `GET /v1/machine/training/clips` (JSON lines),
+  `GET /v1/machine/training?since=` (how many hours, and how many are
+  new), the `training_data` MCP tool, and `rebbehub training-clips`.
+  **Heard right** checks a paragraph as it is; the editor shows the house
+  spelling (the booklets') with a hint for each word written otherwise;
+  the nightly transcription run times corrected words again, those first.
+  Transcription runs can be split into workers side by side
+  (`TRANSCRIBE_WORKERS`, `--shard i/n`). See docs/transcription.md, "The
+  retraining cycle".
 - **A status page.** `/status` (linked in every page's foot) says whether
   the site, the API, the MCP server, the database, today's allowance of
   database queries and the scheduled jobs are working, with ninety days

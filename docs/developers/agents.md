@@ -47,6 +47,7 @@ stream. It has one address, `https://api.rebbehub.org/mcp`:
 | `open_issue` | report a problem for people to look into, under your name (`write`) |
 | `ask_machine` | ask for a scan to be read by OCR or a recording transcribed; queued for the free machines, their words marked `[machine]` until checked (`write`) |
 | `machine_queue` | what waits for the machines, in order, what they did lately, and how much is left |
+| `training_data` | how much training data people's checking has made for the next transcription model, and how much is new since a date |
 | `get_tree` | the catalog as a tree: the top sets, or one set or sefer, with the sets and items under it and how much each holds |
 | `preview_organize` | what a plan of organizing operations would change, item by item, the paths that redirect; saves nothing |
 | `organize` | a whole plan of organizing operations as one suggestion (needs `write`) |
