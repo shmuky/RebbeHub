@@ -89,6 +89,15 @@ describe('training clips from checked transcripts', () => {
     expect(summary).toMatchObject({ clips: 2, gold: 1, silver: 1, recordings: 1, hours: 0, newHours: 0 });
   });
 
+  it('leaves out a paragraph with words a listener marked unclear', async () => {
+    const { catalog, set } = await freshCatalog();
+    const { segments } = await transcribed(catalog, set, 'https://example.org/a.mp3');
+    await catalog.merge((await fixParagraph(catalog, 'chaim', { segment: segments[1]!, content: 'עס שטייט אין [פסוק?]' })).id, 'keeper');
+    const { clips, skipped } = await trainingClips(catalog);
+    expect(clips).toEqual([]);
+    expect(skipped).toEqual([{ segment: segments[1], reason: 'words marked unclear' }]);
+  });
+
   it('cuts a long paragraph at its words, and waits for word timing when it has none', async () => {
     const { catalog, set } = await freshCatalog();
     const { segments } = await transcribed(catalog, set, 'https://example.org/a.mp3');

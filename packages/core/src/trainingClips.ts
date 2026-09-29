@@ -1,4 +1,4 @@
-import type { EntityId } from '@rebbehub/model';
+import { hasUnclear, type EntityId } from '@rebbehub/model';
 import type { Catalog } from './catalog.js';
 
 /**
@@ -73,7 +73,7 @@ export interface TrainingClip {
 
 export interface TrainingSkip {
   segment: EntityId;
-  reason: 'no timing' | 'long, waiting for word timing' | 'too short' | 'words and timing disagree' | 'no audio';
+  reason: 'no timing' | 'long, waiting for word timing' | 'too short' | 'words and timing disagree' | 'no audio' | 'words marked unclear';
 }
 
 export interface TrainingSummary {
@@ -176,6 +176,11 @@ export async function trainingClips(catalog: Catalog, options: { since?: string;
     }
     if (!row.span) {
       skipped.push({ segment: row.segment, reason: 'no timing' });
+      continue;
+    }
+    // A listener's guess, marked `[words?]`, is no ground truth to learn from.
+    if (hasUnclear(row.content)) {
+      skipped.push({ segment: row.segment, reason: 'words marked unclear' });
       continue;
     }
     const pieces = piecesOf(row.content, { ...row.span, startMs: Number(row.span.startMs), endMs: Number(row.span.endMs) });
