@@ -173,6 +173,12 @@ Most files need nothing, and are told apart cheaply
   publisher's. Each turn is tried and the page measured again; a page that
   does not come out level keeps no turn (`fixed`).
 
+Install Poppler first (`apt-get install poppler-utils`): pdf-fix draws
+pages with its `pdftoppm` when it is there, a hundred times faster than
+pdf.js on a big compressed scan (a 462-page book of 450 dpi pages: 81 s
+against well over an hour). Without it pdf.js draws them, correctly but
+slowly.
+
 ```sh
 rebbehub page-fixes make --work .data/page-fixes --shard 0/4   # and 1/4, 2/4, 3/4 side by side
 export CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=…         # R2 edit rights on rebbehub-public
