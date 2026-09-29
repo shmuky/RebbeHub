@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import type { Lang } from '../lib/i18n.js';
 import { Icon, type IconName } from './Icon.js';
 import { Breadcrumbs, Tabs, cx, type TabItem } from './primitives.js';
@@ -85,8 +85,42 @@ export function ItemHeader({ head, lang, flat }: { head: ItemHead; lang: Lang; f
   );
 }
 
+/**
+ * "Report a problem", "Suggest a fix": a link to a panel's id opens the
+ * panel and brings it into view, from the page's own buttons and from a
+ * link that arrives with the hash.
+ */
+function useHashPanels() {
+  useEffect(() => {
+    const open = (id: string) => {
+      const el = id ? document.getElementById(id) : null;
+      if (!(el instanceof HTMLDetailsElement)) return false;
+      el.open = true;
+      el.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      el.querySelector<HTMLElement>('input, textarea, select, button:not([type=button])')?.focus({ preventScroll: true });
+      return true;
+    };
+    open(decodeURIComponent(location.hash.slice(1)));
+    const onHash = () => open(decodeURIComponent(location.hash.slice(1)));
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as Element | null)?.closest?.('a[href^="#"]');
+      if (a && open(decodeURIComponent(a.getAttribute('href')!.slice(1)))) {
+        e.preventDefault();
+        history.replaceState(history.state, '', a.getAttribute('href')!);
+      }
+    };
+    window.addEventListener('hashchange', onHash);
+    document.addEventListener('click', onClick);
+    return () => {
+      window.removeEventListener('hashchange', onHash);
+      document.removeEventListener('click', onClick);
+    };
+  }, []);
+}
+
 export function ItemShell({ head, lang, children, side, wide }: { head: ItemHead; lang: Lang; children: ReactNode; side?: ReactNode; wide?: boolean }) {
   const slots = useContext(ItemSlots);
+  useHashPanels();
   const hasSide = Boolean(side || slots?.side);
   return (
     <>

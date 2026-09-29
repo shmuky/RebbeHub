@@ -1,0 +1,569 @@
+/* A farbrengen's page (views/EventPage.tsx): the player card, what was
+   said, its hanachos as pages, its words synced to the recording. */
+
+.event-page > * + * {
+  margin-top: 28px;
+}
+
+.event-page > .see-all {
+  margin-top: 8px;
+}
+
+.ev-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.ev-h .end {
+  margin-inline-start: auto;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* ------------------------------------------------------------ the player */
+
+.listen {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.listen-top {
+  padding: 14px 16px 10px;
+}
+
+.listen-now {
+  font-size: 12px;
+  color: var(--subtle);
+}
+
+.listen-title {
+  font-weight: 600;
+  font-size: 15px;
+  margin-top: 2px;
+}
+
+.wave {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 44px;
+  margin-top: 12px;
+  direction: ltr;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+
+.wave:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.wave i {
+  flex: 1;
+  min-width: 1px;
+  background: var(--border-strong);
+  border-radius: 1px;
+}
+
+.wave i.p {
+  background: var(--text);
+}
+
+.listen-times {
+  display: flex;
+  justify-content: space-between;
+  font: 12px var(--mono);
+  color: var(--subtle);
+  margin-top: 6px;
+  direction: ltr;
+}
+
+.listen-ctrl {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  padding: 4px 0 14px;
+}
+
+.listen-ctrl button {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.listen-ctrl .pp {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--bg);
+  display: grid;
+  place-items: center;
+}
+
+.listen-ctrl .pp svg {
+  width: 20px;
+  height: 20px;
+}
+
+.listen-ctrl .pp:hover {
+  opacity: 0.88;
+}
+
+.listen-ctrl .sk {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font: 10px var(--mono);
+  color: var(--muted);
+  padding: 4px;
+  border-radius: var(--r);
+}
+
+.listen-ctrl .sk svg {
+  width: 20px;
+  height: 20px;
+  color: var(--text);
+}
+
+.listen-ctrl .sk:hover {
+  background: var(--canvas);
+}
+
+/* In a right-to-left page the skips read the way the time runs: back on the right. */
+[dir='rtl'] .listen-ctrl {
+  flex-direction: row-reverse;
+}
+
+.part-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.part-list > li + li {
+  border-top: 1px solid var(--border-muted);
+}
+
+.part {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 11px 16px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--text);
+  text-align: start;
+  cursor: pointer;
+}
+
+button.part:hover {
+  background: var(--canvas);
+}
+
+.part .n {
+  font: 12px var(--mono);
+  color: var(--subtle);
+  text-align: center;
+  display: grid;
+  place-items: center;
+}
+
+.part.on {
+  background: var(--accent-soft);
+}
+
+button.part.on:hover {
+  background: var(--accent-soft);
+}
+
+.part.on .n {
+  color: var(--accent);
+}
+
+.part.on .part-title {
+  font-weight: 600;
+}
+
+.part .d {
+  font: 12px var(--mono);
+  color: var(--subtle);
+}
+
+.part.missing {
+  cursor: default;
+}
+
+.part .miss {
+  font-size: 12px;
+  color: var(--subtle);
+}
+
+.listen-videos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--border-muted);
+}
+
+/* ------------------------------------------------------------ what was said */
+
+.said {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.said-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  padding: 12px 16px;
+}
+
+.said-row + .said-row {
+  border-top: 1px solid var(--border-muted);
+}
+
+.said-row .t {
+  font-family: var(--torah);
+  font-size: 17.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.said-row .t:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.said-row .tm {
+  align-self: center;
+  font: 12px var(--mono);
+  color: var(--muted);
+  border: 0;
+  background: none;
+  padding: 2px 4px;
+  border-radius: var(--r-sm);
+}
+
+.said-row button.tm {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.said-row button.tm:hover {
+  background: var(--accent-soft);
+}
+
+.said-row .s {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--subtle);
+}
+
+/* ------------------------------------------------------------ hanachos as pages */
+
+.thumbs {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 4px;
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.thumbs.all {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+.th {
+  flex: none;
+  width: 104px;
+}
+
+.th > a {
+  display: block;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.th .page-thumb {
+  width: 104px;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+.th > a:hover .page-thumb {
+  border-color: var(--paper-rule);
+  box-shadow: var(--shadow-paper);
+}
+
+.th .c {
+  display: grid;
+  gap: 1px;
+  margin-top: 6px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.th .c .torah-sm {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--text);
+}
+
+.th-origin {
+  font-size: 11px;
+}
+
+/* ------------------------------------------------------------ its words */
+
+#text .chips-row {
+  margin-bottom: 10px;
+}
+
+.text-modes {
+  max-width: 440px;
+}
+
+.ev-text {
+  padding-top: 14px;
+}
+
+.ev-text .src {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.segs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.seg {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.seg .n {
+  font: 11.5px var(--mono);
+  color: var(--subtle);
+  padding-top: 9px;
+}
+
+.seg-body[role='button'] {
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+
+.seg-body[role='button']:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.seg .he {
+  font-family: var(--torah);
+  font-size: 19px;
+  line-height: 1.85;
+}
+
+.seg .he.unchecked {
+  color: var(--muted);
+}
+
+.seg .en {
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.seg.play .seg-body {
+  box-shadow: inset -2px 0 0 var(--accent);
+  padding-inline-start: 12px;
+  margin-inline-start: -14px;
+  background: linear-gradient(to left, var(--accent-soft), transparent 60%);
+}
+
+[dir='ltr'] .seg.play .seg-body {
+  box-shadow: inset 2px 0 0 var(--accent);
+  background: linear-gradient(to right, var(--accent-soft), transparent 60%);
+}
+
+.seg .ts {
+  display: block;
+  margin-top: 2px;
+  font: 11px var(--mono);
+  color: var(--accent);
+}
+
+.segs.both .seg-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+}
+
+.segs.both .seg-body .ts {
+  grid-column: 1 / -1;
+}
+
+/* ------------------------------------------------------------ verbatim transcripts */
+
+.transcripts h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.transcript {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.transcript-para {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.transcript-para.active {
+  background: var(--accent-soft);
+}
+
+.transcript-para.found {
+  background: var(--mark);
+}
+
+.transcript-text {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 4px 0;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--text);
+  text-align: start;
+  cursor: pointer;
+}
+
+.transcript-para.unchecked .transcript-text {
+  color: var(--muted);
+}
+
+.transcript-para .word.spoken {
+  background: var(--mark);
+  border-radius: 2px;
+}
+
+.transcript-para .word.said {
+  color: var(--text);
+}
+
+.transcript-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12.5px;
+}
+
+.transcript-actions .link-button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------ side and foot */
+
+.year-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.year-chips .chip {
+  height: 26px;
+  font-size: 12.5px;
+}
+
+.side-list.neighbors > a,
+.side-list.elsewhere > a {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.side-list.neighbors > a .subtle,
+.side-list.elsewhere > a .subtle {
+  font-size: 12px;
+}
+
+.ev-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 640px) {
+  .said {
+    border-radius: 0;
+    border-inline: 0;
+    margin-inline: calc(var(--gutter) * -1);
+  }
+  .segs.both .seg-body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+  .ev-foot .btn {
+    flex: 1;
+    justify-content: center;
+  }
+  .text-modes {
+    max-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .th .page-thumb {
+    transition: none;
+  }
+}

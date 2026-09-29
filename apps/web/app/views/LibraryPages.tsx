@@ -394,7 +394,7 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
           <SideSources copies={copies} lang={lang} />
           <SideKeepers keepers={view.keepers} lang={lang} />
           <SideActivity about={view.about} lang={lang} more={tabTo('suggestions')} />
-          {view.workCover ? (
+          {view.workCover && (view.workCover.cover || view.workCover.sources.length) ? (
             <SideSection title={w(lang, 'shaar')}>
               <CoverChoice work={entity} cover={view.workCover} lang={lang} />
             </SideSection>

@@ -1,5 +1,6 @@
 import { threadsAbout, type AboutThread } from './about.server.js';
 import { workToc, type WorkToc } from './workView.server.js';
+import { eventView, type EventView } from './eventView.server.js';
 import type { Backlink, Cover, Entity, FileInfo, LinkGroup, RebbeHubApi, RelationLink, ScanPages, WorkCover } from './api.js';
 
 /**
@@ -44,6 +45,8 @@ export interface ItemView {
   keepers: Array<{ id: string; username: string | null; displayName: string }>;
   /** How many comments its talk page has. */
   talk: number;
+  /** A farbrengen's: what was said there, and its words synced to its recordings. */
+  event?: EventView;
 }
 
 /** A text's paragraphs, all of them, a page at a time (a hanacha may have up to 2,000; a sefer's text more). */
@@ -149,6 +152,7 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
         const file = (r.data as { file?: string }).file;
         view.files[r.id] = file ? await api.file(file) : null;
       }
+      view.event = await orNone(eventView(api, view.lists.units, recordings, url.searchParams.get('lang') === 'en' ? 'en' : 'he'), { said: [], texts: [] });
       const date = typeof d.date === 'string' ? d.date : '';
       const day = /^\d{4}-(\w{2,3}-\d{2})$/.exec(date)?.[1];
       const [otherYears, sameYear] = await Promise.all([day ? api.events({ day, limit: 50 }) : [], date ? api.events({ within: date.slice(0, 4), limit: 2000 }) : []]);

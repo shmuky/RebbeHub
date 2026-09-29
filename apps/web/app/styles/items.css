@@ -370,10 +370,27 @@ details.pick .pop {
   overflow-wrap: anywhere;
 }
 
-.side-list > a {
-  display: block;
-  padding: 3px 0;
+.side-list > a,
+.side-list > .side-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
   font-size: 13.5px;
+  color: var(--text);
+}
+
+.side-list > a:hover .grow {
+  color: var(--accent);
+}
+
+.side-list .num {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.side-list > .side-row > :first-child {
+  color: var(--text);
 }
 
 .thread-lines {
@@ -548,4 +565,20 @@ ul.list > li:first-child {
     margin-inline-start: 0;
     width: 100%;
   }
+}
+
+
+.side .linked ul.list > li > a,
+.side .sources ul.list > li > a,
+.side .sources ul.list > li > .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.side .linked .meta,
+.side .sources .meta {
+  color: var(--subtle);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }

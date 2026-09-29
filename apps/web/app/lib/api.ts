@@ -618,6 +618,11 @@ export class RebbeHubApi {
     return (await this.get<{ people: Array<{ id: string; username: string | null; displayName: string; bot: boolean }> }>('/v1/people', { ids: [...new Set(ids)].join(',') }).catch(() => ({ people: [] }))).people;
   }
 
+  /** The hanacha synced to a recording, paragraph by paragraph with where each is heard; null when none is. */
+  hanachaSync(recording: string) {
+    return this.maybe(this.get<{ text: string; alignment: string; paragraphs: Array<{ id: string; content: string; startMs: number | null; endMs: number | null; checked: boolean }> }>(`/v1/recordings/${encodeURIComponent(recording)}/hanacha`));
+  }
+
   /** Every label, with how many open issues carry it. */
   async labels() {
     return (await this.get<{ labels: Array<IssueLabel & { open: number }> }>('/v1/labels')).labels;
