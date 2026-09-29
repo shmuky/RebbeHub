@@ -212,8 +212,9 @@ export function CommandPalette({ lang, account, open, onClose, initial = '' }: {
       ['/mirrors', 'database', tu(lang, 'mirrors'), 'mirrors download הורדה'],
       ['/about', 'info', tu(lang, 'about'), 'about אודות'],
       ['/takedown', 'shield', tu(lang, 'takedown'), 'takedown הסרה'],
+      ['/connect', 'bot', lang === 'he' ? 'חיבור ל-Claude ול-ChatGPT' : 'Connect Claude or ChatGPT', 'connect claude chatgpt mcp ai agent חיבור בינה'],
     ];
-    if (account) pages.push(['/account', 'user', tu(lang, 'account'), 'account settings חשבון']);
+    if (account) pages.push(['/account', 'user', tu(lang, 'account'), 'account settings חשבון'], ['/account/developers', 'code', lang === 'he' ? 'טוקנים ו-webhooks' : 'API tokens and webhooks', 'tokens webhooks developers api טוקן']);
     if (steward) pages.push(['/admin', 'shield', tu(lang, 'admin'), 'admin ניהול']);
 
     const pageEntries: Entry[] = pages.map(([path, icon, title, kw]) => ({ id: `page-${path}`, section: 'pages', icon, title, keywords: `${title} ${kw}`, run: () => go(href(path, lang)) }));

@@ -3354,3 +3354,29 @@ a.when:hover {
 .th-title-input {
   font-size: var(--fs-xl) !important;
 }
+
+/* Asking the machines to read a scan or transcribe a recording (AskMachine.tsx) */
+.ask-machine {
+  gap: 8px;
+}
+
+.ask-machine .note svg {
+  vertical-align: -2px;
+}
+
+.ask-transcripts {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 10px 14px;
+}
+
+.ask-transcripts > summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.ask-transcripts ul {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}

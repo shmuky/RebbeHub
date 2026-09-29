@@ -180,6 +180,9 @@ const OPERATIONS: Operation[] = [
   { method: 'post', path: '/v1/suggestions/contents-map', operationId: 'mapContents', tag: 'Suggestions', summary: 'Map pages of a publication to the unit they hold (an existing unit, a new one, or words)', access: 'write', body: obj({ publication: idSchema, pages: obj({ from: int(), to: int(), scheme: { enum: ['printed', 'pdf'] } }, ['from', 'to']), unit: idSchema, newUnit: obj({ work: idSchema, label: any(), date: str() }), label: any() }, ['publication', 'pages']), ok: { status: 201, description: 'The suggestion sent for review', schema: any() } },
 
   // Organize
+  { method: 'get', path: '/v1/machine', operationId: 'machineSummary', tag: 'Machine', summary: 'What waits for the machines (OCR, transcription), what is left for them, and what they did this week', access: 'public', ok: { description: 'By kind: waiting, running, done and failed this week, and the backlog of served scans or recordings not done yet', schema: any() } },
+  { method: 'get', path: '/v1/machine/requests', operationId: 'machineRequests', tag: 'Machine', summary: 'Requests for the machines, the waiting ones in the order they are taken', access: 'public', params: [query('kind', { enum: ['ocr', 'transcript'] }), query('status', { enum: ['waiting', 'running', 'done', 'failed'] }), query('item', idSchema, 'Requests for one item'), query('items', str('Ids, comma separated (up to 100)')), limitParam(200, 50)], ok: { description: 'The requests', schema: obj({ requests: arr(ref('MachineRequest')) }, ['requests']) } },
+  { method: 'post', path: '/v1/machine/requests', operationId: 'requestMachineWork', tag: 'Machine', summary: 'Ask the machine to read a scan (ocr) or transcribe a recording (transcript)', description: 'Free CPU engines only; what they make is labelled as machine output until people check it. Asking for what already waits joins that request (200).', access: 'write', body: obj({ kind: { enum: ['ocr', 'transcript'] }, item: idSchema }, ['kind', 'item']), ok: { status: 201, description: 'The request, its place in line, and whether the machine starts at once', schema: obj({ request: ref('MachineRequest'), created: bool(), startsAtOnce: bool() }, ['request', 'created', 'startsAtOnce']) } },
   { method: 'get', path: '/v1/tree', operationId: 'catalogTree', tag: 'Organize', summary: 'The catalog as a tree: the top sets (or one set or sefer), the sets and items under them, and how much each holds', access: 'public', params: [query('root', idSchema, 'A set or a sefer (work); left out, the top sets'), query('depth', int(undefined, { minimum: 0, maximum: 4, default: 1 }), 'How many levels down'), limitParam(500, 100)], ok: { description: 'The tree', schema: obj({ root: nullable(ref('TreeNode')), children: arr(ref('TreeNode')), more: int('Children left out past the limit') }, ['root', 'children', 'more']) } },
   { method: 'post', path: '/v1/organize/preview', operationId: 'previewOrganize', tag: 'Organize', summary: 'What a plan of moves, renames, orderings, new sets and merges would change, item by item, saved nowhere', access: 'write', body: ref('OrganizePlan'), ok: { description: 'The change', schema: ref('OrganizePreview') } },
   { method: 'post', path: '/v1/organize', operationId: 'organize', tag: 'Organize', summary: 'Organize the catalog: a plan becomes one suggestion, sent for review (apply: true approves it at once where you may approve it yourself)', description: 'Operations: move, move-up, rename, reorder, create-set, delete-set, merge, split. Every old path redirects once it is approved; a merged item\'s paths lead to the item it was merged into.', access: 'write', body: ref('OrganizePlan'), ok: { status: 201, description: 'The suggestion, whether it was merged, and the change', schema: obj({ suggestion: ref('Suggestion'), merged: bool(), mayApprove: bool('Whether you may approve it yourself'), preview: ref('OrganizePreview') }, ['suggestion', 'merged', 'preview']) } },
@@ -489,6 +492,21 @@ const SCHEMAS: Record<string, Schema> = {
     },
     ['scan', 'page', 'pages', 'lines'],
   ),
+  MachineRequest: obj(
+    {
+      id: int(),
+      kind: { enum: ['ocr', 'transcript'] },
+      item: idSchema,
+      requestedBy: str(),
+      status: { enum: ['waiting', 'running', 'done', 'failed'] },
+      note: nullable(str('Why it failed, or what the machine found')),
+      createdAt: str(undefined, { format: 'date-time' }),
+      startedAt: nullable(str(undefined, { format: 'date-time' })),
+      finishedAt: nullable(str(undefined, { format: 'date-time' })),
+      position: nullable(int('Its place among the waiting requests of its kind, 1 is next')),
+    },
+    ['id', 'kind', 'item', 'status', 'createdAt'],
+  ),
   Transcript: obj(
     {
       recording: idSchema,
@@ -595,6 +613,7 @@ export const API_TAGS = [
   { name: 'Search', description: 'By names and dates, inside the words, and by meaning' },
   { name: 'Texts', description: "Scans' texts line by line, printings compared, translations" },
   { name: 'Media', description: 'Transcripts and their sync' },
+  { name: 'Machine', description: 'Asking the machines to read a scan or transcribe a recording, and their queue' },
   { name: 'Files', description: 'File bytes (while their rights allow), page images, uploads' },
   { name: 'Suggestions', description: 'Every change is a suggestion, checked and reviewed' },
   { name: 'Organize', description: 'Moving, renaming, ordering, merging and splitting: the catalog\'s tree put in order, as suggestions' },

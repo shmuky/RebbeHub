@@ -52,6 +52,8 @@ describe('the MCP server', () => {
       'open_issue',
       'suggest_items',
       'approve_suggestion',
+      'ask_machine',
+      'machine_queue',
       'get_tree',
       'preview_organize',
       'organize',

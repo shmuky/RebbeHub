@@ -67,7 +67,10 @@ export default [
   // A person's page by their handle, and what is waiting for the signed-in person.
   route('u/:username', 'routes/profile.tsx'),
   route('inbox', 'routes/inbox.tsx'),
-  route('account', 'routes/account.tsx'),
+  // Your settings, a page for each part (profile, signing in, email, following, AI apps, developers), as GitHub's are.
+  route('account/:section?', 'routes/account.tsx'),
+  // Connecting Claude, ChatGPT or another AI app to RebbeHub, for anyone: copy one address, say yes.
+  route('connect', 'routes/connect.tsx'),
   // For developers and AI agents: the docs, the interactive API reference, and llms.txt.
   route('developers/reference', 'routes/developers-reference.tsx'),
   route('developers/:page?', 'routes/developers.tsx'),

@@ -125,74 +125,92 @@
 
 /* ================================================================== the account (settings) */
 
+/* One slim line of who you are, as GitHub's settings head: no page banner. */
+.acct {
+  padding-top: 20px;
+  padding-bottom: 56px;
+}
+
 .acct-head {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
-}
-
-.acct-head .avatar.xl {
-  width: 56px;
-  height: 56px;
-  font-size: 19px;
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
 }
 
 .acct-who {
   flex: 1;
-  min-width: 200px;
-}
-
-.acct-who .page-title {
-  margin-top: 0;
-}
-
-.acct-who .pmeta {
-  margin-top: 4px;
-  font-size: var(--fs-md);
-}
-
-.acct-who .pmeta a {
-  font-family: var(--mono);
-  font-size: var(--fs-md);
-}
-
-.acct-lede {
-  margin: 14px 0 22px;
-}
-
-.acct {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 32px;
-  padding-top: 24px;
-  padding-bottom: 56px;
-  align-items: start;
-}
-
-/* The sections, listed at the side as GitHub's settings are. */
-.acct-nav {
-  position: sticky;
-  top: calc(var(--header-h) + 16px);
-  display: grid;
-  gap: 12px;
-}
-
-.acct-nav ul {
+  min-width: 180px;
   display: grid;
   gap: 2px;
 }
 
-.acct-nav ul + ul {
+.acct-name {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+
+.acct-handle {
+  font-family: var(--mono);
+  font-size: var(--fs-md);
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.acct-sub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.acct-body {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+/* The parts, listed at the side in groups as GitHub's settings are; each is its own page. */
+.acct-nav {
+  position: sticky;
+  top: calc(var(--header-h) + 16px);
+  display: grid;
+  gap: 14px;
+}
+
+.acct-group + .acct-group {
   border-top: 1px solid var(--border);
   padding-top: 12px;
 }
 
+.acct-group h2 {
+  margin: 0 0 4px;
+  padding-inline: 10px;
+  font: 600 12px / 1.4 var(--ui);
+  color: var(--subtle);
+}
+
+.acct-nav ul {
+  display: grid;
+  gap: 1px;
+}
+
 .acct-nav a {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 6px 10px;
+  padding: 5px 10px;
   border-radius: var(--r);
   color: var(--text);
   font-size: var(--fs-md);
@@ -202,6 +220,23 @@
 .acct-nav a:hover {
   background: var(--sunken);
   text-decoration: none;
+}
+
+.acct-nav a[aria-current='page'] {
+  background: var(--sunken);
+  font-weight: 600;
+}
+
+/* The mark beside the part you are on, as GitHub draws it. */
+.acct-nav a[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: -8px;
+  top: 6px;
+  bottom: 6px;
+  width: 4px;
+  border-radius: 4px;
+  background: var(--accent-strong);
 }
 
 .acct-nav a .i {
@@ -220,12 +255,125 @@
 
 .acct-main {
   display: grid;
-  gap: 20px;
+  gap: 16px;
   min-width: 0;
 }
 
-.acct-main > .box {
-  scroll-margin-top: calc(var(--header-h) + 16px);
+.acct-title {
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+}
+
+/* ================================================================== connecting an AI app */
+
+.ai-connect {
+  display: grid;
+  gap: 16px;
+}
+
+.ai-address {
+  display: grid;
+  gap: 6px;
+}
+
+.ai-copy.big code {
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.ai-apps {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.ai-apps legend {
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: 8px;
+}
+
+.ai-app-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-app-row .btn.on {
+  border-color: var(--accent-strong);
+  background: var(--accent-soft, var(--sunken));
+  font-weight: 600;
+}
+
+.ai-how {
+  display: grid;
+  gap: 12px;
+}
+
+.ai-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-inline-start: 22px;
+  list-style: decimal;
+}
+
+.ai-steps li {
+  line-height: 1.55;
+}
+
+.ai-steps .secret-line {
+  margin-top: 6px;
+}
+
+.ai-free {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.ai-free .i {
+  flex: none;
+  margin-top: 2px;
+}
+
+.ai-try {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--r);
+  background: var(--sunken);
+}
+
+.ai-try ul {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.ai-can {
+  display: grid;
+  gap: 8px;
+}
+
+.ai-can li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.ai-can .i {
+  flex: none;
+  margin-top: 3px;
+  color: var(--positive, var(--accent-strong));
 }
 
 /* A box of settings: its heading in the box's head. */
@@ -426,12 +574,11 @@
 }
 
 @media (max-width: 960px) {
-  .acct {
+  .acct-body {
     grid-template-columns: minmax(0, 1fr);
     gap: 16px;
-    padding-top: 16px;
   }
-  /* On a phone the sections are a row of links under the head, scrolled sideways. */
+  /* On a phone the parts are a row of links under the head, scrolled sideways. */
   .acct-nav {
     position: static;
     display: flex;
@@ -446,11 +593,14 @@
   .acct-nav::-webkit-scrollbar {
     display: none;
   }
+  .acct-group h2 {
+    display: none;
+  }
   .acct-nav ul {
     display: flex;
     gap: 4px;
   }
-  .acct-nav ul + ul {
+  .acct-group + .acct-group {
     border-top: 0;
     padding-top: 0;
     border-inline-start: 1px solid var(--border);
@@ -460,25 +610,24 @@
     white-space: nowrap;
     padding: 6px 10px;
   }
+  .acct-nav a[aria-current='page']::before {
+    inset-inline: 10px;
+    top: auto;
+    bottom: -4px;
+    width: auto;
+    height: 3px;
+  }
 }
 
 @media (max-width: 720px) {
   .acct-head {
-    gap: 12px;
-  }
-  .acct-head .avatar.xl {
-    width: 44px;
-    height: 44px;
-    font-size: 15px;
+    margin-bottom: 12px;
   }
   .acct-head .phead-acts {
     width: 100%;
   }
   .acct-head .phead-acts .btn {
     flex: 1;
-  }
-  .acct-lede {
-    margin-bottom: 16px;
   }
   .set-row {
     grid-template-columns: minmax(0, 1fr) auto;

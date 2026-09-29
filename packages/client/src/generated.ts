@@ -331,6 +331,20 @@ export type ScanTextPage = {
   layers?: Array<Record<string, unknown>>;
 };
 
+export type MachineRequest = {
+  id: number;
+  kind: "ocr" | "transcript";
+  /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+  item: string;
+  requestedBy?: string;
+  status: "waiting" | "running" | "done" | "failed";
+  note?: string | null;
+  createdAt: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  position?: number | null;
+};
+
 export type Transcript = {
   /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
   recording: string;
@@ -1363,6 +1377,26 @@ export interface Operations {
     input: Record<string, never>;
     output: string;
   };
+  /** Requests for the machines, the waiting ones in the order they are taken */
+  machineRequests: {
+    input: {
+      kind?: "ocr" | "transcript";
+      status?: "waiting" | "running" | "done" | "failed";
+      /** Requests for one item */
+      item?: string;
+      items?: string;
+      /** How many (at most 200) */
+      limit?: number;
+    };
+    output: {
+      requests: Array<MachineRequest>;
+    };
+  };
+  /** What waits for the machines (OCR, transcription), what is left for them, and what they did this week */
+  machineSummary: {
+    input: Record<string, never>;
+    output: Record<string, unknown>;
+  };
   /** Map pages of a publication to the unit they hold (an existing unit, a new one, or words) */
   mapContents: {
     input: {
@@ -1672,6 +1706,21 @@ export interface Operations {
     output: {
       id: number;
       number: number | null;
+    };
+  };
+  /** Ask the machine to read a scan (ocr) or transcribe a recording (transcript) */
+  requestMachineWork: {
+    input: {
+      body: {
+        kind: "ocr" | "transcript";
+        /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+        item: string;
+      };
+    };
+    output: {
+      request: MachineRequest;
+      created: boolean;
+      startsAtOnce: boolean;
     };
   };
   /** Ask people to review (asking again asks again) */
@@ -2331,6 +2380,8 @@ export const OPERATIONS = {
   listSuggestions: {"method":"GET","path":"/v1/suggestions","pathParams":[],"query":["status","state","author","reviewer","q","postReview","limit","cursor"],"body":null,"answer":"json","items":"suggestions"},
   listWebhooks: {"method":"GET","path":"/v1/webhooks","pathParams":[],"query":[],"body":null,"answer":"json"},
   llmsTxt: {"method":"GET","path":"/llms.txt","pathParams":[],"query":[],"body":null,"answer":"text"},
+  machineRequests: {"method":"GET","path":"/v1/machine/requests","pathParams":[],"query":["kind","status","item","items","limit"],"body":null,"answer":"json"},
+  machineSummary: {"method":"GET","path":"/v1/machine","pathParams":[],"query":[],"body":null,"answer":"json"},
   mapContents: {"method":"POST","path":"/v1/suggestions/contents-map","pathParams":[],"query":[],"body":"json","answer":"json"},
   markInboxRead: {"method":"POST","path":"/v1/inbox/read","pathParams":[],"query":[],"body":"json","answer":"json"},
   mcp: {"method":"POST","path":"/mcp","pathParams":[],"query":[],"body":"json","answer":"json"},
@@ -2357,6 +2408,7 @@ export const OPERATIONS = {
   releaseClaim: {"method":"POST","path":"/v1/projects/{slug}/release","pathParams":["slug"],"query":[],"body":"json","answer":"json"},
   removeReviewRequest: {"method":"DELETE","path":"/v1/suggestions/{id}/review-requests/{username}","pathParams":["id","username"],"query":[],"body":null,"answer":"json"},
   report: {"method":"POST","path":"/v1/reports","pathParams":[],"query":[],"body":"json","answer":"json"},
+  requestMachineWork: {"method":"POST","path":"/v1/machine/requests","pathParams":[],"query":[],"body":"json","answer":"json"},
   requestReview: {"method":"POST","path":"/v1/suggestions/{id}/review-requests","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   requestTakedown: {"method":"POST","path":"/v1/takedowns","pathParams":[],"query":[],"body":"json","answer":"json"},
   resolveComment: {"method":"POST","path":"/v1/comments/{id}/resolve","pathParams":["id"],"query":[],"body":"json","answer":"json"},
@@ -2825,6 +2877,16 @@ export abstract class GeneratedMethods {
     return this.call('llmsTxt', {} as Operations['llmsTxt']['input']);
   }
 
+  /** Requests for the machines, the waiting ones in the order they are taken (GET /v1/machine/requests) */
+  machineRequests(input?: Operations['machineRequests']['input']): Promise<Operations['machineRequests']['output']> {
+    return this.call('machineRequests', input ?? {} as Operations['machineRequests']['input']);
+  }
+
+  /** What waits for the machines (OCR, transcription), what is left for them, and what they did this week (GET /v1/machine) */
+  machineSummary(): Promise<Operations['machineSummary']['output']> {
+    return this.call('machineSummary', {} as Operations['machineSummary']['input']);
+  }
+
   /** Map pages of a publication to the unit they hold (an existing unit, a new one, or words) (POST /v1/suggestions/contents-map) */
   mapContents(input: Operations['mapContents']['input']): Promise<Operations['mapContents']['output']> {
     return this.call('mapContents', input ?? {} as Operations['mapContents']['input']);
@@ -2953,6 +3015,11 @@ export abstract class GeneratedMethods {
   /** Report a problem (no account needed: a captcha and an hourly limit instead) (POST /v1/reports) */
   report(input: Operations['report']['input']): Promise<Operations['report']['output']> {
     return this.call('report', input ?? {} as Operations['report']['input']);
+  }
+
+  /** Ask the machine to read a scan (ocr) or transcribe a recording (transcript) (POST /v1/machine/requests) */
+  requestMachineWork(input: Operations['requestMachineWork']['input']): Promise<Operations['requestMachineWork']['output']> {
+    return this.call('requestMachineWork', input ?? {} as Operations['requestMachineWork']['input']);
   }
 
   /** Ask people to review (asking again asks again) (POST /v1/suggestions/{id}/review-requests) */
