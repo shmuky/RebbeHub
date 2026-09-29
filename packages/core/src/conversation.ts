@@ -375,12 +375,16 @@ export async function listSuggestions(
   if (options.about) {
     // About an item: a suggestion that changes it, or what is in it (a sefer's sichos and their texts, a sicha's
     // texts and their paragraphs, a farbrengen's sichos). One statement here, where an item's page used to open every
-    // suggestion in full to find the ones about it.
+    // suggestion in full to find the ones about it. Each line is a lookup in an index over what a version points at
+    // (migration 0026); written as one test of every version, this read all 141,000 of them, twice a page.
     const ids = `$${params.push([...new Set(options.about)].slice(0, 500))}::text[]`;
     filters.push(
-      `EXISTS (SELECT 1 FROM revision r WHERE r.changeset_id = c.id AND (r.entity_id = ANY(${ids})
-         OR r.data->>'work' = ANY(${ids}) OR r.data->>'unit' = ANY(${ids}) OR r.data->>'text' = ANY(${ids}) OR r.data->>'event' = ANY(${ids})
-         OR r.data->>'unit' IN (SELECT u.from_id FROM entity_ref u WHERE u.field = 'work' AND u.to_id = ANY(${ids}))))`,
+      `c.id IN (SELECT r.changeset_id FROM revision r WHERE r.entity_id = ANY(${ids})
+         UNION SELECT r.changeset_id FROM revision r WHERE r.data->>'work' = ANY(${ids})
+         UNION SELECT r.changeset_id FROM revision r WHERE r.data->>'unit' = ANY(${ids})
+         UNION SELECT r.changeset_id FROM revision r WHERE r.data->>'text' = ANY(${ids})
+         UNION SELECT r.changeset_id FROM revision r WHERE r.data->>'event' = ANY(${ids})
+         UNION SELECT r.changeset_id FROM revision r JOIN entity_ref u ON u.from_id = r.data->>'unit' WHERE u.field = 'work' AND u.to_id = ANY(${ids}))`,
     );
   }
   if (options.reviewer) filters.push(`EXISTS (SELECT 1 FROM review_request q WHERE q.changeset_id = c.id AND q.reviewer = $${params.push(options.reviewer)})`);

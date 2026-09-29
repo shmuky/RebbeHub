@@ -140,6 +140,16 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Fixed
 
+- **An item's page finds the suggestions about it in a lookup, not a
+  read of every version.** "About an item" means a suggestion with a
+  version of it or of what is in it (a sefer's sichos, a sicha's texts, a
+  farbrengen's recordings). Finding them tested every version in the
+  database, 141,000 of them, unpacking each one's data, twice a page: ten
+  seconds of the database's time for every item page, a work's page
+  eleven seconds in all. Four indexes over what a version points at
+  (migration 0026) make each part of the question a lookup: the same
+  question answers in under fifty milliseconds.
+
 - **A page is one Worker and one database connection.** The site's Worker
   answers a page's reads of the API itself, with the API running inside
   it over one connection to Postgres the page opens and closes, instead
@@ -160,7 +170,8 @@ any time. `@rebbehub/client` carries the API's version.
   them are now kept with each item (`entity.search_tsv`, migration 0024)
   and indexed, so a search matches and ranks from what is kept. The
   places a search's words are (`/v1/search/moments`) are found the same
-  way.
+  way. The old index over the expression is dropped (migration 0025), so
+  a write no longer computes an item's words twice.
 
 - **A calendar year is a quarter lighter, and the home page's feed a
   third cheaper to make.** The calendar's year, the home page's week and
