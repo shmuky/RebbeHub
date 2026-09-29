@@ -82,16 +82,51 @@ files, not here, since the texts can't be.
 Every night the *Machine transcription* workflow takes the recordings
 people asked for (the button under a farbrengen's parts, the API, the
 `ask_machine` MCP tool, `rebbehub machine ask`), then the newest
-recordings with no transcript, `TRANSCRIBE_NIGHTLY` in all, always with
-the local engine. With `GITHUB_DISPATCH_TOKEN` set on the API, a request
-starts the workflow at once for what was asked ([deploy](deploy.md#7-machine-ocr-and-transcription)).
-A rented GPU is never started this way: each GPU run waits for a person.
+recordings with no transcript, `TRANSCRIBE_NIGHTLY` for each worker,
+always with the local engine. A run can be split into workers side by
+side (`TRANSCRIBE_WORKERS`, or **workers** when started by hand), each
+taking its own part of the recordings. With `GITHUB_DISPATCH_TOKEN` set
+on the API, a request starts the workflow at once for what was asked
+([deploy](deploy.md#7-machine-ocr-and-transcription)). A rented GPU is
+never started this way: each GPU run waits for a person.
+
+## The retraining cycle
+
+Every correction people make is training data for the next version,
+gathered with nobody doing it by hand:
+
+1. **People check.** On a farbrengen's transcript, **Heard right** marks a
+   paragraph's words checked as they are; **Fix** corrects them. Under the
+   editor the house spelling is shown (the booklets': אויך, דעמאלט,
+   ברענגט, ע"י as written; `packages/model/src/spelling.ts`), with a hint
+   for each word written otherwise, so everything checked is in one
+   spelling. Both go for review like any suggestion.
+2. **The machine times the words again.** A corrected paragraph loses its
+   word timings. The nightly run then runs `rebbehub align` on the
+   recordings with corrected paragraphs first, timing the new words.
+3. **They become clips.** `GET /v1/machine/training/clips` (or
+   `rebbehub training-clips --out clips-site.jsonl`) gives every checked
+   paragraph as clips in the training script's own format: `audio`,
+   `start`, `end`, `text`, `split`, and `group: "site"`. Paragraphs over
+   28 seconds are cut between words. A clip is `gold` when a person also
+   set where it is heard, `silver` when that timing is the machine's.
+   Each recording is wholly in `train` or wholly in `test`, by a hash of
+   its id that never changes (one in ten is `test`), so a version is never
+   scored on audio it learned from.
+4. **When there is enough, train.** `GET /v1/machine/training?since=<the
+   last version's date>` (or the `training_data` MCP tool) says how many
+   new hours people have checked. Training still waits for Shmuly's OK
+   for each paid GPU run; the clips go in with the booklets' and 5742's
+   (`train.py --clips clips-5742.jsonl clips-booklets.jsonl
+   clips-site.jsonl`), and the version is published to R2 only when it
+   scores better on the same held-out farbrengens.
+5. **The workflow picks it up.** The next transcription run uses the
+   highest `models/rebbehub-whisper-v<N>/` in R2.
 
 ## Next
 
 1. Run the local engine over a year of farbrengens and sync their
    hanachos; everything stays labelled as machine output.
-2. Train the next version the way v2 was: the newest model hears the
-   recordings, and the text comes from word-for-word booklets and the
-   paragraphs people correct on the site. Keep the same held-out
-   farbrengens and publish a version to R2 only when it scores better.
+2. Train the next version the way v2 was, adding the site's clips (the
+   retraining cycle above). Keep the same held-out farbrengens and
+   publish a version to R2 only when it scores better.

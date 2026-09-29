@@ -316,9 +316,11 @@ export async function recordingTranscript(catalog: Catalog, recording: EntityId)
 
 /**
  * Fixes a paragraph of a transcript as a suggestion: its words as the
- * person heard them, marked checked. Its word timings no longer fit the
- * corrected words, so they are let go (the paragraph keeps where it is
- * heard) until the next alignment run times the new words.
+ * person heard them, marked checked. When the words changed, their word
+ * timings no longer fit, so they are let go (the paragraph keeps where it
+ * is heard) until the next alignment run times the new words; words
+ * checked unchanged keep theirs, and are training clips at once
+ * (trainingClips.ts).
  */
 export async function fixParagraph(catalog: Catalog, by: string, input: { segment: EntityId; content: string }): Promise<ChangesetRow> {
   const content = input.content.replace(/\s+/g, ' ').trim();
@@ -332,7 +334,7 @@ export async function fixParagraph(catalog: Catalog, by: string, input: { segmen
     type: 'segment',
     data: { ...data, content, proofread: 1, ...(data.origin ? { origin: { ...data.origin, checked: true } } : {}) } as Json,
   });
-  const spans = await catalog.backlinks(segment.id, { field: 'segment', type: 'alignment-span' });
+  const spans = data.content === content ? [] : await catalog.backlinks(segment.id, { field: 'segment', type: 'alignment-span' });
   for (const s of spans) {
     const span = await catalog.get(s.from);
     const sd = span?.data as unknown as SpanData | undefined;

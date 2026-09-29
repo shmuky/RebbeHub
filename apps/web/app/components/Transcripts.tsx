@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
+import { spellingHints } from '@rebbehub/model';
 import { t, type Lang } from '../lib/i18n.js';
 import { clockOf, tn } from '../lib/i18nNetwork.js';
 import { href } from '../lib/links.js';
@@ -98,6 +99,27 @@ function Spoken({ content, words, nowMs }: { content: string; words: Word[]; now
   return <>{out}</>;
 }
 
+/** The house spelling (the booklets'), where the words being written differ from it: a hint, never a change. */
+function SpellingHints({ text, lang }: { text: string; lang: Lang }) {
+  const hints = spellingHints(text);
+  return (
+    <p className="note spelling-hints">
+      {t(lang, 'houseSpelling')}
+      {hints.length ? (
+        <>
+          {' '}
+          {hints.map((h, i) => (
+            <span key={h.written} dir="rtl">
+              {i ? ', ' : ''}
+              {h.written} ← <strong>{h.house}</strong>
+            </span>
+          ))}
+        </>
+      ) : null}
+    </p>
+  );
+}
+
 function Para({
   recording,
   paragraph,
@@ -137,6 +159,7 @@ function Para({
     return (
       <li ref={ref} className="transcript-para editing">
         <textarea value={editing} onChange={(e) => setEditing(e.target.value)} rows={4} dir="auto" autoFocus />
+        <SpellingHints text={editing} lang={lang} />
         <div className="actions">
           <button
             type="button"
@@ -174,6 +197,17 @@ function Para({
     }
   }
 
+  // "Heard right": the words checked as they are, keeping their word timings, so the paragraph is a training clip at once.
+  async function heardRight() {
+    setError(null);
+    try {
+      await postJson(`recordings/${recording}/transcript/fix`, { segment: paragraph.id, content: paragraph.content });
+      setSent('text');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   const classes = ['transcript-para', active ? 'active' : '', found ? 'found' : '', paragraph.checked ? '' : 'unchecked', paragraph.syncChecked === false ? 'sync-unchecked' : ''].filter(Boolean).join(' ');
   return (
     <li ref={ref} id={`p-${paragraph.id}`} className={classes}>
@@ -191,6 +225,11 @@ function Para({
         {canFix && playing && paragraph.startMs !== null && sent !== 'sync' ? (
           <button type="button" className="link-button said-now" onClick={saidNow} title={t(lang, 'saidNowHint')}>
             {t(lang, 'saidNow')}
+          </button>
+        ) : null}
+        {canFix && !sent && !paragraph.checked ? (
+          <button type="button" className="link-button" onClick={heardRight} title={t(lang, 'heardRightHint')}>
+            {t(lang, 'heardRight')}
           </button>
         ) : null}
         {canFix && !sent ? (

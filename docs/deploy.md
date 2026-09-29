@@ -146,9 +146,14 @@ npm run rebbehub -- import sichos-kodesh-occasions --from ../Sichos-Kodesh --app
   workflow** reads more at once.
 - **Machine transcription** transcribes recordings with Whisper. Every
   night it takes the recordings people asked for, then the newest with no
-  transcript, `TRANSCRIBE_NIGHTLY` in all (a repository *variable*, 1
-  when unset, 0 to turn the nightly run off), always with the free local
-  engine. Started by hand, it takes any engine and limit.
+  transcript, `TRANSCRIBE_NIGHTLY` for each worker (a repository
+  *variable*, 1 when unset, 0 to turn the nightly run off), always with
+  the free local engine, then times the words people corrected
+  (`rebbehub align`) so they become training clips. `TRANSCRIBE_WORKERS`
+  (1, 2, 4, 8 or 16; 1 when unset) splits the nightly run into workers
+  side by side, each with its own recordings. Started by hand, it takes
+  any engine, limit and number of **workers**; the limit is per worker,
+  and a worker gets through about six hours of recordings in a run.
   Its **engine** box picks who hears them: `local` (the default), ivrit.ai's
   Yiddish Whisper on the runner's CPU, free, about a quarter of the
   recording's length ([transcription](transcription.md)); or `workers-ai`,

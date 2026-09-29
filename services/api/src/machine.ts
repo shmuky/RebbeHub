@@ -1,5 +1,5 @@
 import type { Context, Hono } from 'hono';
-import { machineRequests, machineSummary, requestMachineWork, type Catalog, type MachineKind, type MachineRequestStatus } from '@rebbehub/core';
+import { machineRequests, machineSummary, requestMachineWork, summariseTraining, trainingClips, type Catalog, type MachineKind, type MachineRequestStatus } from '@rebbehub/core';
 import { readId, type EntityId } from '@rebbehub/model';
 import { HttpError } from './app.js';
 
@@ -13,6 +13,10 @@ import { HttpError } from './app.js';
  *   POST /v1/machine/requests { kind, item }
  *                                         "read this scan" (ocr) or "transcribe this recording"
  *                                         (transcript); asking again joins the waiting request
+ *   GET  /v1/machine/training?since=      the next Rebbe Whisper's training data so far: hours, clips,
+ *                                         and what was checked since the last round
+ *   GET  /v1/machine/training/clips       those clips, one JSON object a line, as the training
+ *                                         script reads them (core/trainingClips.ts)
  *
  * A request is answered by the free CPU jobs (services/jobs): at once
  * when `dispatch` can start them (GitHub Actions), else on their nightly
@@ -31,6 +35,21 @@ export function machineRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context
   };
 
   app.get('/v1/machine', async (c) => c.json({ ...(await machineSummary(catalog)), startsAtOnce: Boolean(options.dispatch) }));
+
+  // The retraining cycle's data: what people's checking has made so far. One query each; the words are the site's own, the audio stays where it is.
+  app.get('/v1/machine/training', async (c) => {
+    const since = c.req.query('since');
+    if (since && Number.isNaN(Date.parse(since))) throw new HttpError(400, 'since is a date, like 2026-09-29');
+    c.header('Cache-Control', 'public, max-age=3600');
+    return c.json(summariseTraining(await trainingClips(catalog), since));
+  });
+
+  app.get('/v1/machine/training/clips', async (c) => {
+    const { clips } = await trainingClips(catalog);
+    return new Response(clips.map((clip) => JSON.stringify(clip)).join('\n') + (clips.length ? '\n' : ''), {
+      headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'public, max-age=3600', 'Content-Disposition': 'inline; filename="clips-site.jsonl"' },
+    });
+  });
 
   app.get('/v1/machine/requests', async (c) => {
     const kind = c.req.query('kind');

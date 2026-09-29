@@ -211,7 +211,8 @@ export async function takeMachineRequests(catalog: Catalog, kind: MachineKind, l
      WHERE id IN (
        SELECT id FROM machine_request
        WHERE kind = $1 AND (status = 'waiting' OR (status = 'running' AND started_at < now() - make_interval(hours => $3)))
-       ORDER BY created_at, id LIMIT $2)
+       ORDER BY created_at, id LIMIT $2
+       FOR UPDATE SKIP LOCKED)
      RETURNING id`,
     [kind, Math.max(0, limit), stale],
   );
