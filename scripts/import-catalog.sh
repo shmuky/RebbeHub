@@ -79,7 +79,9 @@ if [ "$(DATABASE_URL=$live rebbehub rebuildable | tail -n 1)" != "rebuildable" ]
   # had when it was copied: anything anyone did meanwhile stops the copy, never lost.
   echo "People have added to the live catalog: importing next to a copy of it, then copying it back."
   mark=$(DATABASE_URL=$live rebbehub rebuildable --mark | tail -n 1)
-  pgtool pg_dump --no-owner --no-privileges --exclude-schema=auth "$live" | pgtool psql "$BUILD_DATABASE_URL" --quiet --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --output /dev/null
+  # The auth schema comes along empty: the catalog's triggers call its functions
+  # (auth.number_thread numbers Suggestions and Reports), but nobody's account leaves.
+  pgtool pg_dump --no-owner --no-privileges --exclude-table-data='auth.*' "$live" | pgtool psql "$BUILD_DATABASE_URL" --quiet --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --output /dev/null
   import_into "$BUILD_DATABASE_URL"
   copy_build_to_live "$(DATABASE_URL=$live rebbehub rebuildable --guard-mark "$mark")"
   echo "Copied: the live catalog is the import's result, with everything people had made."
