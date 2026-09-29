@@ -332,6 +332,191 @@ function tools(siteUrl: string): Tool[] {
         return { text: `Issue #${number} opened. ${site}/issues/${number}`, structured: { number, url: `${site}/issues/${number}` } };
       },
     },
+    ...organizeTools(site),
+  ];
+}
+
+/** A place among siblings, as the organize tools take it. */
+const POSITION = {
+  description: 'Where among its siblings: "start", "end" (the default), { "after": id } or { "before": id }',
+  oneOf: [{ enum: ['start', 'end'] }, { type: 'object', properties: { after: ID }, required: ['after'], additionalProperties: false }, { type: 'object', properties: { before: ID }, required: ['before'], additionalProperties: false }],
+};
+const LOCAL_NAME = { type: 'object', properties: { he: { type: 'string', maxLength: 300 }, en: { type: 'string', maxLength: 300 } }, additionalProperties: false };
+const SUGGESTION_WORDS = {
+  title: { type: 'string', maxLength: 200, description: "The suggestion's title (made from the change when left out)" },
+  note: { type: 'string', maxLength: 2000, description: 'Why, for the reviewers' },
+};
+const ORGANIZE_NOTE =
+  ' It becomes one suggestion under your account, reviewed by the keepers of the sets it touches (stewards for sets themselves); nothing changes until it is approved, and old paths redirect after. Needs a RebbeHub API token with the write scope. preview_organize shows the change first.';
+const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+const OPERATIONS = {
+  type: 'array',
+  minItems: 1,
+  maxItems: 200,
+  items: { type: 'object', properties: { op: { enum: ['move', 'move-up', 'rename', 'reorder', 'create-set', 'delete-set', 'merge', 'split'] } }, required: ['op'], additionalProperties: true },
+  description:
+    'Done in order; items are ids, or new:<key> for a set made earlier in the plan. move { items, to, from?, mode?, position? }, move-up { items, from? }, rename { item, name?, slug?, path? }, reorder { items, parent?, position? }, create-set { key?, name, slug, parent?, items? }, delete-set { item }, merge { from, into }, split { work, units? or range: { from, to }, title, slug }.',
+};
+
+/**
+ * The organize tools: each makes one plan of operations (core/organize.ts)
+ * and sends it through the API's POST /v1/organize as the agent, so what it
+ * does is one suggestion, reviewed like anyone's.
+ */
+function organizeTools(site: string): Tool[] {
+  const send = async (call: ApiCall, operations: unknown[], args: Record<string, unknown>): Promise<ToolResult> => {
+    const made = await need(call, 'POST', '/v1/organize', { operations, title: typeof args.title === 'string' ? args.title : undefined, description: typeof args.note === 'string' ? args.note : undefined });
+    const s = made.suggestion;
+    const url = s.number != null ? `${site}/suggestions/${s.number}` : `${site}/review?s=${s.id}`;
+    const preview = made.preview;
+    const lines = [
+      `Suggestion ${s.number != null ? `#${s.number}` : s.id} "${s.title}": ${made.merged ? 'merged' : `sent for review (${s.status})`}. ${url}`,
+      ...preview.summary.map((line: string) => `- ${line}`),
+      `${preview.items.length} item${preview.items.length === 1 ? '' : 's'} changed${preview.redirects.length ? `; ${preview.redirects.length} old path${preview.redirects.length === 1 ? '' : 's'} will redirect once approved` : ''}.`,
+      ...preview.warnings.map((w: string) => `Note: ${w}`),
+    ];
+    return {
+      text: lines.join('\n'),
+      structured: { suggestion: s.id, number: s.number ?? null, status: s.status, merged: made.merged, url, summary: preview.summary, items: preview.items.length, redirects: preview.redirects, forwards: preview.forwards, warnings: preview.warnings, created: preview.created },
+    };
+  };
+  const ids = (value: unknown): string[] => {
+    if (!Array.isArray(value) || value.length === 0 || !value.every((v) => typeof v === 'string')) throw new ToolError('give items: a list of ids');
+    return value as string[];
+  };
+  const ITEMS = { type: 'array', items: ID, minItems: 1, maxItems: 5000 };
+  const label = (n: any) => [n.name?.he, n.name?.en].filter(Boolean).join(' / ') || n.id;
+  const counts = (n: any) => Object.entries(n.counts ?? {}).map(([k, v]) => `${v} ${k}`).join(', ');
+
+  return [
+    {
+      name: 'get_tree',
+      title: 'See the tree',
+      description:
+        "The catalog as a tree, for organizing it: the top sets (no root), or one set or sefer, with the sets under it, the sefarim and other items in it (sefarim first, in their order) and how much each holds (sets, items, units). depth goes further down (a set's sefarim's units at depth 2).",
+      inputSchema: { type: 'object', properties: { root: { ...ID, description: 'A set or sefer; left out, the top sets' }, depth: { type: 'integer', minimum: 0, maximum: 4, default: 1 }, limit: { type: 'integer', minimum: 1, maximum: 500, default: 100 } }, additionalProperties: false },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      async run(args, call) {
+        const params = new URLSearchParams();
+        if (typeof args.root === 'string') params.set('root', args.root);
+        if (args.depth !== undefined) params.set('depth', String(Math.min(Math.max(Number(args.depth) || 0, 0), 4)));
+        if (args.limit !== undefined) params.set('limit', String(Math.min(Math.max(Number(args.limit) || 100, 1), 500)));
+        const tree = await need(call, 'GET', `/v1/tree?${params}`);
+        const lines: string[] = [];
+        const walk = (nodes: any[], indent: string) => {
+          for (const n of nodes) {
+            lines.push(`${indent}- ${label(n)} (${n.type}, ${n.id}${n.path ? `, ${n.path}` : ''})${counts(n) ? ` [${counts(n)}]` : ''}`);
+            if (n.children) walk(n.children, `${indent}  `);
+            if (n.more) lines.push(`${indent}  … ${n.more} more`);
+          }
+        };
+        if (tree.root) lines.push(`${label(tree.root)} (${tree.root.type}, ${tree.root.id}) [${counts(tree.root)}]`);
+        walk(tree.children, tree.root ? '  ' : '');
+        if (!tree.root && tree.more) lines.push(`… ${tree.more} more top sets`);
+        return { text: lines.length ? lines.join('\n') : 'Nothing here.', structured: tree };
+      },
+    },
+    {
+      name: 'preview_organize',
+      title: 'Preview organizing',
+      description:
+        'See what a plan of organizing operations would change, item by item, without saving anything: the fields that change, the paths that move and redirect, notes. Send the same operations with organize (or use the single-step tools) to make the suggestion.',
+      inputSchema: { type: 'object', properties: { operations: OPERATIONS }, required: ['operations'], additionalProperties: false },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      async run(args, call) {
+        if (!Array.isArray(args.operations) || args.operations.length === 0) throw new ToolError('give operations: a list of { op, … }');
+        const preview = await need(call, 'POST', '/v1/organize/preview', { operations: args.operations });
+        const lines = [
+          `Would make one suggestion: "${preview.title}"`,
+          ...preview.summary.map((l: string) => `- ${l}`),
+          ...preview.items.slice(0, 50).map((i: any) => `  ${i.deleted ? 'delete' : i.isNew ? 'new' : 'change'} ${i.type} ${i.name} (${i.id})${i.pathBefore !== i.path ? `: ${i.pathBefore ?? '-'} → ${i.path ?? '-'}` : ''}${i.changes.length ? `; ${i.changes.map((c: any) => c.path).join(', ')}` : ''}`),
+          preview.items.length > 50 ? `  … and ${preview.items.length - 50} more items` : '',
+          ...preview.warnings.map((w: string) => `Note: ${w}`),
+        ].filter(Boolean);
+        return { text: lines.join('\n'), structured: preview };
+      },
+    },
+    {
+      name: 'organize',
+      title: 'Organize (a whole plan)',
+      description: `Send a plan of organizing operations (as preview_organize takes them) as one suggestion: several moves, renames and merges reviewed together.${ORGANIZE_NOTE}`,
+      inputSchema: { type: 'object', properties: { operations: OPERATIONS, ...SUGGESTION_WORDS }, required: ['operations'], additionalProperties: false },
+      annotations: WRITE,
+      async run(args, call) {
+        if (!Array.isArray(args.operations) || args.operations.length === 0) throw new ToolError('give operations: a list of { op, … }');
+        return send(call, args.operations, args);
+      },
+    },
+    {
+      name: 'move_items',
+      title: 'Move items',
+      description: `Move items under a new parent: sefarim (or any items) into a set (with from, out of that set; mode "only" makes it their one set); to null with from takes them out of that set; a set under another set, or to the top (to null); sichos (units) to another sefer, at the end or at a position, their paths moving along; a printing to another sefer, a scan to another printing, a recording to another farbrengen. A set never goes under its own descendant.${ORGANIZE_NOTE}`,
+      inputSchema: { type: 'object', properties: { items: ITEMS, to: { oneOf: [ID, { type: 'null' }], description: 'The new parent, or null (to the top, or out of `from`)' }, from: { ...ID, description: 'The set they leave' }, mode: { enum: ['add', 'only'], default: 'add' }, position: POSITION, ...SUGGESTION_WORDS }, required: ['items', 'to'], additionalProperties: false },
+      annotations: WRITE,
+      async run(args, call) {
+        return send(call, [{ op: 'move', items: ids(args.items), to: args.to ?? null, from: args.from, mode: args.mode, position: args.position }], args);
+      },
+    },
+    {
+      name: 'move_up',
+      title: 'Move up a level',
+      description: `Move items one level up the tree: a set to its parent's parent (the top, when its parent is a top set); a sefer out of a set into that set's parent set (from says which set, when it is in several).${ORGANIZE_NOTE}`,
+      inputSchema: { type: 'object', properties: { items: ITEMS, from: { ...ID, description: 'The set they move up out of' }, ...SUGGESTION_WORDS }, required: ['items'], additionalProperties: false },
+      annotations: WRITE,
+      async run(args, call) {
+        return send(call, [{ op: 'move-up', items: ids(args.items), from: args.from }], args);
+      },
+    },
+    {
+      name: 'rename_item',
+      title: 'Rename an item',
+      description: `Give an item (a set, a sefer, a sicha…) a new name in Hebrew and/or English, and optionally a new slug (the last part of its path; a set's slug too) or a whole new path. The old path redirects, and paths made from it (a sefer's sichos) move along.${ORGANIZE_NOTE}`,
+      inputSchema: { type: 'object', properties: { item: ID, name: LOCAL_NAME, slug: { type: 'string', pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' }, path: { type: 'string', description: 'A whole new path, starting with /' }, ...SUGGESTION_WORDS }, required: ['item'], additionalProperties: false },
+      annotations: WRITE,
+      async run(args, call) {
+        return send(call, [{ op: 'rename', item: args.item, name: args.name, slug: args.slug, path: args.path }], args);
+      },
+    },
+    {
+      name: 'reorder_children',
+      title: 'Put items in order',
+      description: `Put siblings in order: a sefer's sichos, the sefarim of a set, the sets under a set (parent null for the top sets). Without position, the items take the places they hold now in the order given (give the whole list for a whole new order); with it, they go together to the start, the end, or beside a sibling. Only the items whose place changes are changed.${ORGANIZE_NOTE}`,
+      inputSchema: { type: 'object', properties: { items: ITEMS, parent: { oneOf: [ID, { type: 'null' }], description: 'Whose children they are, where it is not clear (a sefer in two sets); null for the top sets' }, position: POSITION, ...SUGGESTION_WORDS }, required: ['items'], additionalProperties: false },
+      annotations: WRITE,
+      async run(args, call) {
+        return send(call, [{ op: 'reorder', items: ids(args.items), parent: args.parent, position: args.position }], args);
+      },
+    },
+    {
+      name: 'create_set',
+      title: 'Make a set',
+      description: `Make a new set, under a parent set or at the top, kept like its parent (the same keepers and policy), optionally moving items into it at once. Its path is /sets/<slug>.${ORGANIZE_NOTE}`,
+      inputSchema: { type: 'object', properties: { name: { ...LOCAL_NAME, required: ['he'] }, slug: { type: 'string', pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' }, parent: { ...ID, description: 'The set it goes under' }, description: LOCAL_NAME, items: { ...ITEMS, description: 'Items to move into it' }, ...SUGGESTION_WORDS }, required: ['name', 'slug'], additionalProperties: false },
+      annotations: WRITE,
+      async run(args, call) {
+        return send(call, [{ op: 'create-set', key: 'set', name: args.name, slug: args.slug, parent: args.parent, description: args.description, items: args.items }], args);
+      },
+    },
+    {
+      name: 'delete_set',
+      title: 'Remove an empty set',
+      description: `Remove a set that holds nothing (no sets under it, no items in it; move them out first). Its path then leads to its parent set.${ORGANIZE_NOTE}`,
+      inputSchema: { type: 'object', properties: { item: ID, ...SUGGESTION_WORDS }, required: ['item'], additionalProperties: false },
+      annotations: { ...WRITE, destructiveHint: true },
+      async run(args, call) {
+        return send(call, [{ op: 'delete-set', item: args.item }], args);
+      },
+    },
+    {
+      name: 'merge_items',
+      title: 'Merge duplicates',
+      description: `Merge a duplicate into the item to keep (both of one type: two sefarim, two sets, two sichos…): everything under or pointing at the duplicate moves to the one kept, what it lacks is taken from the duplicate (external ids, sets, editions joined), and the duplicate is deleted, its paths leading to the one kept. For sorting a library's books into sefarim already in the catalog.${ORGANIZE_NOTE}`,
+      inputSchema: { type: 'object', properties: { from: { ...ID, description: 'The duplicate, deleted' }, into: { ...ID, description: 'The item kept' }, ...SUGGESTION_WORDS }, required: ['from', 'into'], additionalProperties: false },
+      annotations: { ...WRITE, destructiveHint: true },
+      async run(args, call) {
+        return send(call, [{ op: 'merge', from: args.from, into: args.into }], args);
+      },
+    },
   ];
 }
 
@@ -362,7 +547,7 @@ export function mcpRoutes(app: Hono, options: { siteUrl: string; version: string
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: MCP_SERVER_NAME, title: 'RebbeHub', version: options.version, websiteUrl: `${options.siteUrl.replace(/\/+$/, '')}/developers` },
           instructions:
-            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix (write scope; you will be asked to connect your RebbeHub account) makes a suggestion under the connected person\'s account that people review before anything changes; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into.',
+            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix (write scope; you will be asked to connect your RebbeHub account) makes a suggestion under the connected person\'s account that people review before anything changes; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into. To organize the catalog, get_tree shows it; move_items, move_up, rename_item, reorder_children, create_set, delete_set, merge_items and organize (write scope) each make one suggestion that people review; preview_organize shows the change first.',
         };
       }
       case 'ping':

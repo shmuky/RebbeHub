@@ -37,6 +37,9 @@ export default [
   route('_/steward/*', 'routes/admin-pass.ts'),
   // People and conversations: @mentions, #numbers, reviews, issues and the inbox.
   route('_/threads/*', 'routes/threads-pass.ts'),
+  // Organizing the catalog: moving, renaming, ordering and merging, as one suggestion.
+  route('organize', 'routes/organize.tsx'),
+  route('_/organize/*', 'routes/organize-pass.ts'),
   route('admin', 'routes/admin.tsx'),
   route('review', 'routes/review.tsx'),
   route('missing', 'routes/missing.tsx'),

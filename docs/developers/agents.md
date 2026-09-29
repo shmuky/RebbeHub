@@ -39,11 +39,33 @@ stream. It has one address, `https://api.rebbehub.org/mcp`:
 | `suggest_fix` | a correction to one item, as a suggestion for review, under your name (`write`) |
 | `list_issues` | issues people opened, open ones first, or about one item |
 | `open_issue` | report a problem for people to look into, under your name (`write`) |
+| `get_tree` | the catalog as a tree: the top sets, or one set or sefer, with the sets and items under it and how much each holds |
+| `preview_organize` | what a plan of organizing operations would change, item by item, the paths that redirect; saves nothing |
+| `organize` | a whole plan of organizing operations as one suggestion (needs `write`) |
+| `move_items` | sefarim into or out of sets, a set under another set or to the top, sichos to another sefer, a printing, scan or recording to another parent (needs `write`) |
+| `move_up` | a set to its parent's parent; a sefer out of a set into that set's parent (needs `write`) |
+| `rename_item` | a new name in Hebrew and English, and optionally a new slug or path; old paths redirect (needs `write`) |
+| `reorder_children` | put a sefer's sichos, a set's sefarim or sets in a new order (needs `write`) |
+| `create_set` | a new set, under another or at the top, with items moved in at once (needs `write`) |
+| `delete_set` | remove a set that holds nothing (needs `write`) |
+| `merge_items` | merge a duplicate into the item kept: its children and links move over, its paths redirect (needs `write`) |
 
 Every tool calls the API itself, as you, so an agent reads exactly what
 anyone reads: words withheld for rights stay withheld, and a fix it
 suggests is a Suggestion reviewed like anyone's. Nothing in the catalog
 changes until a keeper approves it.
+
+### Organizing the catalog
+
+The organizing tools (`move_items` to `merge_items`, and `organize` for
+several steps at once) each make **one** suggestion, however many items
+it touches: a sefer renamed with its three thousand sichos' paths is one
+suggestion. Nothing changes until a keeper of the sets it touches approves
+it (stewards approve changes to sets themselves). Every old path redirects
+once it is approved; a merged item's paths lead to the item it was merged
+into. Look first with `get_tree`, and send the plan to `preview_organize`
+to see the change before making it. The same plans go to the API as
+`POST /v1/organize` ([suggestions](suggestions.md#organizing-the-catalog)).
 
 ### What an agent sends shows as the agent's
 
@@ -138,5 +160,7 @@ curl -s https://api.rebbehub.org/mcp -H 'Content-Type: application/json' -H 'Acc
   machine's reading or hearing; say so if you use it.
 - Link to what you cite: every result carries its page's address.
 - Suggest fixes only with a source, in the note; people review every one.
+- Organize in small, clear steps with a note saying why; preview a merge
+  before sending it, and merge only what is truly the same item.
 - Keep to [rights](../rights.md): do not copy withheld words from
   elsewhere into a suggestion.

@@ -20,6 +20,7 @@ import * as apiTokens from './migrations/0018_api_tokens.js';
 import * as listingIndexes from './migrations/0019_listing_indexes.js';
 import * as driveFiles from './migrations/0020_drive_files.js';
 import * as oauth from './migrations/0021_oauth.js';
+import * as entityForward from './migrations/0022_entity_forward.js';
 
 export interface Migration {
   version: number;
@@ -50,6 +51,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 19, name: 'listing-indexes', up: listingIndexes.up },
   { version: 20, name: 'drive-files', up: driveFiles.up },
   { version: 21, name: 'oauth', up: oauth.up },
+  { version: 22, name: 'entity-forward', up: entityForward.up },
 ];
 
 /** Applies the migrations `db` has not had yet, each in its own transaction. Returns the versions applied. */

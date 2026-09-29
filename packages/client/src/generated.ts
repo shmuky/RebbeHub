@@ -77,6 +77,108 @@ export type Commit = {
   }>;
 };
 
+export type TreeNode = {
+  /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+  id: string;
+  type: string;
+  path: string | null;
+  name: Record<string, unknown> | null;
+  order?: string | null;
+  counts: {
+    /** Sets under it */
+    sets?: number;
+    /** Items in it (a set) */
+    items?: number;
+    /** Units of it (a sefer) */
+    units?: number;
+  };
+  children?: Array<TreeNode>;
+  /** Children left out past the limit */
+  more?: number;
+};
+
+/** One step of a plan. Items are ids (rh-…), or new:<key> for a set made earlier in the same plan. Positions are "start", "end", { after: id } or { before: id }. - move { items, to, from?, mode?: add | only, position? }: into a set (a sefer joins it, leaving `from` when given); `to: null` with `from` takes it out; a set under a set or to the top (to: null); a unit to another work, a printing to a work, a scan to a printing, a recording to an event. - move-up { items, from? }: a set to its parent's parent; an item out of a set into that set's parent. - rename { item, name?: { he?, en? }, slug?, path? }: old paths redirect, and paths made from it (a sefer's units) move along. - reorder { items, parent?, position? }: without position, the items take the places they hold in the order given. - create-set { key?, name: { he, en? }, slug, parent?, description?, items? } - delete-set { item }: only a set that holds nothing. - merge { from, into }: everything under or pointing at `from` moves to `into`; `from` is deleted and its paths lead to `into`. - split { work, units? | range: { from, to }, title: { he, en? }, slug }: units into a new sefer. */
+export type OrganizeOperation = {
+  op: "move" | "move-up" | "rename" | "reorder" | "create-set" | "delete-set" | "merge" | "split";
+  items?: Array<string>;
+  item?: string;
+  to?: string | null;
+  from?: string;
+  into?: string;
+  mode?: "add" | "only";
+  position?: "start" | "end" | {
+    after: string;
+  } | {
+    before: string;
+  };
+  parent?: string | null;
+  /** { he, en } */
+  name?: Record<string, unknown>;
+  /** { he, en } */
+  title?: Record<string, unknown>;
+  slug?: string;
+  path?: string;
+  key?: string;
+  /** { he, en } */
+  description?: Record<string, unknown>;
+  work?: string;
+  units?: Array<string>;
+  range?: {
+    from: string;
+    to: string;
+  };
+};
+
+export type OrganizePlan = {
+  /** Done in order, each seeing what the ones before it did */
+  operations: Array<OrganizeOperation>;
+  /** The suggestion's title; made from the operations when left out */
+  title?: string;
+  description?: string;
+  /** Keep it a draft instead of sending it for review (organize only) */
+  draft?: boolean;
+  /** Approve it at once where you may approve it yourself (organize only) */
+  apply?: boolean;
+};
+
+export type OrganizePreview = {
+  title: string;
+  /** One line per operation */
+  summary: Array<string>;
+  items: Array<{
+    /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+    id: string;
+    type: string;
+    name?: string;
+    isNew?: boolean;
+    deleted?: boolean;
+    pathBefore?: string | null;
+    path?: string | null;
+    changes: Array<{
+      path?: string;
+      before?: unknown;
+      after?: unknown;
+    }>;
+  }>;
+  /** Old paths and where they lead once approved */
+  redirects: Array<{
+    /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+    id?: string;
+    from?: string;
+    to?: string | null;
+  }>;
+  /** Items merged into others */
+  forwards: Array<{
+    /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+    from?: string;
+    /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+    to?: string;
+  }>;
+  warnings: Array<string>;
+  /** The new sets, by their key */
+  created?: Record<string, unknown>;
+};
+
 export type Suggestion = {
   id: number;
   title: string;
@@ -362,6 +464,23 @@ export interface Operations {
   authorizationServer: {
     input: Record<string, never>;
     output: Record<string, unknown>;
+  };
+  /** The catalog as a tree: the top sets (or one set or sefer), the sets and items under them, and how much each holds */
+  catalogTree: {
+    input: {
+      /** A set or a sefer (work); left out, the top sets */
+      root?: string;
+      /** How many levels down */
+      depth?: number;
+      /** How many (at most 500) */
+      limit?: number;
+    };
+    output: {
+      root: TreeNode | null;
+      children: Array<TreeNode>;
+      /** Children left out past the limit */
+      more: number;
+    };
   };
   /** Before an upload: whether we have it (its sha256, a few page hashes) and what it likely is */
   checkUpload: {
@@ -1330,6 +1449,19 @@ export interface Operations {
     };
     output: Issue;
   };
+  /** Organize the catalog: a plan becomes one suggestion, sent for review (apply: true approves it at once where you may approve it yourself) */
+  organize: {
+    input: {
+      body?: OrganizePlan;
+    };
+    output: {
+      suggestion: Suggestion;
+      merged: boolean;
+      /** Whether you may approve it yourself */
+      mayApprove?: boolean;
+      preview: OrganizePreview;
+    };
+  };
   /** Read a Hebrew date as people write it */
   parseDate: {
     input: {
@@ -1342,6 +1474,13 @@ export interface Operations {
       he?: string;
       en?: string;
     };
+  };
+  /** What a plan of moves, renames, orderings, new sets and merges would change, item by item, saved nowhere */
+  previewOrganize: {
+    input: {
+      body?: OrganizePlan;
+    };
+    output: OrganizePreview;
   };
   /** Before adding something new: the machine's guess of what it is and where it belongs, from its name (a date in it, words of a title), and files already held that look like it */
   proposeUpload: {
@@ -2021,6 +2160,7 @@ export const OPERATIONS = {
   anchorSync: {"method":"POST","path":"/v1/recordings/{id}/sync/anchor","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   approveSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/approve","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   authorizationServer: {"method":"GET","path":"/.well-known/oauth-authorization-server","pathParams":[],"query":[],"body":null,"answer":"json"},
+  catalogTree: {"method":"GET","path":"/v1/tree","pathParams":[],"query":["root","depth","limit"],"body":null,"answer":"json"},
   checkUpload: {"method":"POST","path":"/v1/uploads/check","pathParams":[],"query":[],"body":"json","answer":"json"},
   claimNext: {"method":"POST","path":"/v1/projects/{slug}/next","pathParams":["slug"],"query":[],"body":null,"answer":"json"},
   closeProject: {"method":"POST","path":"/v1/projects/{slug}/close","pathParams":["slug"],"query":[],"body":null,"answer":"json"},
@@ -2104,7 +2244,9 @@ export const OPERATIONS = {
   oauthToken: {"method":"POST","path":"/oauth/token","pathParams":[],"query":[],"body":"application/x-www-form-urlencoded","answer":"json"},
   openapi: {"method":"GET","path":"/openapi.json","pathParams":[],"query":[],"body":null,"answer":"json"},
   openIssue: {"method":"POST","path":"/v1/issues","pathParams":[],"query":[],"body":"json","answer":"json"},
+  organize: {"method":"POST","path":"/v1/organize","pathParams":[],"query":[],"body":"json","answer":"json"},
   parseDate: {"method":"GET","path":"/v1/dates/parse","pathParams":[],"query":["q"],"body":null,"answer":"json"},
+  previewOrganize: {"method":"POST","path":"/v1/organize/preview","pathParams":[],"query":[],"body":"json","answer":"json"},
   proposeUpload: {"method":"POST","path":"/v1/uploads/propose","pathParams":[],"query":[],"body":"json","answer":"json"},
   protectedResource: {"method":"GET","path":"/.well-known/oauth-protected-resource","pathParams":[],"query":[],"body":null,"answer":"json"},
   putSuggestionItem: {"method":"PUT","path":"/v1/suggestions/{id}/items","pathParams":["id"],"query":[],"body":"json","answer":"json"},
@@ -2194,6 +2336,11 @@ export abstract class GeneratedMethods {
   /** Authorization Server Metadata (RFC 8414): the endpoints, scopes read and write, PKCE S256, registration and Client ID Metadata Documents (GET /.well-known/oauth-authorization-server) */
   authorizationServer(): Promise<Operations['authorizationServer']['output']> {
     return this.call('authorizationServer', {} as Operations['authorizationServer']['input']);
+  }
+
+  /** The catalog as a tree: the top sets (or one set or sefer), the sets and items under them, and how much each holds (GET /v1/tree) */
+  catalogTree(input?: Operations['catalogTree']['input']): Promise<Operations['catalogTree']['output']> {
+    return this.call('catalogTree', input ?? {} as Operations['catalogTree']['input']);
   }
 
   /** Before an upload: whether we have it (its sha256, a few page hashes) and what it likely is (POST /v1/uploads/check) */
@@ -2611,9 +2758,19 @@ export abstract class GeneratedMethods {
     return this.call('openIssue', input ?? {} as Operations['openIssue']['input']);
   }
 
+  /** Organize the catalog: a plan becomes one suggestion, sent for review (apply: true approves it at once where you may approve it yourself) (POST /v1/organize) */
+  organize(input?: Operations['organize']['input']): Promise<Operations['organize']['output']> {
+    return this.call('organize', input ?? {} as Operations['organize']['input']);
+  }
+
   /** Read a Hebrew date as people write it (GET /v1/dates/parse) */
   parseDate(input: Operations['parseDate']['input']): Promise<Operations['parseDate']['output']> {
     return this.call('parseDate', input ?? {} as Operations['parseDate']['input']);
+  }
+
+  /** What a plan of moves, renames, orderings, new sets and merges would change, item by item, saved nowhere (POST /v1/organize/preview) */
+  previewOrganize(input?: Operations['previewOrganize']['input']): Promise<Operations['previewOrganize']['output']> {
+    return this.call('previewOrganize', input ?? {} as Operations['previewOrganize']['input']);
   }
 
   /** Before adding something new: the machine's guess of what it is and where it belongs, from its name (a date in it, words of a title), and files already held that look like it (POST /v1/uploads/propose) */

@@ -42,7 +42,26 @@ describe('the MCP server', () => {
     expect((await rpc('initialize', { protocolVersion: '1999-01-01' })).body.result.protocolVersion).toBe('2025-11-25');
     expect(await rpc('notifications/initialized', undefined, { notification: true })).toEqual({ status: 202, body: null });
     const { tools } = (await rpc('tools/list')).body.result;
-    expect(tools.map((t: { name: string }) => t.name)).toEqual(['search', 'get_item', 'list_children', 'get_text', 'suggest_fix', 'list_issues', 'open_issue']);
+    expect(tools.map((t: { name: string }) => t.name)).toEqual([
+      'search',
+      'get_item',
+      'list_children',
+      'get_text',
+      'suggest_fix',
+      'list_issues',
+      'open_issue',
+      'get_tree',
+      'preview_organize',
+      'organize',
+      'move_items',
+      'move_up',
+      'rename_item',
+      'reorder_children',
+      'create_set',
+      'delete_set',
+      'merge_items',
+    ]);
+    expect(tools.find((t: { name: string }) => t.name === 'merge_items').annotations.destructiveHint).toBe(true);
     expect(tools.find((t: { name: string }) => t.name === 'suggest_fix').annotations.readOnlyHint).toBe(false);
     expect((await rpc('ping')).body.result).toEqual({});
     expect((await rpc('nothing/here')).body.error.code).toBe(-32601);
@@ -117,5 +136,43 @@ describe('the MCP server', () => {
     expect(suggestion.author).toBe(me);
     // Nothing changed on main until a keeper approves.
     expect((await catalog.get(event))!.data).toMatchObject({ title: { en: 'Yud Shvat 5742' } });
+  });
+
+  it('shows the tree and organizes it as suggestions, with a write token', async () => {
+    const tree = await tool('get_tree', {});
+    expect(tree.isError).toBe(false);
+    expect(tree.content[0].text).toContain(`(set, ${set}, /farbrengens) [0 sets, 1 items]`);
+    const other = await add(catalog, 'shmuly', 'shmuly', 'set', { name: { he: 'שיחות', en: 'Sichos' }, slug: 'sichos', policy: 'moderated', keepers: ['keeper'] }, '/sets/sichos');
+    const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'חיבור' }, slug: 'w', authors: [], genre: 'sichos', levels: ['sicha'], sets: [set] }, '/w');
+    const deep = await tool('get_tree', { root: set, depth: 1 });
+    expect(deep.structuredContent.children.map((n: { id: string }) => n.id)).toEqual([work, event]);
+
+    const preview = await tool('preview_organize', { operations: [{ op: 'move', items: [work], from: set, to: other }] });
+    expect(preview.isError).toBe(false);
+    expect(preview.content[0].text).toMatch(/Would make one suggestion: "Move חיבור into שיחות \/ Sichos"/);
+    // Without a token a tool that writes is refused at the HTTP level, so the client asks to sign in.
+    expect((await rpc('tools/call', { name: 'move_items', arguments: { items: [work], to: other } })).status).toBe(401);
+
+    const me = (await createPerson(catalog.db, 'Organizer')).id;
+    const made = await app.request('/v1/tokens', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Test-Account': me }, body: JSON.stringify({ name: 'organizer', scopes: ['read', 'write'] }) });
+    const { token } = (await made.json()) as { token: string };
+    const moved = await tool('move_items', { items: [work], from: set, to: other, note: 'It is a sefer of sichos' }, token);
+    expect(moved.isError).toBe(false);
+    expect(moved.structuredContent).toMatchObject({ status: 'open', merged: false, items: 1 });
+    expect(moved.content[0].text).toMatch(/sent for review/);
+    const movedSuggestion = await catalog.changeset(moved.structuredContent.suggestion);
+    expect(movedSuggestion.author).toBe(me);
+    expect(movedSuggestion.via).toMatchObject({ name: 'organizer' });
+
+    const renamed = await tool('rename_item', { item: work, name: { en: 'A work' }, slug: 'a-work' }, token);
+    expect(renamed.structuredContent.redirects).toEqual([{ id: work, from: '/w', to: '/a-work' }]);
+    const created = await tool('create_set', { name: { he: 'חדש' }, slug: 'new-set', parent: other }, token);
+    expect(Object.keys(created.structuredContent.created)).toEqual(['set']);
+    expect((await tool('delete_set', { item: set }, token)).content[0].text).toMatch(/still holds/);
+    expect((await tool('merge_items', { from: work, into: event }, token)).content[0].text).toMatch(/only items of one type/);
+    expect((await tool('move_up', { items: [work] }, token)).content[0].text).toMatch(/top set/);
+    expect((await tool('reorder_children', { items: [work, event], parent: set }, token)).content[0].text).toMatch(/not beside|no order/);
+    const plan = await tool('organize', { operations: [{ op: 'rename', item: other, name: { en: 'Talks' } }], title: 'Name the set' }, token);
+    expect(plan.structuredContent).toMatchObject({ status: 'open', summary: ['Rename שיחות / Sichos to שיחות / Talks'] });
   });
 });

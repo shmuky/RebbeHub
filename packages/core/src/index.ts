@@ -230,3 +230,20 @@ export { inbox, markRead, unreadCount, type InboxFilter, type InboxLine } from '
 export { inboxHref, inboxText } from './notify.js';
 export { profile, type Profile, type ProfileActivity } from './profiles.js';
 export { SITEMAP_PAGE_SIZE, SITEMAP_TYPES, sitemapChunks, sitemapPage, type SitemapChunk, type SitemapEntry } from './sitemap.js';
+export {
+  MAX_ORGANIZE_ITEMS,
+  MOVE_FIELDS,
+  applyOrganize,
+  catalogTree,
+  keysBetween,
+  nameOfData,
+  previewOrganize,
+  rekey,
+  type OrganizeItem,
+  type OrganizeOperation,
+  type OrganizePlan,
+  type OrganizePosition,
+  type OrganizePreview,
+  type OrganizeRef,
+  type TreeNode,
+} from './organize.js';

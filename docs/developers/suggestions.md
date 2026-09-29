@@ -46,6 +46,48 @@ const sent = await rh.submitSuggestion({ id: draft.id });
 Schema (`GET /v1/types`); a failing check is in `checks`, and the keepers
 see it.
 
+## Organizing the catalog
+
+Moving, renaming, ordering, merging and splitting are plans of operations,
+done in order, each seeing what the ones before it did. A plan becomes
+**one** suggestion, however many items it touches.
+
+```ts
+// See where things are: the top sets, or one set or sefer, with counts.
+const tree = await rh.catalogTree({ root: otzros, depth: 1 });
+
+const plan = {
+  operations: [
+    { op: 'create-set', key: 'ls', name: { he: 'לקוטי שיחות', en: 'Likkutei Sichos' }, slug: 'likkutei-sichos-set', parent: sichos },
+    { op: 'move', items: [volume12, volume13], from: otzros, to: 'new:ls' },
+    { op: 'merge', from: otzrosCopy, into: likkuteiSichos },
+    { op: 'rename', item: likkuteiSichos, name: { en: 'Likkutei Sichos' }, slug: 'likkutei-sichos' },
+  ],
+  description: 'Sorting the Otzros books into the sefarim we have',
+};
+const preview = await rh.previewOrganize({ body: plan }); // item by item, before and after; saves nothing
+const made = await rh.organize({ body: plan });            // { suggestion, merged, mayApprove, preview }
+```
+
+| Operation | Does |
+| --- | --- |
+| `move { items, to, from?, mode?, position? }` | into a set (with `from`, leaving it; `mode: "only"` makes it the one set); `to: null` with `from` takes it out; a set under a set, or to the top (`to: null`); a unit to another work, a printing to a work, a scan to a printing, a recording to an event |
+| `move-up { items, from? }` | a set to its parent's parent; an item out of a set into that set's parent |
+| `rename { item, name?, slug?, path? }` | new names; a new slug or path moves the paths made from it (a sefer's units) along |
+| `reorder { items, parent?, position? }` | the items take their own places in the order given; with `position` (`"start"`, `"end"`, `{ after }`, `{ before }`) they go there together |
+| `create-set { key?, name, slug, parent?, items? }` | a new set at `/sets/<slug>`, kept like its parent; later operations name it `new:<key>` |
+| `delete-set { item }` | a set that holds nothing; its path leads to its parent |
+| `merge { from, into }` | everything under or pointing at `from` moves to `into`, lists are joined, `from` is deleted and its paths lead to `into` |
+| `split { work, units? \| range, title, slug }` | some of a sefer's units into a new sefer beside it |
+
+Ordering uses fractional keys (`order`), so only the items whose place
+changes are changed. A set never goes under its own descendant, and an
+item moves only into the kind of parent it has. Every old path redirects
+once the suggestion is approved, and `GET /v1/entities/<id>` of a merged
+item answers 404 with `detail.mergedInto`. `apply: true` approves it at
+once when you may approve your own (stewards); otherwise the keepers of
+the sets it touches review it, and stewards review changes to sets.
+
 ## Words: lines, paragraphs, sync
 
 - `POST /v1/scans/<id>/text/fix` `{ page, line, text }`: one line of a
