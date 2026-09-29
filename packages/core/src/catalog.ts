@@ -785,14 +785,21 @@ export class Catalog {
    * that listed it. With `summary` (or without `limit`), every item is
    * read and grouped by how it changes. Without `limit`, every item.
    */
-  async review(changesetId: number, options: { offset?: number; limit?: number; summary?: boolean } = {}): Promise<{ changeset: ChangesetRow; entries: ChangeEntry[]; reviews: unknown[]; total: number; offset: number; summary?: ChangeGroup[] }> {
+  async review(
+    changesetId: number,
+    options: { offset?: number; limit?: number; summary?: boolean } = {},
+  ): Promise<{ changeset: ChangesetRow; entries: ChangeEntry[]; reviews: unknown[]; total: number; offset: number; summary?: ChangeGroup[]; clashes?: number; unchanged?: number }> {
     const cs = await this.changeset(changesetId);
     const offset = Math.max(0, Math.floor(options.offset ?? 0));
     const limit = options.limit === undefined ? undefined : Math.max(0, Math.floor(options.limit));
     const { rows: reviews } = await this.db.query('SELECT * FROM review WHERE changeset_id = $1 ORDER BY created_at', [changesetId]);
     if (limit === undefined || (options.summary ?? false)) {
       const all = await this.changeEntries(this.db, cs, await this.proposals(changesetId));
-      return { changeset: cs, entries: limit === undefined ? all.slice(offset) : all.slice(offset, offset + limit), reviews, total: all.length, offset, summary: summarizeChanges(all) };
+      // With the summary, what the reviewer must know before Approve: how many items clash with a later change on the site
+      // (each needs a decision), and how many the site already holds as suggested.
+      const clashes = all.filter((e) => e.conflicts.length > 0).length;
+      const unchanged = all.filter((e) => e.changes.length === 0).length;
+      return { changeset: cs, entries: limit === undefined ? all.slice(offset) : all.slice(offset, offset + limit), reviews, total: all.length, offset, summary: summarizeChanges(all), clashes, unchanged };
     }
     const { rows } = await this.db.query<RevisionRow & { base_rev: number | null; total: number }>(
       `SELECT p.*, count(*) OVER ()::int AS total FROM (${PROPOSALS_SQL}) p ORDER BY p.entity_id OFFSET $2 LIMIT $3`,
@@ -1005,7 +1012,8 @@ export class Catalog {
   /**
    * "Approve": merges a suggestion into main (or into its project). Clashes
    * with main are decided by the reviewer through `resolutions`, keyed by
-   * item id and then field path.
+   * item id and then field path; `*` in either place stands for every item
+   * or every field not named, so one decision can settle all of a bot's clashes.
    */
   async merge(changesetId: number, by: string, resolutions: Record<string, Record<string, Resolution>> = {}, note?: string): Promise<{ commit: number | null }> {
     return this.mergeInternal(changesetId, by, resolutions, { note });
@@ -1092,25 +1100,33 @@ export class Catalog {
     const registry = await this.registry(tx);
     const planned: Array<{ proposal: Proposal; current: RevisionRow | null; data: Json | null; path: string | null; direct: boolean }> = [];
     const unresolved: Conflict[] = [];
+    // Main's versions, and the versions the moved ones were made from, read at once: a bot's Suggestion of 500 items is two reads, not a thousand.
+    const currents = await this.targetRevs(tx, null, proposals.map((p) => p.entityId));
+    const moved = proposals.filter((p) => p.baseRev !== null && String(currents.get(p.entityId)?.id ?? '') !== String(p.baseRev));
+    const bases = new Map<string, RevisionRow>();
+    if (moved.length) {
+      const { rows } = await tx.query<RevisionRow>('SELECT * FROM revision WHERE id = ANY($1::bigint[])', [[...new Set(moved.map((p) => String(p.baseRev)))]]);
+      for (const row of rows) bases.set(String(row.id), row);
+    }
     for (const p of proposals) {
-      const current = await this.targetRev(tx, null, p.entityId);
-      if ((current?.id ?? null) === p.baseRev) {
+      const current = currents.get(p.entityId) ?? null;
+      if (String(current?.id ?? '') === String(p.baseRev ?? '') && (current !== null) === (p.baseRev !== null)) {
         // A suggestion sent before words had structure lands with its body read as structured words.
         const data = withStructuredBody(p.rev.data);
         planned.push({ proposal: p, current, data, path: p.rev.path, direct: data === p.rev.data });
         continue;
       }
-      const base = p.baseRev === null ? null : await this.revision(p.baseRev, tx);
+      const base = p.baseRev === null ? null : (bases.get(String(p.baseRev)) ?? null);
       const merged = threeWayMerge(base?.data ?? null, current?.data ?? null, p.rev.data);
       let data = merged.merged;
       if (merged.conflicts.length > 0) {
-        const decided = resolutions[p.entityId];
-        const open = merged.conflicts.filter((c) => !decided?.[c.path]);
+        const decided = decisionsFor(resolutions, p.entityId, merged.conflicts);
+        const open = merged.conflicts.filter((c) => !decided[c.path]);
         if (open.length > 0) {
           unresolved.push(...open.map((c) => ({ ...c, path: `${p.entityId}${c.path}` })));
           continue;
         }
-        data = resolveConflicts(merged, decided!);
+        data = resolveConflicts(merged, decided);
       }
       data = withStructuredBody(data);
       // A path changed on one side only follows that side; changed on both, theirs wins unless the reviewer said otherwise.
@@ -1243,7 +1259,7 @@ export class Catalog {
       if ((current?.id ?? null) !== p.baseRev) {
         const base = p.baseRev === null ? null : await this.revision(p.baseRev, tx);
         const merged = threeWayMerge(base?.data ?? null, current?.data ?? null, p.rev.data);
-        const decided = resolutions[p.entityId] ?? {};
+        const decided = decisionsFor(resolutions, p.entityId, merged.conflicts);
         const open = merged.conflicts.filter((c) => !decided[c.path]);
         if (open.length > 0) throw new UnresolvedConflictError(open.map((c) => ({ ...c, path: `${p.entityId}${c.path}` })));
         const data = merged.conflicts.length > 0 ? resolveConflicts(merged, decided) : merged.merged;
@@ -1916,4 +1932,16 @@ export function isoWeekTag(date: Date): string {
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
   return `${d.getUTCFullYear()}.${String(week).padStart(2, '0')}`;
+}
+
+/** The reviewer's decision for each of an item's clashes: the item's own, else the one for all its fields, else the one for every item. */
+function decisionsFor(resolutions: Record<string, Record<string, Resolution>>, entityId: string, conflicts: Conflict[]): Record<string, Resolution> {
+  const own = resolutions[entityId] ?? {};
+  const every = resolutions['*'] ?? {};
+  const out: Record<string, Resolution> = {};
+  for (const c of conflicts) {
+    const decision = own[c.path] ?? own['*'] ?? every[c.path] ?? every['*'];
+    if (decision) out[c.path] = decision;
+  }
+  return out;
 }

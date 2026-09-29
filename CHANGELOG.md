@@ -19,6 +19,19 @@ any time. `@rebbehub/client` carries the API's version.
   say which). Each segment is marked **Right** as it is or fixed in place.
   `POST /v1/suggestions/words` takes `change: "check"`: the segment's
   words stay and its `origin` becomes `checked`.
+- **Clashes are decided before Approve, all at once.** With `summary=1`,
+  `GET /v1/suggestions/{id}` also gives `clashes` (items changed on the
+  site since the suggestion was made, each needing a decision) and
+  `unchanged` (items the site already holds as suggested). `resolutions`
+  on approve takes `*` for every item or every field, so
+  `{"*": {"*": {"take": "ours"}}}` keeps the site's version of every
+  clashing field ("theirs" takes the suggestion's). The review page shows
+  the count and offers both; before, Approve ran the whole merge and then
+  stopped on the first clash with no way to decide. Approving reads the
+  items' versions in two queries, not two per item.
+- **MCP: `close_suggestion`, `reopen_suggestion`, `send_back_suggestion`**,
+  and `approve_suggestion` takes `clashes` (`keep_live` or
+  `take_suggestion`).
 - **A transcript fix may cover only some words.** `POST
   /v1/recordings/{id}/transcript/fix` takes `complete` (default true):
   with `false` the words are fixed but the paragraph stays machine

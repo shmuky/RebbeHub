@@ -54,6 +54,9 @@ export interface ReviewDetail {
   total?: number;
   next?: number | null;
   summary?: ChangeGroup[];
+  /** With the summary: how many items clash with a later change on the site, and how many the site already holds as suggested. */
+  clashes?: number;
+  unchanged?: number;
   reviews: Array<{ reviewer: string; verdict: 'approve' | 'send_back'; body: string | null; created_at: string }>;
   names: Record<string, string>;
   files: Record<string, { url: string | null; mime: string; bytes: number; rights: string; similar?: Array<{ kind: 'same' | 'shares'; matched?: number; of?: number; items: Array<{ id: string; type: string; path: string | null }> }> }>;
@@ -90,7 +93,29 @@ const W = {
   deleted: { he: 'נמחקים', en: 'deleted' },
   all: { he: 'הכול', en: 'all' },
   loadError: { he: 'לא נטען. לנסות שוב', en: "Didn't load. Try again" },
+  clashTitle: { he: 'פריטים שהשתנו באתר מאז', en: 'Items changed on the site since' },
+  clashWhy: {
+    he: 'באתר שונו השדות האלה אחרי שההצעה נכתבה. בוחרים פעם אחת מה נשאר בכולם:',
+    en: 'These fields were changed on the site after this was suggested. Choose once what stays in all of them:',
+  },
+  keepSite: { he: 'לאשר, להשאיר את מה שבאתר', en: "Approve, keep what's on the site" },
+  takeSuggested: { he: 'לאשר, לקחת את ההצעה', en: 'Approve, take the suggestion' },
+  unchanged: { he: 'כבר באתר כפי שהוצע', en: 'already on the site as suggested' },
 } as const;
+
+/** One decision for every clash: `*` stands for every item and every field. In a merge "ours" is the site's version, "theirs" the suggestion's. */
+export const KEEP_SITE = { '*': { '*': { take: 'ours' } } } as const;
+export const TAKE_SUGGESTED = { '*': { '*': { take: 'theirs' } } } as const;
+
+/** An answer the API refused, with the clashes it names when that was the reason. */
+class CallError extends Error {
+  constructor(
+    message: string,
+    readonly conflicts: unknown[] | undefined,
+  ) {
+    super(message);
+  }
+}
 
 /** What a field was or became, as the summary says it: a kind of value, or links and the sites they point to. */
 const KINDS: Record<string, { he: string; en: string }> = {
@@ -135,8 +160,8 @@ async function call<T>(path: string, init?: { method: 'POST'; body: unknown }): 
     headers: { 'Content-Type': 'application/json', accept: 'application/json' },
     body: init ? JSON.stringify(init.body) : undefined,
   });
-  const json = (await response.json().catch(() => ({}))) as T & { message?: string };
-  if (!response.ok) throw new Error(json.message ?? response.statusText);
+  const json = (await response.json().catch(() => ({}))) as T & { message?: string; conflicts?: unknown[] };
+  if (!response.ok) throw new CallError(json.message ?? response.statusText, json.conflicts);
   return json;
 }
 
@@ -350,6 +375,8 @@ export function SuggestionCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  // Clashes found by Approve itself, where the summary had not counted them (a page read without it).
+  const [refused, setRefused] = useState<number | null>(null);
   const cs = detail?.changeset ?? row;
   const author = person?.name ?? detail?.names[cs.author] ?? cs.author;
   const bot = person?.bot ?? cs.author.startsWith('bot:');
@@ -364,6 +391,10 @@ export function SuggestionCard({
       await call(`/${cs.id}/${path}`, { method: 'POST', body });
       onDone();
     } catch (e) {
+      if (e instanceof CallError && e.conflicts?.length) {
+        setRefused(new Set(e.conflicts.map((c) => String((c as { path?: string }).path ?? '').split('/')[0])).size);
+        return;
+      }
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -380,6 +411,8 @@ export function SuggestionCard({
   const left = detail ? total - detail.entries.length : 0;
   // All of a large Suggestion is approved at once: the button says how many.
   const allOf = detail && total > detail.entries.length ? <span className="num"> · {num(total, lang)}</span> : null;
+  // Clashing items are decided before Approve, all at once, not found by it one merge later.
+  const clashes = refused ?? detail?.clashes ?? 0;
   return (
     <article ref={cardRef} className={`rq-card${open ? ' focused' : ''}${live ? ' live' : ''}`} id={`s${cs.id}`}>
       <header className="rq-h">
@@ -401,7 +434,7 @@ export function SuggestionCard({
         </div>
         <div className="rq-state">
           {live ? (
-            <span className="machine rq-live">
+            <span className="machine-label rq-live">
               <Icon name="pulse" size={12} />
               {W.wentLive[lang]}
             </span>
@@ -499,6 +532,24 @@ export function SuggestionCard({
             </div>
           </div>
         ) : null}
+        {clashes > 0 && cs.status === 'open' && mayApprove ? (
+          <div className="alert info rq-clashes" role="status">
+            <Icon name="warn" />
+            <span>
+              <b>
+                {W.clashTitle[lang]}: <span className="num">{num(clashes, lang)}</span>
+              </b>
+              {detail?.unchanged ? (
+                <span className="subtle">
+                  {' '}
+                  · <span className="num">{num(detail.unchanged, lang)}</span> {W.unchanged[lang]}
+                </span>
+              ) : null}
+              <br />
+              {W.clashWhy[lang]}
+            </span>
+          </div>
+        ) : null}
         {error ? (
           <p className="alert negative" role="alert">
             <Icon name="warn" />
@@ -511,11 +562,24 @@ export function SuggestionCard({
         {cs.status === 'open' && mayApprove ? (
           note === null ? (
             <>
-              <button type="button" className="btn approve" onClick={act('approve')} disabled={busy} aria-busy={busy || undefined}>
-                <Icon name="check" />
-                {t(lang, 'approve')}
-                {allOf}
-              </button>
+              {clashes > 0 ? (
+                <>
+                  <button type="button" className="btn approve" onClick={act('approve', { resolutions: KEEP_SITE })} disabled={busy} aria-busy={busy || undefined}>
+                    <Icon name="check" />
+                    {W.keepSite[lang]}
+                    {allOf}
+                  </button>
+                  <button type="button" className="btn" onClick={act('approve', { resolutions: TAKE_SUGGESTED })} disabled={busy}>
+                    {W.takeSuggested[lang]}
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="btn approve" onClick={act('approve')} disabled={busy} aria-busy={busy || undefined}>
+                  <Icon name="check" />
+                  {t(lang, 'approve')}
+                  {allOf}
+                </button>
+              )}
               <button type="button" className="btn danger" onClick={() => setNote('')} disabled={busy}>
                 <Icon name="x" />
                 {t(lang, 'sendBack')}

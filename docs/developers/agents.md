@@ -42,7 +42,10 @@ stream. It has one address, `https://api.rebbehub.org/mcp`:
 | `get_text` | the words of a sicha, a scan's page or a recording's transcript; machine words marked `[machine]` |
 | `suggest_fix` | a correction to one item, as a suggestion for review, under your name (`write`) |
 | `suggest_items` | add new items, or change or delete many, as one suggestion; 200 items a call, added to the same draft over several calls (`write`) |
-| `approve_suggestion` | approve a suggestion sent for review, when you may: its sets' keepers, or a steward (`write`) |
+| `approve_suggestion` | approve a suggestion sent for review, when you may: its sets' keepers, or a steward ; `clashes` (`keep_live` or `take_suggestion`) settles every clash with a later change at once (`write`) |
+| `close_suggestion` | close (withdraw) a suggestion without merging it: your own, or any as a steward (`write`) |
+| `reopen_suggestion` | open a closed suggestion for review again; its checks run again (`write`) |
+| `send_back_suggestion` | send a suggestion back to its author with a note on what should change (`write`) |
 | `list_issues` | issues people opened, open ones first, or about one item |
 | `open_issue` | report a problem for people to look into, under your name (`write`) |
 | `ask_machine` | ask for a scan to be read by OCR or a recording transcribed; queued for the free machines, their words marked `[machine]` until checked (`write`) |

@@ -288,6 +288,7 @@ const STRINGS = {
   transcript: { he: 'תמלול', en: 'Transcript' },
   reviewMachineText: { he: 'בדיקת טקסט המכונה', en: 'Review machine text' },
   reviewTranscript: { he: 'תיקון התמלול', en: 'Fix the transcript' },
+  editTranscript: { he: 'עריכה', en: 'Edit' },
   backToLyrics: { he: 'חזרה לתצוגת ההאזנה', en: 'Back to listening' },
   backToNow: { he: 'חזרה למה שנשמע', en: 'Back to now' },
   fullScreen: { he: 'מסך מלא', en: 'Full screen' },

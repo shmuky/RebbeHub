@@ -1,4 +1,4 @@
-import { Maximize2, Minimize2, Pause, Play, ScanText, SkipBack, SkipForward, Undo2, LocateFixed, Loader2 } from 'lucide-react';
+import { Maximize2, Minimize2, Pause, PenLine, Play, SkipBack, SkipForward, Undo2, LocateFixed, Loader2 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { t, type Lang } from '../lib/i18n.js';
@@ -159,14 +159,8 @@ export function Transcripts({ tracks, lang, onLoaded }: { tracks: Track[]; lang:
   if (!reviewing)
     return (
       <section id="transcript" ref={section} className="transcripts">
-        <Lyrics transcripts={transcripts} tracks={tracks} lang={lang} nowMs={nowMs} found={found} machine={unchecked || syncUnchecked} />
-        <div className="lyrics-foot">
-          {unchecked || syncUnchecked ? <p className="row-sub">{t(lang, 'lyricsMachineHint')}</p> : null}
-          <button type="button" className="btn" onClick={() => review(true)}>
-            <ScanText size={16} aria-hidden />
-            {t(lang, unchecked || syncUnchecked ? 'reviewMachineText' : 'reviewTranscript')}
-          </button>
-        </div>
+        <Lyrics transcripts={transcripts} tracks={tracks} lang={lang} nowMs={nowMs} found={found} machine={unchecked || syncUnchecked} onEdit={() => review(true)} />
+        {unchecked || syncUnchecked ? <p className="lyrics-foot row-sub">{t(lang, 'lyricsMachineHint')}</p> : null}
         {ask}
       </section>
     );
@@ -198,7 +192,7 @@ const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.
  * word or paragraph plays from there. Scrolling by hand lets go of the
  * recording until "Back to now"; full screen hides the page around it.
  */
-function Lyrics({ transcripts, tracks, lang, nowMs, found, machine }: { transcripts: Transcript[]; tracks: Track[]; lang: Lang; nowMs: number; found: string | null; machine: boolean }) {
+function Lyrics({ transcripts, tracks, lang, nowMs, found, machine, onEdit }: { transcripts: Transcript[]; tracks: Track[]; lang: Lang; nowMs: number; found: string | null; machine: boolean; onEdit: () => void }) {
   const player = usePlayer();
   const box = useRef<HTMLDivElement>(null);
   const [follow, setFollow] = useState(true);
@@ -298,6 +292,19 @@ function Lyrics({ transcripts, tracks, lang, nowMs, found, machine }: { transcri
           {track && (full || tracks.length > 1) ? <span className="lyrics-title">{track.title}</span> : null}
         </div>
         {machine ? <MachineLabel lang={lang} size="sm" /> : null}
+        {/* Editing is one step away, never in the way of listening: the tools open on their own screen. */}
+        <button
+          type="button"
+          className="lyrics-edit"
+          onClick={() => {
+            setFull(false);
+            onEdit();
+          }}
+          title={t(lang, machine ? 'reviewMachineText' : 'reviewTranscript')}
+        >
+          <PenLine size={16} aria-hidden />
+          {t(lang, 'editTranscript')}
+        </button>
         <button type="button" className="lyrics-ib" onClick={() => setFull((f) => !f)} aria-label={t(lang, full ? 'exitFullScreen' : 'fullScreen')} title={t(lang, full ? 'exitFullScreen' : 'fullScreen')}>
           {full ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
         </button>
