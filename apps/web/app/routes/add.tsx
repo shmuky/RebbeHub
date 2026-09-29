@@ -503,7 +503,7 @@ export default function Add({ loaderData }: Route.ComponentProps) {
                               {c.date ? ` · ${dateLabel(c.date, lang)}` : ''} · {c.why === 'date' ? W.byDate[lang] : W.byName[lang]}
                             </span>
                           </span>
-                          {i === 0 ? <span className="machine sm">{W.best[lang]}</span> : null}
+                          {i === 0 ? <span className="machine-label sm">{W.best[lang]}</span> : null}
                           <Link className="place-open" to={href(c.path ?? `/${c.id}`, lang)} target="_blank" aria-label={candidateLabel(c, lang)}>
                             <Icon name="external" size={14} />
                           </Link>

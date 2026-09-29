@@ -228,8 +228,12 @@ a.label:hover {
   align-items: center;
 }
 
-/* Machine output nobody has checked: amber, and says so in words. */
-.machine {
+/*
+ * Machine output nobody has checked: amber, and says so in words (MachineLabel).
+ * Its own class: `machine` alone marks a paragraph or a page as unchecked,
+ * and a badge's nowrap on one of those put a whole text on one line.
+ */
+.machine-label {
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
@@ -244,7 +248,7 @@ a.label:hover {
   vertical-align: middle;
 }
 
-.machine.sm {
+.machine-label.sm {
   height: 18px;
   font-size: 11.5px;
 }

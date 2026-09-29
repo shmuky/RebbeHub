@@ -5,6 +5,7 @@ import { Link, useSearchParams } from 'react-router';
 import type { Route } from './+types/home';
 import type { Via } from '../lib/threads.js';
 import { ContinueRow } from '../components/ContinueRow.js';
+import { ReviewHero } from '../components/ReviewHero.js';
 import { eventData, eventRow, type EventItem } from '../components/EventRow.js';
 import type { Entity, SuggestionDetail } from '../lib/api.js';
 import { siteOf } from '../lib/context.server.js';
@@ -32,7 +33,8 @@ import { AgentBy, Bar, Label, MachineLabel, RelativeTime, StatusBadge, cx } from
  * follow); what is happening (suggestions asking for review, what was
  * approved, what importers and machines did, with the words that changed);
  * and today in other years, where help is needed, and the projects under
- * way. Personal parts (continue, your feed, what waits for your review)
+ * way. When the machines wrote words nobody checked, a big band under the
+ * day asks for help checking them (components/ReviewHero). Personal parts (continue, your feed, what waits for your review)
  * are drawn in the browser; the page itself is the same for everyone.
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -40,7 +42,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const lang = langFrom(request);
   const week = thisWeek(lang);
   const matching = kviusYears(Number(week.today.slice(0, 4)));
-  const [weekEvents, community, stats, works, unitCounts, projects, health, open, issues] = await Promise.all([
+  const [weekEvents, community, stats, works, unitCounts, projects, health, open, issues, toCheck] = await Promise.all([
     api.events({ day: week.dayTokens, limit: 2000, brief: true }),
     api.community(12),
     api.stats(),
@@ -50,6 +52,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     api.health().catch(() => null),
     api.suggestions({ status: 'open', limit: 500 }).catch(() => []),
     api.issues({ state: 'open', limit: 6 }).catch(() => null),
+    api.toCheck(6).catch(() => null),
   ]);
 
   // The week, in a year whose calendar falls like this one (as Sichos-Kodesh's app does).
@@ -177,6 +180,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     pages: health ? health.pages : null,
     recordings: health ? health.recordings : null,
     feed,
+    toCheck,
   };
 }
 
@@ -606,7 +610,7 @@ function yearShort(y: number, lang: Lang) {
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { lang, week, civil, weekday, year, yearEvents, years, today, todayTotal, community, counts, library, projects, pages, feed } = loaderData;
+  const { lang, week, civil, weekday, year, yearEvents, years, today, todayTotal, community, counts, library, projects, pages, feed, toCheck } = loaderData;
   const account = useAccount();
   const { gaps } = community;
   const withRecordings = gaps.events - gaps.eventsWithoutRecordings;
@@ -621,6 +625,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   return (
     <div className="home">
       <DayStrip lang={lang} week={week} civil={civil} weekday={weekday} year={year} yearCount={yearEvents.length} />
+      {toCheck?.totals.transcripts ? <ReviewHero lang={lang} list={toCheck} /> : null}
       <div className="wrap home-grid">
         <aside className="home-lib" aria-label={w(lang, 'library')}>
           <h2 className="h-sec">{w(lang, 'library')}</h2>
