@@ -13,14 +13,53 @@ describe('machine transcription and sync', () => {
       { startMs: 0, endMs: 4000, text: 'א' },
       { startMs: 4500, endMs: 9000, text: 'ב' },
       { startMs: 15000, endMs: 20000, text: 'ג' }, // after a pause
-      { startMs: 20500, endMs: 90000, text: 'ד' },
-      { startMs: 90500, endMs: 95000, text: 'ה' }, // the paragraph is already over a minute
+      { startMs: 20500, endMs: 90000, text: 'ד.' },
+      { startMs: 90500, endMs: 95000, text: 'ה' }, // the paragraph is already over a minute, and ends a sentence
     ];
     expect(paragraphs(heard)).toEqual([
       { startMs: 0, endMs: 9000, text: 'א ב' },
-      { startMs: 15000, endMs: 90000, text: 'ג ד' },
+      { startMs: 15000, endMs: 90000, text: 'ג ד.' },
       { startMs: 90500, endMs: 95000, text: 'ה' },
     ]);
+  });
+
+  it('breaks a long paragraph at the end of a sentence, and past two minutes wherever it is', () => {
+    const heard = [
+      { startMs: 0, endMs: 61000, text: 'עס שטייט' },
+      { startMs: 61000, endMs: 70000, text: 'אין פסוק, און' }, // over a minute, but mid-sentence: carries on
+      { startMs: 70000, endMs: 80000, text: 'אזוי איז עס.' },
+      { startMs: 80000, endMs: 150000, text: 'דער רבי זאגט' }, // after the sentence's end: a new paragraph
+      { startMs: 150000, endMs: 205000, text: 'אז' },
+      { startMs: 205000, endMs: 210000, text: 'מען דארף' }, // two minutes without a sentence's end: breaks anyway
+    ];
+    expect(paragraphs(heard).map((p) => p.text)).toEqual(['עס שטייט אין פסוק, און אזוי איז עס.', 'דער רבי זאגט אז', 'מען דארף']);
+  });
+
+  it('joins a piece that carries on the word the piece before ended in, and never breaks there', () => {
+    const heard = [
+      {
+        startMs: 0,
+        endMs: 70000,
+        text: 'יראה פון דעם י',
+        words: [
+          { text: 'יראה', startMs: 0, endMs: 1000 },
+          { text: 'פון', startMs: 1000, endMs: 69000 },
+          { text: 'דעם', startMs: 69000, endMs: 69500 },
+          { text: 'י', startMs: 69500, endMs: 70000 },
+        ],
+      },
+      // Over a minute already and after a pause, but it is the rest of "יוד".
+      { startMs: 72500, endMs: 74000, text: 'וד, און', glued: true, words: [{ text: 'וד,', startMs: 72500, endMs: 73000 }, { text: 'און', startMs: 73000, endMs: 74000 }] },
+      { startMs: 77000, endMs: 78000, text: 'נאך', words: [{ text: 'נאך', startMs: 77000, endMs: 78000 }] }, // after a pause
+    ];
+    const [first, second, ...none] = paragraphs(heard);
+    expect(none).toEqual([]);
+    expect(first).toMatchObject({ startMs: 0, endMs: 74000, text: 'יראה פון דעם יוד, און' });
+    expect(first!.words!.slice(-2)).toEqual([
+      { text: 'יוד,', startMs: 69500, endMs: 73000 },
+      { text: 'און', startMs: 73000, endMs: 74000 },
+    ]);
+    expect(second).toMatchObject({ startMs: 77000, text: 'נאך' });
   });
 
   it("reads the local Whisper's lines, in milliseconds, without JEM's spoken opening", async () => {
@@ -30,11 +69,14 @@ describe('machine transcription and sync', () => {
       { start: 0, end: 1.84, text: 'This audio has been restored by JEM.', words: [['This', 0, 0.22]] },
       { start: 5.136, end: 6.5, text: 'עס זאל', words: [['עס', 5.136, 5.5], ['זאל', 5.6, 6.5]] },
       { start: 7, end: 8, text: 'קומען' },
+      // The rest of a word the piece before ended in, and a word Whisper heard in two halves.
+      { start: 8, end: 10, text: 'ען גוטע', glued: true, words: [['ען', 8, 8.5, true], ['גו', 8.5, 9], ['טע', 9, 10, true]] },
     ];
     await writeFile(script, `${lines.map((l) => `console.log(${JSON.stringify(JSON.stringify(l))})`).join(';')}; (await import('node:fs')).writeFileSync(${JSON.stringify(join(dir, 'args'))}, process.argv.slice(2).join(' '))`);
     expect(await localWhisper({ python: process.execPath, script }).transcribe('a.mp3', 'yi', dir)).toEqual([
       { startMs: 5136, endMs: 6500, text: 'עס זאל', words: [{ text: 'עס', startMs: 5136, endMs: 5500 }, { text: 'זאל', startMs: 5600, endMs: 6500 }] },
       { startMs: 7000, endMs: 8000, text: 'קומען' },
+      { startMs: 8000, endMs: 10000, text: 'ען גוטע', glued: true, words: [{ text: 'ען', startMs: 8000, endMs: 8500 }, { text: 'גוטע', startMs: 8500, endMs: 10000 }] },
     ]);
     expect(await readFile(join(dir, 'args'), 'utf8')).toBe('a.mp3 --language yi --model ivrit-ai/yi-whisper-large-v3-turbo-ct2');
     expect(localWhisper().version).toBe('ivrit-ai/yi-whisper-large-v3-turbo');

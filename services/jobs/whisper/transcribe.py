@@ -4,6 +4,13 @@ Whisper on this machine's own CPU (or GPU), for `rebbehub transcribe
 JSON line per piece heard: {"start", "end", "text", "words": [[word, start,
 end], ...]}, times in seconds from the recording's start.
 
+Whisper sometimes ends a piece in the middle of a word ("... פון דעם י",
+then "וד, און ..."). Its own text tells a new word by the space before it,
+which the stripped text loses, so a piece that carries on the last word of
+the piece before is marked `"glued": true`, and so is a word that carries
+on the word before it (a fourth item, `true`, after its times). Readers
+that do not know the mark read the rest as before.
+
 The default model is ivrit.ai's Yiddish Whisper, which on a test farbrengen
 (Tzom Gedaliah 5745 against its typed hanacha) heard the Rebbe's Yiddish far
 better than Whisper itself, which drifts into Latin letters and Hebrew
@@ -29,12 +36,37 @@ def heard(model, audio, language, offset=0.0):
     for s in segments:
         text = s.text.strip()
         if text:
+            words = []
+            for w in s.words or []:
+                if w.word.strip():
+                    word = [w.word.strip(), round(offset + w.start, 3), round(offset + w.end, 3)]
+                    if words and not w.word[:1].isspace():
+                        word.append(True)
+                    words.append(word)
             yield {
                 'start': round(offset + s.start, 3),
                 'end': round(offset + s.end, 3),
                 'text': text,
-                'words': [[w.word.strip(), round(offset + w.start, 3), round(offset + w.end, 3)] for w in (s.words or []) if w.word.strip()],
+                'words': words,
+                # Whether Whisper put a space before it: read, and dropped, by glue() below.
+                'spaced': s.text[:1].isspace(),
             }
+
+
+def glue(out):
+    """
+    Marks the pieces that carry on the word the piece before ended in: no
+    space before them, and the piece before ends in a letter, not in
+    punctuation. A model that puts no space before most of its pieces is not
+    telling words apart that way, so then nothing is marked.
+    """
+    loose = sum(1 for p in out if not p['spaced']) > len(out) / 2
+    for i, p in enumerate(out):
+        if not p.pop('spaced') and not loose and i > 0 and out[i - 1]['text'][-1:].isalpha():
+            p['glued'] = True
+            if p['words']:
+                p['words'][0] = p['words'][0][:3] + [True]
+    return out
 
 
 def latin(text):
@@ -52,7 +84,7 @@ def main():
     a = p.parse_args()
     model = WhisperModel(a.model, device=a.device, compute_type=a.compute_type)
     audio = decode_audio(a.audio, sampling_rate=RATE)
-    out = list(heard(model, audio, a.language))
+    out = glue(list(heard(model, audio, a.language)))
     # An opening in English, then a long gap: from where the next speech starts, hear
     # the next minute and a half again without the English, and keep that instead.
     lead = 0
@@ -65,7 +97,12 @@ def main():
         rest = [i for i in range(lead, len(out)) if out[i]['start'] >= start + 90]
         cut = rest[0] if rest else len(out)
         until = out[cut]['start'] if rest else len(audio) / RATE
-        again = [g for g in heard(model, audio[int(start * RATE):int(until * RATE)], a.language, start) if g['start'] < until]
+        again = glue([g for g in heard(model, audio[int(start * RATE):int(until * RATE)], a.language, start) if g['start'] < until])
+        # Heard apart, the pieces where the two hearings meet do not carry on each other's words.
+        for p in again[:1] + out[cut:cut + 1]:
+            p.pop('glued', None)
+            if p['words']:
+                p['words'][0] = p['words'][0][:3]
         out = out[:lead] + again + out[cut:]
     for piece in out:
         print(json.dumps(piece, ensure_ascii=False), flush=True)

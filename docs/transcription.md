@@ -44,6 +44,14 @@ then stays in English for its first half-minute and skips the Rebbe's
 first words; the local engine hears that stretch again and drops the
 English line.
 
+Whisper sometimes ends a piece in the middle of a word ("... פון דעם י",
+then "וד, און ..."). The local engine marks a piece that carries on the
+word before it (`glued`), and a paragraph never breaks there; a long
+paragraph breaks at the end of a sentence where it can. Transcripts made
+before that can have such a cut between two paragraphs; `rebbehub
+mend-splits` joins the ones it is sure of, as one suggestion per recording,
+in paragraphs no person has checked (`--dry-run` lists them first).
+
 ## rebbehub-whisper: fine-tuned on the Rebbe's voice
 
 Each version is ivrit.ai's Yiddish model trained further on the Rebbe's own
