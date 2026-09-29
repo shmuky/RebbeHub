@@ -23,6 +23,7 @@ describe('migrations', () => {
       'comment',
       'commit',
       'commit_change',
+      'cover',
       'derivation',
       'embedding',
       'entity',
