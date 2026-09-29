@@ -132,12 +132,32 @@ export async function catalogIsRebuildable(db: Db): Promise<boolean> {
 }
 
 /**
+ * SQL that takes every lock in `tables` at once, or none, and tries again
+ * until it can. Taking them one by one while the site is reading deadlocks:
+ * a page holds a table the copy wants next while it waits for one the copy
+ * already has (import run #11). So the copy never waits holding a lock; after
+ * five minutes of a busy site it stops, having replaced nothing.
+ */
+function lockAllSql(tables: string): string {
+  return `DO $$ BEGIN
+  FOR attempt IN 1..600 LOOP
+    BEGIN
+      LOCK TABLE ${tables} IN ACCESS EXCLUSIVE MODE NOWAIT;
+      RETURN;
+    EXCEPTION WHEN lock_not_available THEN PERFORM pg_sleep(0.5);
+    END;
+  END LOOP;
+  RAISE EXCEPTION 'the live catalog stayed busy; nothing was replaced (run the import again)';
+END $$;`;
+}
+
+/**
  * SQL that stops a transaction unless the catalog is still rebuildable,
  * locking out new suggestions, reports and comments until it ends. The
  * whole-catalog copy runs it first, so it can never replace anything
  * people have made.
  */
-export const REBUILD_GUARD_SQL = `LOCK TABLE changeset, report, comment, review, review_request, mention, thread_link, report_label, report_assignee, follow, file, cover, project, webhook, thread_event, label, auth.api_token, auth.oauth_connection, auth.notification, auth.username_redirect IN ACCESS EXCLUSIVE MODE;
+export const REBUILD_GUARD_SQL = `${lockAllSql('changeset, report, comment, review, review_request, mention, thread_link, report_label, report_assignee, follow, file, cover, project, webhook, thread_event, label, auth.api_token, auth.oauth_connection, auth.notification, auth.username_redirect')}
 DO $$ BEGIN IF (${PEOPLE_MADE_SQL}) THEN RAISE EXCEPTION 'people have added to the catalog; not replacing it'; END IF; END $$;`;
 
 /**
@@ -187,7 +207,7 @@ export async function markGuardSql(db: Db, mark: string): Promise<string> {
     "SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND NOT c.relispartition ORDER BY c.relname",
   );
   const sql = await catalogMarkSql(db);
-  return `LOCK TABLE ${rows.map((r) => `public.${JSON.stringify(r.name)}`).join(', ')} IN ACCESS EXCLUSIVE MODE;
+  return `${lockAllSql(rows.map((r) => `public.${JSON.stringify(r.name)}`).join(', '))}
 DO $$ BEGIN IF (${sql}) <> '${mark}' THEN RAISE EXCEPTION 'the live catalog changed while the import ran; nothing was replaced (run the import again)'; END IF; END $$;`;
 }
 
