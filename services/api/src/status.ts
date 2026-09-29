@@ -178,6 +178,16 @@ export async function checkDatabase(ask: () => Promise<unknown>): Promise<CheckR
 const startOfDay = (at: Date) => new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()));
 
 /**
+ * Hyperdrive gives no reason when it refuses a query for the day's allowance
+ * ("Connection terminated unexpectedly"), so a database that fails while the
+ * count says the allowance is used up is taken to be that, not an outage.
+ */
+export function explainDatabase(database: CheckResult, quota: CheckResult): CheckResult {
+  if (database.state !== 'down' || quota.state !== 'down') return database;
+  return { ...database, detail: "Today's allowance of database queries is used up; it starts again at 00:00 UTC." };
+}
+
+/**
  * Queries through the Hyperdrive config since 00:00 UTC, from Cloudflare's
  * GraphQL analytics (a token allowed Account Analytics: Read). Null when it
  * could not be read.
