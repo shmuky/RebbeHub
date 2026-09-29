@@ -1,4 +1,5 @@
 import { dateKeyToGregorian, dateKeyToHDate, toHebrewNumeral } from '@rebbehub/hebrew';
+import type { LocalName } from '@rebbehub/model';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import type { Route } from './+types/home';
@@ -13,8 +14,8 @@ import { labelOf } from '../lib/labels.js';
 import { href, itemPath } from '../lib/links.js';
 import { personName } from '../lib/people.js';
 import { pageMeta } from '../lib/seo.js';
-import { LABELS, changeExcerpt, detailLabels, wordsChanged } from '../lib/suggestions.js';
-import { describeTargets } from '../lib/targets.server.js';
+import { LABELS, changeExcerpt, detailLabels, firstTextChange, wordsChanged } from '../lib/suggestions.js';
+import { describeTargets, type Target } from '../lib/targets.server.js';
 import { useAccount } from '../lib/useAccount.js';
 import { useFollows } from '../lib/useFollows.js';
 import { kviusYears, thisWeek } from '../lib/week.js';
@@ -38,7 +39,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const lang = langFrom(request);
   const week = thisWeek(lang);
   const matching = kviusYears(Number(week.today.slice(0, 4)));
-  const [weekEvents, community, stats, works, unitCounts, projects, health, open] = await Promise.all([
+  const [weekEvents, community, stats, works, unitCounts, projects, health, open, issues] = await Promise.all([
     api.events({ day: week.dayTokens, limit: 2000 }),
     api.community(12),
     api.stats(),
@@ -47,6 +48,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     api.projects().catch(() => ({ projects: [] })),
     api.health().catch(() => null),
     api.suggestions({ status: 'open', limit: 500 }).catch(() => []),
+    api.issues({ state: 'open', limit: 6 }).catch(() => null),
   ]);
 
   // The week, in a year whose calendar falls like this one (as Sichos-Kodesh's app does).
@@ -75,15 +77,26 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const suggestionItems: FeedItem[] = details.map((d) => {
     const first = d.entries[0];
     const target = first ? targets.get(first.entityId) : undefined;
+    const change = firstTextChange(d);
+    // A date reads as a date ("ו׳ מרחשון תשי״ז"), not as its key.
+    const diff: DiffPart[] | null =
+      change && /date/i.test(change.path) && /^\d{4}-/.test(change.before)
+        ? [
+            { kind: 'del', text: dateLabel(change.before, lang, { civil: false }) },
+            { kind: 'same', text: ' ' },
+            { kind: 'ins', text: dateLabel(change.after, lang, { civil: false }) },
+          ]
+        : changeExcerpt(d, 4);
     return {
       kind: 'suggestion',
       key: `s${d.changeset.id}`,
       at: d.changeset.submitted_at ?? d.changeset.created_at,
       id: d.changeset.id,
+      number: d.changeset.number ?? null,
       who: d.names[d.changeset.author] ?? d.changeset.author,
       whoId: d.changeset.author,
       title: d.changeset.title,
-      diff: changeExcerpt(d),
+      diff,
       labels: detailLabels(d),
       where: target ? [target.within, target.label].filter(Boolean).join(' · ') : null,
       whereHref: target?.path ?? null,
@@ -97,13 +110,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const since = Math.max(0, stats.head - 12);
   const commits = await api.commits(since, 12).catch(() => []);
   const names = new Map(community.recent.map((c) => [c.seq, c]));
-  const touched = await api.entities(commits.flatMap((c) => c.changes.slice(0, 3).map((x) => x.id))).catch(() => new Map<string, Entity>());
+  // What each commit touched, as people say it: a paragraph is its sicha, a printing its sefer's.
+  const touched = await describeTargets(api, commits.flatMap((c) => c.changes.slice(0, 3).map((x) => ({ entityId: x.id, type: x.type, before: null, after: x.data }))), lang).catch(() => new Map<string, Target>());
   const commitItems: FeedItem[] = commits
     .filter((c) => c.author !== 'system')
     .map((c) => {
       const who = names.get(c.seq);
       const bot = who?.authorIsBot ?? c.author.startsWith('bot:');
-      const items = c.changes.slice(0, 3).map((x) => touched.get(x.id) ?? ({ id: x.id, type: x.type, path: x.path, rev: 0, data: x.data ?? {} } as Entity));
+      const items = c.changes.slice(0, 3).map((x) => {
+        const target = touched.get(x.id);
+        return target ? { id: x.id, path: target.path, label: [target.label, target.within].filter(Boolean).join(', '), type: x.type } : { id: x.id, path: x.path ?? `/${x.id}`, label: labelOf({ id: x.id, type: x.type, path: x.path, rev: 0, data: x.data ?? {} } as Entity, lang), type: x.type };
+      });
       return {
         kind: bot ? 'bot' : 'merged',
         key: `c${c.seq}`,
@@ -114,12 +131,27 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         title: c.message,
         count: c.changes.length,
         types: [...new Set(c.changes.map((x) => x.type))],
-        items: items.map((e) => ({ id: e.id, path: itemPath(e), label: labelOf(e, lang), type: e.type })),
-        entities: c.changes.map((x) => x.id),
+        items: [...new Map(items.map((i) => [i.label, i])).values()],
+        entities: [...c.changes.map((x) => x.id), ...c.changes.map((x) => touched.get(x.id)?.rootId ?? '').filter(Boolean)],
       } as FeedItem;
     });
 
-  const feed = [...suggestionItems, ...commitItems].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 14);
+  // Issues people opened: what is wrong, where, with its labels.
+  const issueItems: FeedItem[] = (issues?.items ?? []).map((i) => ({
+    kind: 'issue',
+    key: `i${i.number}`,
+    at: i.createdAt,
+    number: i.number,
+    who: i.author ? (issues!.people[i.author]?.name ?? i.author) : lang === 'he' ? 'אורח' : 'A guest',
+    whoId: i.author ?? '',
+    title: i.title ?? i.typeTitle[lang],
+    labels: i.labels.map((l) => ({ name: l.name, color: l.color })),
+    where: i.entity ? { label: nameOf(i.entity.name as LocalName, lang) || i.entity.id, path: i.entity.path ?? `/${i.entity.id}` } : null,
+    comments: i.comments,
+    entities: [i.entity?.id ?? '', i.set ?? ''].filter(Boolean),
+  }));
+
+  const feed = [...suggestionItems, ...commitItems, ...issueItems].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 14);
 
   return {
     lang,
@@ -143,7 +175,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 type FeedItem =
-  | { kind: 'suggestion'; key: string; at: string; id: number; who: string; whoId: string; title: string; diff: DiffPart[] | null; labels: string[]; where: string | null; whereHref: string | null; entities: string[]; words: number; items: number }
+  | { kind: 'suggestion'; key: string; at: string; id: number; number: number | null; who: string; whoId: string; title: string; diff: DiffPart[] | null; labels: string[]; where: string | null; whereHref: string | null; entities: string[]; words: number; items: number }
+  | { kind: 'issue'; key: string; at: string; number: number; who: string; whoId: string; title: string; labels: Array<{ name: string; color: string }>; where: { label: string; path: string } | null; comments: number; entities: string[] }
   | { kind: 'merged' | 'bot'; key: string; at: string; who: string; whoId: string; by: string | null; title: string; count: number; types: string[]; items: Array<{ id: string; path: string; label: string; type: string }>; entities: string[] };
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -170,6 +203,11 @@ const W = {
   all: { he: 'כל האתר', en: 'Everything' },
   review: { he: 'ממתין לבדיקה שלי', en: 'Waiting for my review' },
   askedReview: { he: 'ביקש בדיקה בהצעה', en: 'asked for review on' },
+  askedYourReview: { he: 'ביקש את בדיקתך בהצעה', en: 'asked for your review on' },
+  reported: { he: 'דיווח על בעיה', en: 'reported a problem' },
+  comments: { he: 'תגובות', en: 'comments' },
+  suggestionsN: { he: 'הצעות', en: 'suggestions' },
+  reportsN: { he: 'דיווחים', en: 'reports' },
   approved: { he: 'אישר את', en: 'approved' },
   approvedChange: { he: 'שינוי של', en: 'a change by' },
   imported: { he: 'הוסיף', en: 'added' },
@@ -259,8 +297,60 @@ function DayStrip({ lang, week, civil, weekday, year, yearCount }: { lang: Lang;
   );
 }
 
-function FeedEntry({ item, lang }: { item: FeedItem; lang: Lang }) {
+/** A label as the concept draws it: the kinds of change in the words of the plan, any other in its own colour. */
+function IssueLabelChip({ name, color, lang }: { name: string; color: string; lang: Lang }) {
+  const known = LABELS[name];
+  return known ? <Label tone={known.tone}>{known[lang]}</Label> : <Label color={`#${color}`}>{name}</Label>;
+}
+
+function FeedEntry({ item, lang, forMe }: { item: FeedItem; lang: Lang; forMe?: boolean }) {
+  if (item.kind === 'issue') {
+    const to = href(`/issues/${item.number}`, lang);
+    return (
+      <li className="ev">
+        <span className="ic r">
+          <Icon name="report" />
+        </span>
+        <div>
+          <div className="line">
+            <b>{item.who}</b> {w(lang, 'reported')}{' '}
+            <Link to={to}>
+              <b>#{item.number}</b>
+            </Link>
+            {item.where ? (
+              <>
+                {' '}
+                {lang === 'he' ? 'ב' : 'in '}
+                <Link to={href(item.where.path, lang)}>
+                  <b>{item.where.label}</b>
+                </Link>
+              </>
+            ) : null}
+            <RelativeTime at={item.at} lang={lang} className="when" />
+          </div>
+          <Link className="card" to={to}>
+            <div className="t">{item.title}</div>
+            <div className="meta">
+              {item.labels.map((l) => (
+                <IssueLabelChip key={l.name} name={l.name} color={l.color} lang={lang} />
+              ))}
+              {item.where ? <span>{item.where.label}</span> : null}
+              {item.comments ? (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>
+                    {num(item.comments, lang)} {w(lang, 'comments')}
+                  </span>
+                </>
+              ) : null}
+            </div>
+          </Link>
+        </div>
+      </li>
+    );
+  }
   if (item.kind === 'suggestion') {
+    const to = item.number ? href(`/suggestions/${item.number}`, lang) : href('/review', lang, { s: String(item.id) });
     return (
       <li className="ev">
         <span className="ic g">
@@ -268,13 +358,13 @@ function FeedEntry({ item, lang }: { item: FeedItem; lang: Lang }) {
         </span>
         <div>
           <div className="line">
-            <b>{item.who}</b> {w(lang, 'askedReview')}{' '}
-            <Link to={href('/review', lang, { s: String(item.id) })}>
-              <b>#{item.id}</b>
+            <b>{item.who}</b> {w(lang, forMe ? 'askedYourReview' : 'askedReview')}{' '}
+            <Link to={to}>
+              <b>#{item.number ?? item.id}</b>
             </Link>
             <RelativeTime at={item.at} lang={lang} className="when" />
           </div>
-          <Link className="card" to={href('/review', lang, { s: String(item.id) })}>
+          <Link className="card" to={to}>
             <div className="t">{item.title}</div>
             {item.diff ? (
               <div className="quote torah">
@@ -429,7 +519,7 @@ function Feed({ lang, feed }: { lang: Lang; feed: FeedItem[] }) {
       {shown.length ? (
         <ol className="feed">
           {shown.map((item) => (
-            <FeedEntry key={item.key} item={item} lang={lang} />
+            <FeedEntry key={item.key} item={item} lang={lang} forMe={item.kind === 'suggestion' && reviewable?.has(item.id)} />
           ))}
         </ol>
       ) : (
@@ -439,13 +529,22 @@ function Feed({ lang, feed }: { lang: Lang; feed: FeedItem[] }) {
   );
 }
 
-function Following({ lang }: { lang: Lang }) {
+function Following({ lang, feed }: { lang: Lang; feed: FeedItem[] }) {
   const account = useAccount();
   const follows = useFollows(Boolean(account));
   if (!account) return null;
   const items = follows?.items ?? [];
   const recent = new Map<string, number>();
   for (const f of follows?.feed ?? []) recent.set(f.entityId, (recent.get(f.entityId) ?? 0) + 1);
+  // What is open about each: suggestions waiting, then reports; else how much changed in it lately.
+  const open = (id: string, kind: FeedItem['kind']) => feed.filter((f) => f.kind === kind && f.entities.includes(id)).length;
+  const note = (id: string) => {
+    const s = open(id, 'suggestion');
+    const r = open(id, 'issue');
+    if (s) return `${num(s, lang)} ${w(lang, 'suggestionsN')}`;
+    if (r) return `${num(r, lang)} ${w(lang, 'reportsN')}`;
+    return recent.get(id) ? `${num(recent.get(id)!, lang)} ${w(lang, 'changes')}` : '—';
+  };
   return (
     <section className="following">
       <h2 className="h-sec">{w(lang, 'following')}</h2>
@@ -454,7 +553,7 @@ function Following({ lang }: { lang: Lang }) {
           {items.slice(0, 6).map((item) => (
             <li key={item.id}>
               <Link to={href(itemPath(item), lang)}>{labelOf(item, lang)}</Link>
-              <span className="num subtle">{recent.get(item.id) ? `${num(recent.get(item.id)!, lang)} ${w(lang, 'changes')}` : '—'}</span>
+              <span className="num subtle">{note(item.id)}</span>
             </li>
           ))}
         </ul>
@@ -505,7 +604,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           <Link className="more-link" to={href('/sets', lang)}>
             {w(lang, 'allLibrary')} <span aria-hidden="true">{lang === 'he' ? '←' : '→'}</span>
           </Link>
-          <Following lang={lang} />
+          <Following lang={lang} feed={feed as FeedItem[]} />
         </aside>
 
         <section className="home-feed" aria-labelledby="feed-h">
@@ -574,11 +673,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               ) : null}
               <li className="todo">
                 <span className="num">{num(community.openReports, lang)}</span>
-                <Link to={href('/reports', lang)}>{w(lang, 'reportsWaiting')}</Link>
+                <Link to={href('/issues', lang)}>{w(lang, 'reportsWaiting')}</Link>
               </li>
               <li className="todo">
                 <span className="num">{num(community.openSuggestions, lang)}</span>
-                <Link to={href('/review', lang)}>{w(lang, 'suggestionsWaiting')}</Link>
+                <Link to={href('/suggestions', lang)}>{w(lang, 'suggestionsWaiting')}</Link>
               </li>
               {pages && pages.total > pages.checked ? (
                 <li className="todo">

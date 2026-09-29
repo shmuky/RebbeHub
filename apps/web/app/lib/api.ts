@@ -1,3 +1,4 @@
+import type { Issue, IssueLabel, People, SuggestionListItem } from './threads.js';
 import type { EntityType, LocalName } from '@rebbehub/model';
 
 /**
@@ -256,6 +257,8 @@ export interface CatalogHealth {
 /** A suggestion as GET /v1/suggestions lists it. */
 export interface SuggestionRow {
   id: number;
+  /** Its #number, shared with issues; imports have none. */
+  number?: number | null;
   title: string;
   description: string | null;
   author: string;
@@ -293,12 +296,6 @@ export interface SuggestionDetail {
   mine: boolean;
   /** The reviewer's advice, written by a machine (null until one has been written). */
   advice: { summary: string; model: string; at: string; machine: true } | null;
-  /**
-   * The conversation, when the API gives it (comments with their authors,
-   * and events such as "linked report #12"): drawn in the timeline in order.
-   */
-  comments?: Array<{ id: number; author: string; authorName?: string; body: string; at: string; parent?: number | null; hidden?: boolean }>;
-  events?: Array<{ kind: string; actor: string; actorName?: string; at: string; detail?: Record<string, unknown> }>;
 }
 
 export class ApiError extends Error {
@@ -603,6 +600,27 @@ export class RebbeHubApi {
   /** What a mirror needs: the git mirror, the release keys, every edition's dumps (services/api/src/mirrors.ts). */
   async mirrors() {
     return this.get<MirrorsInfo>('/v1/mirrors');
+  }
+
+  /** Issues, newest first, with open and closed counts (public ones, and private ones the asker may read). */
+  issues(options: { state?: 'open' | 'closed' | 'all'; label?: string; type?: string; set?: string; entity?: string; assignee?: string; author?: string; q?: string; limit?: number; cursor?: string } = {}) {
+    return this.get<{ items: Issue[]; people: People; counts: { open: number; closed: number }; next: string | null }>('/v1/issues', options);
+  }
+
+  /** Suggestions as conversations, newest first by number, with reviewers and approvals and open and closed counts. */
+  conversations(options: { state?: 'open' | 'closed' | 'all'; author?: string; reviewer?: string; q?: string; limit?: number; cursor?: string } = {}) {
+    return this.get<{ suggestions: SuggestionListItem[]; people: People; counts: { open: number; closed: number }; next: string | null }>('/v1/suggestions', { state: 'open', ...options });
+  }
+
+  /** Who these accounts are (a set's keepers): name and handle; an API from before handles gives none. */
+  async peopleByIds(ids: readonly string[]) {
+    if (!ids.length) return [];
+    return (await this.get<{ people: Array<{ id: string; username: string | null; displayName: string; bot: boolean }> }>('/v1/people', { ids: [...new Set(ids)].join(',') }).catch(() => ({ people: [] }))).people;
+  }
+
+  /** Every label, with how many open issues carry it. */
+  async labels() {
+    return (await this.get<{ labels: Array<IssueLabel & { open: number }> }>('/v1/labels')).labels;
   }
 
   /** A person's page by their handle (an old handle finds them too, with `movedFrom`); null when nobody has it. */

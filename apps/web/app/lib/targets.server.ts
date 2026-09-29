@@ -63,6 +63,20 @@ export async function describeTargets(api: RebbeHubApi, entries: Array<{ entityI
       });
       continue;
     }
+    if (e.type === 'text') {
+      // A text is its sicha's words: named by the sicha, with its kind when it is a translation or a transcript.
+      const unit = get(d.unit);
+      const kind = d.kind === 'translation' ? (lang === 'he' ? 'תרגום' : 'translation') : d.kind === 'transcript' ? (lang === 'he' ? 'תמלול' : 'transcript') : null;
+      out.set(e.entityId, {
+        id: e.entityId,
+        path: unit ? itemPath(unit) : `/${e.entityId}`,
+        label: [unit ? labelOf(unit, lang) : typeName('text', lang), kind].filter(Boolean).join(' · '),
+        within: workLine(unit),
+        rootId: (unit?.data as { work?: string } | undefined)?.work ?? unit?.id ?? null,
+        type: e.type,
+      });
+      continue;
+    }
     if (e.type === 'unit') {
       out.set(e.entityId, { id: e.entityId, path: `/${e.entityId}`, label: labelOf(item, lang), within: workLine(item), rootId: (d.work as string | undefined) ?? null, type: e.type });
       continue;

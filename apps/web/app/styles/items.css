@@ -1,0 +1,551 @@
+/* Every item's page (ItemShell): the head with its shaar or portrait, the
+   contents of a sefer, the side column's details, sources, keepers and
+   activity, and the panels under the body. */
+
+/* ------------------------------------------------------------ the head */
+
+.ihero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 28px;
+  align-items: start;
+  margin-top: 16px;
+}
+
+.ihero.has-cover {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.ihero-main > .page-title {
+  margin-top: 0;
+}
+
+.kicker {
+  font-size: 12.5px;
+  color: var(--subtle);
+  margin-bottom: 4px;
+}
+
+.ihero-desc {
+  max-width: 640px;
+  color: var(--muted);
+  line-height: 1.65;
+  margin-top: 14px;
+}
+
+.ihero-desc > * + * {
+  margin-top: 8px;
+}
+
+.ihero .phead-acts {
+  justify-content: flex-end;
+}
+
+.shaar-fig {
+  margin: 0;
+}
+
+.shaar.has-img {
+  padding: 0;
+  background: var(--paper);
+}
+
+.shaar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.portrait {
+  width: 132px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+
+/* ------------------------------------------------------------ the body */
+
+.imain {
+  min-width: 0;
+}
+
+.imain > * + * {
+  margin-top: 20px;
+}
+
+.below > * + * {
+  margin-top: 16px;
+}
+
+.panels {
+  display: grid;
+  gap: 10px;
+}
+
+.panels:empty {
+  display: none;
+}
+
+.imain h2.sec,
+.imain .sec-h {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+/* ------------------------------------------------------------ a sefer's contents */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.toolbar .filter {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--subtle);
+}
+
+.toolbar .filter:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+.toolbar .filter input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--fs-md);
+  color: var(--text);
+  height: 100%;
+}
+
+.toc {
+  overflow: hidden;
+}
+
+.toc .grp {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--canvas);
+  border-top: 1px solid var(--border-muted);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.toc > .grp:first-child,
+.toc > :first-child > .grp:first-child {
+  border-top: 0;
+}
+
+.toc .grp .pg {
+  font-weight: 400;
+}
+
+.toc .e {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 64px 44px;
+  gap: 12px;
+  align-items: center;
+  padding: 9px 16px;
+  border-top: 1px solid var(--border-muted);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.toc a.e:hover {
+  background: var(--canvas);
+  text-decoration: none;
+}
+
+.toc a.e:hover .t {
+  color: var(--accent);
+}
+
+.toc .t {
+  font-family: var(--torah);
+  font-size: 16.5px;
+  font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.toc .t small {
+  font: 400 12.5px var(--ui);
+  color: var(--subtle);
+  margin-inline-start: 8px;
+}
+
+.toc .has {
+  display: grid;
+  grid-template-columns: repeat(3, 16px);
+  gap: 10px;
+  color: var(--faint);
+}
+
+.toc .has .on {
+  color: var(--muted);
+}
+
+.toc .has .on.scan {
+  color: var(--l-scan);
+}
+
+.toc .has .on.audio {
+  color: var(--l-audio);
+}
+
+.toc .has .on.translation {
+  color: var(--l-translation);
+}
+
+.toc .ct {
+  color: var(--subtle);
+  font-size: 12px;
+  text-align: end;
+}
+
+.toc .pg {
+  color: var(--muted);
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.toc-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--subtle);
+}
+
+.toc-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.toc-legend .end {
+  margin-inline-start: auto;
+}
+
+details.pick {
+  position: relative;
+  display: inline-block;
+}
+
+details.pick > summary {
+  list-style: none;
+  cursor: pointer;
+  color: var(--accent);
+}
+
+details.pick > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.pick > summary:hover {
+  text-decoration: underline;
+}
+
+details.pick .pop {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  inset-inline-end: 0;
+  z-index: 20;
+  min-width: 220px;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-pop);
+}
+
+.pop-o {
+  display: block;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-size: var(--fs-md);
+}
+
+.pop-o:hover {
+  background: var(--canvas);
+  text-decoration: none;
+}
+
+.pop-o[aria-current] {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* ------------------------------------------------------------ library bits */
+
+.volumes .row-title.torah {
+  font-family: var(--display);
+  font-size: 16.5px;
+  font-weight: 700;
+}
+
+.vol-n {
+  color: var(--subtle);
+  font-size: 12.5px;
+}
+
+.help-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: var(--canvas);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--r);
+  color: var(--muted);
+  font-size: var(--fs-md);
+}
+
+.help-note > :last-child {
+  margin-inline-start: auto;
+}
+
+.more-row {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+}
+
+/* ------------------------------------------------------------ side column and threads */
+
+.people {
+  display: grid;
+  gap: 8px;
+  font-size: 13.5px;
+}
+
+.people a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.side-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13.5px;
+  padding: 3px 0;
+}
+
+.side-row > :first-child {
+  color: var(--subtle);
+}
+
+.side-row > :last-child {
+  text-align: end;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.side-list > a {
+  display: block;
+  padding: 3px 0;
+  font-size: 13.5px;
+}
+
+.thread-lines {
+  display: grid;
+  gap: 10px;
+}
+
+.thread-line {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.thread-line > svg {
+  margin-top: 2px;
+}
+
+.thread-line a {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.st-open {
+  color: var(--open);
+}
+
+.st-approved {
+  color: var(--approved);
+}
+
+.st-closed {
+  color: var(--closed);
+}
+
+.thread-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.thread-row .row-title {
+  font-weight: 600;
+}
+
+.thread-row .labels {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-inline-start: 6px;
+  vertical-align: middle;
+}
+
+.permalink {
+  font-size: 12px;
+  color: var(--subtle);
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------ older lists inside item pages */
+
+ul.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+ul.list > li {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-muted);
+}
+
+ul.list > li:first-child {
+  border-top: 0;
+}
+
+.section-header,
+.relations h2,
+.linked h2,
+.sources h2,
+.page-body h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.side .linked,
+.side .sources {
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.side .linked ul.list,
+.side .sources ul.list {
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.side .linked ul.list > li,
+.side .sources ul.list > li {
+  padding: 3px 0;
+  border: 0;
+  font-size: 13.5px;
+}
+
+.see-all {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+/* ------------------------------------------------------------ narrower screens */
+
+@media (max-width: 960px) {
+  .ihero.has-cover {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .ihero .phead-acts {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+  .ihero:not(.has-cover) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .ihero,
+  .ihero.has-cover {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .ihero-cover {
+    display: flex;
+    justify-content: center;
+  }
+  .ihero-cover .shaar {
+    --w: 112px;
+  }
+  .ihero-main {
+    text-align: start;
+  }
+  .phead h1.torah,
+  .page-title.torah {
+    font-size: 27px;
+  }
+  .toc .e {
+    grid-template-columns: minmax(0, 1fr) auto 36px;
+    padding: 10px 12px;
+  }
+  .toc .grp {
+    padding: 8px 12px;
+  }
+  .toc .ct {
+    display: none;
+  }
+  .toc .t small {
+    display: block;
+    margin-inline-start: 0;
+    margin-top: 2px;
+  }
+  .toc-legend .end {
+    margin-inline-start: 0;
+    width: 100%;
+  }
+}

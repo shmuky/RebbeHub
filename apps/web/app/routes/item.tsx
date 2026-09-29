@@ -1,4 +1,4 @@
-import { data, redirect } from 'react-router';
+import { data, Link, redirect } from 'react-router';
 import type { Route } from './+types/item';
 import { ContentsForm } from '../components/ContentsForm.js';
 import { EmbedCode } from '../components/EmbedCode.js';
@@ -7,7 +7,9 @@ import { FollowButton } from '../components/FollowButton.js';
 import { ReportForm, type ReportResult } from '../components/ReportForm.js';
 import { SuggestFix, canSuggestFix } from '../components/SuggestFix.js';
 import { UploadForm } from '../components/UploadForm.js';
-import { ItemPage } from '../views/ItemPage.js';
+import { ItemBelowStart, ItemPage, ItemSideEnd } from '../views/ItemPage.js';
+import { ItemSlots } from '../ui/ItemShell.js';
+import { Icon } from '../ui/Icon.js';
 import { ApiError } from '../lib/api.js';
 import { siteOf } from '../lib/context.server.js';
 import { dateKeyToGregorian } from '@rebbehub/hebrew';
@@ -124,24 +126,39 @@ const FOLLOWABLE = new Set(['set', 'work', 'unit', 'event', 'person', 'publicati
 const NOT_FOLLOWED = new Set(['segment', 'text-page', 'alignment-span', 'schema']);
 
 export default function Item({ loaderData }: Route.ComponentProps) {
-  const d = loaderData.entity.data as { kind?: string; slug?: string };
+  const { entity, view, lang, siteUrl } = loaderData;
+  const d = entity.data as { kind?: string; slug?: string };
   // The Teshuros set takes new teshuros; a teshura takes a family's request.
-  const teshuros = loaderData.entity.type === 'set' && d.slug === 'teshuros';
-  const teshura = loaderData.entity.type === 'publication' && d.kind === 'teshura';
-  return (
-    <>
-      {!NOT_FOLLOWED.has(loaderData.entity.type) ? (
-        <div className="item-actions">
-          <FollowButton entity={loaderData.entity} lang={loaderData.lang} />
+  const teshuros = entity.type === 'set' && d.slug === 'teshuros';
+  const teshura = entity.type === 'publication' && d.kind === 'teshura';
+  const slots = {
+    lang,
+    actions: (
+      <>
+        {!NOT_FOLLOWED.has(entity.type) ? <FollowButton entity={entity} lang={lang} /> : null}
+        <Link className="btn icon" to={href(`/edit/${entity.id}`, lang)} aria-label={lang === 'he' ? 'עריכה' : 'Edit'} title={lang === 'he' ? 'עריכה' : 'Edit'}>
+          <Icon name="pencil" />
+        </Link>
+      </>
+    ),
+    below: (
+      <>
+        <ItemBelowStart entity={entity} view={view} lang={lang} />
+        <div className="panels">
+          {canSuggestFix(entity) ? <SuggestFix entity={entity} lang={lang} /> : null}
+          {entity.type === 'event' || entity.type === 'work' || entity.type === 'publication' || teshuros ? <UploadForm entity={entity} lang={lang} teshuros={teshuros} /> : null}
+          {entity.type === 'publication' ? <ContentsForm publication={entity} lang={lang} /> : null}
+          <ReportForm entityId={entity.id} />
+          {teshura ? <FamilyRequestForm teshura={entity.id} /> : null}
+          {FOLLOWABLE.has(entity.type) ? <EmbedCode entity={entity} lang={lang} siteUrl={siteUrl} /> : null}
         </div>
-      ) : null}
-      <ItemPage entity={loaderData.entity} view={loaderData.view} />
-      {canSuggestFix(loaderData.entity) ? <SuggestFix entity={loaderData.entity} lang={loaderData.lang} /> : null}
-      {loaderData.entity.type === 'event' || loaderData.entity.type === 'work' || loaderData.entity.type === 'publication' || teshuros ? <UploadForm entity={loaderData.entity} lang={loaderData.lang} teshuros={teshuros} /> : null}
-      {loaderData.entity.type === 'publication' ? <ContentsForm publication={loaderData.entity} lang={loaderData.lang} /> : null}
-      <ReportForm entityId={loaderData.entity.id} />
-      {teshura ? <FamilyRequestForm teshura={loaderData.entity.id} /> : null}
-      {FOLLOWABLE.has(loaderData.entity.type) ? <EmbedCode entity={loaderData.entity} lang={loaderData.lang} siteUrl={loaderData.siteUrl} /> : null}
-    </>
+      </>
+    ),
+    side: <ItemSideEnd entity={entity} view={view} lang={lang} />,
+  };
+  return (
+    <ItemSlots.Provider value={slots}>
+      <ItemPage entity={entity} view={view} />
+    </ItemSlots.Provider>
   );
 }

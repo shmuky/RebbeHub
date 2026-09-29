@@ -1440,6 +1440,58 @@ a.row-title:hover {
   gap: 6px;
   margin-bottom: 14px;
   min-width: 0;
+  /* A label whose words are bare text reads as a label too. */
+  font-weight: 600;
+  font-size: var(--fs-md);
+}
+
+.stack > .field,
+.form.stack > .field {
+  margin-bottom: 0;
+}
+
+.field input,
+.field textarea,
+.field select,
+.field .choices {
+  font-weight: 400;
+}
+
+/* Buttons in forms that predate the design system read as its buttons. */
+.form button:not(.btn):not(.link-button):not(.tsearch-clear):not(.pop-o) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--r);
+  border: 1px solid var(--accent-strong);
+  background: var(--accent-strong);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.form button.secondary:not(.btn) {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--border-strong);
+  font-weight: 500;
+}
+
+.form button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.code-box {
+  width: 100%;
+  font: 12px/1.5 var(--mono);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  background: var(--sunken);
+  color: var(--text);
+  padding: 8px 10px;
 }
 
 .field > span:first-child,

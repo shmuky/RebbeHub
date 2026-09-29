@@ -1,3 +1,5 @@
+import { threadsAbout, type AboutThread } from './about.server.js';
+import { workToc, type WorkToc } from './workView.server.js';
 import type { Backlink, Cover, Entity, FileInfo, LinkGroup, RebbeHubApi, RelationLink, ScanPages, WorkCover } from './api.js';
 
 /**
@@ -34,6 +36,14 @@ export interface ItemView {
   covers: Record<string, Cover>;
   /** A sefer's own cover, and the PDFs a keeper may choose its title page from. */
   workCover?: WorkCover | null;
+  /** A sefer's (or a volume's) contents with their marks and page numbers, and its numbers. */
+  toc?: WorkToc;
+  /** Suggestions and issues about it (and what is in it), newest first. */
+  about: AboutThread[];
+  /** Who keeps its set: they approve suggestions to it. */
+  keepers: Array<{ id: string; username: string | null; displayName: string }>;
+  /** How many comments its talk page has. */
+  talk: number;
 }
 
 /** A text's paragraphs, all of them, a page at a time (a hanacha may have up to 2,000; a sefer's text more). */
@@ -73,7 +83,9 @@ export function sortPrintings(publications: Entity[]): Entity[] {
 
 export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): Promise<ItemView> {
   const d = entity.data as Record<string, unknown>;
-  const view: ItemView = { refs: {}, lists: {}, files: {}, segments: {}, next: null, backlinks: [], relations: [], pages: {}, linked: [], covers: {} };
+  const view: ItemView = { refs: {}, lists: {}, files: {}, segments: {}, next: null, backlinks: [], relations: [], pages: {}, linked: [], covers: {}, about: [], keepers: [], talk: 0 };
+  // What the conversations about it are matched by: the item, and what is in it.
+  const aboutIds = new Set<string>([entity.id]);
   /** The page images of the first few served scans that have them. */
   const loadPages = async (scans: Entity[]) => {
     for (const scan of scans.slice(0, 3)) {
@@ -107,10 +119,14 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
       if (publications.length) view.scanCounts = await api.refCounts('publication', 'scan');
       const part = url.searchParams.get('part');
       if (part) view.lists.units = await api.workPart(entity.id, part);
-      else if (outline.length && outline.every((p) => p.units === 1)) {
+      else if (outline.length && (outline.length === 1 || outline.every((p) => p.units === 1))) {
         const page = await api.children(entity.id, 'work', 'unit', { after: url.searchParams.get('after') ?? undefined, limit: 200 });
         view.lists.units = page.items;
         view.next = page.items.length === 200 ? page.next : null;
+      }
+      if (view.lists.units?.length) {
+        view.toc = await workToc(api, view.lists.units, view.lists.publications, view.scanCounts ?? {}, { part: part ?? (outline.length === 1 ? outline[0]!.value : null), printing: url.searchParams.get('printing'), lang: url.searchParams.get('lang') === 'en' ? 'en' : 'he' });
+        view.lists.units.forEach((u) => aboutIds.add(u.id));
       }
       break;
     }
@@ -192,12 +208,26 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
       for (const value of Object.values(d)) ids(value).forEach((id) => wanted.add(id));
     }
   }
+  if (['work', 'unit', 'event', 'publication', 'set'].includes(entity.type)) {
+    if (entity.type === 'unit') (view.lists.texts ?? []).forEach((x) => aboutIds.add(x.id));
+    if (entity.type === 'event') (view.lists.units ?? []).forEach((x) => aboutIds.add(x.id));
+    const [about, talk] = await Promise.all([orNone(threadsAbout(api, aboutIds, url.searchParams.get('lang') === 'en' ? 'en' : 'he', { set: entity.type === 'set' ? entity.id : null }), []), orNone(api.talk(entity.id), { talk: [] })]);
+    view.about = about;
+    view.talk = talk.talk.length;
+  }
   view.backlinks = await api.backlinks(entity.id);
   view.linked = await orNone(api.linkedCounts(entity.id), []);
   // An API from before links were served has none to give.
   view.relations = await api.relations(entity.id).catch(() => []);
   view.relations.forEach((r) => wanted.add(r.other));
   const refs = await api.entities([...wanted]);
-  view.refs = Object.fromEntries(refs);
+  view.refs = { ...view.refs, ...Object.fromEntries(refs) };
+  // Keepers of its set, by name.
+  const workOf = typeof d.work === 'string' ? view.refs[d.work] : undefined;
+  const setWanted = entity.type === 'set' ? entity.id : (ids(d.sets)[0] ?? ids((workOf?.data as Record<string, unknown> | undefined)?.sets)[0]);
+  const setOf = entity.type === 'set' ? entity : setWanted ? (view.refs[setWanted] ?? (await orNone(api.entity(setWanted), null)) ?? undefined) : undefined;
+  if (setOf && !view.refs[setOf.id]) view.refs[setOf.id] = setOf;
+  const keepers = ((setOf?.data as { keepers?: string[] } | undefined)?.keepers ?? []).slice(0, 12);
+  if (keepers.length) view.keepers = (await api.peopleByIds(keepers)).map((p) => ({ id: p.id, username: p.username, displayName: p.displayName }));
   return view;
 }

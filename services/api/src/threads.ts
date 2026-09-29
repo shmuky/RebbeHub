@@ -16,6 +16,7 @@ import {
   listLabels,
   markRead,
   openIssue,
+  peopleOf,
   profile,
   removeReviewRequest,
   requestReview,
@@ -114,6 +115,13 @@ export function threadRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context)
   // ------------------------------------------------------------ people
 
   app.get('/v1/people', async (c) => {
+    // By account id (a set's keepers, a list's authors): who they are, as a conversation shows them.
+    const ids = c.req.query('ids');
+    if (ids !== undefined) {
+      const list = ids.split(',').map((id) => id.trim()).filter(Boolean).slice(0, 100);
+      const tags = await peopleOf(db, list);
+      return c.json({ people: list.filter((id) => tags[id]).map((id) => ({ id, username: tags[id]!.username, displayName: tags[id]!.name, bot: tags[id]!.bot })) });
+    }
     const thread = /^(changeset|report):(\d+)$/.exec(c.req.query('thread') ?? '');
     let participants: string[] = [];
     if (thread) {

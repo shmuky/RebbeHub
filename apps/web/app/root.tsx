@@ -19,6 +19,7 @@ import './styles/base.css';
 import './styles/components.css';
 import './styles/layout.css';
 import './styles/pages.css';
+import './styles/items.css';
 
 export const links: LinksFunction = () => [
   // Sichos-Kodesh's faces, self-hosted (styles/fonts.css): the UI's two are fetched early, the rest when used.

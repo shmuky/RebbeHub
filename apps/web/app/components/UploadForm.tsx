@@ -5,6 +5,8 @@ import { nameOf, t, type Lang } from '../lib/i18n.js';
 import { href, itemPath } from '../lib/links.js';
 import { st } from '../lib/scanStrings.js';
 import { useAccount } from '../lib/useAccount.js';
+import { Icon } from '../ui/Icon.js';
+import { Panel } from '../ui/primitives.js';
 
 /**
  * "Add a recording" to a farbrengen, "Add a scan" to a sefer, a printing
@@ -136,8 +138,7 @@ export function UploadForm({ entity, lang, teshuros = false }: { entity: Pick<En
   const stop = proposal?.as === 'existing' || (proposal?.as === 'duplicate' && !goOn);
   const summary = teshuros ? st(lang, 'addTeshura') : t(lang, what === 'recording' ? 'addRecording' : 'addScan');
   return (
-    <details className="report upload" id="upload">
-      <summary>{summary}</summary>
+    <Panel id="upload" icon="upload" title={summary} hint={what === 'recording' ? 'MP3, M4A' : 'PDF'}>
       {account === null ? (
         <p>
           {t(lang, 'uploadSignIn')} <Link to={href('/signin', lang, { return: `${here}#upload` })}>{t(lang, 'signIn')}</Link>
@@ -156,9 +157,9 @@ export function UploadForm({ entity, lang, teshuros = false }: { entity: Pick<En
           {t(lang, result.served ? 'uploadSent' : 'uploadSentPrivate')} <Link to={href('/review', lang, { s: String(result.suggestion) })}>{t(lang, 'suggestSee')}</Link>
         </p>
       ) : (
-        <form onSubmit={send}>
-          <label>
-            {t(lang, what === 'recording' ? 'uploadAudio' : 'uploadPdf')}
+        <form onSubmit={send} className="form stack">
+          <label className="field">
+            <span className="field-label">{t(lang, what === 'recording' ? 'uploadAudio' : 'uploadPdf')}</span>
             <input
               type="file"
               accept={what === 'recording' ? 'audio/*' : 'application/pdf'}
@@ -170,7 +171,7 @@ export function UploadForm({ entity, lang, teshuros = false }: { entity: Pick<En
               required
             />
           </label>
-          <p className="row-sub">{t(lang, 'uploadLimit')}</p>
+          <p className="hint">{t(lang, 'uploadLimit')}</p>
           {checking ? <p className="row-sub" role="status">{st(lang, 'checking')}</p> : null}
           {proposal?.as === 'existing' ? (
             <p role="status">
@@ -197,7 +198,7 @@ export function UploadForm({ entity, lang, teshuros = false }: { entity: Pick<En
                 </p>
               ))}
               {proposal?.as === 'duplicate' && !goOn ? (
-                <button type="button" className="secondary" onClick={() => setGoOn(true)}>
+                <button type="button" className="btn sm" onClick={() => setGoOn(true)}>
                   {st(lang, 'sendAnyway')}
                 </button>
               ) : null}
@@ -206,15 +207,20 @@ export function UploadForm({ entity, lang, teshuros = false }: { entity: Pick<En
           {stop ? null : (
             <>
               {what === 'scan' ? (
-                <fieldset className="rights-choice">
+                <fieldset className="field">
                   <legend>{st(lang, 'whatIsIt')}</legend>
+                  <div className="choices inline">
                   {(['scan-of', 'printing', 'teshura'] as const)
                     .filter((k) => (k === 'scan-of' ? printings.length > 0 || entity.type === 'publication' : k === 'printing' ? entity.type === 'work' : true))
                     .map((k) => (
-                      <label key={k}>
-                        <input type="radio" name="as" value={k} checked={kind === k} onChange={() => setKind(k)} /> {st(lang, k === 'scan-of' ? 'asScanOf' : k === 'printing' ? 'asPrinting' : 'asTeshura')}
+                      <label key={k} className="choice">
+                        <input type="radio" name="as" value={k} checked={kind === k} onChange={() => setKind(k)} />
+                        <span>
+                          <b>{st(lang, k === 'scan-of' ? 'asScanOf' : k === 'printing' ? 'asPrinting' : 'asTeshura')}</b>
+                        </span>
                       </label>
                     ))}
+                  </div>
                   {proposal && 'reason' in proposal && ['shares-pages', 'same-year', 'title'].includes(proposal.reason) ? (
                     <p className="row-sub">
                       {st(lang, 'guessedBecause')} {st(lang, `reason_${proposal.reason.replace('-', '_')}` as 'reason_title')}
@@ -223,37 +229,37 @@ export function UploadForm({ entity, lang, teshuros = false }: { entity: Pick<En
                 </fieldset>
               ) : null}
               {what === 'scan' && kind === 'scan-of' && entity.type !== 'publication' ? (
-                <label>
-                  {st(lang, 'whichPrinting')}
-                  <select value={publication} onChange={(e) => setPublication(e.target.value)} required>
-                    <option value="" disabled>
-                      …
-                    </option>
+                <fieldset className="field">
+                  <legend>{st(lang, 'whichPrinting')}</legend>
+                  <div className="choices">
                     {printings.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {printingLabel(p)}
-                      </option>
+                      <label key={p.id} className="choice">
+                        <input type="radio" name="publication" value={p.id} checked={publication === p.id} onChange={() => setPublication(p.id)} required />
+                        <span>
+                          <b>{printingLabel(p)}</b>
+                        </span>
+                      </label>
                     ))}
-                  </select>
-                </label>
+                  </div>
+                </fieldset>
               ) : null}
               {what === 'recording' || kind !== 'scan-of' ? (
-                <label>
+                <label className="field">
                   {t(lang, what === 'recording' ? 'recordingName' : 'printingName')}
                   <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={300} dir="auto" placeholder={t(lang, what === 'recording' ? 'recordingNameHint' : 'printingNameHint')} />
                 </label>
               ) : null}
               {what === 'scan' && kind === 'printing' ? (
                 <>
-                  <label>
+                  <label className="field">
                     {st(lang, 'publisher')}
                     <input {...field('publisher')} maxLength={300} dir="auto" />
                   </label>
-                  <label>
+                  <label className="field">
                     {st(lang, 'year')}
                     <input {...field('year')} maxLength={20} dir="auto" placeholder={st(lang, 'yearHint')} />
                   </label>
-                  <label>
+                  <label className="field">
                     {st(lang, 'printingNumber')}
                     <input {...field('printing')} inputMode="numeric" pattern="[1-9][0-9]{0,2}" maxLength={3} />
                   </label>
@@ -261,37 +267,47 @@ export function UploadForm({ entity, lang, teshuros = false }: { entity: Pick<En
               ) : null}
               {what === 'scan' && kind === 'teshura' ? (
                 <>
-                  <label>
+                  <label className="field">
                     {st(lang, 'families')}
                     <input {...field('families')} maxLength={300} dir="auto" placeholder={st(lang, 'familiesHint')} required />
                   </label>
-                  <label>
+                  <label className="field">
                     {st(lang, 'simchaDate')}
                     <input {...field('date')} maxLength={12} dir="ltr" placeholder={st(lang, 'simchaDateHint')} pattern="\d{4}(-(0[1-9]|1[0-3]|06A|06B)(-\d{2})?)?" />
                   </label>
                   <p className="row-sub">{st(lang, 'teshuraRights')}</p>
                 </>
               ) : null}
-              <fieldset className="rights-choice">
+              <fieldset className="field">
                 <legend>{t(lang, 'rightsQuestion')}</legend>
-                {RIGHTS.map((r) => (
-                  <label key={r}>
-                    <input type="radio" name="rights" value={r} checked={rights === r} onChange={() => setRights(r)} required /> {t(lang, `rights_${r}`)}
-                  </label>
-                ))}
+                <div className="choices">
+                  {RIGHTS.map((r) => (
+                    <label key={r} className="choice">
+                      <input type="radio" name="rights" value={r} checked={rights === r} onChange={() => setRights(r)} required />
+                      <span>
+                        <b>{t(lang, `rights_${r}`)}</b>
+                      </span>
+                    </label>
+                  ))}
+                </div>
               </fieldset>
-              {error ? <p role="alert">{error}</p> : null}
+              {error ? (
+                <p className="alert negative" role="alert">
+                  <Icon name="warn" />
+                  {error}
+                </p>
+              ) : null}
               {progress !== null ? <progress max={100} value={progress} /> : null}
-              <div>
-                <button type="submit" disabled={!file || !rights || progress !== null || checking}>
+              <div className="form-actions">
+                <button type="submit" className="btn primary" disabled={!file || !rights || progress !== null || checking}>
                   {progress !== null ? `${progress}%` : t(lang, 'sendForReview')}
                 </button>
+                <span className="hint">{t(lang, 'uploadHow')}</span>
               </div>
-              <p className="row-sub">{t(lang, 'uploadHow')}</p>
             </>
           )}
         </form>
       )}
-    </details>
+    </Panel>
   );
 }
