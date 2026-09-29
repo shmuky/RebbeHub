@@ -12,6 +12,10 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Covers from linked PDFs.** A sefer whose PDF is only linked (a scan on
+  Drive, a HebrewBooks printing) gets its title page as a cover too; the
+  cover source list (`/v1/works/{id}/cover`) now names `linked` sources and
+  a `publication` kind. The PDF itself stays a link.
 - **API v1 (1.0.0), declared stable.** Every route is in
   `/openapi.json` (OpenAPI 3.1), and a test fails when one is not.
 - **Personal API tokens** (`rhp_…`): made and revoked on the account page,
