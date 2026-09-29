@@ -144,6 +144,10 @@ any time. `@rebbehub/client` carries the API's version.
   `Server-Timing` says how many of its calls were answered in the site's
   Worker.
 
+- **Transcription runs work again.** PyAV 19, out on 2026-09-29, broke
+  faster-whisper's audio reading, so every recording failed; the workflow
+  now pins faster-whisper 1.2.1 and PyAV below 19.
+
 - **Search answers in well under a second, not thirteen.** Postgres
   ranked a search's matches by reading the words of every matching item
   again; a common word matches fourteen thousand sichos, and the search
