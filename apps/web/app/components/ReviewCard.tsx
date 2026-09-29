@@ -37,7 +37,8 @@ export interface ReviewRow {
   post_review: 'pending' | 'done' | null;
   submitted_at: string | null;
   created_at: string;
-  checks: Array<{ check: string; status: 'pass' | 'warn' | 'fail'; message: string }>;
+  /** The checks that did not pass: a Suggestion read on its own has them; the list leaves them out. */
+  checks?: Array<{ check: string; status: 'pass' | 'warn' | 'fail'; message: string }>;
   /** How many items it changes. */
   items?: number;
 }
@@ -369,7 +370,7 @@ export function SuggestionCard({
     }
   };
 
-  const failed = cs.checks.filter((c) => c.status !== 'pass');
+  const failed = (cs.checks ?? []).filter((c) => c.status !== 'pass');
   const lastSendBack = detail ? [...detail.reviews].reverse().find((r) => r.verdict === 'send_back') : undefined;
   const labels = detail ? detailLabels(detail as unknown as Pick<SuggestionDetail, 'entries'>) : [];
   const page = cs.number ? href(`/suggestions/${cs.number}`, lang) : null;

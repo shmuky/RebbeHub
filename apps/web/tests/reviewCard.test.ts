@@ -12,6 +12,7 @@ import type { Lang } from '../app/lib/i18n.js';
  * the whole of it; the bot's work marked as a machine's.
  */
 
+// As GET /v1/suggestions sends it: no checks (a Suggestion read on its own has them).
 const row: ReviewRow = {
   id: 7,
   number: null,
@@ -23,7 +24,6 @@ const row: ReviewRow = {
   post_review: null,
   submitted_at: '2026-09-28T12:00:00Z',
   created_at: '2026-09-28T12:00:00Z',
-  checks: [],
   items: 500,
 };
 
@@ -37,7 +37,7 @@ const entry = (i: number) => ({
 });
 
 const detail: ReviewDetail = {
-  changeset: row,
+  changeset: { ...row, checks: [{ check: 'date', status: 'warn', message: 'no date' }] },
   entries: Array.from({ length: 25 }, (_, i) => entry(i)),
   total: 500,
   next: 25,
@@ -66,6 +66,13 @@ describe("a bot's Suggestion of 500 items in the review queue", () => {
     expect(html).toContain('500 items');
     expect(html).not.toContain('Approve');
     expect(html).toContain('aria-busy="true"'); // its changes are on their way
+  });
+
+  it('is drawn from a list row that carries no checks (the list leaves them out), and shows the checks once read', () => {
+    expect('checks' in row).toBe(false);
+    expect(() => render(null)).not.toThrow();
+    expect(render(null)).not.toContain('no date');
+    expect(render(detail)).toContain('no date');
   });
 
   it('then sums the 500 up, shows the first 25, offers the rest, and approves all of it', () => {
