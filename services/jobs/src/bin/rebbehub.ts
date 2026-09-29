@@ -3,7 +3,7 @@ import { parseArgs } from 'node:util';
 import { checkLinksCommand, citationsCommand, embedCommand } from '../networkCommands.js';
 import { ocrCommand } from '../ocrCommand.js';
 import { alignCommand, transcribeCommand } from '../transcribeCommand.js';
-import { fingerprintsCommand, pageImagesCommand } from '../scanPagesCommand.js';
+import { coversCommand, fingerprintsCommand, pageImagesCommand } from '../scanPagesCommand.js';
 import {
   accountCommand,
   archiveGapsCommand,
@@ -77,6 +77,10 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 page images and thumbnails of served scans that have
                                                 none (the IIIF manifests and the site's viewer show them),
                                                 into R2 (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
+  rebbehub covers [--work <id>] [--limit <n>] [--again] [--files <url>] [--bucket rebbehub-public]
+                                                each sefer's cover from the title page of its best served
+                                                PDF (or the page a keeper chose), into R2
+                                                (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
   rebbehub fingerprints [--limit <n>] [--files <url>] [--preservation-bucket rebbehub-preservation]
                                                 page hashes and audio fingerprints of held files not
                                                 measured yet (recordings need ffmpeg), so the same scan
@@ -135,6 +139,7 @@ const { values, positionals } = parseArgs({
     recording: { type: 'string' },
     linked: { type: 'boolean' },
     reread: { type: 'boolean' },
+    again: { type: 'boolean' },
     files: { type: 'string' },
     minutes: { type: 'string' },
     cache: { type: 'string' },
@@ -201,6 +206,9 @@ try {
       break;
     case 'page-images':
       await pageImagesCommand(ctx, { scan: values.scan, limit: number(values.limit), files: values.files, bucket: values.bucket });
+      break;
+    case 'covers':
+      await coversCommand(ctx, { work: values.work, limit: number(values.limit), again: values.again, files: values.files, bucket: values.bucket });
       break;
     case 'fingerprints':
       await fingerprintsCommand(ctx, { limit: number(values.limit), files: values.files, preservationBucket: values['preservation-bucket'] });

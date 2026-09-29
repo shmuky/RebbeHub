@@ -13,6 +13,7 @@ import * as emailNotifyAdvice from './migrations/0011_email_notify_advice.js';
 import * as scansAndTeshuros from './migrations/0012_scans_and_teshuros.js';
 import * as projectClaims from './migrations/0013_project_claims.js';
 import * as readingPlaces from './migrations/0014_reading_places.js';
+import * as covers from './migrations/0017_covers.js';
 
 export interface Migration {
   version: number;
@@ -36,6 +37,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 12, name: 'scans-and-teshuros', up: scansAndTeshuros.up },
   { version: 13, name: 'project-claims', up: projectClaims.up },
   { version: 14, name: 'reading-places', up: readingPlaces.up },
+  { version: 17, name: 'covers', up: covers.up },
 ];
 
 /** Applies the migrations `db` has not had yet, each in its own transaction. Returns the versions applied. */

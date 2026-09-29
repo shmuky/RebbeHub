@@ -238,6 +238,19 @@ export interface WorkData extends CommonFields {
   levels: string[];
   sourceCopies?: WorkSourceData[];
   description?: LocalName;
+  /**
+   * The page a person chose as its cover: the title page (shaar) of one of
+   * its PDFs. Unset, the jobs choose one and label it as the machine's
+   * choice (`rebbehub covers`); set through a suggestion, the person's
+   * choice wins.
+   */
+  cover?: CoverChoice;
+}
+
+/** A page of a PDF, by the file's sha256 and the page's number from 1. */
+export interface CoverChoice {
+  file: string;
+  page: number;
 }
 
 /** A unit's place in its work, one step per level: `{ level: 'volume', value: '12' }`. */

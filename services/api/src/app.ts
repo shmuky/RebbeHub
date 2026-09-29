@@ -11,6 +11,7 @@ import { networkRoutes } from './network.js';
 import { oaiRoutes, type OaiOptions } from './oai.js';
 import { mirrorRoutes, type MirrorOptions } from './mirrors.js';
 import { readingRoutes } from './reading.js';
+import { pageRoutes } from './pages.js';
 
 /**
  * The RebbeHub API. Reading needs nothing; reporting a problem needs no
@@ -150,7 +151,9 @@ export function createApp(options: ApiOptions): Hono {
 
   if (options.auth) authRoutes(app, catalog, options.mailer && !options.auth.mailer ? { ...options.auth, mailer: options.mailer } : options.auth);
   adminRoutes(app, catalog, signedIn);
-  uploadRoutes(app, catalog, signedIn, options.uploads);
+  const filesBase = (c: Context) => options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
+  uploadRoutes(app, catalog, signedIn, options.uploads, filesBase);
+  pageRoutes(app, catalog, { filesBase });
   networkRoutes(app, catalog, { embedder: options.embedder });
   if (options.oai) oaiRoutes(app, catalog, options.oai);
   readingRoutes(app, catalog, signedIn, (status, message) => {
@@ -158,7 +161,7 @@ export function createApp(options: ApiOptions): Hono {
   });
   mirrorRoutes(app, catalog, { mirrors: options.mirrors, files: options.files });
   scanRoutes(app, catalog, {
-    filesBase: (c) => options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null),
+    filesBase,
     siteUrl: options.siteUrl ?? options.auth?.origins[0] ?? 'https://rebbehub.org',
     signedIn,
     authenticate,

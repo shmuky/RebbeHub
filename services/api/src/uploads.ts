@@ -1,9 +1,9 @@
 import type { Context, Hono } from 'hono';
-import { getFile, itemsUsingFile, registerFile, teshuraCredit, teshurosSetId, uploadAllowance, type Catalog, type EntityView, type Json } from '@rebbehub/core';
+import { addHanachaText, getFile, itemsUsingFile, proposeNewMaterial, registerFile, similarScans, suggestDocument, suggestHanachaPdf, suggestRecording, teshuraCredit, teshurosSetId, uploadAllowance, type Catalog, type EntityView, type HanachaTextRights, type Json, type Place } from '@rebbehub/core';
 import { one } from '@rebbehub/db';
 import { isValidDateKey, parseHebrewYear } from '@rebbehub/hebrew';
-import type { EntityId, FileClass, Licence } from '@rebbehub/model';
-import { isEntityId, mayServe } from '@rebbehub/model';
+import type { EntityId, EventLinkKind, FileClass, Genre, Licence } from '@rebbehub/model';
+import { GENRES, isEntityId, mayServe } from '@rebbehub/model';
 import { HttpError } from './app.js';
 
 /**
@@ -19,6 +19,14 @@ import { HttpError } from './app.js';
  *   scan-of   another scan of a publication the catalog has
  *   printing  a new printing of a sefer: a publication and its scan
  *   teshura   a new teshura, in the Teshuros set, credited to its families
+ *
+ * "Add something new" (/add on the site) brings what the catalog does not
+ * have yet, guessed first too (POST /v1/uploads/propose): a hanacha's PDF
+ * (`what=hanacha`) for a farbrengen or a sicha, a recording of a
+ * farbrengen the catalog lacks (`eventTitle`, `eventDate`), or other
+ * material (`what=document`, `as` sefer, letter or document); a hanacha's
+ * words go to POST /v1/hanachos/text. What becomes of each is in
+ * core/contribute.ts.
  */
 
 export interface ObjectWriter {
@@ -45,6 +53,20 @@ export const RIGHTS_STATEMENTS = {
 } as const satisfies Record<string, { licence: Licence; fileClass?: FileClass; note: string }>;
 
 export type RightsStatement = keyof typeof RIGHTS_STATEMENTS;
+
+/**
+ * A hanacha's PDF: served only when its uploader wrote it or it is anyone's;
+ * a hanacha printed for free distribution, or one they are unsure of, is a
+ * hanacha as docs/rights.md has them - linked, and a copy kept privately.
+ */
+const HANACHA_RIGHTS: Record<RightsStatement, { licence: Licence; fileClass?: FileClass }> = {
+  mine: { licence: 'cc0' },
+  'public-domain': { licence: 'public-domain' },
+  free: { licence: 'unknown', fileClass: 'hanacha' },
+  unsure: { licence: 'unknown', fileClass: 'hanacha' },
+};
+
+const HANACHA_KINDS: readonly EventLinkKind[] = ['bilti-mugah', 'mugah', 'maamar', 'hagahos', 'hosofos', 'english', 'other'];
 
 export type ScanKind = 'scan-of' | 'printing' | 'teshura';
 
@@ -76,27 +98,11 @@ export function familiesOf(text: string | undefined): string[] {
     .slice(0, 6);
 }
 
-export function uploadRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context) => Promise<string>, stores: UploadOptions | undefined): void {
+export function uploadRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context) => Promise<string>, stores: UploadOptions | undefined, filesBase: (c: Context) => string | null = () => null): void {
   const maxBytes = stores?.maxBytes ?? 50 * 1024 * 1024;
 
-  app.post('/v1/uploads', async (c) => {
-    const by = await signedIn(c);
-    if (!stores) throw new HttpError(422, 'uploads are not set up on this server');
-    const query = (name: string) => (c.req.query(name) ?? '').trim();
-    const what = c.req.query('what');
-    const target = query('for');
-    const statement = c.req.query('rights') as RightsStatement | undefined;
-    const title = query('title').slice(0, 300);
-    if (what !== 'recording' && what !== 'scan') throw new HttpError(400, 'what is recording or scan');
-    if (!isEntityId(target)) throw new HttpError(400, 'say which item the file belongs to (for)');
-    if (!statement || !(statement in RIGHTS_STATEMENTS)) throw new HttpError(400, `rights is one of ${Object.keys(RIGHTS_STATEMENTS).join(', ')}`);
-    const mime = (c.req.header('Content-Type') ?? '').split(';')[0]!.trim().toLowerCase();
-    if (what === 'recording' && !AUDIO.test(mime)) throw new HttpError(400, 'a recording is an audio file');
-    if (what === 'scan' && mime !== 'application/pdf') throw new HttpError(400, 'a scan is a PDF');
-    const declared = Number(c.req.header('Content-Length') ?? 0);
-    if (declared > maxBytes) throw new HttpError(422, `files up to ${Math.round(maxBytes / 1024 / 1024)} MB for now`);
-
-    // New accounts wait a day before adding files, and everyone adds so many a day (core, permissions.ts).
+  /** New accounts wait a day before adding files, and everyone adds so many a day (core, permissions.ts). */
+  const mayAdd = async (by: string, adding: number) => {
     const account = await catalog.account(by);
     if (!account) throw new HttpError(403, 'sign in to do this');
     const seen = await one<{ age_hours: number | null; files: number; bytes: string | number }>(
@@ -106,18 +112,51 @@ export function uploadRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context)
        FROM file_source s JOIN file f ON f.sha256 = s.sha256 WHERE s.uploaded_by = $1 AND s.created_at > now() - interval '1 day'`,
       [by],
     );
-    const allowed = uploadAllowance(account, { accountAgeHours: seen?.age_hours ?? null, filesToday: seen?.files ?? 0, bytesToday: Number(seen?.bytes ?? 0), adding: declared });
+    const allowed = uploadAllowance(account, { accountAgeHours: seen?.age_hours ?? null, filesToday: seen?.files ?? 0, bytesToday: Number(seen?.bytes ?? 0), adding });
     if (!allowed.ok) throw new HttpError(allowed.reason === 'hold' || allowed.reason === 'suspended' ? 403 : 429, allowed.message);
+  };
 
-    const item = await catalog.get(target as EntityId);
-    if (!item) throw new HttpError(404, `no item ${target}`);
+  /** Where a new hanacha or recording goes: an item named by `for`, or a new farbrengen (`eventTitle`, `eventDate`). */
+  const placeFrom = (query: (name: string) => string): Place | null => {
+    const target = query('for');
+    if (isEntityId(target)) return { target: target as EntityId };
+    const title = query('eventTitle');
+    const date = query('eventDate');
+    if (!title && !date) return null;
+    if (!title || !date || !isValidDateKey(date)) throw new HttpError(400, 'a new farbrengen needs its name (eventTitle) and its date (eventDate, 5742-05-10)');
+    return { newEvent: { title: title.slice(0, 300), date } };
+  };
+
+  app.post('/v1/uploads', async (c) => {
+    const by = await signedIn(c);
+    if (!stores) throw new HttpError(422, 'uploads are not set up on this server');
+    const query = (name: string) => (c.req.query(name) ?? '').trim();
+    const what = c.req.query('what');
+    const target = query('for');
+    const statement = c.req.query('rights') as RightsStatement | undefined;
+    const title = query('title').slice(0, 300);
+    if (what !== 'recording' && what !== 'scan' && what !== 'hanacha' && what !== 'document') throw new HttpError(400, 'what is recording, scan, hanacha or document');
+    const place = what === 'recording' || what === 'hanacha' ? placeFrom(query) : null;
+    if ((what === 'recording' || what === 'hanacha') && !place) throw new HttpError(400, 'say which farbrengen or sicha it belongs to (for), or name a new farbrengen (eventTitle, eventDate)');
+    if (what === 'scan' && !isEntityId(target)) throw new HttpError(400, 'say which item the file belongs to (for)');
+    if (!statement || !(statement in RIGHTS_STATEMENTS)) throw new HttpError(400, `rights is one of ${Object.keys(RIGHTS_STATEMENTS).join(', ')}`);
+    const mime = (c.req.header('Content-Type') ?? '').split(';')[0]!.trim().toLowerCase();
+    if (what === 'recording' && !AUDIO.test(mime)) throw new HttpError(400, 'a recording is an audio file');
+    if (what !== 'recording' && mime !== 'application/pdf') throw new HttpError(400, `a ${what} is a PDF`);
+    const declared = Number(c.req.header('Content-Length') ?? 0);
+    if (declared > maxBytes) throw new HttpError(422, `files up to ${Math.round(maxBytes / 1024 / 1024)} MB for now`);
+    await mayAdd(by, declared);
+
+    const item = isEntityId(target) ? await catalog.get(target as EntityId) : null;
+    if (isEntityId(target) && !item) throw new HttpError(404, `no item ${target}`);
+    if (what === 'recording' && item && item.type !== 'event') throw new HttpError(400, 'a recording is added to a farbrengen');
+    if (what === 'hanacha' && item && item.type !== 'event' && item.type !== 'unit') throw new HttpError(400, 'a hanacha is added to a farbrengen or a sicha');
     const teshurosSet = await teshurosSetId();
     // What the scan is: as the person confirmed it, else what the page it was added from says.
     let kind: ScanKind | null = null;
     let publication: EntityView | null = null;
-    if (what === 'recording') {
-      if (item.type !== 'event') throw new HttpError(400, 'a recording is added to a farbrengen');
-    } else {
+    if (what === 'scan') {
+      if (!item) throw new HttpError(404, `no item ${target}`);
       const asked = c.req.query('as') as ScanKind | undefined;
       if (asked && !['scan-of', 'printing', 'teshura'].includes(asked)) throw new HttpError(400, 'as is scan-of, printing or teshura');
       kind = asked ?? (item.type === 'publication' ? 'scan-of' : item.id === teshurosSet ? 'teshura' : item.type === 'work' ? 'printing' : null);
@@ -130,6 +169,16 @@ export function uploadRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context)
         throw new HttpError(400, 'a new printing is added to its sefer');
       }
     }
+    // Other material: a new sefer, a letter, or a document of another kind (core/contribute.ts).
+    const documentAs = what === 'document' ? (c.req.query('as') ?? 'document') : null;
+    if (documentAs && !['sefer', 'letter', 'document'].includes(documentAs)) {
+      throw new HttpError(400, 'as is sefer, letter or document (a teshura, or a printing of a sefer the catalog has, is added as a scan to the Teshuros set or the sefer)');
+    }
+    if (documentAs && !title) throw new HttpError(400, 'say what it is called, as printed on it (title)');
+    const genre = query('genre');
+    if (genre && !GENRES.includes(genre as Genre)) throw new HttpError(400, `genre is one of ${GENRES.join(', ')}`);
+    const linkKind = (query('kind') || 'bilti-mugah') as EventLinkKind;
+    if (what === 'hanacha' && !HANACHA_KINDS.includes(linkKind)) throw new HttpError(400, `kind is one of ${HANACHA_KINDS.join(', ')}`);
     const families = kind === 'teshura' ? familiesOf(query('families')) : [];
     if (kind === 'teshura' && families.length === 0) throw new HttpError(400, 'a teshura needs its families, as printed on it');
     const simchaDate = query('date');
@@ -138,7 +187,7 @@ export function uploadRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context)
     if (kind === 'teshura' && !(SIMCHOS as readonly string[]).includes(simchaKind)) throw new HttpError(400, `simcha is one of ${SIMCHOS.join(', ')}`);
     const printingNumber = query('printing');
     if (printingNumber && !/^[1-9]\d{0,2}$/.test(printingNumber)) throw new HttpError(400, 'printing is a number (1 for the first)');
-    const year = kind === 'printing' ? yearFields(query('year')) : {};
+    const year = kind === 'printing' || documentAs ? yearFields(query('year')) : {};
 
     const bytes = await c.req.arrayBuffer();
     if (bytes.byteLength === 0) throw new HttpError(400, 'the file is empty');
@@ -148,10 +197,10 @@ export function uploadRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context)
     // We already have it: say where, and add nothing twice.
     if (await getFile(catalog.db, sha256)) return c.json({ sha256, existed: true, usedBy: (await itemsUsingFile(catalog.db, sha256)).map((i) => ({ id: i.id, type: i.type, path: i.path })) });
 
-    const rights = RIGHTS_STATEMENTS[statement];
+    const rights: { licence: Licence; fileClass?: FileClass; note: string } = what === 'hanacha' ? { ...HANACHA_RIGHTS[statement], note: RIGHTS_STATEMENTS[statement].note } : RIGHTS_STATEMENTS[statement];
     // A teshura's scan is a teshura's, whatever the uploader was unsure of: served with credit to its families (docs/rights.md).
-    const fileClass: FileClass = kind === 'teshura' ? 'teshura-scan' : 'fileClass' in rights ? rights.fileClass : what === 'recording' ? 'recording' : 'other';
-    const itemData = item.data as Record<string, unknown>;
+    const fileClass: FileClass = kind === 'teshura' ? 'teshura-scan' : (rights.fileClass ?? (what === 'recording' ? 'recording' : 'other'));
+    const itemData = (item?.data ?? {}) as Record<string, unknown>;
     // The bytes first, where their rights put them (named by content, so a retry writes the same object).
     const { file } = await registerFile(catalog.db, {
       sha256,
@@ -167,16 +216,39 @@ export function uploadRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context)
     });
     if (file.storage_tier === 'public') await stores.public.put(`objects/${sha256}`, bytes, mime);
     else await stores.preservation.put(`objects/${sha256}`, bytes, mime);
+    const served = mayServe(file.rights_state) && file.storage_tier === 'public';
+    const done = (suggestion: number, extra: Record<string, unknown> = {}) => c.json({ sha256, existed: false, as: kind ?? documentAs ?? what, rights: file.rights_state, served, suggestion, ...extra }, 201);
 
     // Then the suggestion that adds it to the catalog.
+    if (what === 'recording') {
+      const made = await suggestRecording(catalog, by, { file: sha256, place: place!, title: title || ((itemData.title as { he?: string } | undefined)?.he ?? '') });
+      return done(made.suggestion.id, { event: made.event });
+    }
+    if (what === 'hanacha') {
+      const base = filesBase(c);
+      const made = await suggestHanachaPdf(catalog, by, { file: sha256, place: place!, kind: linkKind, title, licence: rights.licence, servedUrl: served && base ? `${base}/objects/${sha256}` : undefined });
+      return done(made.suggestion.id, { publication: made.publication, event: made.event });
+    }
+    if (documentAs) {
+      const made = await suggestDocument(catalog, by, {
+        file: sha256,
+        as: documentAs as 'sefer' | 'letter' | 'document',
+        title,
+        date: simchaDate || undefined,
+        set: isEntityId(query('set')) ? (query('set') as EntityId) : undefined,
+        author: isEntityId(query('author')) ? (query('author') as EntityId) : undefined,
+        genre: (genre || undefined) as Genre | undefined,
+        publisher: query('publisher') || undefined,
+        year,
+        unit: isEntityId(query('unit')) ? (query('unit') as EntityId) : undefined,
+      });
+      return done(made.suggestion.id, { publication: made.publication, work: made.work });
+    }
     const name = title || ((itemData.title as { he?: string } | undefined)?.he ?? '');
     // In the item's sets, so their keepers review it; a teshura in the Teshuros set.
     const setsOf = (data: Record<string, unknown>) => (Array.isArray(data.sets) && data.sets.length ? { sets: data.sets as Json } : {});
     let suggestion;
-    if (what === 'recording') {
-      suggestion = await catalog.createChangeset(by, { title: `הוספת הקלטה: ${name}` });
-      await catalog.putRevision(suggestion.id, by, { type: 'recording', data: { event: item.id, title: { he: name || 'הקלטה' }, file: sha256, ...setsOf(itemData) } as Json });
-    } else if (kind === 'scan-of') {
+    if (kind === 'scan-of') {
       const pubData = publication!.data as { title?: { he?: string } };
       suggestion = await catalog.createChangeset(by, { title: `סריקה נוספת: ${pubData.title?.he ?? name}` });
       await catalog.putRevision(suggestion.id, by, { type: 'scan', data: { publication: publication!.id, file: sha256, completeness: 'unknown' } as Json });
@@ -187,7 +259,7 @@ export function uploadRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context)
       const simcha = { kind: simchaKind, families, ...(simchaDate ? { date: simchaDate } : {}), ...(query('place') ? { place: query('place').slice(0, 200) } : {}) };
       const pub = await catalog.putRevision(suggestion.id, by, {
         type: 'publication',
-        data: { kind: 'teshura', title: { he: teshuraTitle }, simcha, ...(simchaDate ? { date: simchaDate } : {}), ...(item.type === 'work' ? { work: item.id } : {}), ...inSet } as Json,
+        data: { kind: 'teshura', title: { he: teshuraTitle }, simcha, ...(simchaDate ? { date: simchaDate } : {}), ...(item!.type === 'work' ? { work: item!.id } : {}), ...inSet } as Json,
       });
       await catalog.putRevision(suggestion.id, by, { type: 'scan', data: { publication: pub, file: sha256, completeness: 'unknown' } as Json });
     } else {
@@ -197,7 +269,7 @@ export function uploadRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context)
         data: {
           kind: 'book-volume',
           title: { he: name || 'סריקה' },
-          work: item.id,
+          work: item!.id,
           ...(query('publisher') ? { publisher: query('publisher').slice(0, 300) } : {}),
           ...year,
           ...(printingNumber ? { printing: Number(printingNumber) } : {}),
@@ -207,6 +279,44 @@ export function uploadRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context)
       await catalog.putRevision(suggestion.id, by, { type: 'scan', data: { publication: pub, file: sha256, completeness: 'unknown' } as Json });
     }
     const sent = await catalog.submit(suggestion.id, by);
-    return c.json({ sha256, existed: false, as: kind, rights: file.rights_state, served: mayServe(file.rights_state) && file.storage_tier === 'public', suggestion: sent.id }, 201);
+    return done(sent.id);
+  });
+
+  // Before adding something new: what it most likely is and where it belongs, from its name (and, for a PDF, its measurements). A machine's guess.
+  app.post('/v1/uploads/propose', async (c) => {
+    await signedIn(c);
+    const input = await c.req.json<{ what?: string; name?: string; sha256?: string; pageHashes?: unknown[] }>().catch(() => ({}) as Record<string, undefined>);
+    if (input.what !== 'hanacha' && input.what !== 'recording' && input.what !== 'document') throw new HttpError(400, 'what is hanacha, recording or document');
+    const sha256 = typeof input.sha256 === 'string' && /^[0-9a-f]{64}$/.test(input.sha256) ? input.sha256 : null;
+    const usedBy = sha256 && (await getFile(catalog.db, sha256)) ? (await itemsUsingFile(catalog.db, sha256)).map((i) => ({ id: i.id, type: i.type, path: i.path })) : [];
+    const hashes = (Array.isArray(input.pageHashes) ? input.pageHashes : []).slice(0, 64).map((h) => (typeof h === 'string' && /^[0-9a-f]{64}$/.test(h) ? h : null));
+    const similar = hashes.some(Boolean)
+      ? await Promise.all(
+          (await similarScans(catalog.db, hashes, { exclude: sha256 ?? undefined })).map(async (s) => ({
+            ...s,
+            items: (await itemsUsingFile(catalog.db, s.sha256)).map((i) => ({ id: i.id, type: i.type, path: i.path })),
+          })),
+        )
+      : [];
+    const proposal = await proposeNewMaterial(catalog, { what: input.what, name: typeof input.name === 'string' ? input.name : '' });
+    return c.json({ ...proposal, usedBy, similar });
+  });
+
+  // A hanacha's words (pasted, or read from a text file in the browser): a text of kind hanacha, for review.
+  app.post('/v1/hanachos/text', async (c) => {
+    const by = await signedIn(c);
+    const input = await c.req.json<Record<string, unknown>>().catch(() => null);
+    if (!input || typeof input !== 'object') throw new HttpError(400, 'the request body must be JSON');
+    const place = placeFrom((name) => String(input[name] ?? '').trim());
+    if (!place) throw new HttpError(400, 'say which farbrengen or sicha it is of (for), or name a new farbrengen (eventTitle, eventDate)');
+    await mayAdd(by, 0);
+    const made = await addHanachaText(catalog, by, {
+      place,
+      content: String(input.content ?? ''),
+      rights: String(input.rights ?? '') as HanachaTextRights,
+      language: typeof input.language === 'string' ? input.language : undefined,
+      credit: typeof input.credit === 'string' ? input.credit : undefined,
+    });
+    return c.json({ suggestion: made.suggestion.id, text: made.text, event: made.event }, 201);
   });
 }
