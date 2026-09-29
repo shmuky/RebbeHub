@@ -16,6 +16,7 @@ import {
   type SchemaData,
   type SetData,
 } from '@rebbehub/model';
+import { summarizeChanges, type ChangeGroup } from './changeSummary.js';
 import { badState, CatalogError, forbidden, invalid, notFound } from './errors.js';
 import { indexDriveFiles } from './driveFiles.js';
 import { withStructuredBody } from './legacyWords.js';
@@ -718,20 +719,70 @@ export class Catalog {
     return rows.map(({ base_rev, ...rev }) => ({ entityId: rev.entity_id, type: rev.entity_type, baseRev: base_rev, rev }));
   }
 
-  /** The reviewer's view: each item before and after, field by field, and what clashes with main as it is now. */
-  async review(changesetId: number): Promise<{ changeset: ChangesetRow; entries: ChangeEntry[]; reviews: unknown[] }> {
+  /** How many items each suggestion changes, for a list to say ("500 items") without reading them. */
+  async itemCounts(changesetIds: number[]): Promise<Map<number, number>> {
+    const out = new Map<number, number>();
+    if (!changesetIds.length) return out;
+    const { rows } = await this.db.query<{ changeset_id: string | number; items: number }>(
+      'SELECT changeset_id, count(DISTINCT entity_id)::int AS items FROM revision WHERE changeset_id = ANY($1::bigint[]) AND merge_rev IS NULL GROUP BY changeset_id',
+      [changesetIds],
+    );
+    for (const row of rows) out.set(Number(row.changeset_id), row.items);
+    return out;
+  }
+
+  /**
+   * The reviewer's view: each item before and after, field by field, and
+   * what clashes with main as it is now. A bot's Suggestion can change
+   * hundreds of items, so `limit` gives a page of them at a time (from
+   * `offset`), with how many there are in all and a summary of the kinds
+   * of change across all of them. Main's versions are read for every item
+   * in a few queries, never one item at a time. Without `limit`, every item.
+   */
+  async review(changesetId: number, options: { offset?: number; limit?: number } = {}): Promise<{ changeset: ChangesetRow; entries: ChangeEntry[]; reviews: unknown[]; total: number; offset: number; summary: ChangeGroup[] }> {
     const cs = await this.changeset(changesetId);
     const proposals = await this.proposals(changesetId);
-    const entries: ChangeEntry[] = [];
-    for (const p of proposals) {
-      const current = await this.targetRev(this.db, cs.project_id, p.entityId);
-      const base = p.baseRev === null ? null : await this.revision(p.baseRev);
-      const before = current?.data ?? null;
-      const result = current?.id === p.baseRev ? { merged: p.rev.data, conflicts: [] } : threeWayMerge(base?.data ?? null, before, p.rev.data);
-      entries.push({ entityId: p.entityId, type: p.type, before, after: p.rev.data, changes: diffData(before, p.rev.data), conflicts: result.conflicts });
-    }
+    const all = await this.changeEntries(this.db, cs, proposals);
+    const offset = Math.max(0, Math.floor(options.offset ?? 0));
+    const entries = options.limit === undefined ? all.slice(offset) : all.slice(offset, offset + Math.max(0, Math.floor(options.limit)));
     const { rows: reviews } = await this.db.query('SELECT * FROM review WHERE changeset_id = $1 ORDER BY created_at', [changesetId]);
-    return { changeset: cs, entries, reviews };
+    return { changeset: cs, entries, reviews, total: all.length, offset, summary: summarizeChanges(all) };
+  }
+
+  /** Each proposal before and after, with its clashes: main's (or the project's) versions and the versions they were made from, read all at once. */
+  private async changeEntries(db: Db, cs: ChangesetRow, proposals: Proposal[]): Promise<ChangeEntry[]> {
+    const current = await this.targetRevs(db, cs.project_id, proposals.map((p) => p.entityId));
+    // The version a change was made from matters only where main has moved on since.
+    const moved = proposals.filter((p) => p.baseRev !== null && String(current.get(p.entityId)?.id ?? '') !== String(p.baseRev));
+    const bases = new Map<string, RevisionRow>();
+    if (moved.length) {
+      const { rows } = await db.query<RevisionRow>('SELECT * FROM revision WHERE id = ANY($1::bigint[])', [[...new Set(moved.map((p) => String(p.baseRev)))]]);
+      for (const row of rows) bases.set(String(row.id), row);
+    }
+    return proposals.map((p) => {
+      const now = current.get(p.entityId) ?? null;
+      const before = now?.data ?? null;
+      const unmoved = String(now?.id ?? '') === String(p.baseRev ?? '') && (now !== null) === (p.baseRev !== null);
+      const base = p.baseRev === null ? null : (bases.get(String(p.baseRev)) ?? null);
+      const conflicts = unmoved ? [] : threeWayMerge(base?.data ?? null, before, p.rev.data).conflicts;
+      return { entityId: p.entityId, type: p.type, before, after: p.rev.data, changes: diffData(before, p.rev.data), conflicts };
+    });
+  }
+
+  /** Where each item's merge would land (the project's version, or main's), in two queries at most. */
+  private async targetRevs(db: Db, project: number | null, ids: EntityId[]): Promise<Map<string, RevisionRow>> {
+    const out = new Map<string, RevisionRow>();
+    if (!ids.length) return out;
+    if (project !== null) {
+      const { rows } = await db.query<RevisionRow>('SELECT r.* FROM project_head h JOIN revision r ON r.id = h.rev_id WHERE h.project_id = $1 AND h.entity_id = ANY($2::text[])', [project, ids]);
+      for (const row of rows) out.set(row.entity_id, row);
+    }
+    const rest = ids.filter((id) => !out.has(id));
+    if (rest.length) {
+      const { rows } = await db.query<RevisionRow>('SELECT r.* FROM entity e JOIN revision r ON r.id = e.main_rev WHERE e.id = ANY($1::text[])', [rest]);
+      for (const row of rows) out.set(row.entity_id, row);
+    }
+    return out;
   }
 
   /** Where a merge would land: the project's version, or main's. */
@@ -1646,41 +1697,50 @@ export class Catalog {
 
   // ------------------------------------------------------------ sets
 
-  private async setInfo(db: Db, id: EntityId): Promise<SetInfo | null> {
-    const main = await this.targetRev(db, null, id);
+  /** Main's version of an item, read once per `memo` (a bot's 500 items in one work ask for that work 500 times). */
+  private mainRev(db: Db, id: EntityId, memo?: Map<string, Promise<RevisionRow | null>>): Promise<RevisionRow | null> {
+    if (!memo) return this.targetRev(db, null, id);
+    let rev = memo.get(id);
+    if (!rev) memo.set(id, (rev = this.targetRev(db, null, id)));
+    return rev;
+  }
+
+  private async setInfo(db: Db, id: EntityId, memo?: Map<string, Promise<RevisionRow | null>>): Promise<SetInfo | null> {
+    const main = await this.mainRev(db, id, memo);
     if (!main || main.data === null || main.entity_type !== 'set') return null;
     const data = main.data as unknown as SetData;
     return { id, policy: data.policy, keepers: data.keepers };
   }
 
   /** The sets an item belongs to: its own `sets`, else its parent's (a segment's text's unit's work's). */
-  async setsOf(db: Db, type: EntityType, data: Json, depth = 0): Promise<SetInfo[]> {
+  async setsOf(db: Db, type: EntityType, data: Json, depth = 0, memo?: Map<string, Promise<RevisionRow | null>>): Promise<SetInfo[]> {
     if (type === 'set') {
       const parent = (data as unknown as SetData).parent;
-      const info = parent ? await this.setInfo(db, parent) : null;
+      const info = parent ? await this.setInfo(db, parent, memo) : null;
       return info ? [info] : [];
     }
     const own = (data as { sets?: EntityId[] }).sets;
-    if (own && own.length > 0) return (await Promise.all(own.map((id) => this.setInfo(db, id)))).filter((s): s is SetInfo => s !== null);
+    if (own && own.length > 0) return (await Promise.all(own.map((id) => this.setInfo(db, id, memo)))).filter((s): s is SetInfo => s !== null);
     if (depth > 6) return [];
     for (const field of SET_PARENTS[type] ?? []) {
       const parentId = (data as Record<string, unknown>)[field];
       if (typeof parentId !== 'string' || !isEntityId(parentId)) continue;
-      const parent = await this.targetRev(db, null, parentId);
-      if (parent?.data) return this.setsOf(db, parent.entity_type, parent.data, depth + 1);
+      const parent = await this.mainRev(db, parentId, memo);
+      if (parent?.data) return this.setsOf(db, parent.entity_type, parent.data, depth + 1, memo);
     }
     return [];
   }
 
   private async setsOfProposals(db: Db, proposals: Proposal[]): Promise<SetInfo[]> {
     const byId = new Map<string, SetInfo>();
+    const memo = new Map<string, Promise<RevisionRow | null>>();
     for (const p of proposals) {
       const data = p.rev.data ?? (p.baseRev !== null ? (await this.revision(p.baseRev, db))?.data : null) ?? null;
       if (data === null) continue;
       // A change to a set is judged by the set as it stands now (its keepers approve changes to it, stewards its policy).
-      const sets = await this.setsOf(db, p.type, data);
+      const sets = await this.setsOf(db, p.type, data, 0, memo);
       if (p.type === 'set') {
-        const itself = await this.setInfo(db, p.entityId);
+        const itself = await this.setInfo(db, p.entityId, memo);
         if (itself) sets.push(itself);
       }
       for (const s of sets) byId.set(s.id, s);

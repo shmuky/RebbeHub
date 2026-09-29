@@ -1,4 +1,5 @@
 export { Catalog, PRIVATE_REASONS, isoWeekTag, type ArchiveGapRow, type ChangeEntry, type ChangesetKind, type ChangesetRow, type ChangesetStatus, type Check, type EntityView, type HistoryEntry, type NewRevision, type ProjectFocus, type ProjectView, type Proposal, type ReportReason, type RevisionRow } from './catalog.js';
+export { summarizeChanges, type ChangeGroup } from './changeSummary.js';
 export { CatalogError, type CatalogErrorCode } from './errors.js';
 export { ExportGate } from './gate.js';
 export { derivedRights, fileFromDrive, getDerivations, isCoverProfile, getFile, getPageFix, recordDerivation, recordPageFix, registerFile, setRights, storageTierFor, type DerivationRow, type FileRow, type NewDerivation, type NewFile, type NewPageFix, type PageFixRow, type PageFixVerdict } from './files.js';

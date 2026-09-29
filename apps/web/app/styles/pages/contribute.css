@@ -415,6 +415,120 @@
   color: var(--muted);
 }
 
+/* A large Suggestion summed up: its items grouped by how they change, with a few examples each. */
+.rq-summary {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg);
+  min-width: 0;
+}
+
+.rq-summary header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  background: var(--canvas);
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--r) var(--r) 0 0;
+  font-size: var(--fs-md);
+}
+
+.rq-summary header b {
+  font-weight: 600;
+}
+
+.rq-summary header .end {
+  margin-inline-start: auto;
+}
+
+.rq-summary ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rq-summary li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-md);
+}
+
+.rq-summary li:first-child {
+  border-top: 0;
+}
+
+.rq-summary-n {
+  min-width: 3ch;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.rq-summary-what {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rq-summary-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.rq-summary-field code {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.rq-summary-field del {
+  text-decoration: none;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--del-bg);
+  color: var(--del-fg);
+}
+
+.rq-summary-field ins {
+  text-decoration: none;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--add-bg);
+  color: var(--add-fg);
+}
+
+.rq-summary-ex {
+  font-size: var(--fs-sm);
+}
+
+.rq-summary footer {
+  padding: 7px 14px;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+}
+
+.rq-count {
+  color: var(--muted);
+}
+
+/* The rest of a large Suggestion's items, a page at a time. */
+.rq-more-items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
 /* The reviewer's advice: the machine's, in amber, and saying so. */
 .rq-advice {
   border: 1px solid var(--machine-line);

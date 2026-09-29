@@ -498,7 +498,7 @@ function Feed({ lang, feed }: { lang: Lang; feed: FeedItem[] }) {
     if (!account) return;
     const ids = feed.filter((f) => f.kind === 'suggestion').map((f) => (f as { id: number }).id);
     let live = true;
-    void Promise.all(ids.map((id) => fetch(`/_/suggestions/${id}`, { credentials: 'same-origin', headers: { accept: 'application/json' } }).then((r) => (r.ok ? (r.json() as Promise<{ mayApprove?: boolean }>) : null)).catch(() => null))).then((all) => {
+    void Promise.all(ids.map((id) => fetch(`/_/suggestions/${id}?limit=1`, { credentials: 'same-origin', headers: { accept: 'application/json' } }).then((r) => (r.ok ? (r.json() as Promise<{ mayApprove?: boolean }>) : null)).catch(() => null))).then((all) => {
       if (live) setReviewable(new Set(ids.filter((_, i) => all[i]?.mayApprove)));
     });
     return () => {

@@ -114,6 +114,23 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Changed
 
+- **Large Suggestions are reviewable.** `GET /v1/suggestions/{id}` gives
+  a page of its items at a time: 25 unless `limit` says (at most 200),
+  from `offset`, with `total`, `offset`, `limit` and `next` (where the
+  next page starts, or null). Its new `summary` groups every item by how
+  it changes (the same fields, changed the same way: "500 events: links
+  on the media proxy became links on Drive"), with a few examples each,
+  and `people` says whether the author is a bot. Main's versions are
+  read for all the items in a few queries, not a few per item. The list
+  (`GET /v1/suggestions?status=…`) gives each Suggestion's `items` (how
+  many it changes) and `people`. A caller that read every item in one
+  answer asks for `limit=200` and follows `next`. The review page draws
+  the queue from the list and reads each Suggestion's changes as it
+  comes into view, with "Show more"; a bot's Suggestion is shown as the
+  bot's, marked as a machine's work until a person approves it, and
+  Approve and Send back take in the whole Suggestion. A Suggestion with
+  no #number (an import) opens by its id: `/review?s={id}`.
+
 - Importers store a PDF on Google Drive at its own Drive address
   (`https://drive.google.com/file/d/<id>/view`), the mafteiach's and
   Otzros HaRebbe's link, not the media proxy's; an Otzros page has one
