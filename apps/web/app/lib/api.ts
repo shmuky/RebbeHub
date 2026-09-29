@@ -389,6 +389,11 @@ export class RebbeHubApi {
     return this.get<T>('/openapi.json');
   }
 
+  /** The catalog as a tree (for organizing it): the top sets, or one set or sefer with what is under it and how much each holds. */
+  tree(root?: string, depth = 1, limit = 500) {
+    return this.get<{ root: import('./organize.js').TreeNode | null; children: import('./organize.js').TreeNode[]; more: number }>('/v1/tree', { root, depth, limit });
+  }
+
   entity<T = Record<string, unknown>>(id: string) {
     return this.maybe(this.get<Entity<T>>(`/v1/entities/${encodeURIComponent(id)}`));
   }

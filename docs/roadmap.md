@@ -60,6 +60,16 @@ the public takedown form with a steward's one-click takedown are built
 ([accounts](accounts.md)); email and the summary show once their secrets
 are set.
 
+Organizing the catalog by hand is built: `/organize` (from the library,
+every set and every sefer) picks rows and moves them, moves them up a
+level, renames them in place, puts them in order by dragging or the
+keyboard, makes new sets, removes empty ones and merges duplicates, all
+as one suggestion previewed first; the same through `POST /v1/organize`
+and the MCP tools, with splitting a sefer too (`packages/core/src/organize.ts`,
+[suggestions](developers/suggestions.md#organizing-the-catalog)). Not yet:
+splitting from the site, and ordering a sefer that sits in several sets
+separately in each.
+
 People and conversations, the GitHub way, are built (migration 0016):
 every person has a unique handle (chosen at sign-up, changeable, old ones
 redirect) and a page at `/u/<handle>`; @mentions and `#12` wherever people

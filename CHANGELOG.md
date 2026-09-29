@@ -12,6 +12,21 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Organizing the catalog.** Sefarim moved between sets, sets under other
+  sets or up a level, sichos to another sefer; names and addresses
+  changed; lists put in a new order by dragging or the keyboard; new sets
+  made and empty ones removed; duplicates merged (their sichos, printings
+  and links moving over) and sefarim split. Each plan is one suggestion,
+  however many items it touches, previewed item by item first; old
+  addresses redirect once it is approved, a merged item's to the one kept.
+  On the site: "Organize" on the library, every set and every sefer
+  (`/organize`). In the API: `GET /v1/tree`, `POST /v1/organize/preview`,
+  `POST /v1/organize`, and `detail.mergedInto` on a merged item's 404. For
+  agents, the MCP tools `get_tree`, `preview_organize`, `organize`,
+  `move_items`, `move_up`, `rename_item`, `reorder_children`, `create_set`,
+  `delete_set` and `merge_items`. Sets and sefarim take an `order` among
+  their siblings (built-in schemas, version 8); migration 0022 keeps where
+  merged items went.
 - **Ready for search engines and crowds.** Sitemaps a page of 10,000 items
   at a time in both languages, with when each item last changed
   (`/sitemap.xml`; the API's new `/v1/sitemap` and

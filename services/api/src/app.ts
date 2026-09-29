@@ -16,6 +16,7 @@ import { ERROR_CODES, PUBLIC_SUMMARY, caching, cors, cursor, nextLink, type Rate
 import { mcpRoutes } from './mcp.js';
 import { pageRoutes } from './pages.js';
 import { threadRoutes } from './threads.js';
+import { organizeRoutes } from './organize.js';
 
 /**
  * The RebbeHub API, version 1 (docs/developers/api.md). Reading needs
@@ -174,6 +175,7 @@ export function createApp(options: ApiOptions): Hono {
   });
   mirrorRoutes(app, catalog, { mirrors: options.mirrors, files: options.files });
   threadRoutes(app, catalog, signedIn, authenticate);
+  organizeRoutes(app, catalog, signedIn);
   scanRoutes(app, catalog, {
     filesBase,
     siteUrl,
@@ -572,7 +574,11 @@ export function createApp(options: ApiOptions): Hono {
     const id = entityId(c.req.param('id'));
     const at = intParam(c.req.query('at'), 'at');
     const entity = await catalog.get(id, { at });
-    if (!entity) throw new CatalogError('not-found', `${id} not found`);
+    if (!entity) {
+      // Merged into another item (organizing the catalog): say which, so links to it still lead somewhere.
+      const mergedInto = at === undefined ? await catalog.forwardOf(id) : null;
+      throw new CatalogError('not-found', mergedInto ? `${id} was merged into ${mergedInto}` : `${id} not found`, mergedInto ? { mergedInto } : undefined);
+    }
     return c.json((await redact([entity]))[0]);
   });
 

@@ -28,6 +28,7 @@ describe('migrations', () => {
       'embedding',
       'entity',
       'entity_external_id',
+      'entity_forward',
       'entity_ref',
       'family_request',
       'file',

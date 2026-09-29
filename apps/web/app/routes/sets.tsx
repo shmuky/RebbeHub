@@ -84,6 +84,7 @@ const W = {
   missingHint: { he: 'אפשר להציע אותו, עם הסריקה או בלעדיה. אחראי המדף בודק ומאשר.', en: 'Suggest it, with its scan or without. The shelf’s keeper checks and approves.' },
   empty: { he: 'אין עדיין ספרים בקטלוג.', en: 'No sefarim in the catalog yet.' },
   byThem: { he: 'ספרים', en: 'sefarim' },
+  organize: { he: 'סידור הספרייה', en: 'Organize' },
 } as const;
 
 const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
@@ -128,6 +129,10 @@ export default function Library({ loaderData }: Route.ComponentProps) {
               <p className="lede">{w(lang, 'lede')}</p>
             </div>
             <div className="phead-acts">
+              <Link className="btn" to={href('/organize', lang)}>
+                <Icon name="layers" />
+                {w(lang, 'organize')}
+              </Link>
               <Link className="btn" to={href('/add', lang, { what: 'sefer' })}>
                 <Icon name="plus" />
                 {w(lang, 'addSefer')}

@@ -176,6 +176,11 @@ const OPERATIONS: Operation[] = [
   { method: 'post', path: '/v1/suggestions/words', operationId: 'suggestWords', tag: 'Suggestions', summary: "A page's words fixed segment by segment: one segment's new words, a segment added after it or taken out, or a page's first words, sent for review", access: 'write', body: obj({ entityId: idSchema, change: { enum: ['edit', 'add', 'remove', 'start'] }, version: str(), segment: str(), text: arr(any(), 'Runs: { text, marks?, href? }, { note }, { marker }, { br: true }'), before: arr(any(), 'The segment as the person saw it; a change since answers 409'), kind: { enum: ['paragraph', 'heading', 'verse', 'item'] }, language: str(), title: str(), note: str() }, ['entityId', 'change']), ok: { status: 201, description: 'The suggestion sent for review (merged at once where its author may)', schema: any() }, also: { '409': 'The segment changed since it was opened' } },
   { method: 'post', path: '/v1/suggestions/contents-map', operationId: 'mapContents', tag: 'Suggestions', summary: 'Map pages of a publication to the unit they hold (an existing unit, a new one, or words)', access: 'write', body: obj({ publication: idSchema, pages: obj({ from: int(), to: int(), scheme: { enum: ['printed', 'pdf'] } }, ['from', 'to']), unit: idSchema, newUnit: obj({ work: idSchema, label: any(), date: str() }), label: any() }, ['publication', 'pages']), ok: { status: 201, description: 'The suggestion sent for review', schema: any() } },
 
+  // Organize
+  { method: 'get', path: '/v1/tree', operationId: 'catalogTree', tag: 'Organize', summary: 'The catalog as a tree: the top sets (or one set or sefer), the sets and items under them, and how much each holds', access: 'public', params: [query('root', idSchema, 'A set or a sefer (work); left out, the top sets'), query('depth', int(undefined, { minimum: 0, maximum: 4, default: 1 }), 'How many levels down'), limitParam(500, 100)], ok: { description: 'The tree', schema: obj({ root: nullable(ref('TreeNode')), children: arr(ref('TreeNode')), more: int('Children left out past the limit') }, ['root', 'children', 'more']) } },
+  { method: 'post', path: '/v1/organize/preview', operationId: 'previewOrganize', tag: 'Organize', summary: 'What a plan of moves, renames, orderings, new sets and merges would change, item by item, saved nowhere', access: 'write', body: ref('OrganizePlan'), ok: { description: 'The change', schema: ref('OrganizePreview') } },
+  { method: 'post', path: '/v1/organize', operationId: 'organize', tag: 'Organize', summary: 'Organize the catalog: a plan becomes one suggestion, sent for review (apply: true approves it at once where you may approve it yourself)', description: 'Operations: move, move-up, rename, reorder, create-set, delete-set, merge, split. Every old path redirects once it is approved; a merged item\'s paths lead to the item it was merged into.', access: 'write', body: ref('OrganizePlan'), ok: { status: 201, description: 'The suggestion, whether it was merged, and the change', schema: obj({ suggestion: ref('Suggestion'), merged: bool(), mayApprove: bool('Whether you may approve it yourself'), preview: ref('OrganizePreview') }, ['suggestion', 'merged', 'preview']) } },
+
   // Talk
   { method: 'get', path: '/v1/entities/{id}/talk', operationId: 'itemTalk', tag: 'Talk', summary: "An item's talk page: the conversation about it", access: 'public', params: [idParam], ok: { description: 'Comments, oldest first, replies by parent', schema: obj({ talk: arr(ref('Comment')) }, ['talk']) } },
   { method: 'post', path: '/v1/entities/{id}/talk', operationId: 'commentOnItem', tag: 'Talk', summary: "Comment on an item's talk page", access: 'write', params: [idParam], body: obj({ body: str(undefined, { minLength: 1, maxLength: 10000 }), parent: int('The comment this answers') }, ['body']), ok: { status: 201, description: 'The comment id', schema: obj({ id: int() }, ['id']) } },
@@ -311,6 +316,75 @@ const SCHEMAS: Record<string, Schema> = {
   ),
   ItemPage: obj({ items: arr(ref('Item')), next: nullable(str('Pass back as cursor for the next page; null on the last')) }, ['items', 'next']),
   Commit: obj({ seq: int(), at: str(undefined, { format: 'date-time' }), message: str(), mergedBy: str(), author: str(), changes: arr(obj({ id: idSchema, type: str(), path: nullable(str()), rev: int(), data: nullable(any()) })) }, ['seq', 'at', 'message', 'mergedBy', 'author', 'changes']),
+  TreeNode: obj(
+    {
+      id: idSchema,
+      type: str(),
+      path: nullable(str()),
+      name: nullable(any('Its name, Hebrew and English')),
+      order: nullable(str('Its sort key among its siblings, when it has one')),
+      counts: obj({ sets: int('Sets under it'), items: int('Items in it (a set)'), units: int('Units of it (a sefer)') }),
+      children: arr(ref('TreeNode')),
+      more: int('Children left out past the limit'),
+    },
+    ['id', 'type', 'path', 'name', 'counts'],
+  ),
+  OrganizeOperation: {
+    type: 'object',
+    description:
+      'One step of a plan. Items are ids (rh-…), or new:<key> for a set made earlier in the same plan. Positions are "start", "end", { after: id } or { before: id }.\n' +
+      '- move { items, to, from?, mode?: add | only, position? }: into a set (a sefer joins it, leaving `from` when given); `to: null` with `from` takes it out; a set under a set or to the top (to: null); a unit to another work, a printing to a work, a scan to a printing, a recording to an event.\n' +
+      '- move-up { items, from? }: a set to its parent\'s parent; an item out of a set into that set\'s parent.\n' +
+      '- rename { item, name?: { he?, en? }, slug?, path? }: old paths redirect, and paths made from it (a sefer\'s units) move along.\n' +
+      '- reorder { items, parent?, position? }: without position, the items take the places they hold in the order given.\n' +
+      '- create-set { key?, name: { he, en? }, slug, parent?, description?, items? }\n' +
+      '- delete-set { item }: only a set that holds nothing.\n' +
+      '- merge { from, into }: everything under or pointing at `from` moves to `into`; `from` is deleted and its paths lead to `into`.\n' +
+      '- split { work, units? | range: { from, to }, title: { he, en? }, slug }: units into a new sefer.',
+    properties: {
+      op: { enum: ['move', 'move-up', 'rename', 'reorder', 'create-set', 'delete-set', 'merge', 'split'] },
+      items: arr(str()),
+      item: str(),
+      to: nullable(str()),
+      from: str(),
+      into: str(),
+      mode: { enum: ['add', 'only'] },
+      position: { oneOf: [{ enum: ['start', 'end'] }, obj({ after: str() }, ['after']), obj({ before: str() }, ['before'])] },
+      parent: nullable(str()),
+      name: any('{ he, en }'),
+      title: any('{ he, en }'),
+      slug: str(undefined, { pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' }),
+      path: str(),
+      key: str(),
+      description: any('{ he, en }'),
+      work: str(),
+      units: arr(str()),
+      range: obj({ from: str(), to: str() }, ['from', 'to']),
+    },
+    required: ['op'],
+  },
+  OrganizePlan: obj(
+    {
+      operations: arr(ref('OrganizeOperation'), 'Done in order, each seeing what the ones before it did'),
+      title: str('The suggestion\'s title; made from the operations when left out', { maxLength: 200 }),
+      description: str(),
+      draft: bool('Keep it a draft instead of sending it for review (organize only)'),
+      apply: bool('Approve it at once where you may approve it yourself (organize only)'),
+    },
+    ['operations'],
+  ),
+  OrganizePreview: obj(
+    {
+      title: str(),
+      summary: arr(str(), 'One line per operation'),
+      items: arr(obj({ id: idSchema, type: str(), name: str(), isNew: bool(), deleted: bool(), pathBefore: nullable(str()), path: nullable(str()), changes: arr(obj({ path: str(), before: {}, after: {} })) }, ['id', 'type', 'changes'])),
+      redirects: arr(obj({ id: idSchema, from: str(), to: nullable(str()) }), 'Old paths and where they lead once approved'),
+      forwards: arr(obj({ from: idSchema, to: idSchema }), 'Items merged into others'),
+      warnings: arr(str()),
+      created: any('The new sets, by their key'),
+    },
+    ['title', 'summary', 'items', 'redirects', 'forwards', 'warnings'],
+  ),
   Suggestion: obj(
     {
       id: int(),
@@ -478,6 +552,7 @@ export const API_TAGS = [
   { name: 'Media', description: 'Transcripts and their sync' },
   { name: 'Files', description: 'File bytes (while their rights allow), page images, uploads' },
   { name: 'Suggestions', description: 'Every change is a suggestion, checked and reviewed' },
+  { name: 'Organize', description: 'Moving, renaming, ordering, merging and splitting: the catalog\'s tree put in order, as suggestions' },
   { name: 'Talk', description: 'The conversation on each page' },
   { name: 'Reports', description: 'Reporting a problem, takedowns, families\' requests' },
   { name: 'Issues', description: 'Reports kept like issues: titles, labels, assignees, comments, closing' },

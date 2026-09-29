@@ -158,6 +158,8 @@ export interface SetData extends CommonFields {
   keepers: string[];
   /** The set this one sits under, for large collections (Farbrengens → Farbrengens 5742). */
   parent?: EntityId;
+  /** A fractional sort key among the sets beside it (order.ts), when someone has put them in order. */
+  order?: string;
 }
 
 export type AuthorKind = 'rebbe' | 'chossid' | 'editor' | 'family' | 'institution' | 'unknown';
@@ -248,6 +250,8 @@ export interface WorkData extends CommonFields {
    * choice wins.
    */
   cover?: CoverChoice;
+  /** A fractional sort key among the sefarim of its sets (order.ts), when someone has put them in order. */
+  order?: string;
 }
 
 /** A page of a PDF, by the file's sha256 and the page's number from 1. */

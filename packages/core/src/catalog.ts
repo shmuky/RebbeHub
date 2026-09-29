@@ -897,6 +897,7 @@ export class Catalog {
         return { commit: null, author: cs.author };
       }
       const seq = await this.applyToMain(tx, cs.id, proposals, by, cs.title, resolutions);
+      await this.applyForwards(tx, cs.id);
       await tx.query("UPDATE changeset SET status = 'merged', merged_commit = $2, closed_at = now() WHERE id = $1", [cs.id, seq]);
       await this.audit(tx, by, 'changeset.merge', 'changeset', String(cs.id), { commit: seq });
       await suggestionMerged(tx, { id: cs.id, by, commit: seq, live: options.skipPermission });
@@ -1052,6 +1053,40 @@ export class Catalog {
         await tx.query('INSERT INTO entity_ref (from_id, field, to_id) VALUES ($1, $2, $3)', [id, ref.field, ref.id]);
       }
     }
+  }
+
+  /**
+   * An item merged into another (or an empty set deleted into its parent)
+   * sends its readers on: once the suggestion lands, every old path that
+   * led to it leads to where it went (core/organize.ts writes the forwards).
+   */
+  private async applyForwards(tx: Db, changesetId: number): Promise<void> {
+    await tx.query(
+      `UPDATE path_redirect r SET entity_id = f.to_id, created_at = now()
+       FROM entity_forward f JOIN entity b ON b.id = f.from_id AND b.deleted
+       WHERE f.changeset_id = $1 AND r.entity_id = f.from_id`,
+      [changesetId],
+    );
+  }
+
+  /** Where a merged item went: the live item it was merged into, following later merges; null if it was not merged or came back. */
+  async forwardOf(id: EntityId): Promise<EntityId | null> {
+    let current = id;
+    for (let hop = 0; hop < 8; hop++) {
+      const row = await one<{ to_id: EntityId; live: boolean }>(
+        this.db,
+        `SELECT f.to_id, (t.main_rev IS NOT NULL AND NOT t.deleted) AS live FROM entity_forward f
+         JOIN changeset c ON c.id = f.changeset_id AND c.status = 'merged'
+         JOIN entity b ON b.id = f.from_id AND b.deleted
+         JOIN entity t ON t.id = f.to_id
+         WHERE f.from_id = $1 ORDER BY c.merged_commit DESC LIMIT 1`,
+        [current],
+      );
+      if (!row) return null;
+      if (row.live) return row.to_id;
+      current = row.to_id;
+    }
+    return null;
   }
 
   /** Merges a project's suggestion into the project's overlay rather than main. */
@@ -1531,9 +1566,13 @@ export class Catalog {
     for (const p of proposals) {
       const id = p.entityId;
       if (p.rev.data === null) {
-        const { rows } = await tx.query<{ from_id: string }>('SELECT from_id FROM entity_ref WHERE to_id = $1 LIMIT 5', [id]);
-        const still = rows.filter((r) => inChange.get(r.from_id as EntityId)?.rev.data !== null);
-        if (still.length > 0) checks.push({ check: 'references', status: 'fail', entityId: id, message: `${id} is still pointed at by ${still.map((r) => r.from_id).join(', ')}` });
+        const { rows } = await tx.query<{ from_id: string }>('SELECT DISTINCT from_id FROM entity_ref WHERE to_id = $1 LIMIT 10000', [id]);
+        // Items this change also deletes, or points elsewhere (a merge moving a sefer's sichos over), no longer point at it.
+        const still = rows.filter((r) => {
+          const other = inChange.get(r.from_id as EntityId);
+          return !other || (other.rev.data !== null && referencesOf(other.type, other.rev.data).some((ref) => ref.id === id));
+        });
+        if (still.length > 0) checks.push({ check: 'references', status: 'fail', entityId: id, message: `${id} is still pointed at by ${still.slice(0, 5).map((r) => r.from_id).join(', ')}${still.length > 5 ? ` and ${still.length - 5} more` : ''}` });
         continue;
       }
       if (p.type === 'schema') {
