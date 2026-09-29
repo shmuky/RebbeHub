@@ -11,6 +11,8 @@ export interface TokenValue {
   en: string;
   /** A label colour, when the value is one (סריקה, טקסט). */
   tone?: string;
+  /** Or its own colour (an issue label's `#bc4c00`). */
+  color?: string;
   /** How many there are, when the page knows. */
   count?: number;
 }

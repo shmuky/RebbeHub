@@ -231,8 +231,10 @@ export function TokenSearch({
                     <span className="hint">{o.key.hint[lang]}</span>
                   ) : null}
                 </>
-              ) : o.value!.tone ? (
-                <Label tone={o.value!.tone as never}>{o.value![lang]}</Label>
+              ) : o.value!.tone || o.value!.color ? (
+                <Label tone={o.value!.tone as never} color={o.value!.color}>
+                  {o.value![lang]}
+                </Label>
               ) : (
                 <span>{o.value![lang]}</span>
               )}

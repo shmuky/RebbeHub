@@ -1,4 +1,4 @@
-import type { Issue, IssueLabel, People, SuggestionListItem } from './threads.js';
+import type { Issue, IssueLabel, IssueTemplate, People, SuggestionListItem } from './threads.js';
 import type { EntityType, LocalName } from '@rebbehub/model';
 
 /**
@@ -618,9 +618,19 @@ export class RebbeHubApi {
     return (await this.get<{ people: Array<{ id: string; username: string | null; displayName: string; bot: boolean }> }>('/v1/people', { ids: [...new Set(ids)].join(',') }).catch(() => ({ people: [] }))).people;
   }
 
+  /** What #n is: a suggestion or an issue (they share one numbering); null when nothing has it. */
+  threadByNumber(number: number) {
+    return this.maybe(this.get<{ kind: 'suggestion' | 'issue'; number: number; id: number }>(`/v1/threads/${number}`));
+  }
+
   /** The hanacha synced to a recording, paragraph by paragraph with where each is heard; null when none is. */
   hanachaSync(recording: string) {
     return this.maybe(this.get<{ text: string; alignment: string; paragraphs: Array<{ id: string; content: string; startMs: number | null; endMs: number | null; checked: boolean }> }>(`/v1/recordings/${encodeURIComponent(recording)}/hanacha`));
+  }
+
+  /** The kinds of issue, each with the words it starts with. */
+  async issueTemplates() {
+    return (await this.get<{ templates: IssueTemplate[] }>('/v1/issues/templates')).templates;
   }
 
   /** Every label, with how many open issues carry it. */

@@ -1,58 +1,141 @@
-import { Bot, CircleCheck, Clock, FileDiff, MessageSquare, MessageSquarePlus, Pencil, RotateCw, Settings, X } from 'lucide-react';
-import { Fragment, useCallback, useEffect, useState } from 'react';
-import { data, Link, useNavigate } from 'react-router';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { data, Link, redirect, useSearchParams } from 'react-router';
 import type { Route } from './+types/suggestion';
-import { fieldName, valueText } from '../components/ChangeTable.js';
-import { PersonLink, SuggestionState, TimeAgo } from '../components/threads/Bits.js';
 import { Composer } from '../components/threads/Composer.js';
 import { Picker } from '../components/threads/Picker.js';
 import { RichText } from '../components/threads/RichText.js';
-import { loadPeople, SubscribeBox, useReadOnOpen } from '../components/threads/Side.js';
-import { Timeline } from '../components/threads/Timeline.js';
-import { langFrom, typeName, type Lang } from '../lib/i18n.js';
+import { loadPeople, useReadOnOpen } from '../components/threads/Side.js';
+import { siteOf } from '../lib/context.server.js';
+import { langFrom, type Lang } from '../lib/i18n.js';
+import { num } from '../lib/i18nUi.js';
 import { href } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
+import { LABELS } from '../lib/suggestions.js';
+import { suggestionView, type CheckLine, type EntryView, type SuggestionView } from '../lib/suggestionView.server.js';
 import { threads, ThreadsError, type People, type TimelineItem } from '../lib/threads.js';
 import { tt } from '../lib/threadStrings.js';
 import { useAccount } from '../lib/useAccount.js';
 import { useLang } from '../lib/useLang.js';
+import { wordDiff } from '../lib/wordDiff.js';
+import { DiffBox, DiffSegment, DiffStat, FieldDiff } from '../ui/Diff.js';
+import { Icon } from '../ui/Icon.js';
+import { ReviewBox, reviewChoices } from '../ui/ReviewBox.js';
+import { Timeline, TimelineBlock, TimelineComment } from '../ui/Timeline.js';
+import { Avatar, Breadcrumbs, EmptyState, Label, MachineLabel, Skeleton, StatusBadge, Tabs, cx, type State } from '../ui/primitives.js';
+import { Conversation, Person, When } from '../views/Conversation.js';
 
 /**
- * One suggestion, as GitHub shows a pull request: its conversation (the
- * description, comments, reviews and everything that happened, in order)
- * and its changes, field by field, where a comment can be written on any
- * one field. A review is one act: Comment, Approve (which merges it into
- * the catalog) or Request changes (which sends it back), with the field
- * comments gathered on the way. Beside it: who is asked to review it (the
- * set's keepers are asked on their own, as CODEOWNERS are), the issues it
- * closes ("Fixes #12" in its description), and following it.
+ * One suggestion, as a pull request's page is (the plan: "a Suggestion is
+ * a PR"): its title and state, who suggests what where; then four views
+ * of it. Conversation: the description, everything said and done since,
+ * the change itself set in the line, the checks, and the review box.
+ * Changes: each change as a reader reads it, a paragraph's words marked
+ * word by word among the paragraphs around it, a comment on any one of
+ * them now or kept for the review. Against the scan: each changed
+ * paragraph beside the printed page it was read from, and whether the new
+ * words are what the scan shows (the machine's reading, said so). Checks:
+ * what was checked and what it waits for. Beside it: who reviews it, what
+ * kind of change it is, the reports it fixes, its project, what it
+ * changes for readers, and following it.
+ *
+ * What is the same for everyone is read on the server, so the page works
+ * and is whole before script; the conversation and the review, which are
+ * personal, the browser asks for.
  */
-export function loader({ request, params }: Route.LoaderArgs) {
+
+export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (!/^\d{1,9}$/.test(params.number)) throw data('not found', { status: 404 });
-  return { lang: langFrom(request), siteUrl: new URL(request.url).origin, number: Number(params.number) };
+  const { api, siteUrl } = siteOf(context);
+  const lang = langFrom(request);
+  const number = Number(params.number);
+  const thread = await api.threadByNumber(number).catch(() => null);
+  if (thread?.kind === 'issue') throw redirect(href(`/issues/${number}`, lang));
+  let view: SuggestionView | null = null;
+  let people: People = {};
+  if (thread) {
+    const detail = await api.suggestion(thread.id).catch(() => null);
+    if (detail) {
+      view = await suggestionView(api, detail, lang);
+      const found = await api.peopleByIds([detail.changeset.author, ...detail.reviews.map((r) => r.reviewer)]);
+      people = Object.fromEntries(found.map((p) => [p.id, { name: p.displayName, username: p.username, bot: p.bot }]));
+    }
+  }
+  return { lang, siteUrl, number, id: thread?.id ?? null, view, people };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
   if (!loaderData) return [];
-  return pageMeta({ title: `#${loaderData.number}`, path: `/suggestions/${loaderData.number}`, lang: loaderData.lang, siteUrl: loaderData.siteUrl, noindex: true });
+  const title = loaderData.view ? `${loaderData.view.title} #${loaderData.number}` : `#${loaderData.number}`;
+  return pageMeta({ title, path: `/suggestions/${loaderData.number}`, lang: loaderData.lang, siteUrl: loaderData.siteUrl, noindex: true });
 }
 
-interface Change {
-  path: string;
-  before?: unknown;
-  after?: unknown;
-}
+const W = {
+  suggestions: { he: 'הצעות', en: 'Suggestions' },
+  proposes: { he: 'מציע', en: 'suggests' },
+  changesIn: { he: 'שינויים ב', en: 'changes to' },
+  change1: { he: 'שינוי אחד ב', en: 'one change to' },
+  conversation: { he: 'שיחה', en: 'Conversation' },
+  changes: { he: 'השינויים', en: 'Changes' },
+  againstScan: { he: 'מול הסריקה', en: 'Against the scan' },
+  checks: { he: 'בדיקות', en: 'Checks' },
+  author: { he: 'מציע', en: 'Author' },
+  reviewer: { he: 'בודק', en: 'Reviewer' },
+  sideBySide: { he: 'הצגה זה מול זה', en: 'Side by side' },
+  inline: { he: 'הצגה רצופה', en: 'Inline' },
+  printing: { he: 'הדפוס', en: 'The printing' },
+  page: { he: 'עמ׳', en: 'p.' },
+  pages: { he: 'עמ׳', en: 'pp.' },
+  line: { he: 'שורה', en: 'line' },
+  scanCheck: { he: 'בדיקה מול הסריקה', en: 'Checked against the scan' },
+  ocr: { he: 'OCR אוטומטי · טרם נבדק', en: 'Automatic OCR · not checked' },
+  found: { he: 'נמצא בסריקה', en: 'in the scan' },
+  notFound: { he: 'לא נמצא בסריקה', en: 'not in the scan' },
+  openScan: { he: 'פתיחת הסריקה', en: 'Open the scan' },
+  scanUnread: { he: 'הסריקה עוד לא נקראה במכונה, אז אין מה להשוות מילה במילה. פתחו את הסריקה ובדקו בעיניים.', en: 'The scan has not been read by a machine yet, so there is nothing to compare word by word. Open the scan and look.' },
+  noScan: { he: 'לשינויים האלה אין סריקה להשוות אליה.', en: 'These changes have no scan to compare with.' },
+  noScanTitle: { he: 'אין מה להשוות', en: 'Nothing to compare' },
+  automatic: { he: 'בדיקה אוטומטית', en: 'Automatic check' },
+  labels: { he: 'תוויות', en: 'Labels' },
+  linkedReport: { he: 'דיווח מקושר', en: 'Linked report' },
+  project: { he: 'פרויקט', en: 'Project' },
+  checkedOf: { he: '{d} מתוך {t} נבדקו', en: '{d} of {t} done' },
+  whatChanges: { he: 'מה זה משנה', en: 'What this changes' },
+  follow: { he: 'מעקב', en: 'Follow' },
+  following: { he: 'במעקב', en: 'Following' },
+  linkTo: { he: 'קישור לסעיף', en: 'Link to the passage' },
+  youKeep: { he: 'את/ה אחראי/ת על האוסף הזה, ואישורך מכניס את השינוי.', en: 'You keep this set; your approval puts the change in.' },
+  onlyKeepers: { he: 'רק אחראי האוסף מאשרים או מחזירים. כל אחד יכול להגיב.', en: 'Only the set’s keepers approve or send back. Anyone may comment.' },
+  signIn: { he: 'כדי להגיב או לבדוק צריך להיכנס.', en: 'Sign in to comment or review.' },
+  loading: { he: 'טוען את השיחה…', en: 'Loading the conversation…' },
+  notFound404: { he: 'אין הצעה במספר הזה', en: 'No suggestion has this number' },
+  newItem: { he: 'פריט חדש', en: 'New item' },
+  removedItem: { he: 'הפריט יימחק', en: 'The item is removed' },
+  commentHere: { he: 'הערה כאן', en: 'Comment here' },
+  commentNow: { he: 'הגבה עכשיו', en: 'Comment now' },
+  keepForReview: { he: 'שמירה לבדיקה', en: 'Add to review' },
+  pendingNote: { he: 'הערות שישלחו עם הבדיקה', en: 'Comments sent with your review' },
+  editTitle: { he: 'עריכת הכותרת', en: 'Edit title' },
+} as const;
+const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
 
-interface Detail {
-  changeset: { id: number; number: number; title: string; description: string | null; author: string; status: 'draft' | 'open' | 'merged' | 'sent_back' | 'withdrawn'; kind: string; created_at: string; submitted_at: string | null };
-  entries: Array<{ entityId: string; type: string; before: unknown; after: unknown; changes: Change[]; conflicts: unknown[]; withheld?: string }>;
-  names: Record<string, string>;
+/** What a change to an item of this kind changes for readers. */
+const IMPACT: Record<string, { he: string; en: string }> = {
+  segment: { he: 'הטקסט של השיחה בכל תצוגה, בתרגום המסונכרן ובחיפוש. לא משנה את הסריקה.', en: 'The sicha’s words in every view, in the synced translation and in search. It does not change the scan.' },
+  unit: { he: 'איך השיחה נקראת ומוצגת: שמה, תאריכה ומקומה בספר.', en: 'How the sicha is named and shown: its name, date and place in the sefer.' },
+  event: { he: 'פרטי ההתוועדות: שמה ותאריכה, בלוח ובחיפוש.', en: 'The farbrengen’s details: its name and date, in the calendar and in search.' },
+  work: { he: 'פרטי הספר בכל מקום שהוא מופיע.', en: 'The sefer’s details wherever it is shown.' },
+  publication: { he: 'פרטי ההדפסה, וממילא מספרי העמודים שמוצגים לפיה.', en: 'The printing’s details, and so the page numbers shown by it.' },
+  recording: { he: 'פרטי ההקלטה ומה שמתנגן בנגן.', en: 'The recording’s details and what the player plays.' },
+  'contents-map': { he: 'באיזה עמוד מופיעה השיחה בדפוס.', en: 'Which page the sicha is on in the printing.' },
+};
+
+interface ClientDetail {
   mayApprove: boolean;
   mine: boolean;
-  advice: { summary: string; model: string; at: string; machine: true } | null;
+  changeset: { status: SuggestionView['status']; title: string; description: string | null };
 }
 
-interface Conversation {
+interface ConversationData {
   number: number;
   timeline: TimelineItem[];
   people: People;
@@ -67,43 +150,35 @@ interface Pending {
   body: string;
 }
 
+type Tab = 'conversation' | 'changes' | 'scan' | 'checks';
+
+const stateOfStatus = (status: SuggestionView['status']): State => (status === 'merged' ? 'approved' : status === 'withdrawn' ? 'closed' : status === 'draft' ? 'draft' : status === 'sent_back' ? 'closed' : 'open');
+
 export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
-  const { number } = loaderData;
+  const { number, id, people: serverPeople } = loaderData;
+  const [view, setView] = useState<SuggestionView | null>(loaderData.view);
   const lang = useLang();
   const account = useAccount();
-  const navigate = useNavigate();
-  const [id, setId] = useState<number | null>(null);
-  const [detail, setDetail] = useState<Detail | null>(null);
-  const [talk, setTalk] = useState<Conversation | null>(null);
-  const [missing, setMissing] = useState(false);
-  const [tab, setTab] = useState<'conversation' | 'changes'>('conversation');
-  const [reviewing, setReviewing] = useState(false);
+  const [params] = useSearchParams();
+  const tabParam = params.get('tab');
+  const tab: Tab = tabParam === 'changes' || tabParam === 'scan' || tabParam === 'checks' ? tabParam : 'conversation';
+  const [detail, setDetail] = useState<ClientDetail | null>(null);
+  const [talk, setTalk] = useState<ConversationData | null>(null);
   const [pending, setPending] = useState<Pending[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let live = true;
-    threads<{ kind: string; id: number }>(`threads/${number}`).then(
-      (thread) => {
-        if (!live) return;
-        if (thread.kind === 'issue') navigate(href(`/issues/${number}`, lang), { replace: true });
-        else setId(thread.id);
-      },
-      () => live && setMissing(true),
-    );
-    return () => {
-      live = false;
-    };
-  }, [number, lang, navigate]);
+  const [missing, setMissing] = useState(false);
+  useEffect(() => setView(loaderData.view), [loaderData.view]);
 
   const load = useCallback(async () => {
-    if (id === null) return;
+    if (id === null) return setMissing(true);
     try {
-      const [d, c] = await Promise.all([threads<Detail>(`suggestions/${id}`), threads<Conversation>(`suggestions/${id}/conversation`)]);
+      const [d, c] = await Promise.all([threads<ClientDetail>(`suggestions/${id}`), threads<ConversationData>(`suggestions/${id}/conversation`)]);
       setDetail(d);
       setTalk(c);
+      // A title or description just changed here: the page says so without a reload.
+      setView((v) => (v ? { ...v, title: d.changeset.title, description: d.changeset.description, status: d.changeset.status } : v));
     } catch (e) {
       if (e instanceof ThreadsError && e.status === 404) setMissing(true);
       else setError(e instanceof Error ? e.message : String(e));
@@ -114,17 +189,34 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
   }, [load, account]);
   useReadOnOpen('changeset', id, Boolean(account));
 
-  if (missing) return <p className="note">{lang === 'he' ? `לא נמצא #${number}.` : `#${number} not found.`}</p>;
-  if (!detail || !talk || id === null) return error ? <p className="th-error">{error}</p> : <p className="note">…</p>;
+  if (!view)
+    return (
+      <div className="wrap page">
+        {missing || id === null ? (
+          <EmptyState icon="suggest" title={w(lang, 'notFound404')} actions={<Link className="btn" to={href('/suggestions', lang)}>{w(lang, 'suggestions')}</Link>}>
+            #{number}
+          </EmptyState>
+        ) : (
+          <Skeleton rows={6} lang={lang} />
+        )}
+      </div>
+    );
 
-  const cs = detail.changeset;
-  const people = talk.people;
+  const people: People = { ...serverPeople, ...(talk?.people ?? {}) };
   const viewer = account?.person.id ?? null;
-  const live = cs.status === 'open' || cs.status === 'sent_back';
-  const fieldLabel = (a: { entity: string; field: string }) => `${detail.names[a.entity] ?? a.entity} › ${fieldName(a.field, lang)}`;
-  const changeCount = detail.entries.reduce((n, e) => n + Math.max(e.changes.length, 1), 0);
+  const live = view.status === 'open' || view.status === 'sent_back';
+  const mayEdit = Boolean(viewer && (viewer === view.author || account?.person.steward));
+  const fieldLabel = (a: { entity: string; field: string }) => {
+    const e = view.entries.find((x) => x.entityId === a.entity);
+    const f = e?.fields.find((x) => x.path === a.field);
+    return [e?.label ?? a.entity, f?.name ?? (a.field === '/content' ? (lang === 'he' ? 'הטקסט' : 'the words') : a.field)].join(' › ');
+  };
+  const here = (t: Tab) => href(`/suggestions/${number}`, lang, t === 'conversation' ? {} : { tab: t });
+  const changeCount = view.entries.reduce((n, e) => n + (e.segment ? 1 : 0) + e.fields.length, 0);
+  const comments = talk ? talk.timeline.filter((i) => i.type === 'comment').length : null;
+  const scans = view.entries.filter((e) => e.scan);
 
-  async function act<T>(run: () => Promise<T>): Promise<boolean> {
+  async function act(run: () => Promise<unknown>): Promise<boolean> {
     setBusy(true);
     setError(null);
     try {
@@ -139,113 +231,181 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
     }
   }
 
-  const comment = () => act(() => threads(`suggestions/${id}/comments`, { body: { body: draft.trim() } })).then((ok) => ok && setDraft(''));
-  const withdraw = () =>
-    act(async () => {
-      const response = await fetch(`/_/suggestions/${id}/withdraw`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', accept: 'application/json' }, body: '{}' });
-      if (!response.ok) throw new Error(((await response.json().catch(() => ({}))) as { message?: string }).message ?? response.statusText);
-    });
-
-  // Who reviewed last, and how: the side column's reviewers, as on GitHub.
+  // Who reviewed last, and how, and who is asked: the side column's reviewers.
   const lastVerdict = new Map<string, 'approve' | 'send_back' | 'comment'>();
-  for (const item of talk.timeline) if (item.type === 'review') lastVerdict.set(item.author, item.verdict);
-  const reviewers = [...new Set([...talk.reviewRequests.map((r) => r.reviewer), ...lastVerdict.keys()])].filter((r) => r !== cs.author);
-  const asked = new Set(talk.reviewRequests.map((r) => r.reviewer));
+  for (const item of talk?.timeline ?? []) if (item.type === 'review') lastVerdict.set(item.author, item.verdict);
+  const asked = new Set((talk?.reviewRequests ?? []).map((r) => r.reviewer));
+  const reviewers = [...new Set([...asked, ...lastVerdict.keys()])].filter((r) => r !== view.author);
   const handle = (who: string) => people[who]?.username ?? who;
+  const roleOf = (who: string): ReactNode => (who === view.author ? w(lang, 'author') : asked.has(who) || lastVerdict.has(who) ? w(lang, 'reviewer') : null);
+
+  const conversation = talk ? (
+    <Conversation
+      items={talk.timeline.filter((i) => !(i.type === 'event' && i.kind === 'opened'))}
+      people={people}
+      lang={lang}
+      viewer={viewer}
+      thread={`changeset:${id}`}
+      roleOf={roleOf}
+      fieldLabel={fieldLabel}
+      mayResolve={Boolean(viewer && (viewer === view.author || detail?.mayApprove))}
+      mayReply={Boolean(account)}
+      reply={(body, parent) => threads(`suggestions/${id}/comments`, { body: { body, parent } })}
+      changed={() => void load()}
+    />
+  ) : null;
+
+  const reviewBox = !account ? (
+    <p className="note sign-note">
+      <Icon name="lock" /> <Link to={href('/signin', lang, { return: `/suggestions/${number}` })}>{w(lang, 'signIn')}</Link>
+    </p>
+  ) : live && detail ? (
+    <ReviewBox
+      lang={lang}
+      me={{ name: account.person.displayName, id: account.person.id }}
+      choices={detail.mayApprove && !detail.mine ? reviewChoices(lang) : undefined}
+      placeholder={tt(lang, 'leaveComment')}
+      busy={busy}
+      error={error}
+      footnote={
+        <>
+          <Icon name={detail.mayApprove ? 'shield' : 'lock'} size={14} /> {w(lang, detail.mayApprove && !detail.mine ? 'youKeep' : 'onlyKeepers')}
+          {pending.length ? ` · ${w(lang, 'pendingNote')}: ${pending.length}` : ''}
+        </>
+      }
+      extra={
+        detail.mine ? (
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            onClick={() =>
+              void act(async () => {
+                const response = await fetch(`/_/suggestions/${id}/withdraw`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', accept: 'application/json' }, body: '{}' });
+                if (!response.ok) throw new Error(((await response.json().catch(() => ({}))) as { message?: string }).message ?? response.statusText);
+              })
+            }
+          >
+            {tt(lang, 'withdraw')}
+          </button>
+        ) : null
+      }
+      onSubmit={(choice, note) =>
+        void act(async () => {
+          if (choice === 'comment' && !pending.length) await threads(`suggestions/${id}/comments`, { body: { body: note } });
+          else await threads(`suggestions/${id}/reviews`, { body: { verdict: choice === 'send_back' ? 'request_changes' : choice, body: note, comments: pending } });
+          setPending([]);
+        })
+      }
+    />
+  ) : live ? null : (
+    <Composer lang={lang} value={draft} onChange={setDraft} onSubmit={() => void act(() => threads(`suggestions/${id}/comments`, { body: { body: draft.trim() } })).then((ok) => ok && setDraft(''))} submitLabel={tt(lang, 'comment')} busy={busy} thread={`changeset:${id}`} error={error} />
+  );
 
   return (
-    <div className="th-page">
-      <Header cs={cs} people={people} lang={lang} changes={detail.entries.length} mayEdit={Boolean(viewer && (viewer === cs.author || account?.person.steward))} onSave={(title) => act(() => threads(`suggestions/${id}`, { method: 'PATCH', body: { title } }))} />
-      <div className="th-tabs" role="tablist">
-        <button type="button" role="tab" aria-selected={tab === 'conversation'} onClick={() => setTab('conversation')}>
-          <MessageSquare size={14} aria-hidden="true" /> {tt(lang, 'tabConversation')}
-          <span className="th-count">{talk.timeline.filter((i) => i.type === 'comment').length}</span>
-        </button>
-        <button type="button" role="tab" aria-selected={tab === 'changes'} onClick={() => setTab('changes')}>
-          <FileDiff size={14} aria-hidden="true" /> {tt(lang, 'tabChanges')}
-          <span className="th-count">{changeCount}</span>
-        </button>
-        <span style={{ flex: 1 }} />
-        {account && live ? (
-          <button type="button" onClick={() => setReviewing(!reviewing)} aria-expanded={reviewing} className={reviewing ? '' : 'secondary'} style={{ marginBlockEnd: '0.25rem' }}>
-            {tt(lang, 'reviewChanges')}
-            {pending.length ? <span className="th-count">{pending.length}</span> : null}
-          </button>
-        ) : null}
+    <>
+      <div className="phead">
+        <div className="wrap">
+          <Breadcrumbs items={[...view.crumbs, { label: w(lang, 'suggestions'), to: href('/suggestions', lang) }]} lang={lang} />
+          <TitleLine view={view} number={number} lang={lang} mayEdit={mayEdit} onSave={(title) => act(() => threads(`suggestions/${id}`, { method: 'PATCH', body: { title } }))} />
+          <div className="pmeta">
+            <StatusBadge state={stateOfStatus(view.status)} icon={view.status === 'merged' ? 'check' : undefined}>
+              {tt(lang, view.status === 'merged' ? 'stateMerged' : view.status === 'sent_back' ? 'stateSentBack' : view.status === 'withdrawn' ? 'stateWithdrawn' : view.status === 'draft' ? 'stateDraft' : 'stateOpen')}
+            </StatusBadge>
+            <span>
+              <Person id={view.author} people={people} lang={lang} /> {w(lang, 'proposes')} {changeCount === 1 ? w(lang, 'change1') : `${num(changeCount, lang)} ${w(lang, 'changesIn')}`}
+              {view.where ? (
+                <Label to={href(view.where.path, lang)} className="where-label">
+                  {[view.where.within, view.where.label].filter(Boolean).join(' · ')}
+                </Label>
+              ) : null}{' '}
+              · <When at={view.submittedAt ?? view.createdAt} lang={lang} />
+            </span>
+          </div>
+          <Tabs
+            label={lang === 'he' ? 'חלקי ההצעה' : 'Views of the suggestion'}
+            current={tab}
+            items={[
+              { key: 'conversation', label: w(lang, 'conversation'), icon: 'discuss', to: here('conversation'), count: comments },
+              { key: 'changes', label: w(lang, 'changes'), icon: 'code', to: here('changes'), count: changeCount },
+              { key: 'scan', label: w(lang, 'againstScan'), icon: 'scan', to: here('scan'), count: scans.length || null },
+              { key: 'checks', label: w(lang, 'checks'), icon: 'check', to: here('checks'), count: view.checks.length },
+            ]}
+          />
+        </div>
       </div>
-      {reviewing && account ? (
-        <ReviewBox
-          lang={lang}
-          id={id}
-          thread={`changeset:${id}`}
-          pending={pending}
-          mayDecide={detail.mayApprove && !detail.mine}
-          onDropPending={(i) => setPending(pending.filter((_, j) => j !== i))}
-          onDone={async () => {
-            setPending([]);
-            setReviewing(false);
-            await load();
-          }}
-          fieldLabel={fieldLabel}
-        />
-      ) : null}
-      <div className="th-layout">
-        <div style={{ display: 'grid', gap: '1rem', alignContent: 'start' }}>
+      <div className="wrap cols sugg">
+        <div className="imain">
           {tab === 'conversation' ? (
-            <>
-              <Description cs={cs} people={people} lang={lang} mayEdit={Boolean(viewer && (viewer === cs.author || account?.person.steward))} onSave={(description) => act(() => threads(`suggestions/${id}`, { method: 'PATCH', body: { description } }))} />
-              <Timeline
-                items={talk.timeline.filter((i) => !(i.type === 'event' && i.kind === 'opened'))}
-                people={people}
-                lang={lang}
-                viewer={viewer}
-                thread={`changeset:${id}`}
-                fieldLabel={fieldLabel}
-                mayResolve={Boolean(viewer && (viewer === cs.author || detail.mayApprove))}
-                mayReply={Boolean(account)}
-                reply={(body, parent) => threads(`suggestions/${id}/comments`, { body: { body, parent } })}
-                changed={() => void load()}
-              />
-              {account ? (
-                <Composer lang={lang} value={draft} onChange={setDraft} onSubmit={() => void comment()} submitLabel={tt(lang, 'comment')} busy={busy} thread={`changeset:${id}`} error={error}>
-                  {detail.mine && live ? (
-                    <button type="button" className="secondary" disabled={busy} onClick={() => void withdraw()}>
-                      {tt(lang, 'withdraw')}
-                    </button>
-                  ) : null}
-                </Composer>
-              ) : (
-                <p className="note">
-                  <Link to={href('/signin', lang, { return: `/suggestions/${number}` })}>{tt(lang, 'signInToJoin')}</Link>
-                </p>
+            <Timeline label={w(lang, 'conversation')}>
+              <TimelineComment
+                id="description"
+                author={people[view.author]?.name ?? view.author}
+                authorId={view.author}
+                role={w(lang, 'author')}
+                mine={viewer === view.author}
+                header={
+                  <>
+                    <Person id={view.author} people={people} lang={lang} /> <span className="muted">{lang === 'he' ? 'כתב' : 'wrote'}</span> <When at={view.createdAt} lang={lang} anchor="description" />
+                  </>
+                }
+              >
+                <Description view={view} lang={lang} mayEdit={mayEdit} id={id!} onSave={(description) => act(() => threads(`suggestions/${id}`, { method: 'PATCH', body: { description } }))} />
+              </TimelineComment>
+              {view.entries.slice(0, 3).map((e) => (
+                <TimelineBlock key={e.entityId}>
+                  <EntryDiff entry={e} lang={lang} compact />
+                </TimelineBlock>
+              ))}
+              {view.entries.length > 3 ? (
+                <TimelineBlock>
+                  <Link className="more-link" to={here('changes')}>
+                    +{num(view.entries.length - 3, lang)} {w(lang, 'changes')}
+                  </Link>
+                </TimelineBlock>
+              ) : null}
+              {conversation ?? (
+                <TimelineBlock>
+                  <Skeleton rows={3} lang={lang} />
+                </TimelineBlock>
               )}
-            </>
+              <TimelineBlock>
+                <Checks checks={view.checks} lang={lang} />
+              </TimelineBlock>
+              {reviewBox ? <TimelineBlock className="tl-end">{reviewBox}</TimelineBlock> : null}
+            </Timeline>
+          ) : tab === 'changes' ? (
+            <div className="stack">
+              {view.entries.map((e) => (
+                <ChangeWithComments key={e.entityId} entry={e} lang={lang} talk={talk} conversation={talk ? { people, viewer, id: id!, detail } : null} signedIn={Boolean(account)} onPending={(p) => setPending([...pending, p])} changed={() => void load()} />
+              ))}
+              {reviewBox}
+            </div>
+          ) : tab === 'scan' ? (
+            <div className="stack">
+              {scans.length ? (
+                scans.map((e) => <AgainstScan key={e.entityId} entry={e} lang={lang} />)
+              ) : (
+                <div className="box">
+                  <EmptyState icon="scan" title={w(lang, 'noScanTitle')} compact>
+                    {w(lang, 'noScan')}
+                  </EmptyState>
+                </div>
+              )}
+            </div>
           ) : (
-            <Changes
-              detail={detail}
-              timeline={talk.timeline}
-              people={people}
-              lang={lang}
-              viewer={viewer}
-              signedIn={Boolean(account)}
-              id={id}
-              onPending={(p) => {
-                setPending([...pending, p]);
-                setReviewing(true);
-              }}
-              changed={() => void load()}
-            />
+            <Checks checks={view.checks} lang={lang} />
           )}
         </div>
-        <aside className="th-side">
+        <aside className="side" aria-label={lang === 'he' ? 'פרטים' : 'Details'}>
           <section>
-            <h2>
+            <h4>
               {tt(lang, 'reviewers')}
-              {account && live ? (
+              {account && live && talk ? (
                 <Picker
                   lang={lang}
                   title={tt(lang, 'requestReview')}
-                  button={<Settings size={14} aria-label={tt(lang, 'requestReview')} />}
+                  button={<Icon name="more" label={tt(lang, 'requestReview')} />}
                   selected={[...asked].map(handle)}
                   load={(q) => loadPeople(q, `changeset:${id}`)}
                   onApply={(values) =>
@@ -259,28 +419,38 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
                   }
                 />
               ) : null}
-            </h2>
-            {reviewers.length ? (
-              <ul>
+            </h4>
+            {!talk ? (
+              <Skeleton rows={2} lang={lang} />
+            ) : reviewers.length ? (
+              <ul className="people reviewers">
                 {reviewers.map((who) => {
                   const verdict = lastVerdict.get(who);
-                  const waiting = asked.has(who);
+                  const waiting = asked.has(who) && !verdict;
                   return (
-                    <li key={who} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <PersonLink id={who} people={people} lang={lang} />
-                      <span style={{ flex: 1 }} />
-                      {waiting ? (
-                        <Clock size={14} className="th-icon attention" aria-label={tt(lang, 'awaiting')} />
-                      ) : verdict === 'approve' ? (
-                        <CircleCheck size={14} className="th-icon open" aria-label={tt(lang, 'approved')} />
-                      ) : verdict === 'send_back' ? (
-                        <FileDiff size={14} className="th-icon attention" aria-label={tt(lang, 'sentBack')} />
-                      ) : (
-                        <MessageSquare size={14} className="th-icon closed" aria-label={tt(lang, 'reviewedComment')} />
-                      )}
+                    <li key={who}>
+                      <Avatar name={people[who]?.name ?? who} id={who} size="xs" />
+                      <Person id={who} people={people} lang={lang} />
+                      <span className={cx('rv', verdict === 'approve' ? 'st-approved' : verdict === 'send_back' ? 'st-closed' : waiting ? 'attention' : 'subtle')}>
+                        {waiting ? (
+                          <>
+                            <Icon name="clock" size={14} /> {tt(lang, 'awaiting')}
+                          </>
+                        ) : verdict === 'approve' ? (
+                          <>
+                            <Icon name="check" size={14} /> {tt(lang, 'approved')}
+                          </>
+                        ) : verdict === 'send_back' ? (
+                          <>
+                            <Icon name="back" size={14} /> {tt(lang, 'sentBack')}
+                          </>
+                        ) : (
+                          <Icon name="discuss" size={14} label={tt(lang, 'reviewedComment')} />
+                        )}
+                      </span>
                       {!waiting && live && account && who !== viewer ? (
-                        <button type="button" className="th-gear" title={tt(lang, 'reRequest')} onClick={() => void act(() => threads(`suggestions/${id}/review-requests`, { body: { reviewers: [handle(who)] } }))}>
-                          <RotateCw size={12} aria-label={tt(lang, 'reRequest')} />
+                        <button type="button" className="icon-btn" title={tt(lang, 'reRequest')} aria-label={tt(lang, 'reRequest')} onClick={() => void act(() => threads(`suggestions/${id}/review-requests`, { body: { reviewers: [handle(who)] } }))}>
+                          <Icon name="history" size={13} />
                         </button>
                       ) : null}
                     </li>
@@ -288,156 +458,310 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
                 })}
               </ul>
             ) : (
-              <p className="th-hint">{tt(lang, 'noReviewers')}</p>
+              <p className="subtle small">{tt(lang, 'noReviewers')}</p>
             )}
           </section>
+          {view.labels.length ? (
+            <section>
+              <h4>{w(lang, 'labels')}</h4>
+              <div className="labels-row tight">
+                {view.labels.map((l) =>
+                  LABELS[l] ? (
+                    <Label key={l} tone={LABELS[l]!.tone}>
+                      {LABELS[l]![lang]}
+                    </Label>
+                  ) : null,
+                )}
+              </div>
+            </section>
+          ) : null}
           <section>
-            <h2>{tt(lang, 'fixes')}</h2>
-            {talk.fixes.length ? (
-              <ul>
+            <h4>{w(lang, 'linkedReport')}</h4>
+            {!talk ? (
+              <Skeleton rows={1} lang={lang} />
+            ) : talk.fixes.length ? (
+              <ul className="thread-lines">
                 {talk.fixes.map((f) => (
-                  <li key={f.number}>
-                    <Link className="th-ref" to={href(`/issues/${f.number}`, lang)}>
-                      #{f.number}
-                    </Link>{' '}
-                    {f.title ?? ''} {f.state === 'closed' ? <CircleCheck size={12} className="th-icon done" aria-hidden="true" /> : null}
+                  <li key={f.number} className="thread-line">
+                    <Icon name={f.state === 'closed' ? 'reportdone' : 'report'} className={f.state === 'closed' ? 'st-approved' : 'st-open'} />
+                    <span>
+                      <Link to={href(`/issues/${f.number}`, lang)}>#{f.number}</Link> {f.title ?? ''}
+                      <span className="subtle small block">{lang === 'he' ? 'ייסגר כשההצעה תאושר' : 'Closes when this is approved'}</span>
+                    </span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="th-hint">{tt(lang, 'fixesHint')}</p>
+              <p className="subtle small">{tt(lang, 'fixesHint')}</p>
             )}
           </section>
-          {detail.advice ? (
+          {view.project ? (
             <section>
-              <h2>
-                <span>
-                  <Bot size={14} aria-hidden="true" /> {lang === 'he' ? 'סיכום מכונה' : 'Machine summary'}
-                </span>
-              </h2>
-              <p className="th-hint" style={{ margin: 0 }}>
-                {detail.advice.summary}
-              </p>
-              <p className="th-hint">
-                {detail.advice.model} · {lang === 'he' ? 'לא נבדק על ידי אדם; אינו מחליט דבר' : 'not checked by a person; decides nothing'}
-              </p>
+              <h4>{w(lang, 'project')}</h4>
+              <Link to={href(`/projects/${view.project.slug}`, lang)}>{view.project.name}</Link>
+              <p className="subtle small">{w(lang, 'checkedOf').replace('{d}', num(view.project.done, lang)).replace('{t}', num(view.project.total, lang))}</p>
             </section>
           ) : null}
-          <SubscribeBox lang={lang} kind="changeset" id={id} subscribed={talk.subscribed} signedIn={Boolean(account)} />
+          {IMPACT[view.entries[0]?.type ?? ''] ? (
+            <section>
+              <h4>{w(lang, 'whatChanges')}</h4>
+              <p className="muted small">{IMPACT[view.entries[0]!.type]![lang]}</p>
+            </section>
+          ) : null}
+          <section className="side-acts">
+            {account && talk ? <FollowThread id={id!} on={talk.subscribed} lang={lang} /> : null}
+            {view.where ? (
+              <Link to={href(view.where.path, lang)}>
+                <Icon name="link" size={14} /> {w(lang, 'linkTo')}
+              </Link>
+            ) : null}
+          </section>
         </aside>
       </div>
+    </>
+  );
+}
+
+function TitleLine({ view, number, lang, mayEdit, onSave }: { view: SuggestionView; number: number; lang: Lang; mayEdit: boolean; onSave: (title: string) => Promise<boolean> }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(view.title);
+  if (editing)
+    return (
+      <form
+        className="title-edit"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void onSave(value.trim()).then((ok) => ok && setEditing(false));
+        }}
+      >
+        <input className="input" value={value} onChange={(e) => setValue(e.target.value)} maxLength={200} aria-label={tt(lang, 'title')} autoFocus dir="auto" />
+        <button type="submit" className="btn primary">
+          {tt(lang, 'save')}
+        </button>
+        <button type="button" className="btn" onClick={() => setEditing(false)}>
+          {tt(lang, 'cancel')}
+        </button>
+      </form>
+    );
+  return (
+    <div className="title-row">
+      <h1 className="page-title" dir="auto">
+        {view.title} <span className="num">#{number}</span>
+      </h1>
+      {mayEdit ? (
+        <button type="button" className="btn sm" onClick={() => (setValue(view.title), setEditing(true))}>
+          <Icon name="pencil" /> {w(lang, 'editTitle')}
+        </button>
+      ) : null}
     </div>
   );
 }
 
-function Header({ cs, people, lang, changes, mayEdit, onSave }: { cs: Detail['changeset']; people: People; lang: Lang; changes: number; mayEdit: boolean; onSave: (title: string) => Promise<boolean> }) {
+function Description({ view, lang, mayEdit, id, onSave }: { view: SuggestionView; lang: Lang; mayEdit: boolean; id: number; onSave: (text: string) => Promise<boolean> }) {
   const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(cs.title);
+  const [value, setValue] = useState(view.description ?? '');
+  if (editing)
+    return (
+      <Composer lang={lang} value={value} onChange={setValue} onSubmit={() => void onSave(value.trim()).then((ok) => ok && setEditing(false))} submitLabel={tt(lang, 'save')} thread={`changeset:${id}`} autoFocus>
+        <button type="button" className="btn sm" onClick={() => setEditing(false)}>
+          {tt(lang, 'cancel')}
+        </button>
+      </Composer>
+    );
   return (
-    <header style={{ display: 'grid', gap: '0.5rem' }}>
-      <div className="th-head">
-        {editing ? (
-          <form
-            className="th-filters"
-            style={{ flex: 1 }}
-            onSubmit={(e) => {
-              e.preventDefault();
-              void onSave(value.trim()).then((ok) => ok && setEditing(false));
-            }}
-          >
-            <input type="search" value={value} onChange={(e) => setValue(e.target.value)} maxLength={200} aria-label={tt(lang, 'title')} autoFocus dir="auto" />
-            <button type="submit">{tt(lang, 'save')}</button>
-            <button type="button" className="secondary" onClick={() => setEditing(false)}>
-              {tt(lang, 'cancel')}
+    <div className="words">
+      {view.description ? <RichText text={view.description} lang={lang} /> : <p className="subtle">{tt(lang, 'noDescription')}</p>}
+      {mayEdit ? (
+        <button type="button" className="icon-btn edit-own" onClick={() => (setValue(view.description ?? ''), setEditing(true))} aria-label={tt(lang, 'edit')} title={tt(lang, 'edit')}>
+          <Icon name="pencil" size={13} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** One change as a reader reads it: a paragraph among its neighbours, marked word by word; a field before and after. */
+function EntryDiff({ entry, lang, compact, actions }: { entry: EntryView; lang: Lang; compact?: boolean; actions?: ReactNode }) {
+  const [both, setBoth] = useState(false);
+  const seg = entry.segment;
+  const parts = seg ? wordDiff(seg.before, seg.after) : null;
+  const scan = entry.scan;
+  return (
+    <DiffBox
+      id={`d-${entry.entityId}`}
+      icon={entry.type === 'segment' ? 'file' : 'pencil'}
+      title={
+        <Link to={href(entry.path, lang)} className="plain">
+          {entry.label}
+        </Link>
+      }
+      where={[entry.isNew ? w(lang, 'newItem') : entry.removed ? w(lang, 'removedItem') : null, scan?.page ? `${w(lang, 'page')} ${scan.page} ${lang === 'he' ? 'בדפוס' : 'in'} ${scan.printing.split(' · ').pop()}` : entry.within].filter(Boolean).join(' · ')}
+      stat={parts ? <DiffStat parts={parts} lang={lang} /> : null}
+      actions={
+        <>
+          {seg && seg.before && seg.after ? (
+            <button type="button" className="btn sm" onClick={() => setBoth(!both)} aria-pressed={both}>
+              {w(lang, both ? 'inline' : 'sideBySide')}
             </button>
-          </form>
+          ) : null}
+          {actions}
+        </>
+      }
+      note={
+        compact && scan ? (
+          <>
+            <div>
+              <span className="subtle">
+                {w(lang, 'printing')}: {scan.printing}
+                {scan.page ? `, ${w(lang, 'page')} ${scan.page}` : scan.pages ? `, ${w(lang, 'pages')} ${scan.pages.from}–${scan.pages.to}` : ''}
+              </span>
+              {scan.lines ? <ScanLine lines={scan.lines} words={scan.words} /> : scan.scanPath ? <Link to={href(scan.scanPath, lang)} className="block">{w(lang, 'openScan')}</Link> : null}
+            </div>
+            <div>
+              <span className="row-gap">
+                {w(lang, 'scanCheck')} {scan.verdict !== 'unread' ? <MachineLabel lang={lang} size="sm">{w(lang, 'ocr')}</MachineLabel> : null}
+              </span>
+              <span className="block">
+                {scan.verdict === 'unread' ? w(lang, 'scanUnread') : scan.words.map((x) => `${x.word} — ${w(lang, x.found ? 'found' : 'notFound')}`).join(' · ')}
+              </span>
+            </div>
+          </>
+        ) : null
+      }
+    >
+      {entry.withheld ? (
+        <p className="note pad">{entry.withheld}</p>
+      ) : seg ? (
+        both ? (
+          <div className="diff-both">
+            <DiffSegment n={seg.n} before={seg.before} />
+            <DiffSegment n={seg.n} before={seg.after} />
+          </div>
         ) : (
           <>
-            <h1 dir="auto">
-              {cs.title} <span className="th-number">#{cs.number}</span>
-            </h1>
-            {mayEdit ? (
-              <button type="button" className="secondary" onClick={() => (setValue(cs.title), setEditing(true))}>
-                {tt(lang, 'edit')}
-              </button>
-            ) : null}
+            {seg.prev ? <DiffSegment n={seg.prev.n} before={seg.prev.content} context /> : null}
+            <DiffSegment n={seg.n} before={seg.before} after={seg.after} />
+            {seg.next && !compact ? <DiffSegment n={seg.next.n} before={seg.next.content} context /> : null}
           </>
-        )}
-      </div>
-      <div className="th-meta">
-        <SuggestionState status={cs.status} lang={lang} />
-        <span>
-          <PersonLink id={cs.author} people={people} lang={lang} /> · {changes} {lang === 'he' ? 'פריטים' : changes === 1 ? 'item' : 'items'} · <TimeAgo at={cs.submitted_at ?? cs.created_at} lang={lang} />
-        </span>
-      </div>
-    </header>
+        )
+      ) : null}
+      {entry.fields.map((f) => (
+        <FieldDiff key={f.path} name={f.name} before={f.before} after={f.after} />
+      ))}
+    </DiffBox>
   );
 }
 
-function Description({ cs, people, lang, mayEdit, onSave }: { cs: Detail['changeset']; people: People; lang: Lang; mayEdit: boolean; onSave: (text: string) => Promise<boolean> }) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(cs.description ?? '');
+/** The scan's line as the machine read it, the new words marked where they are found. */
+function ScanLine({ lines, words }: { lines: string[]; words: Array<{ word: string; found: boolean }> }) {
+  const wanted = new Set(words.filter((x) => x.found).map((x) => x.word));
+  const clean = (s: string) => s.replace(/[֑-ׇ]/g, '').replace(/[^\p{L}\p{N}]+/gu, '');
+  const line = lines.find((l) => l.split(/\s+/).some((x) => wanted.has(clean(x)))) ?? lines[0] ?? '';
   return (
-    <article className="th-card">
-      <header className="th-card-head">
-        <PersonLink id={cs.author} people={people} lang={lang} /> {tt(lang, 'openedSuggestion')} <TimeAgo at={cs.created_at} lang={lang} />
-        <span className="th-spacer" />
-        {mayEdit && !editing ? (
-          <button type="button" className="link-button" onClick={() => (setValue(cs.description ?? ''), setEditing(true))}>
-            <Pencil size={12} aria-hidden="true" /> {tt(lang, 'edit')}
-          </button>
+    <div className="scanline" dir="rtl">
+      {line.split(/(\s+)/).map((x, i) => (wanted.has(clean(x)) ? <mark key={i}>{x}</mark> : <span key={i}>{x}</span>))}
+    </div>
+  );
+}
+
+function AgainstScan({ entry, lang }: { entry: EntryView; lang: Lang }) {
+  const scan = entry.scan!;
+  const seg = entry.segment;
+  return (
+    <section className="box against">
+      <header className="box-h">
+        <Icon name="scan" />
+        <b>{entry.label}</b>
+        <span className="subtle">
+          {scan.printing}
+          {scan.page ? ` · ${w(lang, 'page')} ${scan.page}` : scan.pages ? ` · ${w(lang, 'pages')} ${scan.pages.from}–${scan.pages.to}` : ''}
+        </span>
+        {scan.scanPath ? (
+          <Link className="btn sm end" to={href(scan.scanPath, lang)}>
+            <Icon name="external" /> {w(lang, 'openScan')}
+          </Link>
         ) : null}
       </header>
-      <div className="th-card-body">
-        {editing ? (
-          <Composer lang={lang} value={value} onChange={setValue} onSubmit={() => void onSave(value.trim()).then((ok) => ok && setEditing(false))} submitLabel={tt(lang, 'save')} thread={`changeset:${cs.id}`} autoFocus>
-            <button type="button" className="secondary" onClick={() => setEditing(false)}>
-              {tt(lang, 'cancel')}
-            </button>
-          </Composer>
-        ) : cs.description ? (
-          <RichText text={cs.description} lang={lang} />
-        ) : (
-          <p className="th-empty">{tt(lang, 'noDescription')}</p>
-        )}
+      <div className="against-grid">
+        <div className="against-page">
+          {scan.image ? <img src={scan.image} alt={`${scan.printing}, ${w(lang, 'page')} ${scan.page}`} loading="lazy" /> : scan.lines ? <ScanLine lines={scan.lines} words={scan.words} /> : <p className="subtle small">{w(lang, 'scanUnread')}</p>}
+          {scan.lines ? (
+            <p className="row-gap small">
+              <MachineLabel lang={lang} size="sm">
+                {w(lang, 'ocr')}
+              </MachineLabel>
+            </p>
+          ) : null}
+        </div>
+        <div className="against-text">
+          {seg ? <DiffSegment n={seg.n} before={seg.before} after={seg.after} /> : null}
+          {scan.words.length ? (
+            <ul className="word-checks">
+              {scan.words.map((x) => (
+                <li key={x.word} className={scan.verdict === 'unread' ? 'subtle' : x.found ? 'st-approved' : 'st-closed'}>
+                  <Icon name={scan.verdict === 'unread' ? 'dot' : x.found ? 'check' : 'x'} size={14} />
+                  <span className="torah-sm">{x.word}</span>
+                  <span className="subtle">{scan.verdict === 'unread' ? '' : w(lang, x.found ? 'found' : 'notFound')}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       </div>
-    </article>
+    </section>
   );
 }
 
-/** The change, item by item and field by field; a comment can be written on any field, now or as part of a review. */
-function Changes({
-  detail,
-  timeline,
-  people,
+function Checks({ checks, lang }: { checks: CheckLine[]; lang: Lang }) {
+  if (!checks.length) return null;
+  return (
+    <div className="box checks" role="list" aria-label={w(lang, 'checks')}>
+      {checks.map((c, i) => (
+        <div key={i} className="check" role="listitem">
+          <span className={c.status === 'pass' ? 'ok' : c.status === 'fail' ? 'fail' : 'warn'}>
+            <Icon name={c.status === 'pass' ? 'check' : c.status === 'fail' ? 'x' : c.status === 'warn' ? 'warn' : 'clock'} size={16} />
+          </span>
+          <span className="grow">{c.message}</span>
+          {c.machine ? <span className="subtle small">{w(lang, 'automatic')}</span> : null}
+          {c.note ? <span className="subtle small num">{c.note}</span> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** A change in the Changes view, with its comments, and a comment on it now or kept for the review. */
+function ChangeWithComments({
+  entry,
   lang,
-  viewer,
+  talk,
+  conversation,
   signedIn,
-  id,
   onPending,
   changed,
 }: {
-  detail: Detail;
-  timeline: TimelineItem[];
-  people: People;
+  entry: EntryView;
   lang: Lang;
-  viewer: string | null;
+  talk: ConversationData | null;
+  conversation: { people: People; viewer: string | null; id: number; detail: ClientDetail | null } | null;
   signedIn: boolean;
-  id: number;
   onPending: (p: Pending) => void;
   changed: () => void;
 }) {
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const comments = timeline.filter((i): i is Extract<TimelineItem, { type: 'comment' }> => i.type === 'comment' && i.anchor !== null && i.parent === null);
+  const field = entry.segment ? '/content' : (entry.fields[0]?.path ?? '');
+  const here = (talk?.timeline ?? []).filter((i) => i.type === 'comment' && i.anchor?.entity === entry.entityId && i.parent === null);
+  const threadOf = (talk?.timeline ?? []).filter((i) => i.type === 'comment' && (here.some((h) => h.id === i.id) || here.some((h) => h.id === (i as { parent: number | null }).parent)));
 
-  async function now(entity: string, field: string) {
+  async function now() {
+    if (!conversation) return;
     setError(null);
     try {
-      await threads(`suggestions/${id}/comments`, { body: { body: draft.trim(), anchor: { entity, field } } });
+      await threads(`suggestions/${conversation.id}/comments`, { body: { body: draft.trim(), anchor: { entity: entry.entityId, field } } });
       setDraft('');
-      setOpen(null);
+      setOpen(false);
       changed();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -445,176 +769,75 @@ function Changes({
   }
 
   return (
-    <div style={{ display: 'grid', gap: '1rem' }}>
-      {detail.entries.map((entry) => {
-        const rows: Change[] = entry.changes.length ? entry.changes : [{ path: '', before: entry.before === null ? undefined : '…', after: entry.after === null ? undefined : '…' }];
-        return (
-          <section key={entry.entityId} className="th-change">
-            <div className="th-change-head">
-              <Link to={href(`/${entry.entityId}`, lang)}>{detail.names[entry.entityId] ?? entry.entityId}</Link> <span className="th-dim">· {typeName(entry.type, lang)}</span>
-              {entry.before === null ? <span className="th-dim"> · {tt(lang, 'newItemLine')}</span> : null}
-            </div>
-            {entry.withheld ? (
-              <p className="note" style={{ padding: '0.5rem 0.75rem' }}>
-                {entry.withheld}
-              </p>
-            ) : (
-              <table className="th-fields">
-                <tbody>
-                  {rows.map((change) => {
-                    const key = `${entry.entityId}|${change.path}`;
-                    const here = comments.filter((c) => c.anchor!.entity === entry.entityId && c.anchor!.field === change.path);
-                    return (
-                      <Fragment key={key}>
-                        <tr>
-                          <th scope="row">{change.path ? fieldName(change.path, lang) : typeName(entry.type, lang)}</th>
-                          <td className="was" dir="auto">
-                            {valueText(change.path, change.before, lang)}
-                          </td>
-                          <td className="now" dir="auto">
-                            {valueText(change.path, change.after, lang)}
-                          </td>
-                          <td style={{ inlineSize: '2rem' }}>
-                            {signedIn ? (
-                              <button type="button" className="th-gear th-add-comment" title={tt(lang, 'commentField')} aria-label={tt(lang, 'commentField')} onClick={() => (setOpen(open === key ? null : key), setDraft(''), setError(null))}>
-                                <MessageSquarePlus size={14} aria-hidden="true" />
-                              </button>
-                            ) : null}
-                          </td>
-                        </tr>
-                        {here.length || open === key ? (
-                          <tr className="th-field-thread">
-                            <td colSpan={4}>
-                              <div style={{ display: 'grid', gap: '0.5rem' }}>
-                                {here.length ? (
-                                  <Timeline
-                                    items={timeline.filter((i) => i.type === 'comment' && (here.some((h) => h.id === i.id) || here.some((h) => h.id === i.parent))).map((i) => (i.type === 'comment' ? { ...i, review: null } : i))}
-                                    people={people}
-                                    lang={lang}
-                                    viewer={viewer}
-                                    thread={`changeset:${id}`}
-                                    mayResolve={Boolean(viewer && (viewer === detail.changeset.author || detail.mayApprove))}
-                                    mayReply={signedIn}
-                                    reply={(body, parent) => threads(`suggestions/${id}/comments`, { body: { body, parent } })}
-                                    changed={changed}
-                                  />
-                                ) : null}
-                                {open === key ? (
-                                  <Composer lang={lang} value={draft} onChange={setDraft} onSubmit={() => void now(entry.entityId, change.path)} submitLabel={tt(lang, 'comment')} thread={`changeset:${id}`} autoFocus error={error}>
-                                    <button type="button" className="secondary" onClick={() => setOpen(null)}>
-                                      {tt(lang, 'cancel')}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="secondary"
-                                      disabled={!draft.trim()}
-                                      onClick={() => {
-                                        onPending({ entity: entry.entityId, field: change.path, body: draft.trim() });
-                                        setDraft('');
-                                        setOpen(null);
-                                      }}
-                                    >
-                                      {tt(lang, 'addToReview')}
-                                    </button>
-                                  </Composer>
-                                ) : null}
-                              </div>
-                            </td>
-                          </tr>
-                        ) : null}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </section>
-        );
-      })}
+    <div className="change-block">
+      <EntryDiff
+        entry={entry}
+        lang={lang}
+        actions={
+          signedIn ? (
+            <button type="button" className="btn sm" onClick={() => setOpen(!open)} aria-expanded={open}>
+              <Icon name="discuss" /> {w(lang, 'commentHere')}
+            </button>
+          ) : null
+        }
+      />
+      {threadOf.length && conversation ? (
+        <ol className="timeline field-thread">
+          <Conversation
+            items={threadOf.map((i) => (i.type === 'comment' ? { ...i, review: null } : i))}
+            people={conversation.people}
+            lang={lang}
+            viewer={conversation.viewer}
+            thread={`changeset:${conversation.id}`}
+            mayResolve={Boolean(conversation.viewer && conversation.detail?.mayApprove)}
+            mayReply={signedIn}
+            reply={(body, parent) => threads(`suggestions/${conversation.id}/comments`, { body: { body, parent } })}
+            changed={changed}
+          />
+        </ol>
+      ) : null}
+      {open && conversation ? (
+        <div className="field-composer">
+          <Composer lang={lang} value={draft} onChange={setDraft} onSubmit={() => void now()} submitLabel={w(lang, 'commentNow')} thread={`changeset:${conversation.id}`} autoFocus error={error}>
+            <button
+              type="button"
+              className="btn sm"
+              disabled={!draft.trim()}
+              onClick={() => {
+                onPending({ entity: entry.entityId, field, body: draft.trim() });
+                setDraft('');
+                setOpen(false);
+              }}
+            >
+              {w(lang, 'keepForReview')}
+            </button>
+            <button type="button" className="btn sm" onClick={() => setOpen(false)}>
+              {tt(lang, 'cancel')}
+            </button>
+          </Composer>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-/** Finishing a review: the words, the verdict, and the field comments gathered on the way, sent as one. */
-function ReviewBox({
-  lang,
-  id,
-  thread,
-  pending,
-  mayDecide,
-  onDropPending,
-  onDone,
-  fieldLabel,
-}: {
-  lang: Lang;
-  id: number;
-  thread: string;
-  pending: Pending[];
-  mayDecide: boolean;
-  onDropPending: (index: number) => void;
-  onDone: () => Promise<void>;
-  fieldLabel: (a: { entity: string; field: string }) => string;
-}) {
-  const [body, setBody] = useState('');
-  const [verdict, setVerdict] = useState<'comment' | 'approve' | 'request_changes'>('comment');
+/** Following the conversation: every comment and change comes to the inbox. */
+function FollowThread({ id, on: initial, lang }: { id: number; on: boolean; lang: Lang }) {
+  const [on, setOn] = useState(initial);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const needsWords = verdict === 'request_changes' || (verdict === 'comment' && pending.length === 0);
-
-  async function submit() {
+  useEffect(() => setOn(initial), [initial]);
+  async function toggle() {
     setBusy(true);
-    setError(null);
     try {
-      await threads(`suggestions/${id}/reviews`, { body: { verdict, body: body.trim(), comments: pending } });
-      setBody('');
-      await onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const response = await fetch('/_/follows', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ kind: 'changeset', id: String(id), on: !on }) });
+      if (response.ok) setOn(!on);
     } finally {
       setBusy(false);
     }
   }
-
-  const choice = (value: typeof verdict, label: 'verdictComment' | 'verdictApprove' | 'verdictRequestChanges', hint: 'verdictCommentHint' | 'verdictApproveHint' | 'verdictRequestChangesHint', disabled = false) => (
-    <label aria-disabled={disabled}>
-      <input type="radio" name="verdict" value={value} checked={verdict === value} disabled={disabled} onChange={() => setVerdict(value)} />
-      <strong>{tt(lang, label)}</strong>
-      <small>{tt(lang, hint)}</small>
-    </label>
-  );
-
   return (
-    <section className="th-card th-review-box" aria-label={tt(lang, 'reviewChanges')}>
-      <div className="th-card-body" style={{ display: 'grid', gap: '0.75rem' }}>
-        <Composer lang={lang} value={body} onChange={setBody} thread={thread} placeholder={tt(lang, 'leaveComment')} autoFocus />
-        {pending.length ? (
-          <div>
-            <p className="th-hint">{tt(lang, 'pendingComments')}</p>
-            <ul style={{ margin: 0, paddingInlineStart: '1rem' }}>
-              {pending.map((p, i) => (
-                <li key={i}>
-                  <span className="th-anchor">{fieldLabel(p)}</span> {p.body.length > 80 ? `${p.body.slice(0, 77)}…` : p.body}{' '}
-                  <button type="button" className="th-gear" aria-label={tt(lang, 'cancel')} onClick={() => onDropPending(i)}>
-                    <X size={12} aria-hidden="true" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        <fieldset className="th-verdicts">
-          {choice('comment', 'verdictComment', 'verdictCommentHint')}
-          {choice('approve', 'verdictApprove', 'verdictApproveHint', !mayDecide)}
-          {choice('request_changes', 'verdictRequestChanges', 'verdictRequestChangesHint', !mayDecide)}
-        </fieldset>
-        {!mayDecide ? <p className="th-hint">{tt(lang, 'onlyKeepers')}</p> : null}
-        {error ? <p className="th-error" role="alert">{error}</p> : null}
-        <div className="th-buttons">
-          <button type="button" onClick={() => void submit()} disabled={busy || (needsWords && !body.trim())}>
-            {tt(lang, 'submitReview')}
-          </button>
-        </div>
-      </div>
-    </section>
+    <button type="button" className="link-btn" onClick={() => void toggle()} disabled={busy} aria-pressed={on} title={tt(lang, on ? 'subscribedNote' : 'notSubscribedNote')}>
+      <Icon name={on ? 'bellon' : 'eye'} size={14} /> {w(lang, on ? 'following' : 'follow')}
+    </button>
   );
 }
