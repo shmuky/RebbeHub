@@ -138,6 +138,25 @@ export function isAllowanceError(error: unknown): boolean {
   return /quota|daily limit|limit (?:was |has been )?(?:reached|exceeded)|exceeded .*limit|too many queries|free tier/i.test(text);
 }
 
+/**
+ * What went wrong, in a few words fit for a public page: the error's code
+ * and the start of its message, with addresses, hosts and anything like a
+ * connection string taken out.
+ */
+export function reasonOf(error: unknown): string {
+  if (!(error instanceof Error)) return '';
+  const code = (error as { code?: unknown }).code;
+  const words = error.message
+    .replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, '…')
+    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b/g, '…')
+    .replace(/\b[\w-]+(?:\.[\w-]+)+\.[a-z]{2,}\b/gi, '…')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 100);
+  const parts = [typeof code === 'string' && /^[\w-]{1,20}$/.test(code) ? code : null, words || null].filter(Boolean);
+  return parts.length ? ` (${parts.join(': ')})` : '';
+}
+
 /** One query through Hyperdrive. */
 export async function checkDatabase(ask: () => Promise<unknown>): Promise<CheckResult> {
   const started = Date.now();
@@ -151,7 +170,7 @@ export async function checkDatabase(ask: () => Promise<unknown>): Promise<CheckR
       id: 'database',
       state: 'down',
       ms: Date.now() - started,
-      detail: isAllowanceError(error) ? "Today's allowance of database queries is used up; it starts again at 00:00 UTC." : 'The database did not answer.',
+      detail: isAllowanceError(error) ? "Today's allowance of database queries is used up; it starts again at 00:00 UTC." : `The database did not answer${reasonOf(error)}.`,
     };
   }
 }
@@ -181,7 +200,13 @@ export async function hyperdriveQueriesToday(options: { accountId: string; token
       console.error('status: analytics', response.status, JSON.stringify(body.errors ?? null));
       return null;
     }
-    const groups = body.data?.viewer?.accounts?.[0]?.hyperdriveQueriesAdaptiveGroups ?? [];
+    // No account in the answer means the token may not read it (or the id is wrong): not measured, never zero.
+    const account = body.data?.viewer?.accounts?.[0];
+    if (!account) {
+      console.error('status: analytics', 'the token cannot read this account, or CLOUDFLARE_ACCOUNT_ID is wrong');
+      return null;
+    }
+    const groups = account.hyperdriveQueriesAdaptiveGroups ?? [];
     return groups.reduce((sum, g) => sum + (g.count ?? 0), 0);
   } catch (error) {
     console.error('status: analytics', error);
