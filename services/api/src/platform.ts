@@ -1,4 +1,5 @@
 import type { Context, MiddlewareHandler } from 'hono';
+import type { DbCost } from '@rebbehub/db';
 
 /**
  * What every route of the public API shares (docs/developers/api.md):
@@ -69,7 +70,7 @@ export function nextLink(c: Context, next: string | null): void {
 // ------------------------------------------------------------------ CORS
 
 const ALLOW_HEADERS = 'Authorization, Content-Type, If-None-Match, Range, Accept, Mcp-Session-Id, Mcp-Protocol-Version';
-const EXPOSE_HEADERS = 'ETag, Link, Retry-After, RateLimit-Policy, Content-Range, Accept-Ranges, Content-Length, X-Credit, Mcp-Session-Id, Deprecation, Sunset, WWW-Authenticate';
+const EXPOSE_HEADERS = 'ETag, Link, Retry-After, RateLimit-Policy, Content-Range, Accept-Ranges, Content-Length, X-Credit, Mcp-Session-Id, Deprecation, Sunset, WWW-Authenticate, Server-Timing';
 
 /**
  * Any site's pages may read the API and send a token with it. Cookies are
@@ -93,6 +94,33 @@ export function cors(): MiddlewareHandler {
     c.header('Access-Control-Allow-Origin', '*');
     c.header('Access-Control-Expose-Headers', EXPOSE_HEADERS);
     c.header('X-Content-Type-Options', 'nosniff');
+  };
+}
+
+// ------------------------------------------------------------------ timing
+
+/**
+ * What answering cost, said on every answer for whoever looks (the Timing
+ * tab of a browser's DevTools, or `curl -sI`): how many statements the
+ * database was sent and how long it took to answer them (`db`), and the
+ * whole (`total`), in milliseconds. `cost` is the request's own database's
+ * count (db.ts, `measured`), exact on Workers, where each request has its
+ * own; over a shared one (tests) it counts what ran meanwhile too. Other
+ * sites' pages may read it (Timing-Allow-Origin).
+ */
+export function serverTiming(cost?: () => DbCost): MiddlewareHandler {
+  return async (c, next) => {
+    const started = performance.now();
+    const before = cost ? { ...cost() } : null;
+    await next();
+    const parts: string[] = [];
+    if (cost && before) {
+      const after = cost();
+      parts.push(`db;dur=${(after.ms - before.ms).toFixed(1)};desc="${after.statements - before.statements} statements"`);
+    }
+    parts.push(`total;dur=${(performance.now() - started).toFixed(1)}`);
+    c.header('Server-Timing', parts.join(', '));
+    c.header('Timing-Allow-Origin', '*');
   };
 }
 

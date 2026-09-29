@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Hono } from 'hono';
-import { createPerson, type Catalog } from '@rebbehub/core';
+import { Catalog, createPerson } from '@rebbehub/core';
+import { measured } from '@rebbehub/db';
 import type { EntityId } from '@rebbehub/model';
 import { createApp } from '../src/app.js';
 import { cursor, etagMatches, mayUseEdgeCache, memoryRateLimiter } from '../src/platform.js';
@@ -59,6 +60,30 @@ describe('errors, CORS and caching', () => {
     const read = await call('GET', '/v1/stats');
     expect(read.headers.get('Access-Control-Allow-Origin')).toBe('*');
     expect(read.headers.get('Access-Control-Expose-Headers')).toMatch(/ETag/);
+  });
+
+  it('says on every answer what it cost: the statements and their time, and the whole (Server-Timing)', async () => {
+    const db = measured(catalog.db);
+    const counted = createApp({ catalog: new Catalog(db), cost: () => db.cost });
+    const read = await counted.request(`/v1/entities/${event}`);
+    expect(read.status).toBe(200);
+    const timing = read.headers.get('Server-Timing')!;
+    expect(timing).toMatch(/^db;dur=\d+(\.\d)?;desc="\d+ statements", total;dur=\d+(\.\d)?$/);
+    const statements = Number(/"(\d+) statements"/.exec(timing)![1]);
+    expect(statements).toBeGreaterThan(0);
+    expect(statements).toBe(db.cost.statements);
+    // A write's transaction counts its BEGIN and COMMIT, as Hyperdrive does.
+    const before = db.cost.statements;
+    await db.transaction(async (tx) => {
+      await tx.query('SELECT 1');
+      await tx.transaction((inner) => inner.query('SELECT 2'));
+    });
+    expect(db.cost.statements - before).toBe(4);
+    // Browsers may show it to other sites' pages, and programs may read it.
+    expect(read.headers.get('Timing-Allow-Origin')).toBe('*');
+    expect(read.headers.get('Access-Control-Expose-Headers')).toMatch(/Server-Timing/);
+    // Without a counted database, the whole alone.
+    expect((await app.request('/v1')).headers.get('Server-Timing')).toMatch(/^total;dur=\d+(\.\d)?$/);
   });
 
   it('tags JSON with an ETag and answers 304 when it has not changed; public for a minute, private when signed in', async () => {

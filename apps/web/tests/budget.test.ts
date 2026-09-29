@@ -34,7 +34,7 @@ let handle: (request: Request) => Promise<Response>;
 const ids = {} as Record<'set' | 'work' | 'unit' | 'pub' | 'scan' | 'event' | 'recording', EntityId>;
 let suggestion = 0;
 const counts = { statements: 0, calls: 0, shapes: new Map<string, number>(), routes: new Map<string, number>() };
-const measured: Array<{ what: string; statements: number; calls: number; status: number }> = [];
+const measured: Array<{ what: string; statements: number; calls: number; status: number; routes: string[] }> = [];
 
 const reset = () => {
   counts.statements = 0;
@@ -112,8 +112,9 @@ beforeAll(async () => {
 }, 180_000);
 
 afterAll(() => {
-  // What each cost, for whoever raises a ceiling: the same table as docs/operations.md keeps.
-  console.log(['', 'statements  calls  status  page', ...measured.map((m) => `${String(m.statements).padStart(10)}  ${String(m.calls).padStart(5)}  ${String(m.status).padStart(6)}  ${m.what}`)].join('\n'));
+  // What each cost, and what it asked, for whoever raises a ceiling (shown with --reporter=verbose --silent=false): the table docs/operations.md keeps.
+  const rows = measured.map((m) => [`${String(m.statements).padStart(10)}  ${String(m.calls).padStart(5)}  ${String(m.status).padStart(6)}  ${m.what}`, ...m.routes.map((r) => `${' '.repeat(28)}${r}`)].join('\n'));
+  console.log(['', 'statements  calls  status  page', ...rows].join('\n'));
 });
 
 /** An item's page: at its path, or at /<id> for one made without a path of its own (lib/links.ts itemPath). */
@@ -123,11 +124,9 @@ async function page(path: string) {
   reset();
   const response = await handle(new Request(`${SITE}${path}`));
   await response.text();
-  const top = [
-    ...[...counts.shapes.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([s, n]) => `${n} × ${s}`),
-    ...[...counts.routes.entries()].sort((a, b) => b[1] - a[1]).map(([r, n]) => `${n} × GET ${r}`),
-  ];
-  measured.push({ what: path, statements: counts.statements, calls: counts.calls, status: response.status });
+  const routes = [...counts.routes.entries()].sort((a, b) => b[1] - a[1]).map(([r, n]) => `${n} × GET ${r}`);
+  const top = [...[...counts.shapes.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([s, n]) => `${n} × ${s}`), ...routes];
+  measured.push({ what: path, statements: counts.statements, calls: counts.calls, status: response.status, routes });
   return { status: response.status, statements: counts.statements, calls: counts.calls, top };
 }
 
@@ -135,7 +134,7 @@ async function route(path: string) {
   reset();
   const response = await api.request(path, { headers: { accept: 'application/json' } });
   await response.text();
-  measured.push({ what: `API ${path}`, statements: counts.statements, calls: 0, status: response.status });
+  measured.push({ what: `API ${path}`, statements: counts.statements, calls: 0, status: response.status, routes: [] });
   return { status: response.status, statements: counts.statements };
 }
 

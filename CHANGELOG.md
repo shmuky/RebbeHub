@@ -12,6 +12,15 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Every answer says what it cost.** The API's and the site's answers
+  carry a `Server-Timing` header: the API's says how many statements its
+  request sent the database and how long they took (`db`) and the whole
+  (`total`); a page's says how many times it asked the API and how long
+  it waited (`api`), the statements and time those answers report (`db`)
+  and the whole. A browser's DevTools shows it in a request's Timing tab;
+  `curl -sI` shows it too ([docs/operations.md](docs/operations.md),
+  "The statement budget").
+
 - **A status page.** `/status` (linked in every page's foot) says whether
   the site, the API, the MCP server, the database, today's allowance of
   database queries and the scheduled jobs are working, with ninety days
