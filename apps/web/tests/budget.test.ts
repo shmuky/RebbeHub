@@ -209,6 +209,7 @@ describe("each page's statements and API calls stay within its ceiling", () => {
     within(await page('/suggestions'), '/suggestions', { statements: 8, calls: 3, kB: 35 });
     within(await page(`/suggestions/${suggestion}`), 'a suggestion', { statements: 18, calls: 8, kB: 45 });
     within(await page('/review'), '/review', { statements: 2, calls: 2, kB: 30 });
+    within(await page('/check'), '/check', { statements: 4, calls: 2, kB: 30 });
   });
   it('the sitemap', async () => within(await page('/sitemap.xml'), '/sitemap.xml', { statements: 2, calls: 2, kB: 5 }));
 });

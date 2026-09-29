@@ -12,6 +12,12 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Checking what the machines wrote: `/check`, linked from the home page.**
+  Farbrengens with machine transcript paragraphs nobody checked, and scans
+  read by OCR with pages nobody proofread, the newest first, each leading
+  to where it is checked. From `GET /v1/machine/to-check` (two queries,
+  kept five minutes at the edge) and the MCP tool `machine_to_check`.
+
 - **The account is on Workers Paid.** No daily allowance of database
   statements, 30 seconds of CPU a request instead of 10 ms. The status
   page's quota line says "no limit" (`HYPERDRIVE_DAILY_QUERIES = "0"`),

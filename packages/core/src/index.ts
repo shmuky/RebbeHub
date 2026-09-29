@@ -252,3 +252,4 @@ export {
 } from './organize.js';
 export { MACHINE_KINDS, MACHINE_REQUESTS_PER_DAY, checkMachineWork, finishMachineWork, machineRequest, machineRequests, machineSummary, releaseMachineRequests, requestMachineWork, takeMachineRequests, type MachineKind, type MachineRequest, type MachineRequestStatus } from './machineWork.js';
 export { CLIP_MAX_SECONDS, HELD_OUT_AUDIO, TRAINING_GOAL, piecesOf, splitOf, summariseTraining, trainingClips, trainingGoal, type ClipQuality, type GoalFarbrengen, type TrainingClip, type TrainingGoal, type TrainingSkip, type TrainingSummary } from './trainingClips.js';
+export { machineToCheck, type MachineToCheck, type ScanToCheck, type TranscriptToCheck } from './toCheck.js';
