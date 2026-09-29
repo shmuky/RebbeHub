@@ -7,24 +7,51 @@
 <title>RebbeHub · אין חיבור</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
-  :root { --bg: #faf8f4; --fg: #161816; --muted: #5d6660; --border: #e4e1da; --accent: #16744a; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #0e1110; --fg: #eef1ee; --muted: #9aa39d; --border: #262b28; --accent: #3ccf7a; } }
-  body { margin: 0; background: var(--bg); color: var(--fg); font-family: 'Noto Sans Hebrew', 'Noto Sans', -apple-system, Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; }
-  main { max-width: 36rem; margin: 0 auto; padding: 48px 16px; }
-  h1 { font-family: 'Frank Ruhl Libre', 'FrankRuehlCLM', serif; font-size: 1.8rem; margin: 0 0 8px; }
-  p { margin: 0 0 12px; }
-  .en { direction: ltr; text-align: left; color: var(--muted); border-top: 1px solid var(--border); padding-top: 16px; margin-top: 24px; }
-  a { color: var(--accent); }
+  /* A page on its own, kept by the service worker: it cannot load the site's
+     styles, so it carries the few tokens it uses (the values of tokens.css). */
+  :root {
+    --bg: #ffffff; --canvas: #f6f7f8; --border: #e2e4e8; --text: #15181d;
+    --muted: #545b66; --subtle: #6b727d; --accent: #1d4ed8; --strong: #15181d;
+    --ui: 'Noto Sans Hebrew', 'Noto Sans', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+    --display: 'Frank Ruhl Libre', 'FrankRuehlCLM', 'Noto Serif Hebrew', Georgia, serif;
+    --r: 6px; --r-lg: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15171a; --canvas: #0f1113; --border: #2b3037; --text: #e8eaed;
+      --muted: #a4abb6; --subtle: #8b929d; --accent: #7ea6ff; --strong: #e8eaed;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--canvas); color: var(--text); font: 14px/1.6 var(--ui); }
+  header { display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 24px; background: var(--bg); border-bottom: 1px solid var(--border); font-weight: 700; font-size: 16px; }
+  .mark { width: 26px; height: 26px; border-radius: 5px; background: var(--strong); color: var(--bg); display: grid; place-items: center; font: 700 15px/1 var(--display); }
+  main { max-width: 34rem; margin: 48px auto; padding: 0 16px; }
+  .box { background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 28px 24px; text-align: center; }
+  .icon { width: 40px; height: 40px; margin: 0 auto 12px; color: var(--subtle); }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 6px; }
+  p { margin: 0 0 16px; color: var(--muted); }
+  .acts { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 0; }
+  .btn { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r); background: var(--bg); color: var(--text); font: 500 14px var(--ui); text-decoration: none; cursor: pointer; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .en { direction: ltr; text-align: center; margin-top: 16px; }
+  .en h1 { font-size: 16px; }
+  @media (max-width: 480px) { header { padding: 0 16px; } main { margin-top: 24px; } .box { padding: 24px 16px; } }
 </style>
 </head>
 <body>
+<header><span class="mark" aria-hidden="true">ר</span>RebbeHub</header>
 <main>
-  <h1>אין חיבור לאינטרנט</h1>
-  <p>הדף הזה לא נשמר במכשיר. דפים שכבר פתחתם נשמרים ונפתחים גם בלי חיבור, וכל השאר ייפתח כשהחיבור יחזור.</p>
-  <p><a href="/">לדף הבית</a> · <a href="" onclick="location.reload(); return false;">לנסות שוב</a></p>
-  <div class="en" lang="en">
-    <p><b>You are offline.</b> This page is not saved on this device. Pages you have opened before are kept and open without a connection; everything else opens when you are back online.</p>
-    <p><a href="/?lang=en">Home</a> · <a href="" onclick="location.reload(); return false;">Try again</a></p>
+  <div class="box">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8.5a15 15 0 0 1 20 0"/><path d="M5.5 12a10 10 0 0 1 13 0"/><path d="M9 15.5a5 5 0 0 1 6 0"/><path d="M12 19h.01"/><path d="M3 3l18 18"/></svg>
+    <h1>אין חיבור לאינטרנט</h1>
+    <p>הדף הזה לא נשמר במכשיר. דפים שכבר פתחתם נשמרים ונפתחים גם בלי חיבור, וכל השאר ייפתח כשהחיבור יחזור.</p>
+    <p class="acts"><a class="btn primary" href="" onclick="location.reload(); return false;">לנסות שוב</a><a class="btn" href="/">לדף הבית</a></p>
+  </div>
+  <div class="box en" lang="en">
+    <h1>You are offline</h1>
+    <p>This page is not saved on this device. Pages you have opened before are kept and open without a connection; everything else opens when you are back online.</p>
+    <p class="acts"><a class="btn primary" href="" onclick="location.reload(); return false;">Try again</a><a class="btn" href="/?lang=en">Home</a></p>
   </div>
 </main>
 </body>

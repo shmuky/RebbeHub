@@ -1,0 +1,405 @@
+/*
+ * The information pages: all of what belongs to an item (/all), a file's
+ * own page (/files/<sha>), how to help, about, download and mirror, and an
+ * item as other sites embed it. Rows and boxes come from components.css;
+ * this file only adds what these pages say differently.
+ */
+
+/* ------------------------------------------------------------ shared */
+
+.row-end {
+  flex: none;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+.side .help-now a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+  color: var(--text);
+}
+
+.side .help-now a:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.side .help-now a > .i,
+.side .help-now a > svg {
+  color: var(--subtle);
+  flex: none;
+}
+
+.side .help-now a:hover > svg {
+  color: var(--accent);
+}
+
+.h-side .count {
+  margin-inline-start: 2px;
+}
+
+/* ------------------------------------------------------------ /all */
+
+.all-kinds {
+  margin: 0;
+}
+
+.all-kinds .row > svg {
+  color: var(--subtle);
+  flex: none;
+}
+
+.all-kinds .row.current > svg {
+  color: var(--accent);
+}
+
+.side .all-kinds .row {
+  padding: 7px 10px;
+  font-size: var(--fs-md);
+}
+
+.all-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.all-rows > li + li > .row {
+  border-top: 1px solid var(--border-muted);
+}
+
+.all-rows .row-title {
+  font-family: var(--torah);
+  font-size: 16.5px;
+  font-weight: 500;
+}
+
+.all-n {
+  flex: none;
+  min-width: 2.6em;
+  color: var(--subtle);
+  font-size: var(--fs-sm);
+  text-align: end;
+}
+
+.all-pager {
+  margin-top: 12px;
+}
+
+/* ------------------------------------------------------------ /files/<sha> */
+
+.file-sha {
+  font-size: 0.62em;
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: 0;
+  vertical-align: 0.15em;
+}
+
+.file-kept {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--fs-md);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 5px 10px;
+  background: var(--canvas);
+}
+
+.file-hash {
+  display: block;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  word-break: break-all;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 6px 8px;
+  color: var(--text);
+  direction: ltr;
+  text-align: left;
+}
+
+.file-why {
+  margin-top: 8px;
+}
+
+.file .box .row > svg {
+  color: var(--subtle);
+  flex: none;
+}
+
+/* ------------------------------------------------------------ help and about */
+
+.ways,
+.how-steps {
+  margin: 0;
+}
+
+.way,
+.how-steps > .row {
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.way + .way,
+.how-steps > .row + .row {
+  border-top: 1px solid var(--border-muted);
+}
+
+.way-icon {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--canvas);
+  color: var(--muted);
+}
+
+.way .row-sub,
+.how-steps .row-sub {
+  white-space: normal;
+  line-height: 1.55;
+  margin-top: 2px;
+}
+
+.way-act {
+  flex: none;
+  align-self: center;
+}
+
+.way-act .count {
+  margin-inline-start: 2px;
+}
+
+.help-say,
+.mirror-say {
+  margin: -4px 0 10px;
+  font-size: var(--fs-md);
+  max-width: 68ch;
+}
+
+.more-rows {
+  margin-top: 8px;
+}
+
+.more-rows > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+}
+
+.more-rows > summary::-webkit-details-marker {
+  display: none;
+}
+
+.more-rows[open] > summary {
+  margin-bottom: 8px;
+}
+
+.more-rows[open] > summary svg {
+  transform: rotate(180deg);
+}
+
+.prose {
+  font-size: 15.5px;
+  line-height: 1.75;
+  max-width: 68ch;
+}
+
+.prose p + p {
+  margin-top: 12px;
+}
+
+/* ------------------------------------------------------------ download and mirror */
+
+.mirror-code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  overflow-x: auto;
+  white-space: pre;
+  direction: ltr;
+  text-align: left;
+  color: var(--text);
+}
+
+.edition .box-h .mono {
+  font-size: var(--fs-md);
+}
+
+.edition-notes {
+  padding: 10px 16px 0;
+  font-size: var(--fs-md);
+}
+
+.edition-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.edition-files > .row {
+  align-items: flex-start;
+}
+
+.edition-files > .row + .row {
+  border-top: 1px solid var(--border-muted);
+}
+
+.edition-file {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.edition-file a {
+  font-family: var(--mono);
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.edition-sha {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--subtle);
+  word-break: break-all;
+}
+
+.edition-f {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+
+.edition-sig {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.edition-f .end {
+  margin-inline-start: auto;
+  font-family: var(--mono);
+}
+
+.mirror-key .grow {
+  display: grid;
+  gap: 6px;
+}
+
+.mirror-key b {
+  font-size: var(--fs-md);
+}
+
+/* ------------------------------------------------------------ an embedded item */
+
+.embed-card .embed-kind {
+  margin: 0;
+}
+
+.embed-card h1 {
+  margin: 0;
+  line-height: 1.3;
+}
+
+.embed-date,
+.embed-track {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.embed-tracks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.embed-tracks li {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 8px 10px;
+  background: var(--canvas);
+}
+
+.embed-foot {
+  margin: 0;
+}
+
+.embed-foot a {
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------ phone */
+
+@media (max-width: 720px) {
+  .way,
+  .how-steps > .row {
+    flex-wrap: wrap;
+    padding: 12px 14px;
+  }
+
+  .way .row-main {
+    flex: 1 1 calc(100% - 44px);
+  }
+
+  .way-act {
+    flex-basis: 100%;
+    padding-inline-start: 44px;
+  }
+
+  .all-rows .row-title {
+    font-size: 15.5px;
+  }
+
+  .all-n {
+    min-width: 2em;
+  }
+
+  .file-sha {
+    display: block;
+    font-size: 0.55em;
+    margin-top: 4px;
+  }
+
+  .edition .box-h {
+    flex-wrap: wrap;
+  }
+
+  .edition .box-h .end {
+    flex-basis: 100%;
+    margin-inline-start: 0;
+  }
+
+  .edition-f .end {
+    margin-inline-start: 0;
+  }
+
+  .mirror-code {
+    font-size: 11.5px;
+    padding: 10px 12px;
+  }
+}
+
+.side dl .dl-row {
+  display: contents;
+}

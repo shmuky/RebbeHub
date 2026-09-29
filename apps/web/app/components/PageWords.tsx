@@ -4,6 +4,8 @@ import { toHebrewNumeral } from '@rebbehub/hebrew';
 import { allSegments, type PageInline, type PageSegment, type PageText, type PageVersion, type TextProfile } from '@rebbehub/model';
 import type { Lang } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
+import { MachineNote } from '../ui/primitives.js';
+import '../styles/pages/words.css';
 import { SegmentEditor, SentNote, type SentSuggestion } from './SegmentEditor.js';
 
 const WORDS = {
@@ -245,8 +247,9 @@ function Segment({ segment, depth, ctx }: { segment: PageSegment; depth: number;
     default:
       return (
         <p id={id} className={`words-p${segment.end ? ' end' : ''}${machine}`}>
+          {/* The paragraph's number in the margin: its own when it has one, else counted in order (words.css). */}
           <a className="words-anchor" href={`#${anchor}`} aria-label={WORDS.segmentLink[ctx.lang]}>
-            ¶
+            {segment.n !== undefined ? numberIn(segment.n, ctx.version.language) : null}
           </a>
           <Words segment={segment} ctx={ctx} />
         </p>
@@ -447,20 +450,20 @@ export function PageWords({ page, lang, edit }: { page: PageText; lang: Lang; ed
   return (
     <div className="page-words">
       {versions.length > 1 ? (
-        <p className="words-versions" role="group" aria-label={WORDS.versions[lang]}>
+        <div className="segmented words-versions" role="group" aria-label={WORDS.versions[lang]}>
           {versions.map((v) => (
-            <button key={v.id} type="button" className={shown === v.id ? '' : 'secondary'} aria-pressed={shown === v.id} onClick={() => setShown(v.id)} lang={v.language}>
+            <button key={v.id} type="button" aria-pressed={shown === v.id} onClick={() => setShown(v.id)} lang={v.language}>
               {versionName(v, lang)}
             </button>
           ))}
           {pairable ? (
-            <button type="button" className={shown === 'both' ? '' : 'secondary'} aria-pressed={shown === 'both'} onClick={() => setShown('both')}>
+            <button type="button" aria-pressed={shown === 'both'} onClick={() => setShown('both')}>
               {WORDS.both[lang]}
             </button>
           ) : null}
-        </p>
+        </div>
       ) : null}
-      {machine ? <p className="notice machine">{WORDS.machine[lang]}</p> : null}
+      {machine ? <MachineNote>{WORDS.machine[lang]}</MachineNote> : null}
       {pairable && shown === 'both' ? (
         <SideBySide first={versions[0]!} second={versions[1]!} lang={lang} edit={editState} />
       ) : (
