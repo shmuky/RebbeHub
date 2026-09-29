@@ -53,7 +53,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   let view: SuggestionView | null = null;
   let people: People = {};
   if (thread) {
-    const detail = await api.suggestion(thread.id).catch(() => null);
+    const detail = await api.suggestion(thread.id, { limit: 200 }).catch(() => null);
     if (detail) {
       view = await suggestionView(api, detail, lang);
       const found = await api.peopleByIds([detail.changeset.author, ...detail.reviews.map((r) => r.reviewer)]);
@@ -172,7 +172,7 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
   const load = useCallback(async () => {
     if (id === null) return setMissing(true);
     try {
-      const [d, c] = await Promise.all([threads<ClientDetail>(`suggestions/${id}`), threads<ConversationData>(`suggestions/${id}/conversation`)]);
+      const [d, c] = await Promise.all([threads<ClientDetail>(`suggestions/${id}?limit=200`), threads<ConversationData>(`suggestions/${id}/conversation`)]);
       setDetail(d);
       setTalk(c);
       // A title or description just changed here: the page says so without a reload.

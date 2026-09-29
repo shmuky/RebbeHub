@@ -228,6 +228,9 @@ export type Suggestion = {
   created_at?: string;
   submitted_at?: string | null;
   closed_at?: string | null;
+  number?: number | null;
+  /** How many items it changes */
+  items?: number;
 };
 
 export type SuggestionListItem = {
@@ -1017,10 +1020,14 @@ export interface Operations {
     };
     output: string;
   };
-  /** The review view: each item before and after, clashes with main, and the reviewer's advice (machine-written, `machine: true`) */
+  /** The review view: each item before and after, clashes with main, and the reviewer's advice (machine-written, `machine: true`). A page of items at a time (`entries`, from `offset`), with `total`, `next` (the offset of the next page, or null) and `summary`: the items grouped by how they change ("500 units: links on the media proxy became links on Drive"), with a few examples of each */
   getSuggestion: {
     input: {
       id: number;
+      /** Items to skip: the `next` of the page before */
+      offset?: number;
+      /** How many (at most 200) */
+      limit?: number;
     };
     output: Record<string, unknown>;
   };
@@ -2293,7 +2300,7 @@ export const OPERATIONS = {
   getProject: {"method":"GET","path":"/v1/projects/{slug}","pathParams":["slug"],"query":[],"body":null,"answer":"json"},
   getRevision: {"method":"GET","path":"/v1/revisions/{rev}","pathParams":["rev"],"query":[],"body":null,"answer":"json"},
   getSourceText: {"method":"GET","path":"/v1/texts/{sha256}","pathParams":["sha256"],"query":[],"body":null,"answer":"text"},
-  getSuggestion: {"method":"GET","path":"/v1/suggestions/{id}","pathParams":["id"],"query":[],"body":null,"answer":"json"},
+  getSuggestion: {"method":"GET","path":"/v1/suggestions/{id}","pathParams":["id"],"query":["offset","limit"],"body":null,"answer":"json"},
   health: {"method":"GET","path":"/v1/health","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
   hideComment: {"method":"POST","path":"/v1/comments/{id}/hide","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   iiifManifest: {"method":"GET","path":"/manifests/iiif/{file}","pathParams":["file"],"query":[],"body":null,"answer":"json"},
@@ -2682,7 +2689,7 @@ export abstract class GeneratedMethods {
     return this.call('getSourceText', input ?? {} as Operations['getSourceText']['input']);
   }
 
-  /** The review view: each item before and after, clashes with main, and the reviewer's advice (machine-written, `machine: true`) (GET /v1/suggestions/{id}) */
+  /** The review view: each item before and after, clashes with main, and the reviewer's advice (machine-written, `machine: true`). A page of items at a time (`entries`, from `offset`), with `total`, `next` (the offset of the next page, or null) and `summary`: the items grouped by how they change ("500 units: links on the media proxy became links on Drive"), with a few examples of each (GET /v1/suggestions/{id}) */
   getSuggestion(input: Operations['getSuggestion']['input']): Promise<Operations['getSuggestion']['output']> {
     return this.call('getSuggestion', input ?? {} as Operations['getSuggestion']['input']);
   }

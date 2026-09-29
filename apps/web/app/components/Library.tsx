@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { LocalName } from '@rebbehub/model';
 import type { Cover, Entity } from '../lib/api.js';
 import { nameOf, type Lang } from '../lib/i18n.js';
@@ -47,14 +48,14 @@ export function RebbePortrait({ author, lang = 'he', size = 62 }: { author: Enti
  * PDF the site serves shows (core/covers.ts) where the jobs have drawn one,
  * else the title page set from the catalog's words.
  */
-export function Books({ works, lang, meta, covers }: { works: Entity[]; lang: Lang; meta?: (w: Entity) => string | undefined; covers?: Record<string, Cover> }) {
+export function Books({ works, lang, meta, covers, action }: { works: Entity[]; lang: Lang; meta?: (w: Entity) => string | undefined; covers?: Record<string, Cover>; action?: (w: Entity) => ReactNode }) {
   return (
     <ul className="shaar-row">
       {works.map((w) => {
         const title = nameOf((w.data as { title?: LocalName }).title, lang);
         const more = meta?.(w);
         return (
-          <li key={w.id}>
+          <li key={w.id} className={action ? 'has-edit' : undefined}>
             <Shaar
               title={title}
               image={covers?.[w.id]?.thumb.url ?? null}
@@ -66,6 +67,7 @@ export function Books({ works, lang, meta, covers }: { works: Entity[]; lang: La
                 </>
               }
             />
+            {action?.(w)}
           </li>
         );
       })}

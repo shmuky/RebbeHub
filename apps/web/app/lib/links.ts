@@ -53,3 +53,22 @@ export const SOURCE_NAMES: Record<string, { he: string; en: string }> = {
   oclc: { he: 'OCLC', en: 'OCLC' },
   otzar: { he: 'אוצר החכמה', en: 'Otzar HaChochma' },
 };
+
+/**
+ * A long link or id as a short label a phone can show: a web address as
+ * its host and "…" (`drive.google.com/…`), any other long unbroken id cut
+ * with "…". The whole value stays in the link and its title.
+ */
+export function shortLabel(value: string, max = 24): string {
+  const text = value.trim();
+  if (/^https?:\/\//i.test(text)) {
+    try {
+      const url = new URL(text);
+      const host = url.hostname.replace(/^www\./, '');
+      return url.pathname === '/' && !url.search && !url.hash ? host : `${host}/…`;
+    } catch {
+      // Not a valid address after all: cut it like any other id.
+    }
+  }
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}

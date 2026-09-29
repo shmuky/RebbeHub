@@ -12,6 +12,25 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Organizing from an item's own page.** A set's and a sefer's page have
+  "Edit" (for signed-in people) and "…" in their head, and a "…" on each
+  row of their lists (each sefer on a set's shelf, each sicha in a sefer's
+  contents). They open a small sheet, a bottom sheet on a phone: rename
+  (Hebrew and English name, address), move to another set (or a sicha to
+  another sefer) found by name, move up to the set above, put what is in
+  it in a new order (drag, or arrows for a finger), make a set inside it,
+  merge into another item, or remove an empty set. Each shows its preview
+  (what moves, which addresses will redirect) and is sent as one
+  suggestion, with a link to it; a keeper who may approve it can apply it
+  at once. Signed-out people see the actions and are asked to sign in.
+
+### Fixed
+
+- **Long links no longer push an item's page sideways on a phone.** A
+  source's long address (a Drive folder) or id is shown short, as its
+  host and "…", with the whole of it kept in the link and its title; the
+  side column's lists, facts and ids break or end in "…".
+
 - **The Sichos Kodesh apps' catalog, from RebbeHub.** `/v1/app/v1`,
   `/v1/app/v2` and `/v1/app/v3` answer at the paths and in the shapes of
   Sichos-Kodesh's own catalog API (`catalog/manifest.json`,
@@ -113,6 +132,23 @@ any time. `@rebbehub/client` carries the API's version.
   developer docs.
 
 ### Changed
+
+- **Large Suggestions are reviewable.** `GET /v1/suggestions/{id}` gives
+  a page of its items at a time: 25 unless `limit` says (at most 200),
+  from `offset`, with `total`, `offset`, `limit` and `next` (where the
+  next page starts, or null). Its new `summary` groups every item by how
+  it changes (the same fields, changed the same way: "500 events: links
+  on the media proxy became links on Drive"), with a few examples each,
+  and `people` says whether the author is a bot. Main's versions are
+  read for all the items in a few queries, not a few per item. The list
+  (`GET /v1/suggestions?status=…`) gives each Suggestion's `items` (how
+  many it changes) and `people`. A caller that read every item in one
+  answer asks for `limit=200` and follows `next`. The review page draws
+  the queue from the list and reads each Suggestion's changes as it
+  comes into view, with "Show more"; a bot's Suggestion is shown as the
+  bot's, marked as a machine's work until a person approves it, and
+  Approve and Send back take in the whole Suggestion. A Suggestion with
+  no #number (an import) opens by its id: `/review?s={id}`.
 
 - Importers store a PDF on Google Drive at its own Drive address
   (`https://drive.google.com/file/d/<id>/view`), the mafteiach's and

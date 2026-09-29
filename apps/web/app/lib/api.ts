@@ -275,6 +275,18 @@ export interface SuggestionRow {
   checks: Array<{ check: string; status: 'pass' | 'warn' | 'fail'; message: string; entityId?: string; path?: string }>;
   /** Sent by an agent for its author (a token, a connected app). */
   via?: Via | null;
+  /** How many items it changes (in the API's list). */
+  items?: number;
+}
+
+/** Items a suggestion changes in the same way ("500 units: links on the media proxy became links on Drive"), with a few to look at. */
+export interface ChangeGroup {
+  type: string;
+  kind: 'new' | 'deleted' | 'changed';
+  count: number;
+  /** Each field's place, and what it was and became: a kind ("text", "list", "none") or "link:" and the sites the links point to. */
+  fields: Array<{ path: string; before: string; after: string }>;
+  examples: string[];
 }
 
 /** One change a suggestion makes to one item. */
@@ -300,6 +312,14 @@ export interface SuggestionDetail {
   mine: boolean;
   /** The reviewer's advice, written by a machine (null until one has been written). */
   advice: { summary: string; model: string; at: string; machine: true } | null;
+  /** `entries` is a page of the items, from `offset`: how many there are in all, and where the next page starts (null: none). */
+  total?: number;
+  offset?: number;
+  next?: number | null;
+  /** Every item, grouped by how it changes. */
+  summary?: ChangeGroup[];
+  /** Who wrote it: a person, or a bot. */
+  people?: Record<string, { name: string; username: string | null; bot: boolean }>;
 }
 
 export class ApiError extends Error {
@@ -606,9 +626,9 @@ export class RebbeHubApi {
     return (await this.get<{ suggestions: SuggestionRow[] }>('/v1/suggestions', { status: options.status, author: options.author, postReview: options.postReview ? 'true' : undefined, limit: options.limit })).suggestions;
   }
 
-  /** One suggestion with its changes, reviews and who wrote them; null when there is none. */
-  suggestion(id: number) {
-    return this.maybe(this.get<SuggestionDetail>(`/v1/suggestions/${id}`));
+  /** One suggestion with a page of its changes (25 unless `limit` says), reviews and who wrote them; null when there is none. */
+  suggestion(id: number, options: { offset?: number; limit?: number } = {}) {
+    return this.maybe(this.get<SuggestionDetail>(`/v1/suggestions/${id}`, options));
   }
 
   /** The commits after `since`, oldest first, each with the items it changed (as they became). */

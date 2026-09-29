@@ -5,7 +5,7 @@ import type { AboutThread } from '../lib/about.server.js';
 import { type Lang } from '../lib/i18n.js';
 import { num } from '../lib/i18nUi.js';
 import type { ItemView } from '../lib/itemData.server.js';
-import { href, SOURCE_NAMES, sourceUrl } from '../lib/links.js';
+import { href, shortLabel, SOURCE_NAMES, sourceUrl } from '../lib/links.js';
 import { LABELS } from '../lib/suggestions.js';
 import { personPath } from '../lib/threads.js';
 import { Icon, type IconName } from '../ui/Icon.js';
@@ -89,11 +89,11 @@ export function SideSources({ copies, lang }: { copies: Copy[]; lang: Lang }) {
           const body = (
             <>
               <span className="grow">{SOURCE_NAMES[c.source]?.[lang] ?? c.source}</span>
-              {c.sourceId ? <span className="num subtle">{/^\d+$/.test(c.sourceId) ? `#${c.sourceId}` : c.sourceId}</span> : null}
+              {c.sourceId ? <span className="num subtle src-id" dir="ltr">{/^\d+$/.test(c.sourceId) ? `#${c.sourceId}` : shortLabel(c.sourceId)}</span> : null}
             </>
           );
           return link ? (
-            <a key={i} href={link} target="_blank" rel="noopener">
+            <a key={i} href={link} target="_blank" rel="noopener" title={link}>
               {body}
             </a>
           ) : (

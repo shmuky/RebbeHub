@@ -5,6 +5,7 @@
     "declaration": false,
     "declarationMap": false,
     "noEmit": true,
+    "jsx": "react-jsx",
     "rootDir": ".",
     "paths": {
       "@rebbehub/hebrew": [

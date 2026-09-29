@@ -1,5 +1,6 @@
 import { Hono, type Context } from 'hono';
 import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, getDerivations, getFile, getPageFix, hanachaSync, itemsUsingFile, listWebhooks, pageImageCount, printingsOf, projectTodo, recordingTranscript, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type Mailer, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
+import { peopleOf } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType, type Language, type PageInline, type PageSegmentKind } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
@@ -806,11 +807,16 @@ export function createApp(options: ApiOptions): Hono {
     const last = suggestions[suggestions.length - 1];
     const next = last && suggestions.length === limit ? cursor.encode([new Date(last.submitted_at ?? last.created_at).toISOString(), Number(last.id)]) : null;
     nextLink(c, next);
-    return c.json({ suggestions, next });
+    // How many items each changes, and who wrote them (a bot's, said to be one), so a list is drawn without opening each.
+    const counts = await catalog.itemCounts(suggestions.map((s) => Number(s.id)));
+    return c.json({ suggestions: suggestions.map((s) => ({ ...s, items: counts.get(Number(s.id)) ?? 0 })), people: await peopleOf(catalog.db, suggestions.map((s) => s.author)), next });
   });
 
   app.get('/v1/suggestions/:id', async (c) => {
-    const view = await catalog.review(intParam(c.req.param('id'), 'id')!);
+    // A page of its items at a time (a bot's Suggestion may change hundreds), with how many in all and a summary of them all.
+    const offset = Math.max(intParam(c.req.query('offset'), 'offset') ?? 0, 0);
+    const limit = Math.min(Math.max(intParam(c.req.query('limit'), 'limit') ?? 25, 1), 200);
+    const view = await catalog.review(intParam(c.req.param('id'), 'id')!, { offset, limit });
     const gate = new ExportGate(catalog);
     const hide = async (type: string, id: EntityId, data: Json | null) => (data === null ? null : ((await gate.redact({ id, type: type as EntityType, path: null, rev: 0, data })) as { withheld?: string }).withheld);
     for (const entry of view.entries) {
@@ -834,10 +840,14 @@ export function createApp(options: ApiOptions): Hono {
       const similar = await Promise.all((await similarFiles(catalog.db, sha)).map(async (s) => ({ kind: s.kind, matched: s.matched, of: s.of, items: (await itemsUsingFile(catalog.db, s.sha256)).map((i) => ({ id: i.id, type: i.type, path: i.path })) })));
       if (file) files[sha] = { url: base && mayServe(file.rights_state) && file.storage_tier === 'public' ? `${base}/objects/${sha}` : null, mime: file.mime, bytes: file.bytes, rights: file.rights_state, similar };
     }
+    const next = view.offset + view.entries.length < view.total ? view.offset + view.entries.length : null;
     return c.json({
       ...view,
+      limit,
+      next,
       files,
       names: await names([view.changeset.author, ...(view.reviews as Array<{ reviewer: string }>).map((r) => r.reviewer)]),
+      people: await peopleOf(catalog.db, [view.changeset.author]),
       mayApprove: mayApprove.ok,
       mayApproveReason: mayApprove.ok ? null : mayApprove.reason,
       mine: viewer === view.changeset.author,
