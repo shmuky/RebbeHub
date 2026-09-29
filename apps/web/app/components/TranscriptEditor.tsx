@@ -1,7 +1,7 @@
-import { Check, CircleHelp, History, Pencil, Radio, Undo2, X } from 'lucide-react';
+import { Check, CircleHelp, History, Pencil, Radio, ShieldQuestion, Timer, Undo2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { spellingHints } from '@rebbehub/model';
+import { markUnclear, spellingHints, unclearRanges } from '@rebbehub/model';
 import { t, type Lang } from '../lib/i18n.js';
 import { clockOf } from '../lib/i18nNetwork.js';
 import { href } from '../lib/links.js';
@@ -16,9 +16,11 @@ import { Bar, MachineLabel, RelativeTime } from '../ui/primitives.js';
  * Checking what the machine heard, opened from a farbrengen's or a
  * recording's transcript by "Review machine text". The words are the
  * recording: tapping one plays from it. Selecting words opens a small
- * editor for just those; the paragraph's own tools (all correct, retype
- * it, "the Rebbe is saying this now" for the sync, and its history) show
- * under the paragraph being worked on, each saying what it does. A fix of
+ * editor for just those, or marks them unclear (`[words?]`); the
+ * paragraph's own tools (all exact, retype it, confirm its timing or move
+ * its start to now, and its history) show under the paragraph being worked
+ * on, each saying what it does. The recording pauses while words are being
+ * fixed, and this browser remembers where the listener was. A fix of
  * some words is on the site once approved but leaves the paragraph the
  * machine's (`complete: false`, core/sync.ts fixParagraph), so it stays
  * labelled and is no training clip until someone checks all of it. Every
@@ -33,7 +35,10 @@ const W = {
   howSelect: { he: 'סמנו מילים (לחיצה ארוכה וגרירה) כדי לתקן רק אותן.', en: 'Select words (press and drag) to fix just those.' },
   howRight: { he: '„הכל מדוייק”: שמעתם, וכל המילים נכונות כפי שהמחשב שמע. כך היא נבדקת, ומלמדת את המודל הבא.', en: '"All exact": you listened and every word is right as the machine heard it. That checks it, and teaches the next model.' },
   howEdit: { he: '„עריכת הפסקה”: להקליד אותה מחדש. סמנו אם בדקתם את כולה; אם לא, היא נשארת טקסט מכונה.', en: '"Edit paragraph": retype it. Say whether you checked all of it; if not, it stays machine text.' },
-  howSync: { he: '„תזמון מדוייק”: מתקן את התזמון, לא את המילים. כשהסימון מקדים או מאחר, לחצו בדיוק כשהרבי מתחיל את הפסקה. ההמשך זז איתה.', en: '"Exact timing": fixes the timing, not the words. When the highlight runs ahead or behind, tap just as the Rebbe starts the paragraph. What follows moves with it.' },
+  howSync: { he: '„תזמון מדוייק”: הסימון עוקב נכון אחרי השמע בפסקה הזאת. מאשר את התזמון כפי שהוא, בלי להזיז כלום.', en: '"Exact timing": the highlight follows the audio right in this paragraph. Confirms the timing as it is, moving nothing.' },
+  howStarts: { he: '„מתחילה עכשיו”: כשהסימון מקדים או מאחר, נגנו ולחצו בדיוק כשהרבי מתחיל את הפסקה. ההמשך זז איתה, ואפשר לבטל.', en: '"Starts now": when the highlight runs ahead or behind, play and tap just as the Rebbe starts the paragraph. What follows moves with it, and it can be undone.' },
+  howUnclear: { he: '„לא ברור”: סמנו מילים שלא בטוח מה נאמר בהן. הן נשמרות כך [מילים?], ולא מלמדים מהן את המודל.', en: '"Unclear": mark words you are not sure of. They are kept as [words?], and the model does not learn from them.' },
+  howPause: { he: 'בזמן עריכה ההקלטה נעצרת, וממשיכה מעט לפני כן כשמסיימים.', en: 'The recording pauses while you edit, and goes on from a little before when you finish.' },
   howHistory: { he: '„היסטוריה”: כל מה ששונה בפסקה, מי ומתי.', en: '"History": everything changed in the paragraph, by whom and when.' },
   progress: { he: '{n} מתוך {of} פסקאות נבדקו', en: '{n} of {of} paragraphs checked' },
   checked: { he: 'נבדק', en: 'Checked' },
@@ -41,6 +46,13 @@ const W = {
   allRight: { he: 'הכל מדוייק', en: 'All exact' },
   edit: { he: 'עריכת הפסקה', en: 'Edit paragraph' },
   saidNow: { he: 'תזמון מדוייק', en: 'Exact timing' },
+  startsNow: { he: 'מתחילה עכשיו', en: 'Starts now' },
+  undo: { he: 'ביטול', en: 'Undo' },
+  syncOk: { he: 'התזמון אושר', en: 'Timing confirmed' },
+  syncUndone: { he: 'ההזזה בוטלה', en: 'The move was undone' },
+  unclear: { he: 'לא ברור', en: 'Unclear' },
+  markUnclear: { he: 'סימון כלא ברור', en: 'Mark as unclear' },
+  continueHere: { he: 'כאן עצרת בפעם הקודמת', en: 'You stopped here last time' },
   history: { he: 'היסטוריה', en: 'History' },
   fixWords: { he: 'תיקון המילים שסומנו', en: 'Fix the selected words' },
   save: { he: 'שמירה', en: 'Save' },
@@ -153,7 +165,32 @@ function offsetIn(host: HTMLElement, node: Node, offset: number): number {
 }
 
 type Editing = { kind: 'words'; from: number; to: number; value: string } | { kind: 'all'; value: string; complete: boolean };
-type Sent = { content: string; complete: boolean; merged: boolean } | { sync: true };
+type Sent = { content: string; complete: boolean; merged: boolean } | { sync: 'confirmed' | 'moved' | 'undone'; was?: number };
+
+/*
+ * Where a listener was, kept in this browser: the paragraph they had open
+ * (per recording) and a fix they had not sent yet (per paragraph), so a
+ * reload, a lost signal or tomorrow picks up where they stopped. Storage
+ * can be missing (private windows): then nothing is remembered.
+ */
+const PLACE = 'rebbehub.review.place.';
+const DRAFT = 'rebbehub.review.draft.';
+function recall<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+function keep(key: string, value: unknown) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Not remembered; the editor works the same.
+  }
+}
 
 /** One commit's changes, told in words. */
 function ChangeRow({ commit, lang, numberOf, only }: { commit: TranscriptCommit; lang: Lang; numberOf: (segment: string) => number; only?: string }) {
@@ -201,6 +238,7 @@ function Para({
   open,
   active,
   found,
+  resumed,
   nowMs,
   playing,
   canFix,
@@ -219,6 +257,8 @@ function Para({
   open: boolean;
   active: boolean;
   found: boolean;
+  /** Where this listener stopped last time. */
+  resumed: boolean;
   nowMs: number;
   playing: boolean;
   canFix: boolean;
@@ -228,12 +268,17 @@ function Para({
   onPlayFrom: (ms: number) => void;
   onFixed: (content: string, complete: boolean, merged: boolean) => void;
   onAnchored: (spans: Span[]) => void;
-  pickWords: { from: number; to: number } | null;
+  pickWords: { from: number; to: number; unclear?: boolean } | null;
   numberOf: (segment: string) => number;
 }) {
   const player = usePlayer();
   const ref = useRef<HTMLLIElement>(null);
-  const [editing, setEditing] = useState<Editing | null>(null);
+  // An unsent fix of this paragraph, from before a reload, opens again as it was left.
+  const [editing, setEditingNow] = useState<Editing | null>(() => (typeof window !== 'undefined' ? recall<Editing>(DRAFT + paragraph.id) : null));
+  const setEditing = (next: Editing | null) => {
+    keep(DRAFT + paragraph.id, next);
+    setEditingNow(next);
+  };
   const [sent, setSent] = useState<Sent | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -245,12 +290,31 @@ function Para({
   useEffect(() => {
     if (found) ref.current?.scrollIntoView({ block: 'center' });
   }, [found]);
-  // Words picked in the text open their editor here.
+  // Words picked in the text open their editor here, already marked when they were picked as unclear.
   useEffect(() => {
-    if (pickWords && canFix) setEditing({ kind: 'words', ...pickWords, value: paragraph.content.slice(pickWords.from, pickWords.to) });
+    if (!pickWords || !canFix) return;
+    const words = paragraph.content.slice(pickWords.from, pickWords.to);
+    setEditing({ kind: 'words', from: pickWords.from, to: pickWords.to, value: pickWords.unclear ? markUnclear(words) : words });
     // Only a new pick opens it; the words changing under it (an approved fix) must not open it again.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickWords]);
+
+  // The recording waits while the words are being fixed, and goes on from a little before, so nothing is missed.
+  const resume = useRef(false);
+  const isEditing = editing !== null;
+  useEffect(() => {
+    if (isEditing && playing && player.playing) {
+      player.toggle();
+      resume.current = true;
+    } else if (!isEditing && resume.current) {
+      resume.current = false;
+      if (playing && !player.playing) {
+        player.seek(Math.max(0, player.now() - 2));
+        player.toggle();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing]);
 
   async function send(content: string, complete: boolean) {
     setError(null);
@@ -268,20 +332,29 @@ function Para({
     }
   }
 
-  // "The Rebbe is saying this now": the moment is taken at the tap, before anything is sent.
-  async function saidNow() {
-    const atMs = Math.round(player.now() * 1000);
+  /*
+   * The paragraph's timing. "Exact timing" confirms it where it is: the
+   * sync is anchored at its own start, so nothing moves. "Starts now" moves
+   * its start to the moment of the tap (a quarter second earlier, for the
+   * hand), and what follows with it; it can be undone, by anchoring it back.
+   */
+  async function anchor(atMs: number, kind: 'confirmed' | 'moved' | 'undone') {
+    const was = paragraph.startMs ?? undefined;
     setError(null);
+    setBusy(true);
     try {
-      const fix = await postJson<{ spans: Span[] }>(`recordings/${recording}/sync/anchor`, { segment: paragraph.id, atMs });
+      const fix = await postJson<{ spans: Span[] }>(`recordings/${recording}/sync/anchor`, { segment: paragraph.id, atMs: Math.max(0, Math.round(atMs)) });
       onAnchored(fix.spans);
-      setSent({ sync: true });
+      setSent({ sync: kind, was: kind === 'moved' ? was : undefined });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
     }
   }
 
   const tokens = tokensOf(paragraph);
+  const marks = unclearRanges(paragraph.content);
   const text: React.ReactNode[] = [];
   let at = 0;
   for (const [i, tk] of tokens.entries()) {
@@ -289,8 +362,9 @@ function Para({
     const next = tokens[i + 1]?.ms ?? paragraph.endMs ?? Infinity;
     const state = active && tk.ms !== null ? (nowMs >= tk.ms && nowMs < next ? ' w-now' : nowMs >= next ? ' w-past' : '') : '';
     const picked = editing?.kind === 'words' && tk.from < editing.to && tk.to > editing.from ? ' w-picked' : '';
+    const unclear = marks.some((m) => tk.from < m.to && tk.to > m.from);
     text.push(
-      <span key={i} className={`word${state}${picked}`} data-ms={tk.ms ?? undefined}>
+      <span key={i} className={`word${state}${picked}${unclear ? ' w-unclear' : ''}`} data-ms={tk.ms ?? undefined} title={unclear ? t(lang, 'unclearWords') : undefined}>
         {paragraph.content.slice(tk.from, tk.to)}
       </span>,
     );
@@ -321,6 +395,7 @@ function Para({
         ) : (
           <MachineLabel lang={lang} size="sm" />
         )}
+        {resumed ? <span className="tx-state resumed">{w(lang, 'continueHere')}</span> : null}
         {paragraph.syncChecked === false ? <span className="row-sub tx-sync-note">{t(lang, 'machineSyncShort')}</span> : null}
       </div>
 
@@ -363,6 +438,12 @@ function Para({
             >
               {w(lang, 'save')}
             </button>
+            {!/^\[.*\?\]$/.test(editing.value.trim()) ? (
+              <button type="button" className="btn" onClick={() => setEditing({ ...editing, value: markUnclear(editing.value.trim()) })}>
+                <ShieldQuestion size={15} aria-hidden />
+                {w(lang, 'markUnclear')}
+              </button>
+            ) : null}
             <button type="button" className="btn" onClick={() => setEditing(null)}>
               {w(lang, 'cancel')}
             </button>
@@ -403,10 +484,16 @@ function Para({
               {w(lang, 'edit')}
             </button>
           ) : null}
-          {canFix && playing && paragraph.startMs !== null && !(sent && 'sync' in sent) ? (
-            <button type="button" className="tx-tool" onClick={saidNow} title={w(lang, 'howSync')}>
-              <Radio size={16} aria-hidden />
+          {canFix && paragraph.startMs !== null && paragraph.syncChecked === false && !(sent && 'sync' in sent) ? (
+            <button type="button" className="tx-tool" onClick={() => anchor(paragraph.startMs ?? 0, 'confirmed')} disabled={busy} title={w(lang, 'howSync')}>
+              <Timer size={16} aria-hidden />
               {w(lang, 'saidNow')}
+            </button>
+          ) : null}
+          {canFix && playing && paragraph.startMs !== null && !(sent && 'sync' in sent && sent.sync === 'moved') ? (
+            <button type="button" className="tx-tool" onClick={() => anchor(player.now() * 1000 - 250, 'moved')} disabled={busy} title={w(lang, 'howStarts')}>
+              <Radio size={16} aria-hidden />
+              {w(lang, 'startsNow')} · <span className="num">{clockOf(nowMs)}</span>
             </button>
           ) : null}
           <button type="button" className={showHistory ? 'tx-tool on' : 'tx-tool'} onClick={() => setShowHistory((s) => !s)} aria-expanded={showHistory}>
@@ -416,7 +503,19 @@ function Para({
         </div>
       ) : null}
 
-      {sent ? <p className="row-sub tx-sent">{'sync' in sent ? w(lang, 'syncFixed') : w(lang, sent.merged ? 'saved' : 'sent')}</p> : null}
+      {sent ? (
+        <p className="row-sub tx-sent">
+          {'sync' in sent ? w(lang, sent.sync === 'confirmed' ? 'syncOk' : sent.sync === 'undone' ? 'syncUndone' : 'syncFixed') : w(lang, sent.merged ? 'saved' : 'sent')}
+          {'sync' in sent && sent.sync === 'moved' && sent.was !== undefined ? (
+            <>
+              {' '}
+              <button type="button" className="link-button" disabled={busy} onClick={() => anchor(sent.was!, 'undone')}>
+                {w(lang, 'undo')}
+              </button>
+            </>
+          ) : null}
+        </p>
+      ) : null}
       {error ? <p role="alert">{error}</p> : null}
 
       {open && showHistory ? (
@@ -487,8 +586,15 @@ export function TranscriptEditor({
   onFixed: (recording: string, segment: string, content: string, complete: boolean) => void;
 }) {
   const player = usePlayer();
-  const [open, setOpen] = useState<string | null>(found);
-  const [pick, setPick] = useState<{ segment: string; from: number; to: number } | null>(null);
+  // Where this listener stopped last time in these recordings, unless a link names a paragraph.
+  const placeKey = PLACE + transcripts.map((tr) => tr.recording).join(',');
+  const [start] = useState<string | null>(() => found ?? (typeof window !== 'undefined' ? recall<string>(placeKey) : null));
+  const [open, setOpenNow] = useState<string | null>(start);
+  const setOpen = (segment: string) => {
+    keep(placeKey, segment);
+    setOpenNow(segment);
+  };
+  const [pick, setPick] = useState<{ segment: string; from: number; to: number; unclear?: boolean } | null>(null);
   const [offer, setOffer] = useState<{ segment: string; from: number; to: number } | null>(null);
   const [history, setHistory] = useState<Record<string, TranscriptCommit[]>>({});
   const [showAll, setShowAll] = useState(false);
@@ -563,7 +669,10 @@ export function TranscriptEditor({
             <li>{w(lang, 'howSelect')}</li>
             <li>{w(lang, 'howRight')}</li>
             <li>{w(lang, 'howEdit')}</li>
+            <li>{w(lang, 'howUnclear')}</li>
             <li>{w(lang, 'howSync')}</li>
+            <li>{w(lang, 'howStarts')}</li>
+            <li>{w(lang, 'howPause')}</li>
             <li>{w(lang, 'howHistory')}</li>
           </ul>
         </details>
@@ -611,7 +720,8 @@ export function TranscriptEditor({
                   paragraph={p}
                   open={open === p.id}
                   active={playing && within(nowMs, p)}
-                  found={p.id === found}
+                  found={p.id === start}
+                  resumed={p.id === start && !found}
                   nowMs={nowMs}
                   playing={playing}
                   canFix={canFix}
@@ -652,6 +762,20 @@ export function TranscriptEditor({
           >
             <Pencil size={15} aria-hidden />
             {w(lang, 'fixWords')}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              setOpen(offer.segment);
+              setPick({ ...offer, unclear: true });
+              setOffer(null);
+              document.getSelection()?.removeAllRanges();
+            }}
+          >
+            <ShieldQuestion size={15} aria-hidden />
+            {w(lang, 'unclear')}
           </button>
           <button type="button" className="icon-button" aria-label={w(lang, 'cancel')} onClick={() => (document.getSelection()?.removeAllRanges(), setOffer(null))}>
             <X size={16} />

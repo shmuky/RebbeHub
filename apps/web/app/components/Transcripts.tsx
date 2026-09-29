@@ -1,6 +1,7 @@
 import { Maximize2, Minimize2, Pause, PenLine, Play, SkipBack, SkipForward, Undo2, LocateFixed, Loader2 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
+import { unclearRanges } from '@rebbehub/model';
 import { t, type Lang } from '../lib/i18n.js';
 import { clockOf, tn } from '../lib/i18nNetwork.js';
 import { href } from '../lib/links.js';
@@ -57,15 +58,36 @@ function useNowMs(playing: boolean): number {
 }
 
 /** A paragraph's words, the one being said marked, the ones already said set apart; each knows when it is said, so a tap can play from it. */
-function Spoken({ content, words, nowMs }: { content: string; words: Word[]; nowMs: number }) {
+/** A paragraph's words with the ones a listener marked unclear (`[words?]`) shown as such. */
+function Plain({ content, lang }: { content: string; lang: Lang }) {
+  const marks = unclearRanges(content);
+  if (!marks.length) return <>{content}</>;
   const out: React.ReactNode[] = [];
+  let at = 0;
+  for (const m of marks) {
+    if (m.from > at) out.push(content.slice(at, m.from));
+    out.push(
+      <span key={m.from} className="w-unclear" title={t(lang, 'unclearWords')}>
+        {content.slice(m.from, m.to)}
+      </span>,
+    );
+    at = m.to;
+  }
+  if (at < content.length) out.push(content.slice(at));
+  return <>{out}</>;
+}
+
+function Spoken({ content, words, nowMs, lang }: { content: string; words: Word[]; nowMs: number; lang: Lang }) {
+  const out: React.ReactNode[] = [];
+  const marks = unclearRanges(content);
   let at = 0;
   for (const [i, w] of words.entries()) {
     if (w.from > at) out.push(content.slice(at, w.from));
     // Not `said`: that is the farbrengen page's "what was said" list, whose phone rule pulls it out to the screen's edges.
     const state = nowMs >= w.startMs && nowMs < Math.max(w.endMs, w.startMs + 1) ? 'w-now' : nowMs >= w.endMs ? 'w-past' : '';
+    const unclear = marks.some((m) => w.from < m.to && w.to > m.from);
     out.push(
-      <span key={i} className={state ? `word ${state}` : 'word'} data-ms={w.startMs}>
+      <span key={i} className={['word', state, unclear ? 'w-unclear' : ''].filter(Boolean).join(' ')} data-ms={w.startMs} title={unclear ? t(lang, 'unclearWords') : undefined}>
         {content.slice(w.from, w.to)}
       </span>,
     );
@@ -132,7 +154,23 @@ export function Transcripts({ tracks, lang, onLoaded, only }: { tracks: Track[];
     );
   }
 
+  // Checking is remembered in this browser until "Back to listening", so a reload opens the editor again.
+  const reviewKey = `rebbehub.review.on.${ids}`;
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(reviewKey)) setReviewing(true);
+    } catch {
+      // No storage: the listening view, as always.
+    }
+  }, [reviewKey]);
+
   function review(on: boolean) {
+    try {
+      if (on) localStorage.setItem(reviewKey, '1');
+      else localStorage.removeItem(reviewKey);
+    } catch {
+      // Not remembered.
+    }
     setReviewing(on);
     requestAnimationFrame(() => section.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
   }
@@ -353,7 +391,7 @@ function Lyrics({ transcripts, tracks, lang, nowMs, found, machine, onEdit }: { 
                 playFrom(at ? Number(at) : (p.startMs ?? 0));
               }}
             >
-              {now && p.words?.length ? <Spoken content={p.content} words={p.words} nowMs={nowMs} /> : p.content}
+              {now && p.words?.length ? <Spoken content={p.content} words={p.words} nowMs={nowMs} lang={lang} /> : <Plain content={p.content} lang={lang} />}
             </button>
           );
         })}
