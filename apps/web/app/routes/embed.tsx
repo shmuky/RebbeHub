@@ -8,6 +8,8 @@ import { loadItemView } from '../lib/itemData.server.js';
 import { describe, labelOf } from '../lib/labels.js';
 import { href, itemPath } from '../lib/links.js';
 import { tracksOf } from '../lib/tracks.js';
+import { Icon } from '../ui/Icon.js';
+import '../styles/pages/info.css';
 
 /**
  * An item as other sites embed it (the plan, section 12, phase 6:
@@ -44,20 +46,31 @@ export default function Embed({ loaderData }: Route.ComponentProps) {
   const link = `${siteUrl.replace(/\/$/, '')}${href(itemPath(entity), lang)}`;
   return (
     <article className="embed-card">
-      <p className="row-sub">{describe(entity, lang)}</p>
+      <p className="embed-kind subtle small">{describe(entity, lang)}</p>
       <h1>{d.title ? nameOf(d.title, lang) : labelOf(entity, lang)}</h1>
-      {d.date ? <p className="row-sub">{dateLabel(d.date, lang)}</p> : null}
+      {d.date ? (
+        <p className="embed-date muted">
+          <Icon name="cal" size={14} className="subtle" />
+          {dateLabel(d.date, lang)}
+        </p>
+      ) : null}
       {tracks.length ? (
         <ol className="embed-tracks">
           {tracks.map((track) => (
             <li key={track.id}>
-              <span>{track.title}</span>
+              <span className="embed-track">
+                <Icon name="audio" size={14} className="subtle" />
+                {track.title}
+              </span>
               <audio controls preload="none" src={track.url} />
             </li>
           ))}
         </ol>
       ) : null}
-      <p>
+      <p className="embed-foot">
+        <span className="mark" aria-hidden="true">
+          ר
+        </span>
         <a href={link} target="_blank" rel="noreferrer">
           {t(lang, 'onRebbeHub')}
         </a>

@@ -83,6 +83,8 @@ export interface HtmlToPageOptions {
   language: Language;
   /** Sefaria's rules: sub-headings as sections, paragraphs as numbered segments. */
   numbered?: boolean;
+  /** Keeps the text's links to the web (`<a href="https://…">`) as links; any other link is dropped and its words kept. */
+  links?: boolean;
   title?: string;
   credit?: string;
   licence?: string;
@@ -116,6 +118,7 @@ export function htmlToPageVersion(html: string, options: HtmlToPageOptions): Pag
   let pendingNote: string | null = null;
   let inMark = false;
   let markWords = '';
+  let link: string | undefined;
 
   const container = () => (sections.length ? sections[sections.length - 1]!.segment.children! : segments);
 
@@ -167,7 +170,7 @@ export function htmlToPageVersion(html: string, options: HtmlToPageOptions): Pag
       const words = decode(token).replace(/\s+/g, ' ');
       if (skipping) skipping.words += words;
       else if (inMark) markWords += words;
-      else runs.push({ text: words, ...(marks.length ? { marks: [...marks] } : {}) });
+      else runs.push({ text: words, ...(marks.length ? { marks: [...marks] } : {}), ...(link ? { href: link } : {}) });
       continue;
     }
     const tag = /^<\s*(\/?)\s*([a-z0-9]+)([^>]*)>/i.exec(token);
@@ -238,6 +241,11 @@ export function htmlToPageVersion(html: string, options: HtmlToPageOptions): Pag
           note = { id: id && PAGE_ID.test(id) && !taken(id) ? id : `n${fresh}` };
         }
       }
+      continue;
+    }
+    if (name === 'a' && options.links) {
+      const target = close ? undefined : decode(/\bhref="([^"]*)"/i.exec(attrs)?.[1] ?? '');
+      link = target && /^https?:\/\//i.test(target) ? target : undefined;
       continue;
     }
     if (name === 'br') {

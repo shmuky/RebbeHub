@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { chabadLibraryImporter, crawlChabadLibrary, type LibraryTree } from '@rebbehub/importers';
+import { chabadLibraryImporter, crawlChabadLibrary, htmlToPageVersion, libraryHtml, type LibraryTree } from '@rebbehub/importers';
 
 /** A little library: a work with two parts, the first with two pages, the second with one. */
 const SITE: Record<number, { type: string; data: unknown }> = {
   300000000: { type: 'children', data: [{ id: 1, heading: 'חלק ראשון' }, { id: 2, heading: 'חלק שני' }] },
   1: { type: 'children', data: [{ id: 11, heading: 'א' }, { id: 12, heading: 'ב' }] },
   2: { type: 'children', data: [{ id: 21, heading: 'הוספות' }] },
-  11: { type: 'page', data: { text: 'not kept' } },
+  11: { type: 'page', data: { text: '<h3>שיחה א</h3>\r\n[cup]תניא[/cup] [בספ"ג דנדה] משביעים[ftnref_1_1]\r\n[ftn_1_1]) נדה ל, ב.', haoros: '' } },
   12: { type: 'page', data: { text: 'not kept' } },
   21: { type: 'page', data: { text: 'not kept' } },
 };
@@ -49,5 +49,65 @@ describe('chabadlibrary.org', () => {
       position: [{ level: 'chelek', value: '1', label: { he: 'חלק ראשון' } }, { level: 'siman', value: '1' }],
       editions: [{ source: 'chabadlibrary', sourceId: '11', url: 'https://chabadlibrary.org/books/11' }],
     });
+  });
+
+  it('keeps each page\'s text with a crawl that asks for it, and puts it on the page with credit', async () => {
+    const tree: LibraryTree = { nodes: {} };
+    await crawlChabadLibrary([300000000], tree, { fetch: fakeFetch([]), pauseMs: 0 });
+    expect(tree.nodes[11]!.sha256).toBeUndefined();
+    const kept = new Map<string, string>();
+    const asked: number[] = [];
+    await crawlChabadLibrary([300000000], tree, { fetch: fakeFetch(asked), pauseMs: 0, texts: async (sha, html) => void kept.set(sha, html) });
+    expect(asked.filter((id) => id === 11 || id === 12 || id === 21)).toHaveLength(3); // pages read again, for their words
+    const sha = tree.nodes[11]!.sha256!;
+    expect(kept.get(sha)).toContain('https://chabadlibrary.org/books/11');
+    tree.nodes[11]!.kept = true;
+    const index = { works: [{ id: 'keser-shem-tov', levels: ['chelek', 'siman'], sources: [{ source: 'chabadlibrary', sourceId: '300000000', licence: 'free-to-read', kind: 'text' }] }] };
+    const records = [];
+    for await (const r of chabadLibraryImporter({ index, withContents: new Set(), tree, text: async (s) => kept.get(s) ?? null, api: 'https://api.example' }).records()) records.push(r);
+    const page = records[0]!.data as { body: unknown; bodySource: Record<string, string> };
+    expect(page.body).toEqual({
+      profile: 'chabad-library',
+      versions: [
+        {
+          id: 'he',
+          language: 'he',
+          credit: 'ספריית ליובאוויטש',
+          licence: 'free-to-read',
+          url: 'https://chabadlibrary.org/books/11',
+          segments: [
+            { id: 'h1', kind: 'heading', level: 2, text: [{ text: 'שיחה א' }] },
+            { id: 'p1', kind: 'paragraph', text: [{ text: 'תניא', marks: ['b'] }, { text: ' [בספ"ג דנדה] משביעים' }, { note: 'n1' }] },
+          ],
+          notes: [{ id: 'n1', kind: 'note', n: 1, text: [{ text: 'נדה ל, ב.' }] }],
+        },
+      ],
+    });
+    expect(page.bodySource).toMatchObject({ source: 'chabadlibrary', sourceId: '11', url: 'https://chabadlibrary.org/books/11', rights: 'credit', copy: `https://api.example/v1/texts/${sha}` });
+  });
+
+  it('reads the library\'s own marks: bold and small words, index references, old pages as markers', () => {
+    expect(libraryHtml('[headingintext_begin]חג השבועות[headingintext_end] ראה [mafteach_gopage file="ls30" gopage="240"] וע"ע [mafteach_goterm file="ls30" goterm="כיבוד אב ואם"].[new_section]')).toBe(
+      "<p><b>חג השבועות</b> ראה עמ' 240 וע\"ע כיבוד אב ואם.</p>",
+    );
+    expect(libraryHtml('סוף[oldpage_לח] התחלה')).toBe('<p>סוף<span class="mark">עמ\' לח</span> התחלה</p>');
+    expect(libraryHtml('<p class=bodytext>א<!--[if !supportFootnotes]-->[1]<!--[endif]--></p>')).toBe('<p class=bodytext>א[1]</p>');
+    const version = htmlToPageVersion(libraryHtml('סוף[oldpage_לח] התחלה'), { id: 'he', language: 'he' });
+    expect(version.segments).toEqual([{ id: 'p1', kind: 'paragraph', text: [{ text: 'סוף' }, { marker: "עמ' לח" }, { text: ' התחלה' }] }]);
+  });
+
+  it('makes footnotes and haoros notes, each pointed to from its marker', () => {
+    const html = libraryHtml(
+      'שורה[ftnref_2_1] ועוד[ftnref_2_2] ובלי הערה[ftnref_9_7]',
+      '[ftn_2_1]) ראה <a href="https://chabadlibrary.org/books/5">שם</a>.\nהמשך ההערה.\n[ftn_2_2]. ועוד.',
+    );
+    const version = htmlToPageVersion(html, { id: 'he', language: 'he', links: true });
+    expect(version.segments).toEqual([
+      { id: 'p1', kind: 'paragraph', text: [{ text: 'שורה' }, { note: 'n1' }, { text: ' ועוד' }, { note: 'n2' }, { text: ' ובלי הערה' }, { text: '7', marks: ['sup'] }] },
+    ]);
+    expect(version.notes).toEqual([
+      { id: 'n1', kind: 'note', n: 1, text: [{ text: 'ראה ' }, { text: 'שם', href: 'https://chabadlibrary.org/books/5' }, { text: '.' }, { br: true }, { text: 'המשך ההערה.' }] },
+      { id: 'n2', kind: 'note', n: 2, text: [{ text: 'ועוד.' }] },
+    ]);
   });
 });

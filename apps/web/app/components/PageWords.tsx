@@ -4,6 +4,8 @@ import { toHebrewNumeral } from '@rebbehub/hebrew';
 import { allSegments, type PageInline, type PageSegment, type PageText, type PageVersion, type TextProfile } from '@rebbehub/model';
 import type { Lang } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
+import { MachineNote } from '../ui/primitives.js';
+import '../styles/pages/words.css';
 import { SegmentEditor, SentNote, type SentSuggestion } from './SegmentEditor.js';
 
 const WORDS = {
@@ -17,6 +19,7 @@ const WORDS = {
   machine: { he: 'נכתב בידי מכונה ועדיין לא נבדק בידי אדם - הקטעים שלא נבדקו מסומנים.', en: 'Made by a machine and not yet checked by a person - the segments nobody has checked are marked.' },
   segmentLink: { he: 'קישור לקטע', en: 'Link to this segment' },
   fixHint: { he: 'לחיצה לתיקון', en: 'Click to fix' },
+  library: { he: 'ספריית ליובאוויטש', en: 'The Lubavitch Library' },
 } as const;
 
 const RTL = new Set(['he', 'yi', 'ar']);
@@ -244,8 +247,9 @@ function Segment({ segment, depth, ctx }: { segment: PageSegment; depth: number;
     default:
       return (
         <p id={id} className={`words-p${segment.end ? ' end' : ''}${machine}`}>
+          {/* The paragraph's number in the margin: its own when it has one, else counted in order (words.css). */}
           <a className="words-anchor" href={`#${anchor}`} aria-label={WORDS.segmentLink[ctx.lang]}>
-            ¶
+            {segment.n !== undefined ? numberIn(segment.n, ctx.version.language) : null}
           </a>
           <Words segment={segment} ctx={ctx} />
         </p>
@@ -277,8 +281,27 @@ function noteLabels(version: PageVersion): (id: string) => string {
   return (id) => labels.get(id) ?? '*';
 }
 
-/** The credit line of a version: its edition, its licence and where it is read at its source (Sefaria asks for it on every page that uses its texts). */
-function Credit({ version }: { version: PageVersion }) {
+/**
+ * The credit line of a version: its edition, its licence and where it is
+ * read at its source (Sefaria asks for it on every page that uses its
+ * texts). The Chabad Library's texts are shown on the condition of its
+ * credit: the library's name in the reader's language, linking back to
+ * the page there (docs/rights.md).
+ */
+function Credit({ version, profile, lang }: { version: PageVersion; profile?: TextProfile; lang?: Lang }) {
+  if (profile === 'chabad-library' && lang) {
+    return (
+      <p className="words-credit row-sub" lang={lang} dir={dirOf(lang)}>
+        {version.url ? (
+          <a href={version.url} target="_blank" rel="noopener">
+            {`${WORDS.library[lang]} · chabadlibrary.org`}
+          </a>
+        ) : (
+          WORDS.library[lang]
+        )}
+      </p>
+    );
+  }
   const parts = [version.credit ?? version.title, version.licence ? (LICENCES[version.licence] ?? version.licence) : undefined].filter(Boolean);
   let site: string | null = null;
   try {
@@ -310,7 +333,7 @@ function VersionView({ version, profile, lang, edit }: { version: PageVersion; p
     <div className={`words words-${profile}${version.origin && !version.origin.checked ? ' machine' : ''}`} lang={version.language} dir={dirOf(version.language)}>
       <Segments list={version.segments} depth={0} ctx={ctx} />
       <Notes ctx={ctx} />
-      {profile === 'sefaria' || profile === 'sichos-kodesh' ? <Credit version={version} /> : null}
+      {profile === 'sefaria' || profile === 'sichos-kodesh' || profile === 'chabad-library' ? <Credit version={version} profile={profile} lang={lang} /> : null}
     </div>
   );
 }
@@ -384,6 +407,10 @@ const versionName = (v: PageVersion, lang: Lang) => (v.language === 'he' || v.la
  *   side or one at a time, each version's credit and licence;
  * - sichos-kodesh: paragraphs and headings as Sichos-Kodesh's app sets
  *   them, a letter's lines at the end side, versions one at a time;
+ * - chabad-library: chabadlibrary.org's texts, paragraphs and headings
+ *   like sichos-kodesh, its footnotes and haoros as notes, the printed
+ *   edition's old page numbers as markers, and the library's credit line
+ *   linking back to the page there;
  * - outline: a farbrengen's contents, numbered items under titles;
  * - plain: what people wrote here.
  *
@@ -423,20 +450,20 @@ export function PageWords({ page, lang, edit }: { page: PageText; lang: Lang; ed
   return (
     <div className="page-words">
       {versions.length > 1 ? (
-        <p className="words-versions" role="group" aria-label={WORDS.versions[lang]}>
+        <div className="segmented words-versions" role="group" aria-label={WORDS.versions[lang]}>
           {versions.map((v) => (
-            <button key={v.id} type="button" className={shown === v.id ? '' : 'secondary'} aria-pressed={shown === v.id} onClick={() => setShown(v.id)} lang={v.language}>
+            <button key={v.id} type="button" aria-pressed={shown === v.id} onClick={() => setShown(v.id)} lang={v.language}>
               {versionName(v, lang)}
             </button>
           ))}
           {pairable ? (
-            <button type="button" className={shown === 'both' ? '' : 'secondary'} aria-pressed={shown === 'both'} onClick={() => setShown('both')}>
+            <button type="button" aria-pressed={shown === 'both'} onClick={() => setShown('both')}>
               {WORDS.both[lang]}
             </button>
           ) : null}
-        </p>
+        </div>
       ) : null}
-      {machine ? <p className="notice machine">{WORDS.machine[lang]}</p> : null}
+      {machine ? <MachineNote>{WORDS.machine[lang]}</MachineNote> : null}
       {pairable && shown === 'both' ? (
         <SideBySide first={versions[0]!} second={versions[1]!} lang={lang} edit={editState} />
       ) : (

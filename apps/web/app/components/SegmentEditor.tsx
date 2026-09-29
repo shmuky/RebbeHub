@@ -108,13 +108,13 @@ export function SegmentEditor({
   return (
     <span className="words-editor">
       <span className="words-toolbar" role="toolbar">
-        <button type="button" className="secondary" onMouseDown={format('bold')} aria-label={WORDS.bold[lang]} title={WORDS.bold[lang]}>
+        <button type="button" className="btn sm icon" onMouseDown={format('bold')} aria-label={WORDS.bold[lang]} title={WORDS.bold[lang]}>
           <b>B</b>
         </button>
-        <button type="button" className="secondary" onMouseDown={format('italic')} aria-label={WORDS.italic[lang]} title={WORDS.italic[lang]}>
+        <button type="button" className="btn sm icon" onMouseDown={format('italic')} aria-label={WORDS.italic[lang]} title={WORDS.italic[lang]}>
           <i>I</i>
         </button>
-        <button type="button" className="secondary" onMouseDown={format('underline')} aria-label={WORDS.underline[lang]} title={WORDS.underline[lang]}>
+        <button type="button" className="btn sm icon" onMouseDown={format('underline')} aria-label={WORDS.underline[lang]} title={WORDS.underline[lang]}>
           <u>U</u>
         </button>
       </span>
@@ -144,20 +144,20 @@ export function SegmentEditor({
       />
       <input className="words-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} dir="auto" placeholder={WORDS.note[lang]} aria-label={WORDS.note[lang]} />
       <span className="words-actions">
-        <button type="button" disabled={busy} onClick={() => void send(mode === 'edit' ? 'edit' : mode)}>
+        <button type="button" className="btn sm primary" disabled={busy} onClick={() => void send(mode === 'edit' ? 'edit' : mode)}>
           {busy ? t(lang, 'waiting') : t(lang, 'sendForReview')}
         </button>
         {mode === 'edit' && onAddAfter ? (
-          <button type="button" className="secondary" disabled={busy} onClick={onAddAfter}>
+          <button type="button" className="btn sm" disabled={busy} onClick={onAddAfter}>
             {WORDS.addAfter[lang]}
           </button>
         ) : null}
         {mode === 'edit' ? (
-          <button type="button" className="secondary" disabled={busy} onClick={() => window.confirm(WORDS.removeSure[lang]) && void send('remove')}>
+          <button type="button" className="btn sm danger" disabled={busy} onClick={() => window.confirm(WORDS.removeSure[lang]) && void send('remove')}>
             {WORDS.remove[lang]}
           </button>
         ) : null}
-        <button type="button" className="secondary" disabled={busy} onClick={onClose}>
+        <button type="button" className="btn sm" disabled={busy} onClick={onClose}>
           {t(lang, 'cancel')}
         </button>
       </span>
