@@ -445,68 +445,6 @@ button.part.on:hover {
   margin-bottom: 10px;
 }
 
-.transcript {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.transcript-para {
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border-muted);
-}
-
-.transcript-para.active {
-  background: var(--accent-soft);
-}
-
-.transcript-para.found {
-  background: var(--mark);
-}
-
-.transcript-text {
-  display: block;
-  width: 100%;
-  border: 0;
-  background: none;
-  padding: 4px 0;
-  font: inherit;
-  font-size: 16px;
-  line-height: 1.75;
-  color: var(--text);
-  text-align: start;
-  cursor: pointer;
-}
-
-.transcript-para.unchecked .transcript-text {
-  color: var(--muted);
-}
-
-.transcript-para .word.w-now {
-  background: var(--mark);
-  border-radius: 2px;
-}
-
-.transcript-para .word.w-past {
-  color: var(--text);
-}
-
-.transcript-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  font-size: 12.5px;
-}
-
-.transcript-actions .link-button {
-  border: 0;
-  background: none;
-  padding: 0;
-  font: inherit;
-  color: var(--accent);
-  cursor: pointer;
-}
-
 /* ------------------------------------------------------------ side and foot */
 
 .year-chips {
@@ -569,7 +507,7 @@ button.part.on:hover {
 }
 
 /* The house spelling, under the editor: a hint, never a change. */
-.transcript-para .spelling-hints {
+.tx-edit .spelling-hints {
   margin: 0.25rem 0 0.5rem;
   font-size: 0.85em;
 }
@@ -926,4 +864,359 @@ button.part.on:hover {
   .lyrics-play {
     transition: none;
   }
+}
+
+/* ------------------------------------------------------------ reviewing: the editor */
+
+.tx-top {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.tx-progress {
+  display: grid;
+  gap: 4px;
+}
+
+.tx-how,
+.tx-all {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+}
+
+.tx-how > summary,
+.tx-all > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: var(--fs-md);
+  list-style: none;
+}
+
+.tx-how > summary::-webkit-details-marker,
+.tx-all > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tx-how ul {
+  margin: 0;
+  padding-inline: 34px 14px;
+  display: grid;
+  gap: 6px;
+  font-size: var(--fs-md);
+  color: var(--muted);
+}
+
+.tx-all > ul,
+.tx-all > p {
+  margin: 0;
+  padding: 0 14px 12px;
+}
+
+.tx-all > ul,
+.tx-history ul {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.tx-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.tx-para {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  padding: 10px 14px 12px;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  scroll-margin: 90px;
+}
+
+.tx-para.open {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.tx-para.found {
+  background: var(--mark);
+}
+
+.tx-para-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.tx-n {
+  font: 600 12px var(--ui);
+  color: var(--faint);
+  min-width: 18px;
+}
+
+.tx-time {
+  border: 0;
+  background: var(--sunken);
+  color: var(--muted);
+  font: 12px var(--ui);
+  font-variant-numeric: tabular-nums;
+  padding: 2px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  direction: ltr;
+}
+
+.tx-time:hover {
+  color: var(--accent);
+}
+
+.tx-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: var(--r-sm);
+  font: 500 11.5px / 1 var(--ui);
+}
+
+.tx-state.ok {
+  color: var(--open);
+  background: var(--open-soft);
+}
+
+.tx-state.partly {
+  color: var(--approved);
+  background: var(--approved-soft);
+}
+
+.tx-sync-note {
+  font-size: 11.5px;
+}
+
+.tx-text {
+  font-family: var(--torah);
+  font-size: 19px;
+  line-height: 1.8;
+  color: var(--text);
+  cursor: pointer;
+  -webkit-touch-callout: default;
+}
+
+.tx-para.is-machine .tx-text {
+  color: var(--muted);
+}
+
+.tx-text .word {
+  border-radius: 3px;
+  transition: background-color 0.15s linear, color 0.15s linear;
+}
+
+.tx-text .word:hover {
+  background: var(--accent-soft);
+}
+
+.tx-text .word.w-past {
+  color: var(--text);
+}
+
+.tx-text .word.w-now {
+  background: var(--mark);
+  color: var(--text);
+}
+
+.tx-text .word.w-picked {
+  background: var(--accent-soft);
+  box-shadow: 0 2px 0 var(--accent);
+}
+
+.tx-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tx-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 17px;
+  background: var(--bg);
+  color: var(--text);
+  font: 500 13.5px var(--ui);
+  cursor: pointer;
+}
+
+.tx-tool:hover {
+  background: var(--canvas);
+}
+
+.tx-tool.on {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+.tx-tool:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.tx-edit {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tx-edit textarea,
+.tx-edit .input {
+  width: 100%;
+  font-family: var(--torah);
+  font-size: 18px;
+  line-height: 1.7;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.tx-edit .actions {
+  display: flex;
+  gap: 8px;
+}
+
+.tx-complete {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-md);
+}
+
+.tx-pending {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--r);
+  background: var(--canvas);
+}
+
+.tx-diff {
+  margin: 4px 0 0;
+  font-family: var(--torah);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.tx-diff del {
+  color: var(--del-fg);
+  background: var(--del-bg);
+}
+
+.tx-diff ins {
+  color: var(--add-fg);
+  background: var(--add-bg);
+  text-decoration: none;
+}
+
+.tx-sent {
+  margin: 8px 0 0;
+}
+
+.tx-history {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-muted);
+  display: grid;
+  gap: 8px;
+}
+
+.tx-history ul {
+  margin: 0;
+  padding: 0;
+}
+
+.tx-change-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-md);
+}
+
+.tx-change p {
+  margin: 2px 0 0;
+}
+
+.tx-change-item {
+  margin-top: 4px;
+}
+
+/* Words selected in a paragraph: fixing them is one tap away, at the foot of the screen, clear of the phone's own menu. */
+.tx-pick {
+  position: fixed;
+  inset-inline: 12px;
+  bottom: calc(var(--player-h, 0px) + 12px);
+  z-index: 60;
+  margin: 0 auto;
+  max-width: 560px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--overlay);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-dialog);
+}
+
+.tx-pick-words {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--torah);
+  font-size: 17px;
+}
+
+/* A part's row: play it, or open its own page. */
+.part-list > li {
+  display: flex;
+  align-items: center;
+}
+
+.part-list > li > .part {
+  flex: 1;
+  min-width: 0;
+}
+
+.part-page {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-inline-end: 8px;
+  border-radius: 50%;
+  color: var(--subtle);
+}
+
+.part-page:hover {
+  background: var(--canvas);
+  color: var(--accent);
 }

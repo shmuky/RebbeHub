@@ -1,15 +1,15 @@
 import { Maximize2, Minimize2, Pause, Play, ScanText, SkipBack, SkipForward, Undo2, LocateFixed, Loader2 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { spellingHints } from '@rebbehub/model';
 import { t, type Lang } from '../lib/i18n.js';
 import { clockOf, tn } from '../lib/i18nNetwork.js';
 import { href } from '../lib/links.js';
-import { postJson } from '../lib/post.js';
+import { get, within, type Span, type Transcript, type Word } from '../lib/transcript.js';
 import { useAccount } from '../lib/useAccount.js';
 import { clock, usePlayer, type Track } from '../player/PlayerProvider.js';
 import { MachineLabel } from '../ui/primitives.js';
 import { AskMachine } from './AskMachine.js';
+import { TranscriptEditor } from './TranscriptEditor.js';
 
 /**
  * A farbrengen's transcripts, part by part, synced to its recordings (the
@@ -31,95 +31,6 @@ import { AskMachine } from './AskMachine.js';
  * on "Review machine text" (or `?review=1`, as /check links), so a
  * listener is not asked to judge every line.
  */
-
-interface Word {
-  from: number;
-  to: number;
-  startMs: number;
-  endMs: number;
-}
-
-interface Paragraph {
-  id: string;
-  content: string;
-  startMs: number | null;
-  endMs: number | null;
-  words?: Word[] | null;
-  locked?: boolean;
-  checked: boolean;
-  syncChecked?: boolean;
-}
-
-interface Transcript {
-  recording: string;
-  language: string;
-  alignment?: string | null;
-  paragraphs: Paragraph[];
-}
-
-
-async function get<T>(path: string): Promise<T> {
-  const response = await fetch(`/_/steward/${path}`, { credentials: 'same-origin', headers: { accept: 'application/json' } });
-  const json = (await response.json().catch(() => ({}))) as T & { message?: string };
-  if (!response.ok) throw new Error(json.message ?? response.statusText);
-  return json;
-}
-
-interface Goal {
-  model: string;
-  hours: { done: number; target: number };
-  farbrengens: { done: number; target: number };
-  next: Array<{ event: string; path: string | null; title: { he: string; en?: string } | null; date: string | null; paragraphs: number; checked: number; mostWanted: boolean }>;
-}
-
-/**
- * What checking teaches: the next transcription model is trained once
- * people have checked enough farbrengens (core/trainingClips.ts), so the
- * goal is shown where they check, with the farbrengens most wanted next.
- */
-function TrainingGoalBar({ lang }: { lang: Lang }) {
-  const [goal, setGoal] = useState<Goal | null>(null);
-  useEffect(() => {
-    let live = true;
-    void get<{ goal: Goal }>('machine/training')
-      .then((r) => live && setGoal(r.goal))
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, []);
-  if (!goal) return null;
-  const hours = (n: number) => (Math.round(n * 10) / 10).toLocaleString(lang);
-  return (
-    <div className="training-goal">
-      <p className="row-sub">
-        {t(lang, 'trainingGoal')
-          .replace('{model}', goal.model)
-          .replace('{done}', goal.farbrengens.done.toLocaleString(lang))
-          .replace('{target}', goal.farbrengens.target.toLocaleString(lang))
-          .replace('{hours}', hours(goal.hours.done))
-          .replace('{targetHours}', hours(goal.hours.target))}
-      </p>
-      <progress max={goal.hours.target} value={Math.min(goal.hours.done, goal.hours.target)} />
-      {goal.next.length ? (
-        <details>
-          <summary>{t(lang, 'trainingNext')}</summary>
-          <ul>
-            {goal.next.map((f) => (
-              <li key={f.event}>
-                {f.path ? <Link to={`${href(f.path, lang, { review: '1' })}#transcript`}>{f.title?.[lang === 'en' ? 'en' : 'he'] ?? f.title?.he ?? f.event}</Link> : (f.title?.he ?? f.event)}{' '}
-                <span className="row-sub">
-                  {f.checked.toLocaleString(lang)}/{f.paragraphs.toLocaleString(lang)}
-                  {f.mostWanted ? ` · ${t(lang, 'mostWanted')}` : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
-    </div>
-  );
-}
 
 /** Where the audio is, in milliseconds, updated many times a second while this recording plays, for word by word highlighting. */
 function useNowMs(playing: boolean): number {
@@ -164,179 +75,7 @@ function Spoken({ content, words, nowMs }: { content: string; words: Word[]; now
   return <>{out}</>;
 }
 
-/** The house spelling (the booklets'), where the words being written differ from it: a hint, never a change. */
-function SpellingHints({ text, lang }: { text: string; lang: Lang }) {
-  const hints = spellingHints(text);
-  return (
-    <p className="note spelling-hints">
-      {t(lang, 'houseSpelling')}
-      {hints.length ? (
-        <>
-          {' '}
-          {hints.map((h, i) => (
-            <span key={h.written} dir="rtl">
-              {i ? ', ' : ''}
-              {h.written} ← <strong>{h.house}</strong>
-            </span>
-          ))}
-        </>
-      ) : null}
-    </p>
-  );
-}
-
-function Para({
-  recording,
-  paragraph,
-  active,
-  found,
-  nowMs,
-  playing,
-  onPlay,
-  onAnchored,
-  lang,
-  canFix,
-}: {
-  recording: string;
-  paragraph: Paragraph;
-  active: boolean;
-  found: boolean;
-  nowMs: number;
-  playing: boolean;
-  onPlay: () => void;
-  onAnchored: (spans: Array<{ segment: string; startMs: number; endMs: number; words: Word[] | null; locked: boolean }>) => void;
-  lang: Lang;
-  canFix: boolean;
-}) {
-  const player = usePlayer();
-  const ref = useRef<HTMLLIElement>(null);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [sent, setSent] = useState<'text' | 'sync' | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (active) ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [active]);
-  useEffect(() => {
-    if (found) ref.current?.scrollIntoView({ block: 'center' });
-  }, [found]);
-
-  if (editing !== null)
-    return (
-      <li ref={ref} className="transcript-para editing">
-        <textarea value={editing} onChange={(e) => setEditing(e.target.value)} rows={4} dir="auto" autoFocus />
-        <SpellingHints text={editing} lang={lang} />
-        <div className="actions">
-          <button
-            type="button"
-            disabled={!editing.trim() || editing.trim() === paragraph.content}
-            onClick={async () => {
-              try {
-                await postJson(`recordings/${recording}/transcript/fix`, { segment: paragraph.id, content: editing });
-                setSent('text');
-                setEditing(null);
-              } catch (e) {
-                setError(e instanceof Error ? e.message : String(e));
-              }
-            }}
-          >
-            {t(lang, 'sendForReview')}
-          </button>
-          <button type="button" className="btn" onClick={() => setEditing(null)}>
-            {t(lang, 'cancel')}
-          </button>
-        </div>
-        {error ? <p role="alert">{error}</p> : null}
-      </li>
-    );
-
-  // "The Rebbe is saying this now": the moment is taken at the tap, before anything is sent.
-  async function saidNow() {
-    const atMs = Math.round(player.now() * 1000);
-    setError(null);
-    try {
-      const fix = await postJson<{ spans: Array<{ segment: string; startMs: number; endMs: number; words: Word[] | null; locked: boolean }> }>(`recordings/${recording}/sync/anchor`, { segment: paragraph.id, atMs });
-      onAnchored(fix.spans);
-      setSent('sync');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  // "Heard right": the words checked as they are, keeping their word timings, so the paragraph is a training clip at once.
-  async function heardRight() {
-    setError(null);
-    try {
-      await postJson(`recordings/${recording}/transcript/fix`, { segment: paragraph.id, content: paragraph.content });
-      setSent('text');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  const classes = ['transcript-para', active ? 'active' : '', found ? 'found' : '', paragraph.checked ? '' : 'unchecked', paragraph.syncChecked === false ? 'sync-unchecked' : ''].filter(Boolean).join(' ');
-  return (
-    <li ref={ref} id={`p-${paragraph.id}`} className={classes}>
-      <button type="button" className="transcript-text" onClick={onPlay} dir="auto">
-        {active && paragraph.words?.length ? <Spoken content={paragraph.content} words={paragraph.words} nowMs={nowMs} /> : paragraph.content}
-      </button>
-      <span className="transcript-actions">
-        {found ? (
-          <button type="button" className="link-button" onClick={onPlay}>
-            {tn(lang, 'playFromHere')}
-            {paragraph.startMs !== null ? ` (${clockOf(paragraph.startMs)})` : ''}
-          </button>
-        ) : null}
-        {sent ? <span className="row-sub">{t(lang, sent === 'sync' ? 'syncFixed' : 'lineSent')}</span> : null}
-        {canFix && playing && paragraph.startMs !== null && sent !== 'sync' ? (
-          <button type="button" className="link-button said-now" onClick={saidNow} title={t(lang, 'saidNowHint')}>
-            {t(lang, 'saidNow')}
-          </button>
-        ) : null}
-        {canFix && !sent && !paragraph.checked ? (
-          <button type="button" className="link-button" onClick={heardRight} title={t(lang, 'heardRightHint')}>
-            {t(lang, 'heardRight')}
-          </button>
-        ) : null}
-        {canFix && !sent ? (
-          <button type="button" className="link-button" onClick={() => setEditing(paragraph.content)}>
-            {t(lang, 'fixLine')}
-          </button>
-        ) : null}
-      </span>
-      {error ? <p role="alert">{error}</p> : null}
-    </li>
-  );
-}
-
-function ConfirmSync({ recording, lang }: { recording: string; lang: Lang }) {
-  const [state, setState] = useState<'idle' | 'sent'>('idle');
-  const [error, setError] = useState<string | null>(null);
-  if (state === 'sent') return <p className="row-sub">{t(lang, 'pageSent')}</p>;
-  return (
-    <p className="confirm-page">
-      <button
-        type="button"
-        className="btn"
-        onClick={async () => {
-          try {
-            await postJson(`recordings/${recording}/sync/confirm`);
-            setState('sent');
-          } catch (e) {
-            setError(e instanceof Error ? e.message : String(e));
-          }
-        }}
-      >
-        {t(lang, 'syncIsRight')}
-      </button>
-      <span className="row-sub"> {t(lang, 'syncIsRightHint')}</span>
-      {error ? <span role="alert"> {error}</span> : null}
-    </p>
-  );
-}
-
-const within = (nowMs: number, p: { startMs: number | null; endMs: number | null }) => p.startMs !== null && p.endMs !== null && nowMs >= p.startMs && nowMs < p.endMs;
-
-export function Transcripts({ tracks, lang }: { tracks: Track[]; lang: Lang }) {
+export function Transcripts({ tracks, lang, onLoaded }: { tracks: Track[]; lang: Lang; onLoaded?: (transcripts: number) => void }) {
   const player = usePlayer();
   const account = useAccount();
   const [params] = useSearchParams();
@@ -357,8 +96,10 @@ export function Transcripts({ tracks, lang }: { tracks: Track[]; lang: Lang }) {
     // Most recordings have no transcript yet; those answer "not found" and are left out.
     void Promise.all(tracks.map((tr) => get<Transcript>(`recordings/${tr.id}/transcript`).catch(() => null))).then((all) => {
       if (!live) return;
-      setTranscripts(all.filter((x): x is Transcript => x !== null));
+      const found = all.filter((x): x is Transcript => x !== null);
+      setTranscripts(found);
       setLoaded(true);
+      onLoaded?.(found.length);
     });
     return () => {
       live = false;
@@ -367,13 +108,24 @@ export function Transcripts({ tracks, lang }: { tracks: Track[]; lang: Lang }) {
   }, [ids]);
 
   // A fix to the sync, followed at once: the spans as they now stand replace the old ones.
-  function anchored(recording: string, spans: Array<{ segment: string; startMs: number; endMs: number; words: Word[] | null; locked: boolean }>) {
+  function anchored(recording: string, spans: Span[]) {
     const bySegment = new Map(spans.map((s) => [s.segment, s]));
     setTranscripts((all) =>
       all.map((tr) =>
         tr.recording !== recording
           ? tr
           : { ...tr, paragraphs: tr.paragraphs.map((p) => (bySegment.has(p.id) ? { ...p, ...bySegment.get(p.id)!, syncChecked: bySegment.get(p.id)!.locked || p.syncChecked } : p)) },
+      ),
+    );
+  }
+
+  // An approved fix, shown at once: its words, and whether the paragraph is now checked or only fixed in part.
+  function fixed(recording: string, segment: string, content: string, complete: boolean) {
+    setTranscripts((all) =>
+      all.map((tr) =>
+        tr.recording !== recording
+          ? tr
+          : { ...tr, paragraphs: tr.paragraphs.map((p) => (p.id !== segment ? p : { ...p, content, words: content === p.content ? p.words : null, checked: p.checked || complete, edited: !(p.checked || complete) })) },
       ),
     );
   }
@@ -421,48 +173,17 @@ export function Transcripts({ tracks, lang }: { tracks: Track[]; lang: Lang }) {
 
   return (
     <section id="transcript" ref={section} className="transcripts reviewing">
-      <div className="review-head">
-        <h2 className="section-header">{t(lang, 'reviewMachineText')}</h2>
-        <button type="button" className="btn" onClick={() => review(false)}>
-          <Undo2 size={16} aria-hidden />
-          {t(lang, 'backToLyrics')}
-        </button>
-      </div>
-      {unchecked ? <p className="note machine-note">{t(lang, 'machineTranscript')}</p> : null}
-      {syncUnchecked ? <p className="note machine-note">{t(lang, 'machineSync')}</p> : null}
-      {unchecked && account ? <TrainingGoalBar lang={lang} /> : null}
-      {transcripts.map((tr) => {
-        const index = tracks.findIndex((track) => track.id === tr.recording);
-        const playing = player.current?.id === tr.recording;
-        return (
-          <div key={tr.recording}>
-            {transcripts.length > 1 ? <h3>{tracks[index]?.title}</h3> : null}
-            <ol className="transcript">
-              {tr.paragraphs.map((p) => (
-                <Para
-                  key={p.id}
-                  recording={tr.recording}
-                  paragraph={p}
-                  lang={lang}
-                  canFix={Boolean(account)}
-                  found={p.id === found}
-                  playing={playing}
-                  nowMs={nowMs}
-                  active={playing && within(nowMs, p)}
-                  onAnchored={(spans) => anchored(tr.recording, spans)}
-                  onPlay={() => (playing ? player.seek((p.startMs ?? 0) / 1000) : player.play(tracks, index, (p.startMs ?? 0) / 1000))}
-                />
-              ))}
-            </ol>
-            {account && tr.paragraphs.some((p) => p.syncChecked === false) ? <ConfirmSync recording={tr.recording} lang={lang} /> : null}
-          </div>
-        );
-      })}
-      {account === null ? (
-        <p className="row-sub">
-          {t(lang, 'fixTranscriptSignIn')} <Link to={href('/signin', lang)}>{t(lang, 'signIn')}</Link>
-        </p>
-      ) : null}
+      <TranscriptEditor
+        transcripts={transcripts}
+        tracks={tracks}
+        lang={lang}
+        nowMs={nowMs}
+        found={found}
+        account={account}
+        onBack={() => review(false)}
+        onAnchored={anchored}
+        onFixed={fixed}
+      />
       {ask}
     </section>
   );

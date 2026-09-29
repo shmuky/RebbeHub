@@ -101,6 +101,8 @@ export interface MachineOrigin {
   by: string;
   /** Set once a person has checked it. */
   checked?: boolean;
+  /** A person fixed some of it without checking all of it: still the machine's, and still labelled. */
+  edited?: boolean;
 }
 
 /** Proofread level: 0 raw machine output, 1 checked once, 2 checked twice. */

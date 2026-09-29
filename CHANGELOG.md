@@ -12,6 +12,11 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **A transcript fix may cover only some words.** `POST
+  /v1/recordings/{id}/transcript/fix` takes `complete` (default true):
+  with `false` the words are fixed but the paragraph stays machine
+  hearing, and the transcript marks it `edited` until someone checks the
+  whole of it. It is no training clip until then.
 - **`POST /v1/suggestions/{id}/reopen`: undo a withdrawal.** Its author
   or a steward puts a withdrawn suggestion back for review; its checks run
   again and its set's keepers are asked to look again. On the site, a

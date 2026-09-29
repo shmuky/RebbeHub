@@ -14,6 +14,7 @@ import {
   projectTodo,
   recordingTranscript,
   registerFile,
+  transcriptHistory,
   scanProgress,
   scanText,
   uploadOcr,
@@ -197,6 +198,28 @@ describe('word-level sync and fixing it', () => {
     await catalog.merge((await fixParagraph(catalog, 'chaim', { segment: segments[0]!, content: 'לחיים, לחיים טובים' })).id, 'keeper');
     const view = (await recordingTranscript(catalog, recording))!;
     expect(view.paragraphs[0]).toMatchObject({ content: 'לחיים, לחיים טובים', words: null, startMs: 0, checked: true });
+  });
+
+  it('keeps a paragraph fixed in part as machine hearing, marked edited, until someone checks all of it', async () => {
+    const { catalog, set } = await freshCatalog();
+    const { recording, segments } = await transcribed(catalog, set);
+    await catalog.merge((await fixParagraph(catalog, 'chaim', { segment: segments[0]!, content: 'לחיים, לחיים טובים', complete: false })).id, 'keeper');
+    let view = (await recordingTranscript(catalog, recording))!;
+    expect(view.paragraphs[0]).toMatchObject({ content: 'לחיים, לחיים טובים', checked: false, edited: true });
+    await catalog.merge((await fixParagraph(catalog, 'mendy', { segment: segments[0]!, content: 'לחיים, לחיים טובים' })).id, 'keeper');
+    view = (await recordingTranscript(catalog, recording))!;
+    expect(view.paragraphs[0]).toMatchObject({ checked: true, edited: false });
+  });
+
+  it("tells a transcript's changes, newest first: the machine's hearing, a fix in part, a check", async () => {
+    const { catalog, set } = await freshCatalog();
+    const { recording, segments } = await transcribed(catalog, set);
+    await catalog.merge((await fixParagraph(catalog, 'chaim', { segment: segments[0]!, content: 'לחיים, לחיים טובים', complete: false })).id, 'keeper');
+    await catalog.merge((await fixParagraph(catalog, 'mendy', { segment: segments[1]!, content: (await recordingTranscript(catalog, recording))!.paragraphs[1]!.content })).id, 'keeper');
+    const history = (await transcriptHistory(catalog, recording))!;
+    expect(history[0]).toMatchObject({ author: 'mendy', changes: [{ segment: segments[1], kind: 'checked' }] });
+    expect(history[1]).toMatchObject({ author: 'chaim', changes: [{ segment: segments[0], kind: 'words', after: 'לחיים, לחיים טובים', complete: false }] });
+    expect(history.at(-1)!.changes.every((c) => c.kind === 'made')).toBe(true);
   });
 });
 

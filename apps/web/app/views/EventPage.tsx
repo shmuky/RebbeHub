@@ -49,6 +49,7 @@ const W = {
   pause: { he: 'השהיה', en: 'Pause' },
   seek: { he: 'מיקום בהקלטה', en: 'Position in the recording' },
   noRecording: { he: 'אין הקלטה', en: 'No recording' },
+  partPage: { he: 'דף ההקלטה: התמלול, השיחה וההיסטוריה', en: "The recording's page: its transcript, talk and history" },
   knowWhere: { he: 'יודעים איפה?', en: 'Know where it is?' },
   said: { he: 'מה שנאמר בה', en: 'What was said' },
   playFrom: { he: 'לשמוע מכאן', en: 'Play from here' },
@@ -63,6 +64,7 @@ const W = {
   english: { he: 'English', en: 'English' },
   both: { he: 'זה מול זה', en: 'Side by side' },
   whichText: { he: 'איזה טקסט', en: 'Which text' },
+  heardTranscript: { he: 'תמלול מההקלטה', en: 'Transcript of the recording' },
   textView: { he: 'תצוגת הטקסט', en: 'Text view' },
   syncMachine: { he: 'סנכרון להקלטה · אוטומטי', en: 'Synced to the recording · automatic' },
   syncChecked: { he: 'מסונכרן להקלטה', en: 'Synced to the recording' },
@@ -257,6 +259,10 @@ function ListenCard({ entity, recordings, tracks, lang }: { entity: Entity; reco
                 <span className="part-title">{tr.title}</span>
                 <span className="d num">{tr.durationMs ? clock(tr.durationMs / 1000) : ''}</span>
               </button>
+              {/* Each part's own page: its transcript, its talk and its history. */}
+              <Link className="part-page" to={href(itemPath(recordings.find((r) => r.id === tr.id) ?? { id: tr.id, path: null }), lang)} aria-label={w(lang, 'partPage')} title={w(lang, 'partPage')}>
+                <Icon name="info" size={16} />
+              </Link>
             </li>
           );
         })}
@@ -387,7 +393,7 @@ function useNowMs(active: boolean): number {
 
 type TextMode = 'original' | 'english' | 'both';
 
-function Words({ texts, tracks, entity, lang }: { texts: EventText[]; tracks: Track[]; entity: Entity; lang: Lang }) {
+function Words({ texts, tracks, entity, lang, bare }: { texts: EventText[]; tracks: Track[]; entity: Entity; lang: Lang; bare?: boolean }) {
   const player = usePlayer();
   const [params] = useSearchParams();
   const mode: TextMode = params.get('tv') === 'en' ? 'english' : params.get('tv') === 'both' ? 'both' : 'original';
@@ -401,12 +407,9 @@ function Words({ texts, tracks, entity, lang }: { texts: EventText[]; tracks: Tr
   const english = text.english;
   const shownMode: TextMode = english ? mode : 'original';
 
-  return (
-    <section className="ev-sec" id="text" aria-labelledby="text-h">
-      <h2 id="text-h" className="ev-h">
-        {w(lang, 'text')}
-      </h2>
-      {texts.length > 1 ? (
+  const body = (
+    <>
+      {texts.length > 1 && !bare ? (
         <nav className="chips-row" aria-label={w(lang, 'whichText')}>
           {texts.map((x, i) => (
             <Link key={i} className={cx('chip', i === chosen && 'on')} to={here({ ti: i ? String(i) : undefined })} aria-current={i === chosen ? 'true' : undefined} preventScrollReset replace>
@@ -480,6 +483,75 @@ function Words({ texts, tracks, entity, lang }: { texts: EventText[]; tracks: Tr
           })}
         </ol>
       </div>
+    </>
+  );
+  if (bare) return body;
+  return (
+    <section className="ev-sec" id="text" aria-labelledby="text-h">
+      <h2 id="text-h" className="ev-h">
+        {w(lang, 'text')}
+      </h2>
+      {body}
+    </section>
+  );
+}
+
+/**
+ * The farbrengen's words, from every source it has: its hanachos and
+ * printings (Words), and the transcript heard from its recordings
+ * (Transcripts), each a chip to choose. The transcript is read in its own
+ * reader, the words lit as they are heard; it is found by the browser
+ * after the page loads, so its chip appears then. A search hit in the
+ * transcript (`?at=`) or a link to review it (`?review=1`) opens it.
+ */
+function TextSources({ texts, tracks, entity, lang }: { texts: EventText[]; tracks: Track[]; entity: Entity; lang: Lang }) {
+  const [params] = useSearchParams();
+  const [hasTranscript, setHasTranscript] = useState<boolean | null>(null);
+  const asked = params.get('ti') === 't' || params.has('at') || params.get('review') === '1';
+  const showTranscript = !texts.length || (asked && hasTranscript !== false);
+  const chosen = Math.min(Math.max(0, Number(params.get('ti') ?? 0) || 0), Math.max(0, texts.length - 1));
+  const here = (ti: string | undefined) => href(itemPath(entity), lang, { tv: params.get('tv') ?? undefined, ti });
+  const chips = texts.length + (hasTranscript ? 1 : 0) > 1;
+  return (
+    <section className="ev-sec" id="text" aria-labelledby="text-h">
+      <h2 id="text-h" className="ev-h">
+        {w(lang, 'text')}
+      </h2>
+      {chips ? (
+        <nav className="chips-row" aria-label={w(lang, 'whichText')}>
+          {texts.map((x, i) => (
+            <Link key={i} className={cx('chip', !showTranscript && i === chosen && 'on')} to={here(i ? String(i) : undefined)} aria-current={!showTranscript && i === chosen ? 'true' : undefined} preventScrollReset replace>
+              {x.label}
+            </Link>
+          ))}
+          {hasTranscript ? (
+            <Link className={cx('chip', showTranscript && 'on')} to={here('t')} aria-current={showTranscript ? 'true' : undefined} preventScrollReset replace>
+              {w(lang, 'heardTranscript')}
+            </Link>
+          ) : null}
+        </nav>
+      ) : null}
+      {texts.length && !showTranscript ? <Words texts={texts} tracks={tracks} entity={entity} lang={lang} bare /> : null}
+      <div hidden={!showTranscript && hasTranscript !== false}>
+        <Transcripts tracks={tracks} lang={lang} onLoaded={(n) => setHasTranscript(n > 0)} />
+      </div>
+      {!texts.length && hasTranscript !== true ? (
+        <div className="box" hidden={hasTranscript === null && tracks.length > 0}>
+          <EmptyState
+            icon="file"
+            title={w(lang, 'noText')}
+            compact
+            actions={
+              <Link className="btn sm" to={href('/add', lang, { what: 'hanacha', for: entity.id })}>
+                <Icon name="plus" />
+                {w(lang, 'addHanacha')}
+              </Link>
+            }
+          >
+            {w(lang, 'noTextHint')}
+          </EmptyState>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -623,29 +695,7 @@ export function EventPage({ entity, view, lang }: { entity: Entity; view: ItemVi
         {said.length ? <Said rows={said} tracks={tracks} lang={lang} /> : null}
         <SeeAll id={entity.id} group={view.linked.find((g) => g.field === 'events' && g.type === 'unit')} shown={said.length} lang={lang} />
         {docs.length ? <Documents links={docs} lang={lang} subtitle={subtitle} /> : null}
-        {texts.length ? (
-          <Words texts={texts} tracks={tracks} entity={entity} lang={lang} />
-        ) : (
-          <section className="ev-sec">
-            <h2 className="ev-h">{w(lang, 'text')}</h2>
-            <div className="box">
-              <EmptyState
-                icon="file"
-                title={w(lang, 'noText')}
-                compact
-                actions={
-                  <Link className="btn sm" to={href('/add', lang, { what: 'hanacha', for: entity.id })}>
-                    <Icon name="plus" />
-                    {w(lang, 'addHanacha')}
-                  </Link>
-                }
-              >
-                {w(lang, 'noTextHint')}
-              </EmptyState>
-            </div>
-          </section>
-        )}
-        <Transcripts tracks={tracks} lang={lang} />
+        <TextSources texts={texts} tracks={tracks} entity={entity} lang={lang} />
         {videos.length ? (
           <section className="ev-sec">
             <h2 className="ev-h">{w(lang, 'videos')}</h2>

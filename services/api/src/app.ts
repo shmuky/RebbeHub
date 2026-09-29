@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono';
 import type { DbCost } from '@rebbehub/db';
-import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, getDerivations, getDerivationsOf, getFile, getFiles, getPageFix, getPageFixes, hanachaSyncs, itemsUsingFile, listWebhooks, pageImageCounts, printingsOf, projectTodo, recordingTranscript, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type FileRow, type Mailer, type PageFixRow, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, getDerivations, getDerivationsOf, getFile, getFiles, getPageFix, getPageFixes, hanachaSyncs, itemsUsingFile, listWebhooks, pageImageCounts, printingsOf, projectTodo, recordingTranscript, transcriptHistory, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type FileRow, type Mailer, type PageFixRow, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
 import { peopleOf } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType, type Language, type PageInline, type PageSegmentKind } from '@rebbehub/model';
@@ -464,13 +464,20 @@ export function createApp(options: ApiOptions): Hono {
     return c.json(transcript);
   });
 
+  // Everything that happened to a recording's transcript, newest first, in one read: the editor's changelog.
+  app.get('/v1/recordings/:id/transcript/history', async (c) => {
+    const history = await transcriptHistory(catalog, entityId(c.req.param('id')), { limit: intParam(c.req.query('limit'), 'limit') });
+    if (!history) throw new CatalogError('not-found', 'this recording has no transcript yet');
+    return c.json({ history });
+  });
+
   app.post('/v1/recordings/:id/transcript/fix', async (c) => {
     const by = await signedIn(c);
-    const input = await body<{ segment?: string; content?: string }>(c);
+    const input = await body<{ segment?: string; content?: string; complete?: boolean }>(c);
     if (!input.segment || typeof input.content !== 'string') throw new HttpError(400, 'give segment and content');
     const transcript = await recordingTranscript(catalog, entityId(c.req.param('id')));
     if (!transcript?.paragraphs.some((p) => p.id === input.segment)) throw new CatalogError('not-found', 'no such paragraph in this transcript');
-    return c.json(await fixParagraph(catalog, by, { segment: input.segment as EntityId, content: input.content }), 201);
+    return c.json(await fixParagraph(catalog, by, { segment: input.segment as EntityId, content: input.content, complete: input.complete !== false }), 201);
   });
 
   // "The Rebbe is saying this line now": sets a paragraph (or a word of it) at this moment, locks it, and moves what follows with it.
