@@ -37,7 +37,7 @@ export interface ReviewRow {
   post_review: 'pending' | 'done' | null;
   submitted_at: string | null;
   created_at: string;
-  /** The checks that did not pass: a Suggestion read on its own has them; the list leaves them out. */
+  /** Only a Suggestion read on its own carries its checks; a list row has none until its changes are read. */
   checks?: Array<{ check: string; status: 'pass' | 'warn' | 'fail'; message: string }>;
   /** How many items it changes. */
   items?: number;
@@ -516,8 +516,8 @@ export function SuggestionCard({
                 {t(lang, 'approve')}
                 {allOf}
               </button>
-              <button type="button" className="btn" onClick={() => setNote('')} disabled={busy}>
-                <Icon name="back" className="flip-ltr" />
+              <button type="button" className="btn danger" onClick={() => setNote('')} disabled={busy}>
+                <Icon name="x" />
                 {t(lang, 'sendBack')}
               </button>
             </>
@@ -529,7 +529,7 @@ export function SuggestionCard({
               <textarea id={`note-${cs.id}`} value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder={t(lang, 'sendBackWhy')} autoFocus dir="auto" />
               <span className="btn-row">
                 <button type="button" className="btn danger" onClick={act('send-back', { note })} disabled={busy || !note.trim()}>
-                  <Icon name="back" className="flip-ltr" />
+                  <Icon name="x" />
                   {t(lang, 'sendBack')}
                 </button>
                 <button type="button" className="btn ghost" onClick={() => setNote(null)}>

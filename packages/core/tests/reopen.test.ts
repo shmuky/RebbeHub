@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { Catalog } from '@rebbehub/core';
+import { reviewSuggestion, type Catalog } from '@rebbehub/core';
 import type { EntityId } from '@rebbehub/model';
 import { freshCatalog, yudShvat } from './helpers.js';
 
@@ -47,6 +47,15 @@ describe('reopening a withdrawn suggestion', () => {
     await catalog.withdraw(id, 'mendy');
     await expect(catalog.reopen(id, 'keeper')).rejects.toThrow(/author/);
     expect((await catalog.reopen(id, 'shmuly')).status).toBe('open');
+  });
+});
+
+describe('approving your own suggestion', () => {
+  it('is for a steward only: others ask someone else to approve it', async () => {
+    const mine = await suggestion('shmuly');
+    expect((await reviewSuggestion(catalog, 'shmuly', mine, { verdict: 'approve' })).status).toBe('merged');
+    const theirs = await suggestion('mendy');
+    await expect(reviewSuggestion(catalog, 'mendy', theirs, { verdict: 'approve' })).rejects.toThrow(/other than its author/);
   });
 });
 

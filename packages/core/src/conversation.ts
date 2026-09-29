@@ -223,7 +223,7 @@ export async function reviewSuggestion(
   let reviewId: number;
   let commit: number | null | undefined;
   if (input.verdict === 'approve') {
-    if (by === cs.author) throw forbidden('a suggestion is approved by someone other than its author');
+    // Whether its author may approve it (a steward may) is merge's to say, as for any approval.
     commit = (await catalog.merge(id, by, input.resolutions ?? {}, body || undefined)).commit;
     reviewId = await latestReview(catalog.db, id, by, 'approve');
   } else if (input.verdict === 'request_changes') {

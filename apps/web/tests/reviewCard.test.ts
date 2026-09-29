@@ -90,7 +90,7 @@ describe("a bot's Suggestion of 500 items in the review queue", () => {
     expect(html).toContain('Show more');
     expect(html).toContain('475 left');
     expect(html).toMatch(/Approve<span class="num"> · 500<\/span>/);
-    expect(html).toContain('Send back');
+    expect(html).toContain('Don’t approve, send back');
   });
 
   it('reads in Hebrew too', () => {

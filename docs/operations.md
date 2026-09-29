@@ -383,9 +383,10 @@ ninety days of it and the latest incidents.
   resources": a page nobody got), and the CPU a request takes at the
   median and at the slowest hundredth. Any request stopped today is
   degraded, one in twenty is down, and a slowest hundredth over
-  `WORKERS_CPU_MS` (default 10, the free plan's) is degraded, since the
-  next ones will be stopped; the numbers are on the page whatever the
-  state, so a page that grows heavier shows before anyone is refused.
+  `WORKERS_CPU_MS` (default 10, the free plan's; 30000 on Workers Paid,
+  set in `services/api/wrangler.toml`) is degraded, since the next ones
+  will be stopped; the numbers are on the page whatever the state, so a
+  page that grows heavier shows before anyone is refused.
 - If `checkedAt` is more than twenty minutes old, the page says the
   checks have stopped: the API's scheduled run is not running.
 
@@ -446,8 +447,12 @@ own).
   are not at the API's edge either. An item page makes one to two dozen
   reads, each a lookup by id or an index (`entity_ref`, `entity_path`).
 - Everything a signed-in person reads and does.
-- Searches (full text, `entity_search`; by meaning, the `embedding` HNSW
-  index and a Workers AI call). Each address may search 60 times a minute
+- Searches (full text over `entity.search_tsv`, the words of each item
+  as Postgres searches them, kept with the item and indexed
+  (`entity_search_tsv`, migration 0024) so a search matches and ranks
+  from what is kept, never re-reading the words: ranking a common word's
+  fourteen thousand sichos from their text took thirteen seconds; by
+  meaning, the `embedding` HNSW index and a Workers AI call). Each address may search 60 times a minute
   on the site (`RATE_LIMIT_SEARCH` in `apps/web/wrangler.toml`) and on the
   API (`services/api/wrangler.toml`), on top of the API's 300 requests a
   minute. Page views are never limited: crawlers read pages freely.
@@ -466,14 +471,19 @@ On the Workers Free plan Hyperdrive counts every statement the API Worker
 sends, cached or not, reads and writes alike, a transaction's BEGIN and
 COMMIT included, against 100,000 a day; past that, every query errors
 until midnight UTC and the site is down (a 500 on every page and API read
-not already at the edge). The plan's other limits bite the same way: a
-Worker may make 50 subrequests a request (service-binding calls to the
-API count) and use 10 ms of CPU (Cloudflare lets a request over now and
-then, and cuts off a Worker that is over steadily: error 1102). One limit
-holds on every plan: a request may pass through 32 Worker invocations in
-all, and each of the site's calls to the API is one, so a page keeps well
-under 32 calls whatever the plan. The jobs (`services/jobs`) connect to
-Postgres directly and count against none of these.
+not already at the edge). That is what took the site down on 29 Elul 5786
+(29 September 2026), and the account has been on Workers Paid since that
+evening: no daily allowance, 30 seconds of CPU a request instead of 10
+ms, a thousand subrequests instead of 50 (the plan's limits are in
+`services/api/wrangler.toml`, `HYPERDRIVE_DAILY_QUERIES` and
+`WORKERS_CPU_MS`, for the status page). The budget below is kept all the
+same: a statement costs the database its time whatever the plan, and a
+page that makes a hundred of them is slow for the reader before it costs
+anything. One limit holds on every plan: a request may pass through 32
+Worker invocations in all, and each of the site's calls to the API is
+one, so a page keeps well under 32 calls whatever the plan. The jobs
+(`services/jobs`) connect to Postgres directly and count against none of
+these.
 
 So every page has a budget, and the budget is a test:
 `apps/web/tests/budget.test.ts` renders each page through the site and
@@ -611,14 +621,15 @@ making the page.
   thousands. So when a bot (`isbot`) asks for a page the edge does not
   have, `CachedSite` counts it: each search engine (Googlebot, Bingbot,
   Applebot, DuckDuckBot, Yandex and a few more) has its own budget
-  (`RATE_LIMIT_CRAWL_SEARCH`, 6 pages a minute), and every other bot, AI
-  crawlers among them, shares one (`RATE_LIMIT_CRAWL`, 2 a minute). Over
+  (`RATE_LIMIT_CRAWL_SEARCH`, 60 pages a minute), and every other bot, AI
+  crawlers among them, shares one (`RATE_LIMIT_CRAWL`, 10 a minute). Over
   it, the crawler is answered 503 with `Retry-After: 120`, which search
   engines read as "slow down", never as a missing page. Pages already at
   the edge, `robots.txt`, the sitemaps and `llms*.txt` are never counted,
-  and people never are. The numbers (in `apps/web/wrangler.toml`) are set
-  for Hyperdrive's free 100,000 queries a day, where Google alone could
-  otherwise use a day's reads in hours; on a paid plan raise them.
+  and people never are. The numbers (in `apps/web/wrangler.toml`) were 6
+  and 2 on the free plan, where Google alone could otherwise use a day's
+  reads in hours; on Workers Paid they keep one crawl from taking the
+  database (one compute unit on Neon) from the people reading.
 - The API has its own `robots.txt`: crawlers may read its `llms.txt`,
   `openapi.json`, files (`/objects/`, a shaar for link previews) and what
   the Sichos Kodesh apps read (`/v1/app/`), not the other `/v1` routes, which the site's pages already show.
@@ -631,10 +642,12 @@ making the page.
 
 ### Outside the code
 
-- **Workers Paid.** With the Workers cache on, every request is billed at
-  the Workers request rate, cache hits and service-binding calls
-  included (hits use no CPU time). The free plan's 100,000 requests a day
-  is not enough for real traffic.
+- **Workers Paid.** On since 29 Elul 5786 (29 September 2026). With the
+  Workers cache on, every request is billed at the Workers request rate,
+  cache hits and service-binding calls included (hits use no CPU time).
+  The free plan's 100,000 requests a day, and Hyperdrive's 100,000
+  statements, were not enough for real traffic: the site was down for an
+  afternoon on them.
 - **Neon.** Autoscaling with a minimum of at least 0.5 CU, so the first
   reader after a quiet night does not wait for the database to wake;
   suspend-after-idle off for the production branch once traffic is steady.

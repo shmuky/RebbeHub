@@ -203,8 +203,8 @@ export async function searchMoments(catalog: Catalog, query: string, options: { 
   const { rows } = await catalog.db.query<{ id: EntityId; type: 'text-page' | 'segment' }>(
     `SELECT e.id, e.type FROM entity e
      WHERE e.type IN ('text-page', 'segment') AND NOT e.deleted AND e.main_rev IS NOT NULL
-       AND to_tsvector('simple', coalesce(e.search_text, '')) @@ to_tsquery('simple', $1)
-     ORDER BY ts_rank(to_tsvector('simple', coalesce(e.search_text, '')), to_tsquery('simple', $1)) DESC, e.id
+       AND e.search_tsv @@ to_tsquery('simple', $1)
+     ORDER BY ts_rank(e.search_tsv, to_tsquery('simple', $1)) DESC, e.id
      LIMIT ${limit * 2}`,
     [tsQuery],
   );

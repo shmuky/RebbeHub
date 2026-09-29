@@ -156,7 +156,7 @@ const STRINGS = {
   yourSuggestions: { he: 'ההצעות שלי', en: 'Your suggestions' },
   reviewSignIn: { he: 'אחראי אוסף? היכנסו כדי לאשר.', en: 'A keeper? Sign in to approve.' },
   approve: { he: 'אישור', en: 'Approve' },
-  sendBack: { he: 'החזרה עם הערה', en: 'Send back with a note' },
+  sendBack: { he: 'לא לאשר, להחזיר למציע', en: 'Don’t approve, send back' },
   sendBackWhy: { he: 'מה צריך לשנות?', en: 'What should change?' },
   withdraw: { he: 'משיכת ההצעה', en: 'Withdraw' },
   changedValue: { he: '(שונה)', en: '(changed)' },

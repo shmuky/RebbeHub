@@ -284,13 +284,13 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
     <ReviewBox
       lang={lang}
       me={{ name: account.person.displayName, id: account.person.id }}
-      choices={detail.mayApprove && !detail.mine ? reviewChoices(lang) : undefined}
+      choices={detail.mayApprove ? reviewChoices(lang).filter((c) => !(detail.mine && c.value === 'send_back')) : undefined}
       placeholder={tt(lang, 'leaveComment')}
       busy={busy}
       error={error}
       footnote={
         <>
-          <Icon name={detail.mayApprove ? 'shield' : 'lock'} size={14} /> {w(lang, detail.mayApprove && !detail.mine ? 'youKeep' : 'onlyKeepers')}
+          <Icon name={detail.mayApprove ? 'shield' : 'lock'} size={14} /> {w(lang, detail.mayApprove ? 'youKeep' : 'onlyKeepers')}
           {pending.length ? ` · ${w(lang, 'pendingNote')}: ${pending.length}` : ''}
         </>
       }
@@ -298,15 +298,13 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
         detail.mine ? (
           <button
             type="button"
-            className="btn"
+            className="btn danger"
             disabled={busy}
-            onClick={() =>
-              void act(async () => {
-                await post('withdraw');
-              })
-            }
+            onClick={() => {
+              if (window.confirm(tt(lang, 'withdrawConfirm'))) void act(() => post('withdraw'));
+            }}
           >
-            {tt(lang, 'withdraw')}
+            <Icon name="x" /> {tt(lang, 'withdraw')}
           </button>
         ) : null
       }
