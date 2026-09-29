@@ -19,6 +19,7 @@ import { pageRoutes } from './pages.js';
 import { driveRoutes, type DriveOptions } from './drive.js';
 import { threadRoutes } from './threads.js';
 import { organizeRoutes } from './organize.js';
+import { appCatalogRoutes } from './appCatalog.js';
 
 /**
  * The RebbeHub API, version 1 (docs/developers/api.md). Reading needs
@@ -184,6 +185,7 @@ export function createApp(options: ApiOptions): Hono {
   mirrorRoutes(app, catalog, { mirrors: options.mirrors, files: options.files });
   threadRoutes(app, catalog, signedIn, authenticate);
   organizeRoutes(app, catalog, signedIn);
+  appCatalogRoutes(app, catalog);
   scanRoutes(app, catalog, {
     filesBase,
     siteUrl,
@@ -548,8 +550,8 @@ export function createApp(options: ApiOptions): Hono {
   // (`texts/<sha256>` in the public bucket). The first time it is asked for, it is copied from Sichos-Kodesh's published
   // archive, checked against its hash, and kept; after that RebbeHub serves its own copy. Pages link to it, and the
   // works importer reads it for their words (packages/importers/src/sichosKodeshTexts.ts).
-  app.get('/v1/texts/:sha256', async (c) => {
-    const sha256 = c.req.param('sha256');
+  const sourceText = async (c: Context) => {
+    const sha256 = c.req.param('sha256') ?? '';
     const kept = options.texts;
     if (!kept || !/^[0-9a-f]{64}$/.test(sha256)) throw new CatalogError('not-found', 'no such text');
     const key = `texts/${sha256}`;
@@ -576,7 +578,10 @@ export function createApp(options: ApiOptions): Hono {
       'Content-Security-Policy': 'sandbox',
       'X-Content-Type-Options': 'nosniff',
     });
-  });
+  };
+  app.get('/v1/texts/:sha256', sourceText);
+  // The same texts where the Sichos Kodesh apps look for them, under their catalog's address (appCatalog.ts).
+  app.get('/v1/app/v3/texts/:sha256', sourceText);
 
   app.get('/v1/entities/:id', async (c) => {
     const id = entityId(c.req.param('id'));

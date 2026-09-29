@@ -12,6 +12,16 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **The Sichos Kodesh apps' catalog, from RebbeHub.** `/v1/app/v1`,
+  `/v1/app/v2` and `/v1/app/v3` answer at the paths and in the shapes of
+  Sichos-Kodesh's own catalog API (`catalog/manifest.json`,
+  `catalog/{version}/catalog.json`, `catalog/changelog.json`,
+  `catalog/latest/catalog.json`, and `v3/texts/{sha256}`), built from the
+  farbrengens, recordings, sefarim and units on main, so the apps can
+  switch by changing one address ([Sichos-Kodesh](docs/sichos-kodesh.md)).
+  Numbered `2.<commit>.0`; while RebbeHub holds no library, `v2` and `v3`
+  are numbered `0.<commit>.0` and say `missing: ["library"]`, so no app
+  takes them.
 - **Drive files read through RebbeHub.** `GET /v1/drive/{id}` reads a
   Google Drive file the catalog links to (a hanacha's PDF, an Otzros
   scan) for the site's reader and player, with CORS and Range, kept at the

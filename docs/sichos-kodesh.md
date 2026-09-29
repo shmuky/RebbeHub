@@ -2,7 +2,7 @@
 
 Sichos-Kodesh (the Sichos Kodesh apps, a separate repository) is
 RebbeHub's first consumer and its origin. RebbeHub keeps no copy of its
-content; the two meet at three contracts.
+content; the two meet at the contracts below.
 
 ## 1. The works model
 
@@ -100,3 +100,51 @@ For the apps to build wholly from RebbeHub, a release would add, beside
 Page images and IIIF manifests (`/manifests/iiif/<scan>.json`) are for
 the web and need nothing from the apps. Until those are in a release,
 Sichos-Kodesh keeps building its farbrengens and library as it does now.
+
+## 6. The apps' catalog address
+
+The apps fetch their catalog from one address, app-core's
+`CATALOG_API_BASE_URL` (today `https://api.sk.shmuky.dev`). RebbeHub
+answers the same paths under `https://api.rebbehub.org/v1/app`, in the
+same shapes (its `packages/catalog/src/release.ts`), built from the
+catalog on main (`services/api/src/appCatalog.ts`). Switching an app is
+changing that one address to `https://api.rebbehub.org/v1/app`:
+
+| The app asks (after the base) | RebbeHub answers | What it is |
+| --- | --- | --- |
+| `/v1/catalog/manifest.json` | `/v1/app/v1/catalog/manifest.json` | schema 1 (the web app): the farbrengens |
+| `/v2/catalog/manifest.json` | `/v1/app/v2/catalog/manifest.json` | schema 2 (phones to 1.4.0): with the library |
+| `/v3/catalog/manifest.json` | `/v1/app/v3/catalog/manifest.json` | schema 3 (the phone): with the works |
+| `/v<n>/catalog/<version>/catalog.json` | `/v1/app/v<n>/catalog/<version>/catalog.json` | the release the manifest names (its `url`), byte for byte its `sha256` |
+| `/v<n>/catalog/changelog.json`, `/v<n>/catalog/latest/catalog.json` | the same under `/v1/app` | |
+| `/v3/texts/<sha256>` | `/v1/app/v3/texts/<sha256>` | a sefer's text, as `/v1/texts/<sha256>` |
+| `/v1/app/android/latest.json`, `/v1/app/android/download/<abi>` | `/v1/app/v1/app/android/...` | the phone's own updates: sent on (307) to `api.sk.shmuky.dev` |
+
+What goes in:
+
+- **the farbrengens** (`byYear`): every event with a mafteiach number,
+  its date key as mafteiach wrote it (from its path, else its date and
+  its order that day), its recordings (JEM's file names, parts in order,
+  a shiur or chazara kept as such), and its hanachos that are on Drive;
+- **the works**: the sefarim with a Sichos-Kodesh id, their authors, and
+  the units of each (the phone's unit ids, their place as contents, each
+  edition's source, and the sha256 of the text RebbeHub keeps). What may
+  be done with each source is what Sichos-Kodesh decided when its texts
+  came in, else RebbeHub's default for the source and licence;
+- **the library**: empty. RebbeHub does not hold it yet (section 5).
+
+A release is numbered `2.<commit>.0`, the last commit that changed a
+farbrengen, recording, sefer, unit or author: newer than every catalog
+Sichos-Kodesh numbered itself, and new only when something the apps show
+has changed. A release that lacks a part its app shows (today, the
+library in `v2` and `v3`) is numbered `0.<commit>.0` and its manifest
+says `missing`: the apps take only a newer version, so none swaps its
+own library for an empty one. The web app (`v1`) can switch now; the
+phone once RebbeHub holds the library.
+
+Not kept by RebbeHub, so not in these releases yet: the farbrengens'
+short titles (`occasionLabelShort`, `occasionLabelShortEn`), the size of
+each text (`bytes`) and of a sefer's texts (`textBytes`), the sha256 of a
+unit's second text (an English one beside the Hebrew), the HebrewBooks
+shelf (`works.shelf`; the apps then keep their bundled one), and the
+registry's own order of the sefarim.

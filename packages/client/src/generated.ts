@@ -60,6 +60,35 @@ export type ItemPage = {
   next: string | null;
 };
 
+export type AppCatalogManifest = {
+  /** 1, 2 or 3 */
+  schemaVersion: number;
+  /** X.Y.Z: 2.<commit>.0, or 0.<commit>.0 while a part is missing */
+  version: string;
+  releasedAt: string;
+  /** Where its catalog.json is */
+  url: string;
+  bytes: number;
+  sha256: string;
+  years: Array<number>;
+  occasions: number;
+  changelog: Array<{
+    version: string;
+    date: string;
+    en: Array<string>;
+    he: Array<string>;
+  }>;
+  /** v2 and v3: items per library collection */
+  collections?: Record<string, number>;
+  /** v3: how many works, and how many units their contents have */
+  works?: {
+    works: number;
+    units: number;
+  };
+  /** Parts RebbeHub does not hold yet (farbrengens, library, works) */
+  missing?: Array<string>;
+};
+
 export type Commit = {
   seq: number;
   at: string;
@@ -446,6 +475,52 @@ export interface Operations {
     };
     output: Record<string, unknown>;
   };
+  /** The phone app's APK: redirects to Sichos-Kodesh's app server */
+  appAndroidDownload: {
+    input: {
+      abi: "arm64-v8a" | "armeabi-v7a" | "universal";
+    };
+    output: Response;
+  };
+  /** The phone app's newest release: redirects to Sichos-Kodesh's app server */
+  appAndroidLatest: {
+    input: Record<string, never>;
+    output: Response;
+  };
+  /** The apps' catalog changelog alone */
+  appCatalogChangelog: {
+    input: {
+      schema: "v1" | "v2" | "v3";
+    };
+    output: Array<{
+      version: string;
+      date: string;
+      en: Array<string>;
+      he: Array<string>;
+    }>;
+  };
+  /** Redirects to the served release's catalog.json */
+  appCatalogLatest: {
+    input: {
+      schema: "v1" | "v2" | "v3";
+    };
+    output: Response;
+  };
+  /** The Sichos Kodesh apps' catalog manifest: the served release's version, size, sha256 and address */
+  appCatalogManifest: {
+    input: {
+      schema: "v1" | "v2" | "v3";
+    };
+    output: AppCatalogManifest;
+  };
+  /** The apps' catalog: the farbrengens by year (v1), with the library (v2) and the works (v3) */
+  appCatalogRelease: {
+    input: {
+      schema: "v1" | "v2" | "v3";
+      version: string;
+    };
+    output: Record<string, unknown>;
+  };
   /** Approve and merge (keepers of its sets, stewards) */
   approveSuggestion: {
     input: {
@@ -459,6 +534,13 @@ export interface Operations {
     output: {
       commit?: number | null;
     };
+  };
+  /** A text of a sefer, where the apps look for it (the same as /v1/texts/{sha256}) */
+  appSourceText: {
+    input: {
+      sha256: string;
+    };
+    output: string;
   };
   /** Authorization Server Metadata (RFC 8414): the endpoints, scopes read and write, PKCE S256, registration and Client ID Metadata Documents */
   authorizationServer: {
@@ -2158,7 +2240,14 @@ export const OPERATIONS = {
   addHanachaText: {"method":"POST","path":"/v1/hanachos/text","pathParams":[],"query":[],"body":"json","answer":"json"},
   addTranslation: {"method":"POST","path":"/v1/units/{id}/translations","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   anchorSync: {"method":"POST","path":"/v1/recordings/{id}/sync/anchor","pathParams":["id"],"query":[],"body":"json","answer":"json"},
+  appAndroidDownload: {"method":"GET","path":"/v1/app/v1/app/android/download/{abi}","pathParams":["abi"],"query":[],"body":null,"answer":"raw"},
+  appAndroidLatest: {"method":"GET","path":"/v1/app/v1/app/android/latest.json","pathParams":[],"query":[],"body":null,"answer":"raw"},
+  appCatalogChangelog: {"method":"GET","path":"/v1/app/{schema}/catalog/changelog.json","pathParams":["schema"],"query":[],"body":null,"answer":"json"},
+  appCatalogLatest: {"method":"GET","path":"/v1/app/{schema}/catalog/latest/catalog.json","pathParams":["schema"],"query":[],"body":null,"answer":"raw"},
+  appCatalogManifest: {"method":"GET","path":"/v1/app/{schema}/catalog/manifest.json","pathParams":["schema"],"query":[],"body":null,"answer":"json"},
+  appCatalogRelease: {"method":"GET","path":"/v1/app/{schema}/catalog/{version}/catalog.json","pathParams":["schema","version"],"query":[],"body":null,"answer":"json"},
   approveSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/approve","pathParams":["id"],"query":[],"body":"json","answer":"json"},
+  appSourceText: {"method":"GET","path":"/v1/app/v3/texts/{sha256}","pathParams":["sha256"],"query":[],"body":null,"answer":"text"},
   authorizationServer: {"method":"GET","path":"/.well-known/oauth-authorization-server","pathParams":[],"query":[],"body":null,"answer":"json"},
   catalogTree: {"method":"GET","path":"/v1/tree","pathParams":[],"query":["root","depth","limit"],"body":null,"answer":"json"},
   checkUpload: {"method":"POST","path":"/v1/uploads/check","pathParams":[],"query":[],"body":"json","answer":"json"},
@@ -2328,9 +2417,44 @@ export abstract class GeneratedMethods {
     return this.call('anchorSync', input ?? {} as Operations['anchorSync']['input']);
   }
 
+  /** The phone app's APK: redirects to Sichos-Kodesh's app server (GET /v1/app/v1/app/android/download/{abi}) */
+  appAndroidDownload(input: Operations['appAndroidDownload']['input']): Promise<Operations['appAndroidDownload']['output']> {
+    return this.call('appAndroidDownload', input ?? {} as Operations['appAndroidDownload']['input']);
+  }
+
+  /** The phone app's newest release: redirects to Sichos-Kodesh's app server (GET /v1/app/v1/app/android/latest.json) */
+  appAndroidLatest(): Promise<Operations['appAndroidLatest']['output']> {
+    return this.call('appAndroidLatest', {} as Operations['appAndroidLatest']['input']);
+  }
+
+  /** The apps' catalog changelog alone (GET /v1/app/{schema}/catalog/changelog.json) */
+  appCatalogChangelog(input: Operations['appCatalogChangelog']['input']): Promise<Operations['appCatalogChangelog']['output']> {
+    return this.call('appCatalogChangelog', input ?? {} as Operations['appCatalogChangelog']['input']);
+  }
+
+  /** Redirects to the served release's catalog.json (GET /v1/app/{schema}/catalog/latest/catalog.json) */
+  appCatalogLatest(input: Operations['appCatalogLatest']['input']): Promise<Operations['appCatalogLatest']['output']> {
+    return this.call('appCatalogLatest', input ?? {} as Operations['appCatalogLatest']['input']);
+  }
+
+  /** The Sichos Kodesh apps' catalog manifest: the served release's version, size, sha256 and address (GET /v1/app/{schema}/catalog/manifest.json) */
+  appCatalogManifest(input: Operations['appCatalogManifest']['input']): Promise<Operations['appCatalogManifest']['output']> {
+    return this.call('appCatalogManifest', input ?? {} as Operations['appCatalogManifest']['input']);
+  }
+
+  /** The apps' catalog: the farbrengens by year (v1), with the library (v2) and the works (v3) (GET /v1/app/{schema}/catalog/{version}/catalog.json) */
+  appCatalogRelease(input: Operations['appCatalogRelease']['input']): Promise<Operations['appCatalogRelease']['output']> {
+    return this.call('appCatalogRelease', input ?? {} as Operations['appCatalogRelease']['input']);
+  }
+
   /** Approve and merge (keepers of its sets, stewards) (POST /v1/suggestions/{id}/approve) */
   approveSuggestion(input: Operations['approveSuggestion']['input']): Promise<Operations['approveSuggestion']['output']> {
     return this.call('approveSuggestion', input ?? {} as Operations['approveSuggestion']['input']);
+  }
+
+  /** A text of a sefer, where the apps look for it (the same as /v1/texts/{sha256}) (GET /v1/app/v3/texts/{sha256}) */
+  appSourceText(input: Operations['appSourceText']['input']): Promise<Operations['appSourceText']['output']> {
+    return this.call('appSourceText', input ?? {} as Operations['appSourceText']['input']);
   }
 
   /** Authorization Server Metadata (RFC 8414): the endpoints, scopes read and write, PKCE S256, registration and Client ID Metadata Documents (GET /.well-known/oauth-authorization-server) */
