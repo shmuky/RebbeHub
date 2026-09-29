@@ -13,6 +13,10 @@ agent as context. The API has its own short `https://api.rebbehub.org/llms.txt`.
 
 ## The MCP server
 
+The easy way in: [rebbehub.org/connect](/connect) walks anyone through
+adding it to Claude, ChatGPT, Claude Code, Cursor or VS Code (one copied
+address, or one button), and signing in there.
+
 The [Model Context Protocol](https://modelcontextprotocol.io) server
 speaks Streamable HTTP (versions 2024-11-05 to 2025-11-25): POST a
 JSON-RPC message, get JSON back. It keeps no sessions and opens no event
