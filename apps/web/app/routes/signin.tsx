@@ -1,5 +1,5 @@
 import { browserSupportsWebAuthn, startAuthentication, startRegistration } from '@simplewebauthn/browser';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import type { Route } from './+types/signin';
 import { langFrom, t } from '../lib/i18n.js';
@@ -8,6 +8,9 @@ import { pageMeta } from '../lib/seo.js';
 import { UsernameField } from '../components/threads/UsernameField.js';
 import { refreshAccount, useAccount, useEmailSignIn, useGoogleSignIn } from '../lib/useAccount.js';
 import { useLang } from '../lib/useLang.js';
+import { Icon } from '../ui/Icon.js';
+import { Box } from '../ui/primitives.js';
+import '../styles/pages/people.css';
 
 /**
  * Signing in, with a passkey: no password to choose or forget. The passkey
@@ -19,6 +22,8 @@ import { useLang } from '../lib/useLang.js';
  * Or by a link sent by email, once the site can send email: the link comes
  * back here (`?email-token=`), and the page asks once more before using it,
  * so a mail program that opens links to check them cannot use it up.
+ * Drawn as GitHub's sign-in is: one narrow column under the mark, a box
+ * for having an account and a box for making one.
  */
 
 /** Why a Google sign-in came back here (the API's `?error=`). */
@@ -42,6 +47,16 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
 /** Only an address on this site may be returned to after signing in. */
 function safeReturn(value: string | null): string {
   return value && value.startsWith('/') && !value.startsWith('//') ? value : '/account';
+}
+
+/** A message in the column: a failure said as one, anything else quietly. */
+function Alert({ tone, children }: { tone: 'negative' | 'positive' | 'info'; children: ReactNode }) {
+  return (
+    <div className={`alert ${tone}`} role={tone === 'negative' ? 'alert' : 'status'}>
+      <Icon name={tone === 'negative' ? 'warn' : tone === 'positive' ? 'check' : 'info'} />
+      <div>{children}</div>
+    </div>
+  );
 }
 
 /** Arriving from the link in an email: what it is for, a new person's name, and one button that uses it. */
@@ -79,34 +94,35 @@ function EmailLink({ token, onDone }: { token: string; onDone: () => void }) {
   }
 
   return (
-    <section>
-      <h2 className="section-header">{t(lang, 'emailLinkTitle')}</h2>
-      {error ? (
-        <p className="note" role="alert">
-          {error}
-        </p>
-      ) : null}
-      {added ? <p>{t(lang, 'emailLinkAdded')}</p> : null}
+    <Box as="section" className="auth-box">
+      <h2 className="auth-h">
+        <Icon name="mail" />
+        {t(lang, 'emailLinkTitle')}
+      </h2>
+      {error ? <Alert tone="negative">{error}</Alert> : null}
+      {added ? <Alert tone="positive">{t(lang, 'emailLinkAdded')}</Alert> : null}
       {info && !added ? (
-        <form onSubmit={use} className="signin-form">
-          <p>
+        <form onSubmit={use} className="form stack">
+          <p className="auth-text">
             {info.adding ? `${t(lang, 'emailLinkAdd')} ${info.adding.displayName}: ` : info.known ? `${t(lang, 'emailLinkSignIn')} ` : `${t(lang, 'emailLinkNew')} `}
             <strong dir="ltr">{info.email}</strong>
           </p>
           {!info.known && !info.adding ? (
             <>
-              <label htmlFor="email-name">{t(lang, 'nameToShow')}</label>
-              <input id="email-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required autoComplete="name" dir="auto" />
-              <p className="row-sub">{t(lang, 'nameToShowHint')}</p>
+              <label className="field" htmlFor="email-name">
+                {t(lang, 'nameToShow')}
+                <input id="email-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required autoComplete="name" dir="auto" />
+                <span className="hint">{t(lang, 'nameToShowHint')}</span>
+              </label>
               <UsernameField lang={lang} id="email-username" value={username} onChange={setUsername} from={name} onValid={setUsernameOk} />
             </>
           ) : null}
-          <button type="submit" disabled={busy || (!info.known && !info.adding && (!name.trim() || !usernameOk))}>
+          <button type="submit" className="btn primary block lg" disabled={busy || (!info.known && !info.adding && (!name.trim() || !usernameOk))}>
             {busy ? t(lang, 'waiting') : t(lang, 'continueButton')}
           </button>
         </form>
       ) : null}
-    </section>
+    </Box>
   );
 }
 
@@ -131,28 +147,27 @@ function EmailStart({ returnTo }: { returnTo: string }) {
     }
   }
   return (
-    <section>
-      <h2 className="section-header">{t(lang, 'orEmail')}</h2>
+    <div className="auth-way">
+      <h3 className="auth-or">{t(lang, 'orEmail')}</h3>
       {sentTo ? (
-        <p role="status">
+        <Alert tone="positive">
           {t(lang, 'linkSent')} <strong dir="ltr">{sentTo}</strong>. {t(lang, 'linkSentText')}
-        </p>
+        </Alert>
       ) : (
-        <form onSubmit={send} className="signin-form">
-          <p>{t(lang, 'orEmailText')}</p>
-          <label htmlFor="email">{t(lang, 'emailAddress')}</label>
-          <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={254} required autoComplete="email" dir="ltr" />
-          {error ? (
-            <p className="row-sub" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <button type="submit" className="secondary" disabled={busy || !email.trim()}>
+        <form onSubmit={send} className="form stack">
+          <label className="field" htmlFor="email">
+            {t(lang, 'emailAddress')}
+            <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={254} required autoComplete="email" dir="ltr" />
+            <span className="hint">{t(lang, 'orEmailText')}</span>
+          </label>
+          {error ? <Alert tone="negative">{error}</Alert> : null}
+          <button type="submit" className="btn block" disabled={busy || !email.trim()}>
+            <Icon name="mail" />
             {busy ? t(lang, 'waiting') : t(lang, 'sendLink')}
           </button>
         </form>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -209,77 +224,83 @@ export default function SignIn() {
 
   const supported = typeof window === 'undefined' || browserSupportsWebAuthn();
   return (
-    <>
-      <h1>{t(lang, 'signIn')}</h1>
-      <p className="subtitle">{t(lang, 'signInIntro')}</p>
+    <div className="auth">
+      <div className="auth-head">
+        <Link to={href('/', lang)} className="mark auth-mark" aria-label="RebbeHub">
+          ר
+        </Link>
+        <h1 className="auth-title">{t(lang, 'signIn')}</h1>
+        <p className="auth-lede">{t(lang, 'signInIntro')}</p>
+      </div>
+
+      {error ? <Alert tone="negative">{error}</Alert> : null}
 
       {account ? (
-        <>
-          <p className="note">
+        <Box as="section" className="auth-box">
+          <p className="auth-text">
             {t(lang, 'alreadySignedIn')} <strong>{account.person.displayName}</strong>.
           </p>
           {/* Signed in, a new passkey belongs on this account, never on a new one. */}
-          <p>
-            <Link className="button" to={href('/account', lang)}>
-              {t(lang, 'addPasskeyHere')}
-            </Link>
-          </p>
-        </>
-      ) : null}
-
-      {error ? (
-        <p className="note" role="alert">
-          {error}
-        </p>
+          <Link className="btn primary block lg" to={href('/account', lang)}>
+            <Icon name="key" />
+            {t(lang, 'addPasskeyHere')}
+          </Link>
+        </Box>
       ) : null}
 
       {emailToken ? <EmailLink token={emailToken} onDone={done} /> : null}
 
-      {!supported ? <p className="note">{t(lang, 'noPasskeys')}</p> : null}
+      {!supported ? <Alert tone="info">{t(lang, 'noPasskeys')}</Alert> : null}
 
       {account || emailToken ? null : (
         <>
-          <section>
-            <h2 className="section-header">{t(lang, 'haveAccount')}</h2>
-            <p>{t(lang, 'haveAccountText')}</p>
-            <button type="button" onClick={signIn} disabled={busy !== null || !supported}>
+          <Box as="section" className="auth-box">
+            <h2 className="auth-h">{t(lang, 'haveAccount')}</h2>
+            <p className="auth-text">{t(lang, 'haveAccountText')}</p>
+            <button type="button" className="btn primary block lg" onClick={signIn} disabled={busy !== null || !supported}>
+              <Icon name={busy === 'in' ? 'loader' : 'key'} className={busy === 'in' ? 'spin' : undefined} />
               {busy === 'in' ? t(lang, 'waiting') : t(lang, 'signInWithPasskey')}
             </button>
-          </section>
+            {google ? (
+              <div className="auth-way">
+                <h3 className="auth-or">{t(lang, 'orGoogle')}</h3>
+                {/* A whole-page visit: the browser goes to Google and comes back. */}
+                <a className="btn block lg" href={`/_/auth/google/start?return=${encodeURIComponent(safeReturn(params.get('return')))}`}>
+                  <Icon name="globe" />
+                  {t(lang, 'signInWithGoogle')}
+                </a>
+                <p className="hint">{t(lang, 'orGoogleText')}</p>
+              </div>
+            ) : null}
+            {emailOn ? <EmailStart returnTo={safeReturn(params.get('return'))} /> : null}
+          </Box>
 
-          <section>
-            <h2 className="section-header">{t(lang, 'newAccount')}</h2>
-            <form onSubmit={create} className="signin-form">
-              <label htmlFor="name">{t(lang, 'nameToShow')}</label>
-              <input id="name" name="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required autoComplete="name" dir="auto" />
-              <p className="row-sub">{t(lang, 'nameToShowHint')}</p>
+          <Box as="section" className="auth-box">
+            <h2 className="auth-h">{t(lang, 'newAccount')}</h2>
+            <form onSubmit={create} className="form stack">
+              <label className="field" htmlFor="name">
+                {t(lang, 'nameToShow')}
+                <input id="name" name="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required autoComplete="name" dir="auto" />
+                <span className="hint">{t(lang, 'nameToShowHint')}</span>
+              </label>
               <UsernameField lang={lang} value={username} onChange={setUsername} from={name} onValid={setUsernameOk} />
-              <p className="row-sub">{t(lang, 'newAccountHint')}</p>
-              <button type="submit" disabled={busy !== null || !supported || !name.trim() || !usernameOk}>
+              <button type="submit" className="btn block lg" disabled={busy !== null || !supported || !name.trim() || !usernameOk}>
+                <Icon name={busy === 'new' ? 'loader' : 'plus'} className={busy === 'new' ? 'spin' : undefined} />
                 {busy === 'new' ? t(lang, 'waiting') : t(lang, 'createAccount')}
               </button>
+              <p className="hint">{t(lang, 'newAccountHint')}</p>
             </form>
-          </section>
-
-          {google ? (
-            <section>
-              <h2 className="section-header">{t(lang, 'orGoogle')}</h2>
-              <p>{t(lang, 'orGoogleText')}</p>
-              {/* A whole-page visit: the browser goes to Google and comes back. */}
-              <a className="button secondary" href={`/_/auth/google/start?return=${encodeURIComponent(safeReturn(params.get('return')))}`}>
-                {t(lang, 'signInWithGoogle')}
-              </a>
-            </section>
-          ) : null}
-
-          {emailOn ? <EmailStart returnTo={safeReturn(params.get('return'))} /> : null}
+          </Box>
         </>
       )}
 
-      <section className="note">
-        <b>{t(lang, 'whatIsPasskey')}</b>
-        <p>{t(lang, 'whatIsPasskeyText')}</p>
-      </section>
-    </>
+      <aside className="auth-note">
+        <Icon name="key" />
+        <div>
+          <b>{t(lang, 'whatIsPasskey')}</b>
+          <p>{t(lang, 'whatIsPasskeyText')}</p>
+        </div>
+      </aside>
+    </div>
   );
 }

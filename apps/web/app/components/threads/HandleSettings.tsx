@@ -5,12 +5,14 @@ import { href } from '../../lib/links.js';
 import { personPath } from '../../lib/threads.js';
 import { tt } from '../../lib/threadStrings.js';
 import { refreshAccount } from '../../lib/useAccount.js';
+import { Icon } from '../../ui/Icon.js';
 import { UsernameField } from './UsernameField.js';
 
 /**
- * A signed-in person's handle on their account page: their page's
- * address (/u/…), and changing it. The old handle keeps leading to them,
- * in addresses and in @mentions already written.
+ * A signed-in person's handle, as one row of their account page's
+ * profile: their page's address (/u/…), and changing it in place. The
+ * old handle keeps leading to them, in addresses and in @mentions
+ * already written.
  */
 export function HandleSettings({ lang, username }: { lang: Lang; username: string | undefined }) {
   const [editing, setEditing] = useState(false);
@@ -44,39 +46,50 @@ export function HandleSettings({ lang, username }: { lang: Lang; username: strin
   }
 
   return (
-    <section>
-      <h2 className="section-header">{tt(lang, 'username')}</h2>
+    <div className="set-row" id="handle">
+      <div className="set-k">
+        <b>{tt(lang, 'username')}</b>
+        <span className="hint">{tt(lang, 'usernameHelp')}</span>
+      </div>
       {editing ? (
-        <form onSubmit={save} className="signin-form">
-          <UsernameField lang={lang} id="handle" value={value} onChange={setValue} onValid={setOk} />
-          <p className="row-sub">{tt(lang, 'usernameChangeNote')}</p>
+        <form onSubmit={save} className="set-edit form">
+          <UsernameField lang={lang} id="handle-input" value={value} onChange={setValue} onValid={setOk} />
+          <p className="hint">{tt(lang, 'usernameChangeNote')}</p>
           {error ? (
-            <p className="th-error" role="alert">
-              {error}
-            </p>
+            <div className="alert negative" role="alert">
+              <Icon name="warn" />
+              <div>{error}</div>
+            </div>
           ) : null}
-          <p>
-            <button type="submit" disabled={busy || !ok || !value.trim() || value.trim() === username}>
+          <div className="btn-row">
+            <button type="submit" className="btn primary sm" disabled={busy || !ok || !value.trim() || value.trim() === username}>
               {tt(lang, 'save')}
-            </button>{' '}
-            <button type="button" className="secondary" onClick={() => setEditing(false)}>
+            </button>
+            <button type="button" className="btn sm" onClick={() => setEditing(false)}>
               {tt(lang, 'cancel')}
             </button>
-          </p>
+          </div>
         </form>
       ) : (
-        <p>
-          {username ? (
-            <Link to={href(personPath(username), lang)} dir="ltr">
-              @{username}
-            </Link>
-          ) : null}{' '}
-          <button type="button" className="link-button" onClick={() => (setValue(username ?? ''), setEditing(true), setSaved(false))}>
+        <>
+          <div className="set-v">
+            {username ? (
+              <Link to={href(personPath(username), lang)} dir="ltr">
+                @{username}
+              </Link>
+            ) : null}
+            {saved ? (
+              <span className="handle-ok" role="status">
+                <Icon name="check" size={14} />
+                {tt(lang, 'usernameSaved')}
+              </span>
+            ) : null}
+          </div>
+          <button type="button" className="btn sm" onClick={() => (setValue(username ?? ''), setEditing(true), setSaved(false))}>
             {tt(lang, 'usernameChange')}
           </button>
-          {saved ? <span className="th-ok"> {tt(lang, 'usernameSaved')}</span> : null}
-        </p>
+        </>
       )}
-    </section>
+    </div>
   );
 }

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Lang } from '../../lib/i18n.js';
 import { tt } from '../../lib/threadStrings.js';
-import '../../threads.css';
+import { Icon } from '../../ui/Icon.js';
+import '../../styles/pages/people.css';
 
 /**
  * Choosing a handle (`@mendy`): suggested from the name while it has not
@@ -83,12 +84,15 @@ export function UsernameField({
   }, [value]);
 
   return (
-    <div className="th-username">
+    <div className="field handle-field">
       <label htmlFor={id}>{tt(lang, 'username')}</label>
-      <div className="th-username-field" dir="ltr">
-        <span>@</span>
+      <div className="handle-input" dir="ltr">
+        <span className="at" aria-hidden="true">
+          @
+        </span>
         <input
           id={id}
+          className="handle-in"
           value={value}
           onChange={(e) => {
             touched.current = true;
@@ -100,29 +104,39 @@ export function UsernameField({
           spellCheck={false}
           pattern="[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}"
           aria-describedby={`${id}-state`}
+          aria-invalid={check?.name && !check.available ? true : undefined}
         />
       </div>
-      <div id={`${id}-state`} aria-live="polite">
+      <div id={`${id}-state`} className="handle-state" aria-live="polite">
         {checking ? (
-          <span className="th-hint">{tt(lang, 'usernameChecking')}</span>
+          <span className="hint">
+            <Icon name="loader" className="spin" size={14} />
+            {tt(lang, 'usernameChecking')}
+          </span>
         ) : check?.name && check.available ? (
-          <span className="th-ok">✓ {tt(lang, 'usernameFree')}</span>
+          <span className="handle-ok">
+            <Icon name="check" size={14} />
+            {tt(lang, 'usernameFree')}
+          </span>
         ) : check?.name && !check.available ? (
-          <span className="th-bad">
-            {check.message}
-            {check.suggestion && check.suggestion !== check.name ? (
-              <>
-                {' · '}
-                {tt(lang, 'usernameTry')}{' '}
-                <button type="button" className="link-button" onClick={() => onChange(check.suggestion)}>
-                  @{check.suggestion}
-                </button>
-                ?
-              </>
-            ) : null}
+          <span className="handle-bad">
+            <Icon name="x" size={14} />
+            <span>
+              {check.message}
+              {check.suggestion && check.suggestion !== check.name ? (
+                <>
+                  {' · '}
+                  {tt(lang, 'usernameTry')}{' '}
+                  <button type="button" className="link-button" onClick={() => onChange(check.suggestion)} dir="ltr">
+                    @{check.suggestion}
+                  </button>
+                  ?
+                </>
+              ) : null}
+            </span>
           </span>
         ) : (
-          <span className="th-hint">{tt(lang, 'usernameHelp')}</span>
+          <span className="hint">{tt(lang, 'usernameHelp')}</span>
         )}
       </div>
     </div>
