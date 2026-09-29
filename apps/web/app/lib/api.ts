@@ -267,7 +267,9 @@ export interface CatalogHealth {
 export interface MachineToCheck {
   transcripts: Array<{ event: string; path: string | null; title: { he: string; en?: string } | null; date: string | null; paragraphs: number; checked: number; made: string }>;
   scans: Array<{ scan: string; publication: string | null; title: { he: string; en?: string } | null; pages: number; checked: number; made: string }>;
-  totals: { transcripts: number; paragraphs: number; scans: number; pages: number };
+  /** Pages whose words a machine read (a subject index read from its scan), checked on their edit page. */
+  texts: Array<{ entity: string; type: string; path: string | null; title: { he: string; en?: string } | null; label: { he: string; en?: string } | null; segments: number; checked: number; made: string }>;
+  totals: { transcripts: number; paragraphs: number; scans: number; pages: number; texts: number; entries: number };
 }
 
 /** Whether RebbeHub is up, as GET /v1/status gives it (services/api/src/status.ts). */

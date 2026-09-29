@@ -12,6 +12,13 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Machine-read pages wait in the check lists.** `GET /v1/machine/to-check`
+  also lists `texts`: pages whose words a machine read (the Likkutei Sichos
+  subject index, read from its scans) with segments nobody checked, and
+  `totals.texts` and `totals.entries`. They show on /check, in the home
+  page's band for checking, and on the help page, each leading to its edit
+  page with the scan beside it. Migration 0027 indexes the versions a
+  machine wrote, so finding them is a lookup.
 - **A machine's words checked against their scan.** On the edit page, a
   page whose words a machine read from a scan (a version with the scan's
   `url` and segments carrying `origin`) opens beside the scan, turned to

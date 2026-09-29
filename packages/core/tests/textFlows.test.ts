@@ -17,6 +17,7 @@ import {
   transcriptHistory,
   scanProgress,
   scanText,
+  suggestWords,
   uploadOcr,
   type Catalog,
   type Json,
@@ -250,22 +251,57 @@ describe('compare printings of a unit', () => {
 describe('what the machines wrote for people to check', () => {
   it('lists transcripts and OCR scans with something unchecked, and drops what people finished', async () => {
     const { catalog, set } = await freshCatalog();
-    expect(await machineToCheck(catalog)).toEqual({ transcripts: [], scans: [], totals: { transcripts: 0, paragraphs: 0, scans: 0, pages: 0 } });
+    expect(await machineToCheck(catalog)).toEqual({ transcripts: [], scans: [], texts: [], totals: { transcripts: 0, paragraphs: 0, scans: 0, pages: 0, texts: 0, entries: 0 } });
     const { event, segments } = await transcribed(catalog, set);
     const { scan } = await scanWithMachineText(catalog, set, [['שורה א'], ['עמוד ב']]);
 
     let list = await machineToCheck(catalog);
     expect(list.transcripts).toMatchObject([{ event, paragraphs: 3, checked: 0 }]);
     expect(list.scans).toMatchObject([{ scan, pages: 2, checked: 0 }]);
-    expect(list.totals).toEqual({ transcripts: 1, paragraphs: 3, scans: 1, pages: 2 });
+    expect(list.totals).toEqual({ transcripts: 1, paragraphs: 3, scans: 1, pages: 2, texts: 0, entries: 0 });
 
     await catalog.merge((await confirmPage(catalog, 'chaim', { scan, page: 1 })).id, 'keeper');
     await catalog.merge((await fixParagraph(catalog, 'chaim', { segment: segments[0]!, content: 'לחיים לחיים' })).id, 'keeper');
     list = await machineToCheck(catalog);
-    expect(list.totals).toEqual({ transcripts: 1, paragraphs: 2, scans: 1, pages: 1 });
+    expect(list.totals).toEqual({ transcripts: 1, paragraphs: 2, scans: 1, pages: 1, texts: 0, entries: 0 });
 
     await catalog.merge((await confirmPage(catalog, 'chaim', { scan, page: 2 })).id, 'keeper');
     for (const segment of segments.slice(1)) await catalog.merge((await fixParagraph(catalog, 'chaim', { segment, content: 'אין פסוק' })).id, 'keeper');
-    expect((await machineToCheck(catalog)).totals).toEqual({ transcripts: 0, paragraphs: 0, scans: 0, pages: 0 });
+    expect((await machineToCheck(catalog)).totals).toEqual({ transcripts: 0, paragraphs: 0, scans: 0, pages: 0, texts: 0, entries: 0 });
+  });
+
+  it('lists pages whose words a machine read, segment by segment, until a person checks each one', async () => {
+    const { catalog, set } = await freshCatalog();
+    const ocr = { by: 'ocr:kraken-maftechos-r4' };
+    const words = (origin: 'segments' | 'version' | 'person') => ({
+      profile: 'plain',
+      versions: [
+        {
+          id: 'he',
+          language: 'he',
+          ...(origin === 'version' ? { origin: ocr } : {}),
+          segments: [
+            { id: 't1', kind: 'heading', level: 2, text: [{ text: 'אב ובן' }], ...(origin === 'segments' ? { origin: ocr } : {}) },
+            { id: 't1.1', kind: 'paragraph', text: [{ text: 'בן ממשיך את אביו' }], ...(origin === 'segments' ? { origin: ocr } : {}) },
+          ],
+        },
+      ],
+    });
+    const index = await add(catalog, 'mendy', 'keeper', 'event', { ...yudShvat(set), body: words('segments') } as unknown as Json);
+    const whole = await add(catalog, 'mendy', 'keeper', 'event', { ...yudShvat(set), title: { he: 'כולו במכונה' }, body: words('version') } as unknown as Json);
+    await add(catalog, 'mendy', 'keeper', 'event', { ...yudShvat(set), title: { he: 'בידי אדם' }, body: words('person') } as unknown as Json);
+
+    let list = await machineToCheck(catalog);
+    expect(list.texts.map((r) => r.entity).sort()).toEqual([index, whole].sort());
+    expect(list.texts.find((r) => r.entity === index)).toMatchObject({ type: 'event', segments: 2, checked: 0, title: yudShvat(set).title });
+    expect(list.texts.find((r) => r.entity === whole)).toMatchObject({ segments: 0, checked: 0 });
+    expect(list.totals).toMatchObject({ texts: 2, entries: 2 });
+
+    for (const segment of ['t1', 't1.1']) {
+      await catalog.merge((await suggestWords(catalog, 'chaim', { entity: index, version: 'he', change: 'check', segment })).id, 'keeper');
+      list = await machineToCheck(catalog);
+    }
+    expect(list.texts.map((r) => r.entity)).toEqual([whole]);
+    expect(list.totals).toMatchObject({ texts: 1, entries: 0 });
   });
 });
