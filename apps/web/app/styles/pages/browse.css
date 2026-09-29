@@ -1,0 +1,606 @@
+/*
+ * Browsing: the library's index (/sets), the farbrengens by year
+ * (/calendar) and search (/search). Built on the rows, boxes and headings
+ * of components.css; only what these pages alone draw is here.
+ */
+
+/* ================================================================== shared */
+
+.h-block.first {
+  margin-top: 0;
+}
+
+.section-hint {
+  color: var(--subtle);
+  font-size: var(--fs-sm);
+  margin: -4px 0 10px;
+}
+
+.side-p {
+  color: var(--muted);
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+
+.side .btn.sm {
+  margin-top: 2px;
+}
+
+/* The side's counts: the name as wide as it needs, the number at the end. */
+.cal-page .side dl,
+.lib-page .side dl {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.cal-page .side dd,
+.lib-page .side dd {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A thing's marks at the end of a row: a scan or hanacha, a recording. */
+.row .has {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 16px;
+  gap: 8px;
+  color: var(--subtle);
+  flex: none;
+}
+
+.row .has > i {
+  display: block;
+}
+
+/* ================================================================== the library (/sets) */
+
+.lib-search {
+  margin-top: 18px;
+  padding-bottom: 24px;
+  max-width: 720px;
+}
+
+.lib-page .phead .facts-row {
+  margin-top: 12px;
+}
+
+.shelf-row > .i,
+.sefer-row > .i {
+  color: var(--text);
+  flex: none;
+}
+
+.shelf-row .row-title,
+.sefer-row .row-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.shelf-row .row-sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shelf-row .num,
+.sefer-row .num {
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A sefer on one line: its name, and whose it is beside it. */
+.sefer-row {
+  padding-block: 9px;
+}
+
+.row-main.one-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.row-main.one-line .row-title {
+  flex: none;
+  max-width: 70%;
+}
+
+.row-main.one-line .by {
+  color: var(--subtle);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The sefarim people look for first, as their title pages. */
+.shaar-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 24px 16px;
+}
+
+.shaar-row .shaar {
+  --w: 124px;
+}
+
+.shaar-row li {
+  display: flex;
+  justify-content: center;
+}
+
+.shaar-row .shaar-fig {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0;
+}
+
+.shaar-row .shaar-cap {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: 120px;
+}
+
+.shaar-row .shaar-cap b {
+  color: var(--text);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.rebbe-list li {
+  gap: 10px;
+}
+
+.rebbe-list .grow {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.rebbe-list .grow:hover {
+  color: var(--accent);
+}
+
+.rebbe-list .num {
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .lib-search {
+    padding-bottom: 18px;
+  }
+  .shaar-row {
+    display: flex;
+    overflow-x: auto;
+    gap: 14px;
+    margin-inline: calc(var(--gutter) * -1);
+    padding: 2px var(--gutter) 8px;
+    scrollbar-width: none;
+  }
+  .shaar-row::-webkit-scrollbar {
+    display: none;
+  }
+  .shaar-row li {
+    flex: none;
+  }
+}
+
+/* ================================================================== the farbrengens (/calendar) */
+
+.cal-filter {
+  margin-top: 18px;
+  padding-bottom: 24px;
+  max-width: 720px;
+}
+
+.cal-page .phead .facts-row {
+  margin-top: 12px;
+}
+
+.cal-main > * + * {
+  margin-top: 8px;
+}
+
+.cal-main > .cal-month {
+  margin-top: 0;
+}
+
+.cal-kvius {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+}
+
+/* The year in squares, as GitHub draws a year of work. */
+.year-grid {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg);
+  padding: 14px 16px 10px;
+  margin: 0;
+}
+
+.yg-scroll {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 4px;
+}
+
+.yg {
+  --cell: 11px;
+  --gap: 3px;
+  display: grid;
+  grid-template-columns: 28px max-content;
+  grid-template-rows: 16px auto;
+  column-gap: 6px;
+  width: max-content;
+}
+
+.yg-months {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: repeat(var(--weeks), var(--cell));
+  column-gap: var(--gap);
+  font-size: 11px;
+  color: var(--subtle);
+  line-height: 1;
+}
+
+.yg-months span {
+  white-space: nowrap;
+  overflow: visible;
+  width: 0;
+}
+
+.yg-days {
+  grid-column: 1;
+  grid-row: 2;
+  display: grid;
+  grid-template-rows: repeat(7, var(--cell));
+  row-gap: var(--gap);
+  font-size: 10.5px;
+  color: var(--subtle);
+  line-height: var(--cell);
+}
+
+.yg-cells {
+  grid-column: 2;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: repeat(var(--weeks), var(--cell));
+  grid-template-rows: repeat(7, var(--cell));
+  gap: var(--gap);
+}
+
+.year-grid .c {
+  display: block;
+  width: var(--cell, 11px);
+  height: var(--cell, 11px);
+  border-radius: 2px;
+  background: var(--sunken);
+  outline: 1px solid color-mix(in srgb, var(--text) 5%, transparent);
+  outline-offset: -1px;
+}
+
+.year-grid .c.out {
+  background: transparent;
+  outline: 0;
+}
+
+.year-grid .c.l1 {
+  background: color-mix(in srgb, var(--open) 35%, var(--sunken));
+}
+
+.year-grid .c.l2 {
+  background: color-mix(in srgb, var(--open) 65%, var(--sunken));
+}
+
+.year-grid .c.l3 {
+  background: var(--open);
+}
+
+.year-grid a.c:hover,
+.year-grid a.c:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 0;
+}
+
+.yg-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--subtle);
+}
+
+.yg-legend span {
+  margin-inline: 4px;
+}
+
+/* A month's farbrengens: one dense line each. */
+.day-rows .row {
+  gap: 14px;
+  padding: 8px 16px;
+}
+
+.day-row:target {
+  background: var(--accent-soft);
+}
+
+.day-row .dn {
+  width: 34px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.day-row .dn b {
+  font: 600 16px var(--display);
+}
+
+.day-row .dn small {
+  font-size: 11px;
+  color: var(--subtle);
+}
+
+.day-row .dn.again {
+  visibility: hidden;
+}
+
+.day-row .row-title {
+  display: inline;
+  font-weight: 500;
+}
+
+.day-row .row-sub {
+  margin-top: 1px;
+}
+
+.day-row .pp {
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.day-row .pp:hover {
+  background: var(--sunken);
+}
+
+.day-row .pp-space {
+  width: 28px;
+  flex: none;
+}
+
+.cal-month {
+  scroll-margin-top: calc(var(--header-h) + 12px);
+}
+
+.day-row {
+  scroll-margin-top: calc(var(--header-h) + 12px);
+}
+
+/* The years, as GitHub lists a profile's. */
+.year-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.year-list a {
+  padding: 4px 6px;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  text-align: center;
+  font-size: var(--fs-md);
+  font-variant-numeric: tabular-nums;
+}
+
+.year-list a:hover {
+  background: var(--sunken);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.year-list a[aria-current='page'] {
+  background: var(--accent-strong);
+  color: var(--on-strong);
+  font-weight: 600;
+}
+
+:root[data-theme='dark'] .year-list a[aria-current='page'] {
+  color: var(--text);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .year-list a[aria-current='page'] {
+    color: var(--text);
+  }
+}
+
+@media (max-width: 960px) {
+  .cal-page .side {
+    order: -1;
+  }
+  .cal-page .side > section:not(:first-child) {
+    display: none;
+  }
+  .cal-page .side > section:first-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+    margin-bottom: 0;
+  }
+  .year-list {
+    display: flex;
+    overflow-x: auto;
+    gap: 2px;
+    margin-inline: calc(var(--gutter) * -1);
+    padding-inline: var(--gutter);
+    scrollbar-width: none;
+  }
+  .year-list::-webkit-scrollbar {
+    display: none;
+  }
+  .year-list a {
+    flex: none;
+    min-width: 46px;
+  }
+}
+
+@media (max-width: 720px) {
+  .cal-filter {
+    padding-bottom: 18px;
+  }
+  .year-grid {
+    padding: 12px 12px 8px;
+  }
+  .day-rows .row {
+    padding: 8px 12px;
+    gap: 10px;
+  }
+  .day-row .has {
+    display: none;
+  }
+}
+
+/* ================================================================== search (/search) */
+
+.search-line {
+  margin-top: 16px;
+  max-width: 820px;
+}
+
+.tsearch.lg .tsearch-field {
+  height: 44px;
+}
+
+.tsearch.lg .tsearch-input,
+.tsearch.lg .tsearch-mirror {
+  font-size: var(--fs-lg);
+  line-height: 42px;
+}
+
+.search-page .phead .tabs {
+  margin-top: 18px;
+}
+
+.search-main > section + section {
+  margin-top: 28px;
+}
+
+.search-main .h-block:first-child {
+  margin-top: 0;
+}
+
+.understood {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  font-size: var(--fs-md);
+}
+
+.understood-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-inline-start: 6px;
+}
+
+/* A moment found inside a text: the words as the text sets them, and where. */
+.moments .row {
+  align-items: flex-start;
+  padding: 12px 16px;
+}
+
+.moments .row > .i {
+  margin-top: 6px;
+  flex: none;
+}
+
+.moment-words {
+  font-size: 18px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.moment-words a {
+  color: var(--text);
+}
+
+.moment-words a:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.moment-words mark {
+  background: var(--mark);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.moments .row-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: 4px;
+}
+
+.moments .near {
+  flex: none;
+  min-width: 42px;
+  margin-top: 5px;
+  font: 600 12px var(--ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--machine);
+}
+
+.token-help {
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 2px 0 !important;
+}
+
+.token-help dd {
+  color: var(--muted) !important;
+  margin-bottom: 8px;
+}
+
+.token-help code {
+  font: 12.5px var(--mono);
+  background: var(--sunken);
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+  color: var(--accent);
+}
+
+.examples {
+  display: block;
+  margin-top: 6px;
+}
+
+@media (max-width: 960px) {
+  .search-page .side {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .moments .row {
+    padding: 12px;
+  }
+  .moment-words {
+    font-size: 17px;
+  }
+}

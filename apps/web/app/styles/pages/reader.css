@@ -1,0 +1,262 @@
+/*
+ * The reader (/read), as Sichos-Kodesh's PDF screen lays it out: a
+ * toolbar that stays under the site's header (the name, the page one is
+ * on, the paper's colours), and the pages down a reading column on the
+ * canvas, edge to edge while pinch-zoomed.
+ */
+
+main#main:has(> .pdf-viewer-screen) {
+  background: var(--canvas);
+}
+
+.pdf-viewer-screen {
+  min-height: calc(100vh - var(--header-h));
+  padding-bottom: 96px;
+  background: var(--canvas);
+}
+
+/* ------------------------------------------------------------ the toolbar */
+
+.reader-bar {
+  position: sticky;
+  top: var(--header-h);
+  z-index: 20;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.reader-bar-in,
+.reader-tools {
+  max-width: 980px;
+  margin: 0 auto;
+  padding-inline: var(--gutter);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reader-bar-in {
+  min-height: 52px;
+  padding-block: 6px;
+}
+
+.reader-titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.reader-title {
+  font: 600 var(--fs-lg) / 1.3 var(--ui);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reader-sub {
+  font-size: var(--fs-sm);
+  color: var(--subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reader-count {
+  font-size: var(--fs-md);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.reader-count b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.reader-tools {
+  padding-block: 0 8px;
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.reader-tools-label {
+  font-size: var(--fs-sm);
+  color: var(--subtle);
+}
+
+.reader-colors {
+  flex: none;
+}
+
+.reader-colors > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 3px 10px;
+  font-size: 12.5px;
+}
+
+/* A swatch of each paper, drawn with the page's own filter so it shows what the pages will look like. */
+.reader-colors .paper {
+  width: 10px;
+  height: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 1px;
+  background: var(--paper);
+}
+
+.reader-colors .paper.original {
+  background: var(--bg);
+}
+
+.reader-colors .paper.sepia {
+  background: var(--paper);
+}
+
+.reader-colors .paper.gray {
+  background: var(--sunken);
+}
+
+.reader-colors .paper.dark {
+  background: var(--strong);
+}
+
+.reader-colors .paper.auto {
+  background: var(--bg);
+  box-shadow: inset -4px 0 0 var(--strong);
+}
+
+.btn.toggle[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+.reader-note {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 0 var(--gutter) 8px;
+}
+
+.reader-note .alert {
+  padding-block: 6px;
+}
+
+.reader-resumed {
+  align-items: center;
+}
+
+.reader-resumed .link-button {
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------ loading and failing */
+
+.pdf-viewer-status {
+  max-width: 560px;
+  margin: 0 auto;
+  padding-inline: var(--gutter);
+}
+
+.pdf-loading {
+  padding: 48px 0 24px;
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  color: var(--muted);
+}
+
+.pdf-loading p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pdf-loading .bar {
+  width: 240px;
+}
+
+.pdf-viewer-status .empty {
+  margin-top: 32px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+}
+
+/* ------------------------------------------------------------ the pages */
+
+.pdf-pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 8px 0;
+  overflow-x: hidden;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.pdf-viewer-screen.zoomed .pdf-pages {
+  max-width: none;
+}
+
+.pdf-page {
+  flex-shrink: 0;
+  overflow: hidden;
+  /* The paper itself, whatever the site's theme: a PDF is drawn on white. */
+  background: white;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-pop);
+  /* Only vertical panning is the browser's; a pinch or a sideways drag is the reader's (reader/pdfPageZoom.ts). */
+  touch-action: pan-y;
+}
+
+.pdf-page canvas {
+  display: block;
+}
+
+/* The pages' colours (reader/look.ts, from Sichos-Kodesh's pdfCssFilter): dark pages, sepia or grey paper,
+   stronger contrast. Only the page is drawn through it; dark pages sit on black while they draw. */
+.pdf-viewer-screen .pdf-page canvas {
+  filter: var(--pdf-filter, none);
+}
+
+.pdf-viewer-screen.pdf-dark .pdf-page {
+  background: black;
+}
+
+.pdf-viewer-foot {
+  text-align: center;
+  margin-top: 20px;
+  font-size: var(--fs-sm);
+  color: var(--subtle);
+}
+
+@media (max-width: 720px) {
+  .reader-bar-in {
+    gap: 6px;
+    min-height: 48px;
+  }
+  .reader-file span,
+  .reader-tools-label {
+    display: none;
+  }
+  .reader-tools {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .reader-tools::-webkit-scrollbar {
+    display: none;
+  }
+  .reader-tools > * {
+    flex: none;
+  }
+  .pdf-pages {
+    padding: 8px 0 0;
+    gap: 8px;
+  }
+  .pdf-page {
+    border-inline: 0;
+  }
+}
