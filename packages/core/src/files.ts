@@ -81,6 +81,13 @@ export async function getFile(db: Db, sha256: string): Promise<FileRow | null> {
   return one<FileRow>(db, 'SELECT * FROM file WHERE sha256 = $1', [sha256]);
 }
 
+/** Several files in one statement (a farbrengen's parts, a printing's scans), by sha256; missing ones left out. */
+export async function getFiles(db: Db, sha256s: readonly string[]): Promise<Map<string, FileRow>> {
+  if (sha256s.length === 0) return new Map();
+  const { rows } = await db.query<FileRow>('SELECT * FROM file WHERE sha256 = ANY($1::text[])', [[...new Set(sha256s)]]);
+  return new Map(rows.map((r) => [r.sha256, r]));
+}
+
 /** A file made from another (a scan's reading copy, a web audio profile), regenerable from it. */
 export interface DerivationRow {
   src_sha256: string;
@@ -152,6 +159,15 @@ export async function getDerivations(db: Db, src: string): Promise<DerivationRow
   return rows;
 }
 
+/** What was made from each of several files, in one statement: by source sha256, each list in profile order. */
+export async function getDerivationsOf(db: Db, srcs: readonly string[]): Promise<Map<string, DerivationRow[]>> {
+  const out = new Map<string, DerivationRow[]>();
+  if (srcs.length === 0) return out;
+  const { rows } = await db.query<DerivationRow>('SELECT * FROM derivation WHERE src_sha256 = ANY($1::text[]) ORDER BY src_sha256, profile', [[...new Set(srcs)]]);
+  for (const r of rows) (out.get(r.src_sha256) ?? out.set(r.src_sha256, []).get(r.src_sha256)!).push(r);
+  return out;
+}
+
 /** What a scanned PDF needs to read straight (migration 0002): measured once per file, held or linked. */
 export interface PageFixRow {
   sha256: string;
@@ -191,6 +207,13 @@ export async function recordPageFix(db: Db, input: NewPageFix): Promise<PageFixR
 
 export async function getPageFix(db: Db, sha256: string): Promise<PageFixRow | null> {
   return one<PageFixRow>(db, 'SELECT * FROM page_fix WHERE sha256 = $1', [sha256]);
+}
+
+/** Several files' page fixes in one statement, by sha256 (none for a file not measured). */
+export async function getPageFixes(db: Db, sha256s: readonly string[]): Promise<Map<string, PageFixRow>> {
+  if (sha256s.length === 0) return new Map();
+  const { rows } = await db.query<PageFixRow>('SELECT * FROM page_fix WHERE sha256 = ANY($1::text[])', [[...new Set(sha256s)]]);
+  return new Map(rows.map((r) => [r.sha256, r]));
 }
 
 /** The file registered from a Google Drive file, by the Drive file's id (its address with or without a resource key). */

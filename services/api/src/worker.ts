@@ -2,6 +2,7 @@ import { WorkerEntrypoint } from 'cloudflare:workers';
 import { Catalog, adviseSuggestions, deliverWebhooks, embedderFromEnv, sendNotifications } from '@rebbehub/core';
 import { connectPostgres } from '@rebbehub/db';
 import { createApp, turnstileVerifier, type FileStore } from './app.js';
+import { AppReleases } from './appCatalog.js';
 import { DEFAULT_IP_PER_MINUTE, DEFAULT_KEY_PER_MINUTE, DEFAULT_SEARCH_PER_MINUTE, mayUseEdgeCache, type RateLimiter } from './platform.js';
 import { authFor } from './auth.js';
 import { resendMailer, workersAiAdvisor } from './mail.js';
@@ -79,6 +80,9 @@ interface Ctx {
   /** The Worker's own entrypoints (ctx.exports): `CachedApi`, behind the Workers cache. */
   exports?: { CachedApi?: { fetch(request: Request): Promise<Response> } };
 }
+
+/** The apps' catalog as last built, kept for this isolate's life: each request asks only whether anything changed. */
+const appReleases = new AppReleases();
 
 const mailerOf = (env: Env) => (env.RESEND_API_KEY ? resendMailer({ apiKey: env.RESEND_API_KEY, from: env.EMAIL_FROM }) : undefined);
 
@@ -163,6 +167,7 @@ async function answer(request: Request, env: Env, ctx: { waitUntil(promise: Prom
     drive: { limiter: env.RATE_LIMIT_DRIVE, ...(Number(env.DRIVE_MAX_MB) > 0 ? { maxBytes: Number(env.DRIVE_MAX_MB) * 1024 * 1024 } : {}) },
     auth: env.SITE_URL ? authFor(env.SITE_URL, { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }) : undefined,
     mailer: mailerOf(env),
+    appReleases,
   });
   try {
     return await app.fetch(request);

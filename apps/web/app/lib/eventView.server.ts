@@ -1,5 +1,5 @@
 import type { LocalName } from '@rebbehub/model';
-import type { Entity, RebbeHubApi } from './api.js';
+import type { Entity, HanachaSync, RebbeHubApi } from './api.js';
 import { nameOf, type Lang } from './i18n.js';
 import { labelOf } from './labels.js';
 import { itemPath } from './links.js';
@@ -62,11 +62,13 @@ export async function eventView(api: RebbeHubApi, units: Entity[], recordings: E
   const list = units.slice(0, 12);
   // Each unit's work (and volume), where it is printed, and its texts.
   const works = await api.entities([...new Set(list.map((u) => String((u.data as D).work ?? '')).filter(Boolean))]).catch(() => new Map<string, Entity>());
-  const [maps, textLinks, syncs] = await Promise.all([
+  const [maps, textLinks, syncOfRecording] = await Promise.all([
     Promise.all(list.map((u) => api.backlinks(u.id, { field: 'unit', type: 'contents-map' }).catch(() => []))),
     Promise.all(list.map((u) => api.backlinks(u.id, { field: 'unit', type: 'text' }).catch(() => []))),
-    Promise.all(recordings.map((r) => api.hanachaSync(r.id).catch(() => null))),
+    // All the parts' synced hanachos in one request (a farbrengen may have forty parts).
+    api.hanachaSyncs(recordings.map((r) => r.id)).catch(() => new Map<string, HanachaSync>()),
   ]);
+  const syncs = recordings.map((r) => syncOfRecording.get(r.id) ?? null);
   const mapItems = await api.entities(maps.flat().map((l) => l.from)).catch(() => new Map<string, Entity>());
   const textItems = await api.entities(textLinks.flat().map((l) => l.from)).catch(() => new Map<string, Entity>());
 

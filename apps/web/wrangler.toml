@@ -9,6 +9,12 @@ workers_dev = true
 [observability]
 enabled = true
 
+# Runs near the API and the database (Neon, Virginia) rather than near the reader: a page is
+# made from many API reads one after the other, each a round trip. Built files (assets) and
+# pages already at the edge are still served from near the reader (docs/operations.md).
+[placement]
+mode = "smart"
+
 # build/client is served as static files before the Worker runs.
 [assets]
 directory = "build/client"

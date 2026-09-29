@@ -139,6 +139,11 @@ describe('the media proxy', () => {
     expect(await (await proxy.request(`http://api.test/v1/files/${sha256}`)).json()).toMatchObject({
       derivations: [{ profile: 'reading-copy', sha256: copy, bytes: 8, encoder: 'test@1', url: `http://api.test/objects/${copy}` }],
     });
+    // Several at once say the same of each, in the order asked, without the ones we do not have.
+    const batch = await proxy.request(`http://api.test/v1/files/batch?ids=${'0'.repeat(64)},${sha256}`);
+    expect(batch.status).toBe(200);
+    expect(await batch.json()).toEqual({ items: [await (await proxy.request(`http://api.test/v1/files/${sha256}`)).json()] });
+    expect((await proxy.request('http://api.test/v1/files/batch?ids=not-a-sha256')).status).toBe(400);
 
     await setRights(catalog.db, 'shmuly', sha256, 'preserved', 'takedown');
     expect((await proxy.request(`http://api.test/objects/${sha256}`)).status).toBe(404);

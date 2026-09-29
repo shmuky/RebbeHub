@@ -177,9 +177,13 @@ export function sessionAuthenticator(catalog: Catalog, auth: AuthOptions) {
     if (!token || !fromOwnPages(c, auth.origins)) return null;
     const person = await sessionPerson(catalog.db, token);
     if (!person) return null;
-    await catalog.createAccount({ id: person.id, displayName: person.displayName });
-    // The person's steward mark is the one that counts; their catalog account follows it.
-    await catalog.db.query('UPDATE account SET is_steward = $2 WHERE id = $1 AND is_steward <> $2', [person.id, Boolean(person.steward)]);
+    // The person's steward mark is the one that counts; their catalog account follows it (one statement with making
+    // the account again, since every statement counts where the API runs).
+    await catalog.db.query(
+      `INSERT INTO account (id, display_name, is_steward) VALUES ($1, $2, $3)
+       ON CONFLICT (id) DO UPDATE SET display_name = EXCLUDED.display_name, is_steward = EXCLUDED.is_steward`,
+      [person.id, person.displayName, Boolean(person.steward)],
+    );
     return person.id;
   };
 }
