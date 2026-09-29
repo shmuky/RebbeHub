@@ -129,9 +129,73 @@ export async function catalogIsRebuildable(db: Db): Promise<boolean> {
 export const REBUILD_GUARD_SQL = `LOCK TABLE changeset, report, comment, follow, file, project, webhook IN ACCESS EXCLUSIVE MODE;
 DO $$ BEGIN IF (${PEOPLE_MADE_SQL}) THEN RAISE EXCEPTION 'people have added to the catalog; not replacing it'; END IF; END $$;`;
 
-/** Prints `rebuildable` or `not-rebuildable`, for scripts; with `guard`, prints REBUILD_GUARD_SQL instead. */
-export async function rebuildableCommand(ctx: Context, input: { guard?: boolean } = {}): Promise<void> {
+/**
+ * Big tables that only grow, or change only with a commit: counted (and
+ * their newest key read) rather than read whole, for the mark below.
+ */
+const MARKED_BY_SIZE: Record<string, string | null> = {
+  revision: 'id',
+  commit: 'seq',
+  commit_change: null,
+  entity: 'updated_seq',
+  entity_ref: null,
+  entity_external_id: null,
+  path_redirect: null,
+  audit_log: 'id',
+  embedding: null,
+  file_page: null,
+};
+
+/**
+ * SQL for a mark of everything in the catalog (every table but people's
+ * accounts in `auth`): the same mark means nothing changed. An import made
+ * next to a copy of a catalog people have added to copies it back only if
+ * the live catalog still has the mark it had when it was copied
+ * (scripts/import-catalog.sh), so nothing anyone did meanwhile is lost.
+ */
+export async function catalogMarkSql(db: Db): Promise<string> {
+  const { rows } = await db.query<{ name: string }>(
+    "SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND NOT c.relispartition ORDER BY c.relname",
+  );
+  const parts = rows.map(({ name }) => {
+    const t = `public.${JSON.stringify(name)}`;
+    if (name in MARKED_BY_SIZE) {
+      const key = MARKED_BY_SIZE[name];
+      return `(SELECT count(*)::text${key ? ` || ':' || coalesce(max(${key})::text, '')` : ''} FROM ${t})`;
+    }
+    return `(SELECT count(*)::text || ':' || coalesce(md5(string_agg(md5(x::text), '' ORDER BY md5(x::text))), '') FROM ${t} x)`;
+  });
+  return `SELECT md5(concat_ws('|', ${parts.join(', ')})) AS mark`;
+}
+
+/** SQL that stops a transaction unless the catalog still has `mark`, locking every table first. */
+export async function markGuardSql(db: Db, mark: string): Promise<string> {
+  if (!/^[0-9a-f]{32}$/.test(mark)) throw new Error('a mark is 32 hex characters');
+  const { rows } = await db.query<{ name: string }>(
+    "SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND NOT c.relispartition ORDER BY c.relname",
+  );
+  const sql = await catalogMarkSql(db);
+  return `LOCK TABLE ${rows.map((r) => `public.${JSON.stringify(r.name)}`).join(', ')} IN ACCESS EXCLUSIVE MODE;
+DO $$ BEGIN IF (${sql}) <> '${mark}' THEN RAISE EXCEPTION 'the live catalog changed while the import ran; nothing was replaced (run the import again)'; END IF; END $$;`;
+}
+
+/**
+ * Prints `rebuildable` or `not-rebuildable`, for scripts; with `guard`, the
+ * SQL that stops a rebuild when people have added anything; with `mark`, the
+ * catalog's mark; with `guardMark`, SQL that stops unless it still has it.
+ */
+export async function rebuildableCommand(ctx: Context, input: { guard?: boolean; mark?: boolean; guardMark?: string } = {}): Promise<void> {
   if (input.guard) return ctx.log(REBUILD_GUARD_SQL);
+  if (input.mark || input.guardMark) {
+    const db = await openDatabase(ctx.database);
+    try {
+      if (input.guardMark) return ctx.log(await markGuardSql(db, input.guardMark));
+      const row = await one<{ mark: string }>(db, await catalogMarkSql(db));
+      return ctx.log(row!.mark);
+    } finally {
+      await db.close();
+    }
+  }
   await withCatalog(ctx, async (catalog) => ctx.log((await catalogIsRebuildable(catalog.db)) ? 'rebuildable' : 'not-rebuildable'));
 }
 
