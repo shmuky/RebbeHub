@@ -223,8 +223,14 @@ export async function suggestionView(api: RebbeHubApi, detail: SuggestionDetail,
 
   // The checks: the API's own, the scan's word, and the keepers'.
   const checks: CheckLine[] = [];
+  // The API lists the checks that did not pass, of this page's items, and counts them all (an import of five hundred
+  // items passes five hundred): how many passed, then each of this page's problems, then how many more the other pages have.
+  const counts = cs.checkCounts ?? { pass: 0, warn: 0, fail: 0 };
+  if (counts.pass) checks.push({ status: 'pass', message: lang === 'he' ? (counts.pass === 1 ? 'בדיקה אחת עברה' : `${counts.pass} בדיקות עברו`) : `${counts.pass} check${counts.pass === 1 ? '' : 's'} passed` });
   for (const c of cs.checks ?? [])
     checks.push({ status: c.status, message: c.check === 'schema' && c.status === 'pass' ? w(lang, 'schemaOk') : c.message });
+  const elsewhere = counts.warn + counts.fail - (cs.checks ?? []).filter((c) => c.status !== 'pass').length;
+  if (elsewhere > 0) checks.push({ status: counts.fail > (cs.checks ?? []).filter((c) => c.status === 'fail').length ? 'fail' : 'warn', message: lang === 'he' ? `ועוד ${elsewhere} בפריטים שבעמודים אחרים` : `and ${elsewhere} more on other pages of its items` });
   for (const v of views) {
     if (!v.scan) continue;
     const where = [v.scan.printing, v.scan.page ? `${lang === 'he' ? 'עמ׳' : 'p.'} ${v.scan.page}` : null].filter(Boolean).join(', ');

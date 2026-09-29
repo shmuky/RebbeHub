@@ -100,6 +100,16 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Fixed
 
+- **A volume's page is a sixth of its size, and a set's a seventh.** A
+  volume of Igros Kodesh was 1.1 MB, 1 MB of it the words of its 150
+  letters, listed with each for the page to carry hidden and read by no
+  one; it is 170 kB now, and a third of the CPU to make. The set of the
+  farbrengens listed five hundred of its three thousand (900 kB); a set's
+  page lists its sefarim and the first sixty of anything else in it, with
+  how many there are (133 kB). The home page read the words of every item
+  of the suggestions it shows (800 kB for three) and reads their facts.
+  The budget test now holds each page to a size too.
+
 - **A sefer's volume and a farbrengen no longer make a request per
   sicha.** A volume's page asked the API for each sicha's texts, then for
   each edition's paragraphs: 166 requests for a volume of Igros Kodesh,
@@ -265,6 +275,19 @@ any time. `@rebbehub/client` carries the API's version.
   developer docs.
 
 ### Changed
+
+- **A list answers with each item's facts, not its words.** `body` (the
+  words a page keeps in itself, kilobytes for each sicha or letter) is
+  left out of every list (`/v1/entities`, `children`, `linked`,
+  `batch/linked`, `/v1/works/{id}/parts/{part}`, `/v1/events`, search);
+  an item read by id, or several with `/v1/entities/batch`, has it.
+
+- **A suggestion's page carries its own checks.** `changeset.checks` on a
+  page of a suggestion are the checks that did not pass, of that page's
+  items and of the whole; `checkCounts` counts them all by status. The
+  suggestions list carries no checks. `brief=1` gives each item's facts
+  without its words (`before` and `after` without `body`; what changed is
+  whole in `changes`), for a feed.
 
 - **Large Suggestions are reviewable.** `GET /v1/suggestions/{id}` gives
   a page of its items at a time: 25 unless `limit` says (at most 200),

@@ -57,6 +57,16 @@ export interface RevisionRow {
   created_at: string;
 }
 
+/**
+ * A revision's columns for a list: an item's facts, not its words. `body`
+ * (the words a page keeps in itself, Sichos-Kodesh's works contract:
+ * kilobytes for each sicha or letter) comes only when an item is read by
+ * id (`get`, `getMany`), so a volume of a hundred and fifty letters lists
+ * in a few kilobytes rather than eight hundred, and the page that lists
+ * them is not a megabyte (docs/operations.md, "The statement budget").
+ */
+export const FACTS = `r.id, r.entity_id, r.entity_type, r.parent_rev, r.merge_rev, r.data - 'body' AS data, r.path, r.hash, r.changeset_id, r.author, r.schema_version, r.created_at`;
+
 export type ChangesetStatus = 'draft' | 'open' | 'merged' | 'sent_back' | 'withdrawn';
 export type ChangesetKind = 'suggestion' | 'import' | 'revert' | 'live';
 
@@ -361,7 +371,7 @@ export class Catalog {
     if (options.after) where.push(`(coalesce(e.path, '') || e.id) > $${params.push(options.after)}`);
     const limit = Math.min(Math.max(options.limit ?? 50, 1), 500);
     const { rows } = await this.db.query<RevisionRow>(
-      `SELECT r.* FROM entity e JOIN revision r ON r.id = e.main_rev
+      `SELECT ${FACTS} FROM entity e JOIN revision r ON r.id = e.main_rev
        WHERE ${where.join(' AND ')} ORDER BY coalesce(e.path, '') || e.id LIMIT ${limit}`,
       params,
     );
@@ -386,7 +396,7 @@ export class Catalog {
    */
   async children(parentId: EntityId, field: string, type: EntityType, options: { after?: string; afterId?: string; limit?: number } = {}): Promise<EntityView[]> {
     const { rows } = await this.db.query<RevisionRow>(
-      `SELECT r.* FROM entity_ref x JOIN entity e ON e.id = x.from_id JOIN revision r ON r.id = e.main_rev
+      `SELECT ${FACTS} FROM entity_ref x JOIN entity e ON e.id = x.from_id JOIN revision r ON r.id = e.main_rev
        WHERE x.to_id = $1 AND x.field = $2 AND e.type = $3 AND NOT e.deleted
          AND ($4::text IS NULL
               OR coalesce(r.data->>'order', '') COLLATE "C" > $4::text COLLATE "C"
@@ -433,7 +443,7 @@ export class Catalog {
       where.push("NOT EXISTS (SELECT 1 FROM entity_ref x JOIN entity f ON f.id = x.from_id AND f.type = 'recording' AND NOT f.deleted WHERE x.to_id = e.id AND x.field = 'event')");
     if (options.missing === 'texts') where.push("coalesce(jsonb_array_length(r.data->'links'), 0) = 0");
     const { rows } = await this.db.query<RevisionRow & { recordings: number }>(
-      `SELECT r.*, (SELECT count(*)::int FROM entity_ref x JOIN entity f ON f.id = x.from_id AND NOT f.deleted
+      `SELECT ${FACTS}, (SELECT count(*)::int FROM entity_ref x JOIN entity f ON f.id = x.from_id AND NOT f.deleted
                     WHERE x.to_id = e.id AND x.field = 'event' AND f.type = 'recording') AS recordings
        FROM entity e JOIN revision r ON r.id = e.main_rev WHERE ${where.join(' AND ')}
        ORDER BY r.data->>'date' COLLATE "C", coalesce((r.data->>'order')::int, 0), e.id LIMIT ${Math.min(Math.max(options.limit ?? 500, 1), 2000)}`,
@@ -479,7 +489,7 @@ export class Catalog {
   /** The units of one top-level part of a work (a volume), in order. */
   async workPart(work: EntityId, part: string, limit = 1000): Promise<EntityView[]> {
     const { rows } = await this.db.query<RevisionRow>(
-      `SELECT r.* FROM entity_ref x JOIN entity e ON e.id = x.from_id AND e.type = 'unit' AND NOT e.deleted JOIN revision r ON r.id = e.main_rev
+      `SELECT ${FACTS} FROM entity_ref x JOIN entity e ON e.id = x.from_id AND e.type = 'unit' AND NOT e.deleted JOIN revision r ON r.id = e.main_rev
        WHERE x.to_id = $1 AND x.field = 'work' AND r.data->'position'->0->>'value' = $2
        ORDER BY r.data->>'order' COLLATE "C" LIMIT ${Math.min(Math.max(limit, 1), 2000)}`,
       [work, part],
@@ -592,7 +602,7 @@ export class Catalog {
     const where = ["to_tsvector('simple', coalesce(e.search_text, '')) @@ to_tsquery('simple', $1)", 'NOT e.deleted', 'e.main_rev IS NOT NULL'];
     if (options.type) where.push(`e.type = $${params.push(options.type)}`);
     const { rows } = await this.db.query<RevisionRow>(
-      `SELECT r.* FROM entity e JOIN revision r ON r.id = e.main_rev WHERE ${where.join(' AND ')}
+      `SELECT ${FACTS} FROM entity e JOIN revision r ON r.id = e.main_rev WHERE ${where.join(' AND ')}
        ORDER BY ts_rank(to_tsvector('simple', coalesce(e.search_text, '')), to_tsquery('simple', $1)) DESC, e.path
        LIMIT ${Math.min(options.limit ?? 20, 100)}`,
       params,
