@@ -12,6 +12,11 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **`POST /v1/suggestions/{id}/reopen`: undo a withdrawal.** Its author
+  or a steward puts a withdrawn suggestion back for review; its checks run
+  again and its set's keepers are asked to look again. On the site, a
+  withdrawn suggestion has a Reopen button and an approved one an "Undo
+  this change" button (a revert).
 - **`GET /v1/events?brief=1`: each event's facts with each link's kind
   alone.** A farbrengen's links (where it is printed, each with its label
   and pages) are most of it, and a calendar's row shows whether it has a
