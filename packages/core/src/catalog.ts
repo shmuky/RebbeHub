@@ -229,6 +229,11 @@ export interface CatalogOptions {
   now?: () => Date;
 }
 
+/** A changeset's proposals, one per item (its latest version there) with the version it was made from, in id order. */
+const PROPOSALS_SQL = `SELECT DISTINCT ON (r.entity_id) r.*,
+         (SELECT f.parent_rev FROM revision f WHERE f.changeset_id = r.changeset_id AND f.entity_id = r.entity_id ORDER BY f.id ASC LIMIT 1) AS base_rev
+  FROM revision r WHERE r.changeset_id = $1 AND r.merge_rev IS NULL ORDER BY r.entity_id, r.id DESC`;
+
 export class Catalog {
   private registryCache: { seq: number; registry: SchemaRegistry } | null = null;
 
@@ -707,13 +712,25 @@ export class Catalog {
 
   /** The latest version of each item a suggestion changes, with the version it was made from. */
   async proposals(changesetId: number, db: Db = this.db): Promise<Proposal[]> {
-    const { rows } = await db.query<RevisionRow & { base_rev: number | null }>(
-      `SELECT DISTINCT ON (r.entity_id) r.*,
-              (SELECT f.parent_rev FROM revision f WHERE f.changeset_id = r.changeset_id AND f.entity_id = r.entity_id ORDER BY f.id ASC LIMIT 1) AS base_rev
-       FROM revision r WHERE r.changeset_id = $1 AND r.merge_rev IS NULL ORDER BY r.entity_id, r.id DESC`,
-      [changesetId],
-    );
+    const { rows } = await db.query<RevisionRow & { base_rev: number | null }>(PROPOSALS_SQL, [changesetId]);
     return rows.map(({ base_rev, ...rev }) => ({ entityId: rev.entity_id, type: rev.entity_type, baseRev: base_rev, rev }));
+  }
+
+  /**
+   * What kinds of items each suggestion changes and its first item (by
+   * id), for a list to label and place each one without opening it: an
+   * item's page lists the suggestions about it this way, where it used to
+   * open every one.
+   */
+  async changeShapes(changesetIds: number[]): Promise<Map<number, { types: EntityType[]; first: EntityId | null }>> {
+    const out = new Map<number, { types: EntityType[]; first: EntityId | null }>();
+    if (!changesetIds.length) return out;
+    const { rows } = await this.db.query<{ changeset_id: string | number; types: EntityType[]; first: EntityId | null }>(
+      'SELECT changeset_id, array_agg(DISTINCT entity_type ORDER BY entity_type) AS types, min(entity_id) AS first FROM revision WHERE changeset_id = ANY($1::bigint[]) GROUP BY changeset_id',
+      [changesetIds],
+    );
+    for (const row of rows) out.set(Number(row.changeset_id), { types: row.types, first: row.first });
+    return out;
   }
 
   /** How many items each suggestion changes, for a list to say ("500 items") without reading them. */
@@ -732,18 +749,30 @@ export class Catalog {
    * The reviewer's view: each item before and after, field by field, and
    * what clashes with main as it is now. A bot's Suggestion can change
    * hundreds of items, so `limit` gives a page of them at a time (from
-   * `offset`), with how many there are in all and a summary of the kinds
-   * of change across all of them. Main's versions are read for every item
-   * in a few queries, never one item at a time. Without `limit`, every item.
+   * `offset`), with how many there are in all; main's versions are read
+   * for the page in a few queries, never one item at a time. Only the page
+   * is read and compared: a Suggestion of 500 items used to be read and
+   * compared whole for every page of it, and for every page of the site
+   * that listed it. With `summary` (or without `limit`), every item is
+   * read and grouped by how it changes. Without `limit`, every item.
    */
-  async review(changesetId: number, options: { offset?: number; limit?: number } = {}): Promise<{ changeset: ChangesetRow; entries: ChangeEntry[]; reviews: unknown[]; total: number; offset: number; summary: ChangeGroup[] }> {
+  async review(changesetId: number, options: { offset?: number; limit?: number; summary?: boolean } = {}): Promise<{ changeset: ChangesetRow; entries: ChangeEntry[]; reviews: unknown[]; total: number; offset: number; summary?: ChangeGroup[] }> {
     const cs = await this.changeset(changesetId);
-    const proposals = await this.proposals(changesetId);
-    const all = await this.changeEntries(this.db, cs, proposals);
     const offset = Math.max(0, Math.floor(options.offset ?? 0));
-    const entries = options.limit === undefined ? all.slice(offset) : all.slice(offset, offset + Math.max(0, Math.floor(options.limit)));
+    const limit = options.limit === undefined ? undefined : Math.max(0, Math.floor(options.limit));
     const { rows: reviews } = await this.db.query('SELECT * FROM review WHERE changeset_id = $1 ORDER BY created_at', [changesetId]);
-    return { changeset: cs, entries, reviews, total: all.length, offset, summary: summarizeChanges(all) };
+    if (limit === undefined || (options.summary ?? false)) {
+      const all = await this.changeEntries(this.db, cs, await this.proposals(changesetId));
+      return { changeset: cs, entries: limit === undefined ? all.slice(offset) : all.slice(offset, offset + limit), reviews, total: all.length, offset, summary: summarizeChanges(all) };
+    }
+    const { rows } = await this.db.query<RevisionRow & { base_rev: number | null; total: number }>(
+      `SELECT p.*, count(*) OVER ()::int AS total FROM (${PROPOSALS_SQL}) p ORDER BY p.entity_id OFFSET $2 LIMIT $3`,
+      [changesetId, offset, limit],
+    );
+    // A page past the end has no rows to carry the count.
+    const total = rows[0]?.total ?? (await this.itemCounts([changesetId])).get(changesetId) ?? 0;
+    const entries = await this.changeEntries(this.db, cs, rows.map(({ base_rev, total: _total, ...rev }) => ({ entityId: rev.entity_id, type: rev.entity_type, baseRev: base_rev, rev })));
+    return { changeset: cs, entries, reviews, total, offset };
   }
 
   /** Each proposal before and after, with its clashes: main's (or the project's) versions and the versions they were made from, read all at once. */

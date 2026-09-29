@@ -53,7 +53,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   let view: SuggestionView | null = null;
   let people: People = {};
   if (thread) {
-    const detail = await api.suggestion(thread.id, { limit: 200 }).catch(() => null);
+    const detail = await api.suggestion(thread.id, { limit: 200, summary: true }).catch(() => null);
     if (detail) {
       view = await suggestionView(api, detail, lang);
       const found = await api.peopleByIds([detail.changeset.author, ...detail.reviews.map((r) => r.reviewer)]);

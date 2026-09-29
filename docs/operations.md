@@ -460,11 +460,18 @@ Worker may make 50 subrequests a request (service-binding calls to the
 API count) and use 10 ms of CPU. The jobs (`services/jobs`) connect to
 Postgres directly and do not count.
 
-So every page has a budget, and the counts are measured, not guessed:
-`.data/measure.ts` (in a checkout, not in git) renders each page through
-the site and API in one process against a PGlite catalog imported from
-Sichos Kodesh, counting statements and API calls. The counts of 29 Elul
-5786 (before and after that day's changes):
+So every page has a budget, and the budget is a test:
+`apps/web/tests/budget.test.ts` renders each page through the site and
+the API in one process, over a small PGlite catalog with the shapes that
+matter (a sefer of thirty sichos, a farbrengen of six parts with a synced
+hanacha, open suggestions of twenty items), counting every statement the
+API sends and every request the site makes, and fails when a page goes
+past its ceiling. A PR that needs more raises the ceiling in the test, on
+purpose, saying why; the test prints each page's counts when it runs.
+The same harness over a full catalog (`.data/measure.ts` in a checkout,
+not in git: the test's counting wrapper over a PGlite catalog imported
+from Sichos Kodesh) gave the counts of 29 Elul 5786 (before and after
+that day's changes):
 
 | Page | Statements | API calls |
 | --- | --- | --- |
@@ -485,7 +492,11 @@ farbrengen (58 subrequests exceeds the plan's 50: the page errored
 whatever the quota), and a commit feed that carries every change of an
 import (thousands). Batch routes exist for what pages need many of:
 `/v1/entities/batch`, `/v1/files/batch`, `/v1/recordings/batch/hanacha`,
-`/v1/suggestions?about=`, and `/v1/commits?changes=`.
+`/v1/suggestions?about=`, and `/v1/commits?changes=`. A suggestion is
+read a page at a time (`/v1/suggestions/{id}?limit=`), and its summary of
+every item only when asked (`summary=1`); the conversation list says of
+each what it changes (`types`, `first`), so a page can label and place
+suggestions without opening them.
 
 Latency comes from the same place: each API read is a Worker call and its
 statements are round trips to Postgres in Virginia, one after the other.

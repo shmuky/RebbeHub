@@ -103,6 +103,9 @@ export interface SuggestionListItem {
   changesRequested: boolean;
   fixes: number[];
   via?: Via | null;
+  /** The kinds of items it changes, and the first of them by id: enough to label and place it in a list without opening it. */
+  types?: string[];
+  first?: string | null;
 }
 
 export interface InboxLine {
