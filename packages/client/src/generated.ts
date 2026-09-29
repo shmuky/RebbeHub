@@ -2283,13 +2283,13 @@ export interface Operations {
       subscribed?: boolean;
     };
   };
-  /** A page's words fixed segment by segment: one segment's new words, a segment added after it or taken out, or a page's first words, sent for review */
+  /** A page's words fixed segment by segment: one segment's new words, a segment added after it or taken out, a page's first words, or a machine's segment checked as right (`check`), sent for review */
   suggestWords: {
     input: {
       body: {
         /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
         entityId: string;
-        change: "edit" | "add" | "remove" | "start";
+        change: "edit" | "add" | "remove" | "start" | "check";
         version?: string;
         segment?: string;
         /** Runs: { text, marks?, href? }, { note }, { marker }, { br: true } */
@@ -3439,7 +3439,7 @@ export abstract class GeneratedMethods {
     return this.call('suggestionConversation', input ?? {} as Operations['suggestionConversation']['input']);
   }
 
-  /** A page's words fixed segment by segment: one segment's new words, a segment added after it or taken out, or a page's first words, sent for review (POST /v1/suggestions/words) */
+  /** A page's words fixed segment by segment: one segment's new words, a segment added after it or taken out, a page's first words, or a machine's segment checked as right (`check`), sent for review (POST /v1/suggestions/words) */
   suggestWords(input: Operations['suggestWords']['input']): Promise<Operations['suggestWords']['output']> {
     return this.call('suggestWords', input ?? {} as Operations['suggestWords']['input']);
   }

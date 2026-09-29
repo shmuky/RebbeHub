@@ -12,6 +12,13 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **A machine's words checked against their scan.** On the edit page, a
+  page whose words a machine read from a scan (a version with the scan's
+  `url` and segments carrying `origin`) opens beside the scan, turned to
+  the page of the segment in hand (the words' source markers, `סריקה 12`,
+  say which). Each segment is marked **Right** as it is or fixed in place.
+  `POST /v1/suggestions/words` takes `change: "check"`: the segment's
+  words stay and its `origin` becomes `checked`.
 - **A transcript fix may cover only some words.** `POST
   /v1/recordings/{id}/transcript/fix` takes `complete` (default true):
   with `false` the words are fixed but the paragraph stays machine

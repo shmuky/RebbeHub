@@ -32,8 +32,9 @@ import type { Json } from './merge.js';
  *   add     a new segment after this one (a paragraph, heading, verse or item)
  *   remove  this segment
  *   start   the first words of a page that has none
+ *   check   a machine's segment is right as it is (read against its scan): it stays, checked
  */
-export type WordsChange = 'edit' | 'add' | 'remove' | 'start';
+export type WordsChange = 'edit' | 'add' | 'remove' | 'start' | 'check';
 
 export interface WordsInput {
   entity: EntityId;
@@ -101,7 +102,11 @@ export async function suggestWords(catalog: Catalog, by: string, input: WordsInp
         page = changeSegment(data.body, version.id, found.segment.id, { after: segment });
       } else if (input.change === 'remove') {
         page = changeSegment(data.body, version.id, found.segment.id, { remove: true });
-      } else throw invalid('the change is edit, add, remove or start');
+      } else if (input.change === 'check') {
+        if (!found.segment.origin) throw badState('a person wrote this segment; there is nothing to check');
+        if (found.segment.origin.checked) throw badState('this segment is checked already');
+        page = changeSegment(data.body, version.id, found.segment.id, { check: true });
+      } else throw invalid('the change is edit, add, remove, start or check');
     } catch (error) {
       if (error instanceof RangeError) throw notFound(error.message);
       throw error;
