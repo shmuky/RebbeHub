@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PageText } from '@rebbehub/model';
-import { scanPages, scannedVersion } from '../app/lib/scanPages.js';
+import { scanPages, scanPlaces, scannedVersion } from '../app/lib/scanPages.js';
 
 /**
  * A page of the machine-read subject index, checked against its scan: its
@@ -37,6 +37,19 @@ describe('checking a machine-read index against its scan', () => {
     expect(scannedVersion({ ...index, versions: [noScan] })).toBeNull();
     const allChecked = { ...index.versions[0]!, segments: index.versions[0]!.segments.map((s) => ({ ...s, origin: { ...ocr, checked: true } })) };
     expect(scannedVersion({ ...index, versions: [allChecked] })).toBeNull();
+  });
+
+  it("highlights a segment where it is printed when the machine kept its lines' boxes, else only turns to its page", () => {
+    const printed = [
+      { page: 4, box: [0.52, 0.1, 0.4, 0.05] as [number, number, number, number] },
+      { page: 5, box: [0.08, 0.1, 0.4, 0.02] as [number, number, number, number] },
+    ];
+    const v = index.versions[0]!;
+    const withBoxes = { ...index, versions: [{ ...v, segments: v.segments.map((s) => (s.id === 't2.1' ? { ...s, printed } : s)) }] };
+    const places = scanPlaces(withBoxes, 'he');
+    expect(places.get('t2.1')).toEqual({ page: 4, marks: printed });
+    expect(places.get('t2')).toEqual({ page: 4, marks: [] });
+    expect(places.get('t1')).toEqual({ page: 1, marks: [] });
   });
 
 });

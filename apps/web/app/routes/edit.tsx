@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { data, Link } from 'react-router';
-import { isPageText, type PageSegment, type PageText } from '@rebbehub/model';
+import { isPageText, type PageSegment, type PageText, type PrintedPlace } from '@rebbehub/model';
 import type { Route } from './+types/edit';
 import { PageWords, segmentAnchor } from '../components/PageWords.js';
 import { ScanBeside } from '../components/ScanBeside.js';
@@ -8,7 +8,7 @@ import { SegmentEditor, SentNote, type SentSuggestion } from '../components/Segm
 import { SuggestFix, canSuggestFix } from '../components/SuggestFix.js';
 import { siteOf } from '../lib/context.server.js';
 import { driveReadUrl } from '../lib/drive.js';
-import { scanPages, scannedVersion } from '../lib/scanPages.js';
+import { scanPlaces, scannedVersion } from '../lib/scanPages.js';
 import { num } from '../lib/i18nUi.js';
 import { langFrom, t, type Lang } from '../lib/i18n.js';
 import { labelOf } from '../lib/labels.js';
@@ -166,16 +166,20 @@ const CHECK = {
  * while the words scroll beneath it.
  */
 function CheckBesideScan({ entity, page, scan, lang }: { entity: { id: string; path: string | null; type: string; data: unknown }; page: PageText; scan: { id: string; url: string; file: string }; lang: Lang }) {
-  const pages = scanPages(page, scan.id);
+  const places = scanPlaces(page, scan.id);
   const version = page.versions.find((v) => v.id === scan.id)!;
   const all = [...segmentsOf(version.segments)];
   const machine = all.filter((s) => s.origin);
   const open = machine.filter((s) => !s.origin!.checked);
-  const [at, setAt] = useState<number>(pages.get(open[0]?.id ?? '') ?? pages.values().next().value ?? 1);
+  const [at, setAt] = useState<number>(places.get(open[0]?.id ?? '')?.page ?? places.values().next().value?.page ?? 1);
+  // The clicked segment's lines, highlighted on the scan when the machine kept where it read them.
+  const [marks, setMarks] = useState<PrintedPlace[]>([]);
   const [cursor, setCursor] = useState(0);
   const focus = (id: string) => {
-    const p = pages.get(id);
-    if (p) setAt(p);
+    const place = places.get(id);
+    if (!place) return;
+    setAt(place.page);
+    setMarks(place.marks);
   };
   const next = () => {
     const target = open[cursor % Math.max(open.length, 1)];
@@ -205,7 +209,7 @@ function CheckBesideScan({ entity, page, scan, lang }: { entity: { id: string; p
       </div>
       <div className="check-beside">
         <div className="check-scan">
-          <ScanBeside file={scan.file} src={scan.url} title={labelOf(entity as Parameters<typeof labelOf>[0], lang)} page={at} lang={lang} onPage={setAt} />
+          <ScanBeside file={scan.file} src={scan.url} title={labelOf(entity as Parameters<typeof labelOf>[0], lang)} page={at} marks={marks} lang={lang} onPage={setAt} />
         </div>
         <section className="page-body edit-words check-words">
           <PageWords page={page} lang={lang} edit={{ entityId: entity.id, check: true, onFocus: focus }} />

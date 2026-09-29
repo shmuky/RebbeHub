@@ -592,6 +592,21 @@ input.words-note:focus {
 .scan-page {
   overflow: auto;
 }
+.scan-sheet {
+  position: relative;
+  width: fit-content;
+}
+/* The clicked segment's lines on the scan. */
+.scan-mark {
+  position: absolute;
+  margin: -3px;
+  padding: 3px;
+  box-sizing: content-box;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent, #d4a017) 22%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--accent, #d4a017) 70%, transparent);
+  pointer-events: none;
+}
 .scan-canvas canvas {
   display: block;
   max-width: none;

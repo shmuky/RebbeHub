@@ -12,6 +12,11 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Where a machine read each segment, on its scan.** A page's segment may
+  carry `printed`: the boxes it is printed in on its version's scan (page,
+  and x, y, width, height as fractions of the page). On the edit page that
+  checks a machine's words beside the scan, clicking a segment turns to its
+  page and highlights its lines.
 - **A machine's words checked against their scan.** On the edit page, a
   page whose words a machine read from a scan (a version with the scan's
   `url` and segments carrying `origin`) opens beside the scan, turned to
