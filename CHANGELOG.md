@@ -12,6 +12,12 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **A status page.** `/status` (linked in every page's foot) says whether
+  the site, the API, the MCP server, the database, today's allowance of
+  database queries and the scheduled jobs are working, with ninety days
+  of each and the latest incidents; checked every five minutes, and still
+  answering while the database does not. `GET /v1/status` gives the same
+  as JSON.
 - **Suggestions about an item, in one question.** `GET /v1/suggestions?state=…&about=<ids>`
   lists only the suggestions that change those items, or what is in them
   (a sefer's sichos and their texts, a sicha's paragraphs, a farbrengen's
@@ -54,7 +60,6 @@ any time. `@rebbehub/client` carries the API's version.
   kept adding to one draft over several calls); `approve_suggestion`
   approves a suggestion for those who may. An agent can now do what the
   site's editor does, not only fix one item.
-
 - **Organizing from an item's own page.** A set's and a sefer's page have
   "Edit" (for signed-in people) and "…" in their head, and a "…" on each
   row of their lists (each sefer on a set's shelf, each sicha in a sefer's

@@ -22,7 +22,12 @@ mode = "smart"
 binding = "HYPERDRIVE"
 id = "a06ec525cf9442f484f60ce9d38f0d39"
 
-# File bytes that may be served.
+# The site's Worker, for the status checks: a Worker reaches another on the same zone surely only this way.
+[[services]]
+binding = "SITE"
+service = "rebbehub-web"
+
+# File bytes that may be served (and status/report.json, the status checks' last report).
 [[r2_buckets]]
 binding = "FILES_PUBLIC"
 bucket_name = "rebbehub-public"
@@ -39,8 +44,9 @@ bucket_name = "rebbehub-preservation"
 binding = "SK_ARCHIVE"
 bucket_name = "sichos-kodesh-archive"
 
-# Every five minutes (src/worker.ts, scheduled): webhooks, email updates (once RESEND_API_KEY is set)
-# and the reviewer's advice on suggestions (once CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_AI_TOKEN are set).
+# Every five minutes (src/worker.ts, scheduled): the status checks (src/status.ts, the site's /status), then
+# webhooks, email updates (once RESEND_API_KEY is set) and the reviewer's advice on suggestions (once
+# CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_AI_TOKEN are set).
 [triggers]
 crons = ["*/5 * * * *"]
 
@@ -90,5 +96,10 @@ enabled = true
 # The site people sign in on: passkeys are bound to its domain, and changes are taken only from its pages.
 SITE_URL = "https://rebbehub.org"
 RATE_LIMIT_ADDRESS_PER_MINUTE = "300"
+# The status page counts today's queries through this Hyperdrive config (keep it equal to [[hyperdrive]]'s id),
+# against its daily allowance: 100000 on the free plan; "0" on a plan without one. Counting needs the secret
+# CLOUDFLARE_ANALYTICS_TOKEN (Account Analytics: Read) and CLOUDFLARE_ACCOUNT_ID.
+HYPERDRIVE_ID = "a06ec525cf9442f484f60ce9d38f0d39"
+HYPERDRIVE_DAILY_QUERIES = "100000"
 RATE_LIMIT_TOKEN_PER_MINUTE = "1200"
 RATE_LIMIT_SEARCH_PER_MINUTE = "60"

@@ -346,6 +346,32 @@ It runs from the **Upkeep (manual)** workflow ([deploy](deploy.md)),
 - `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_TOKEN` switch on search by
   meaning; `OAI_ADMIN_EMAIL` switches on OAI-PMH at `/oai`.
 
+## Status
+
+`/status` on the site (and `GET /v1/status` for programs) says whether
+the site, the API, the MCP server, the database, the database's daily
+query allowance and the scheduled jobs are working, with ninety days of
+it and the latest incidents.
+
+- The API's scheduled run, every five minutes, checks them first
+  (`services/api/src/status.ts`) and keeps one report in the public
+  bucket at `status/report.json`. `/v1/status` reads only that file, so
+  the page answers while the database does not; when the API itself does
+  not answer, the page says so from the site.
+- The checks cost the database one query a run (`SELECT now()`, which
+  Hyperdrive never caches): 288 a day. When the database does not answer,
+  the run's jobs (webhooks, email updates, the reviewer's advice) wait
+  for the next run rather than spend queries failing.
+- The site is asked for `/about` through the `SITE` service binding (it
+  needs neither the API nor the database); the API and the MCP server are
+  this Worker's own answers to `/openapi.json` and `initialize`.
+- Today's queries through Hyperdrive come from Cloudflare's analytics,
+  once the `CLOUDFLARE_ANALYTICS_TOKEN` secret is set (a token allowed
+  Account Analytics: Read): past 80%, or on pace to run out before 00:00
+  UTC, the page says so before the site goes down.
+- If `checkedAt` is more than twenty minutes old, the page says the
+  checks have stopped: the API's scheduled run is not running.
+
 ## The site
 
 `apps/web` reads the catalog only through the API, like any other client.

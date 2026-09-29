@@ -7,6 +7,21 @@ import { DEFAULT_IP_PER_MINUTE, DEFAULT_KEY_PER_MINUTE, DEFAULT_SEARCH_PER_MINUT
 import { authFor } from './auth.js';
 import { githubDispatch } from './machine.js';
 import { resendMailer, workersAiAdvisor } from './mail.js';
+import {
+  FREE_DAILY_QUERIES,
+  STATUS_KEY,
+  allowanceCheck,
+  checkDatabase,
+  hyperdriveQueriesToday,
+  jobsCheck,
+  mcpAnswers,
+  mcpRequest,
+  probe,
+  record,
+  type CheckResult,
+  type StatusReport,
+  type StatusStore,
+} from './status.js';
 
 /**
  * The API on Cloudflare Workers: Postgres (Neon) through Hyperdrive, file
@@ -26,12 +41,20 @@ interface R2ObjectBody {
 }
 
 interface R2Bucket {
-  get(key: string, options?: { range?: { offset: number; length?: number } }): Promise<R2ObjectBody | null>;
-  put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
+  get(key: string, options?: { range?: { offset: number; length?: number } }): Promise<(R2ObjectBody & { text(): Promise<string> }) | null>;
+  put(key: string, value: ArrayBuffer | string, options?: { httpMetadata?: { contentType?: string; cacheControl?: string } }): Promise<unknown>;
 }
 
 interface Env {
   HYPERDRIVE: { connectionString: string };
+  /** The site's Worker (a service binding), for the status checks; without it they ask SITE_URL over the internet. */
+  SITE?: { fetch(request: Request): Promise<Response> };
+  /** The Hyperdrive config's id (wrangler.toml), for counting its queries today. */
+  HYPERDRIVE_ID?: string;
+  /** Its daily allowance of queries (default 100000, the free plan's); 0 on a plan without one. */
+  HYPERDRIVE_DAILY_QUERIES?: string;
+  /** A token allowed Account Analytics: Read (a secret), for the status page's count of today's queries; without it, not counted. */
+  CLOUDFLARE_ANALYTICS_TOKEN?: string;
   FILES_PUBLIC?: R2Bucket;
   /** Uploaded bytes whose rights do not let them be served. Written, never read: nothing here is served. */
   FILES_PRESERVATION?: R2Bucket;
@@ -108,19 +131,34 @@ function r2Store(bucket: R2Bucket): FileStore {
 
 export default {
   /**
-   * Every few minutes (wrangler.toml, [triggers]): webhooks get the merges they have not had yet; people who
-   * asked are emailed what changed in what they follow; suggestions waiting for review get the reviewer's advice.
+   * Every few minutes (wrangler.toml, [triggers]): the status checks (status.ts) first; then, when the database
+   * answered, webhooks get the merges they have not had yet, people who asked are emailed what changed in what
+   * they follow, and suggestions waiting for review get the reviewer's advice. When it did not answer, those
+   * wait for the next run rather than spend queries failing.
    */
   async scheduled(_event: unknown, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): Promise<void> {
     const db = connectPostgres(env.HYPERDRIVE.connectionString, { max: 1 });
     const catalog = new Catalog(db);
     const mailer = mailerOf(env);
-    const run = async () => {
-      await deliverWebhooks(catalog).catch((error) => console.error('webhooks', error));
-      if (mailer && env.SITE_URL) await sendNotifications(catalog, mailer, { siteUrl: new URL(env.SITE_URL).origin }).catch((error) => console.error('notifications', error));
+    const jobs = async (): Promise<string[]> => {
+      const failed: string[] = [];
+      const job = (name: string, work: () => Promise<unknown>) =>
+        work().catch((error) => {
+          console.error(name, error);
+          failed.push(name);
+        });
+      await job('webhooks', () => deliverWebhooks(catalog));
+      if (mailer && env.SITE_URL) await job('email updates', () => sendNotifications(catalog, mailer, { siteUrl: new URL(env.SITE_URL!).origin }));
       if (env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_AI_TOKEN) {
-        await adviseSuggestions(catalog, workersAiAdvisor({ accountId: env.CLOUDFLARE_ACCOUNT_ID, token: env.CLOUDFLARE_AI_TOKEN })).catch((error) => console.error('advice', error));
+        await job("the reviewer's advice", () => adviseSuggestions(catalog, workersAiAdvisor({ accountId: env.CLOUDFLARE_ACCOUNT_ID!, token: env.CLOUDFLARE_AI_TOKEN! })));
       }
+      return failed;
+    };
+    const run = async () => {
+      const now = new Date();
+      const database = await checkDatabase(() => db.query('SELECT now()'));
+      const failed = database.state === 'down' ? null : await jobs();
+      await keepStatus(env, ctx, now, database, failed).catch((error) => console.error('status', error));
     };
     ctx.waitUntil(run().finally(() => db.close()));
   },
@@ -157,6 +195,7 @@ async function answer(request: Request, env: Env, ctx: { waitUntil(promise: Prom
     files: env.FILES_PUBLIC ? r2Store(env.FILES_PUBLIC) : undefined,
     texts: env.FILES_PUBLIC ? { store: r2Store(env.FILES_PUBLIC), writer: r2Writer(env.FILES_PUBLIC), from: env.SK_ARCHIVE ? r2Store(env.SK_ARCHIVE) : undefined } : undefined,
     uploads: env.FILES_PUBLIC && env.FILES_PRESERVATION ? { public: r2Writer(env.FILES_PUBLIC), preservation: r2Writer(env.FILES_PRESERVATION) } : undefined,
+    status: env.FILES_PUBLIC ? statusStore(env.FILES_PUBLIC) : undefined,
     embedder: embedderFromEnv({ CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_AI_TOKEN: env.CLOUDFLARE_AI_TOKEN }),
     oai: env.OAI_ADMIN_EMAIL ? { adminEmail: env.OAI_ADMIN_EMAIL, siteUrl: env.SITE_URL } : undefined,
     mirrors: { gitUrls: list(env.CATALOG_GIT_URL), publicKeys: list(env.RELEASE_PUBLIC_KEYS), dumpsBaseUrl: env.DUMPS_BASE_URL || undefined },
@@ -181,4 +220,43 @@ async function answer(request: Request, env: Env, ctx: { waitUntil(promise: Prom
   } finally {
     ctx.waitUntil(db.close());
   }
+}
+
+/** The report kept in the public bucket, for GET /v1/status. */
+function statusStore(bucket: R2Bucket): StatusStore {
+  return {
+    async read() {
+      const object = await bucket.get(STATUS_KEY);
+      return object ? (JSON.parse(await object.text()) as StatusReport) : null;
+    },
+  };
+}
+
+/**
+ * This run's checks, added to the kept report. The site is asked through its
+ * service binding (a Worker cannot always reach another on the same zone over
+ * the internet), for /about, which needs neither the API nor the database; the
+ * API and the MCP server are this Worker's own answers, made as for anyone.
+ */
+async function keepStatus(env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }, now: Date, database: CheckResult, failedJobs: string[] | null): Promise<void> {
+  if (!env.FILES_PUBLIC) return;
+  const bucket = env.FILES_PUBLIC;
+  const siteOrigin = new URL(env.SITE_URL ?? 'https://rebbehub.org').origin;
+  const site = env.SITE ? (request: Request) => env.SITE!.fetch(request) : (request: Request) => fetch(request);
+  const self = (request: Request) => answer(request, env, ctx);
+  const apiOrigin = 'https://api.rebbehub.org';
+  const limit = env.HYPERDRIVE_DAILY_QUERIES === undefined || env.HYPERDRIVE_DAILY_QUERIES === '' ? FREE_DAILY_QUERIES : Number(env.HYPERDRIVE_DAILY_QUERIES) || null;
+  const [siteCheck, apiCheck, mcpCheck, used] = await Promise.all([
+    // A fresh page each time, not the edge's copy: the Worker itself must answer.
+    probe('site', site, new Request(`${siteOrigin}/about?status=${now.getTime()}`, { headers: { 'Cache-Control': 'no-cache' } })),
+    probe('api', self, new Request(`${apiOrigin}/openapi.json`)),
+    probe('mcp', self, mcpRequest(apiOrigin), mcpAnswers),
+    env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_ANALYTICS_TOKEN && env.HYPERDRIVE_ID
+      ? hyperdriveQueriesToday({ accountId: env.CLOUDFLARE_ACCOUNT_ID, token: env.CLOUDFLARE_ANALYTICS_TOKEN, configId: env.HYPERDRIVE_ID, now })
+      : Promise.resolve(null),
+  ]);
+  const { check: quotaCheck, quota } = allowanceCheck(used, limit, now);
+  const previous = await statusStore(bucket).read().catch(() => null);
+  const report = record(previous, [siteCheck, apiCheck, mcpCheck, database, quotaCheck, jobsCheck(failedJobs)], now, quota);
+  await bucket.put(STATUS_KEY, JSON.stringify(report), { httpMetadata: { contentType: 'application/json', cacheControl: 'no-store' } });
 }
