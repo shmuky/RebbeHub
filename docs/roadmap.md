@@ -23,7 +23,7 @@ stands. ✅ built and tested · 🟡 partly · ⬜ not yet.
 
 | Plan item | Status | Where |
 | --- | --- | --- |
-| Public read API (REST + OpenAPI) | ✅ | `services/api` |
+| Public read API (REST + OpenAPI) | ✅ | `services/api`; v1 is stable: one error shape, cursors, ETags, CORS, rate limits - [developers](developers/api.md) |
 | Search (built-in Postgres full text over normalised names, text and dates; Hebrew and English date queries); hits in scans open at the lit-up line, in transcripts at the moment heard | ✅ | `core` search and `moments.ts`, the site's `/search`; Meilisearch only if the catalog outgrows it |
 | Permanent links (ids, paths, redirects) | ✅ | `core`, `api /v1/resolve` |
 | Git mirror (JSON per item, texts as Markdown, sync as WebVTT; one git commit per merge) | ✅ | `packages/mirror`, `rebbehub mirror` |
@@ -31,6 +31,7 @@ stands. ✅ built and tested · 🟡 partly · ⬜ not yet.
 | Parquet dump | ✅ | `rebbehub dump` writes `rebbehub-<tag>.parquet` beside SQLite and JSON Lines |
 | Public site: sets, events calendar, item and publication pages, search, permanent links | ✅ | `apps/web` (React Router 7, server-rendered; Node or Workers) |
 | The site as Sichos-Kodesh's app works: this week first (today's parsha, the kvius year, every year), farbrengen pages, one player across pages, smart search by parsha, chag, date and year | ✅ | `apps/web/app/routes/home.tsx`, `views/EventPage.tsx`, `player/`, `lib/smartSearch.ts` |
+| The site's design (the approved concepts: home, a sefer, a farbrengen, a suggestion, the reports): one set of tokens, primitives and page styles, light and dark, phone first | ✅ | `apps/web/app/styles/`, `ui/primitives.tsx`, `ui/ItemShell.tsx`; a report's page and the reports and suggestions lists search with `key:value` filters (`lib/issueTokens.ts`) |
 | Audio player (recordings by part, video links at the moment) | ✅ | `apps/web/app/components/AudioPlayer.tsx`; words highlighted as spoken in `Transcripts.tsx` |
 | Scan viewer (served scans page by page from page images, with a strip of pages and a IIIF manifest; link-only scans at their source) | ✅ | `ScanViewer.tsx`, `rebbehub page-images`, `/manifests/iiif/<scan>.json` |
 | The reader (`/read`, Sichos-Kodesh's PDF reader): dark, sepia and grey pages, stronger contrast; reopens where you stopped, per device and on your account; "Continue where you stopped" on the home page; the player plays on from where you stopped | ✅ | `routes/read.tsx`, `reader/look.ts`, `lib/places.ts`, `components/ContinueRow.tsx`, `/v1/places` |
@@ -58,6 +59,18 @@ undone on `/review`, new-account holds and daily limits on uploads, and
 the public takedown form with a steward's one-click takedown are built
 ([accounts](accounts.md)); email and the summary show once their secrets
 are set.
+
+People and conversations, the GitHub way, are built (migration 0016):
+every person has a unique handle (chosen at sign-up, changeable, old ones
+redirect) and a page at `/u/<handle>`; @mentions and `#12` wherever people
+write; suggestions as pull requests (`/suggestions`, a timeline, reviews
+that Comment, Approve or Request changes, comments on a field, keepers
+asked to review on their own, `Fixes #12`); reports as issues (`/issues`,
+open and closed, labels, assignees, kinds with their templates, public
+unless about rights or offensive content); and an inbox (`/inbox`, and in
+the email updates) ([api](api.md#people-and-conversations),
+[accounts](accounts.md#handles-and-mentions)). Not yet: @mentions linked
+inside talk pages' wiki text, and a steward's page to edit labels.
 
 ## Phases 3-6
 
@@ -142,6 +155,40 @@ are set.
   lists its printings; *Map pages* marks what a teshura's pages hold,
   through a suggestion; the Teshuros set defaults to credit, and a family
   can ask for a teshura to stop being shown ([rights](rights.md)).
+- **A page's words as structure** ✅: no more wiki markup. A page's
+  words are versions of segments with a few marks
+  ([data model](data-model.md#a-pages-words)), drawn by their source's
+  display rules: Sefaria's numbered segments with the Hebrew and English
+  side by side, Sichos-Kodesh's paragraphs, the Mafteiach's outlines.
+  Every segment has a link of its own (`#s-3.14`); the Edit tab fixes a
+  segment in place, each fix its own suggestion; talk pages are plain
+  words with links. `rebbehub convert-bodies` turns the catalog's old
+  bodies over once (migration 0015).
+- **Public API, developer docs, agents** ✅: personal API tokens (read,
+  or read and write; hashed, made and revoked on `/account`) so scripts
+  and AI agents contribute through the same review; every route in the
+  OpenAPI 3.1 document, checked by a test; rate limits by address and by
+  token; `/developers`, drawn from [docs/developers](developers/index.md),
+  with an interactive reference; `/llms.txt`, `/llms-full.txt`, and an MCP
+  server at `api.rebbehub.org/mcp` (search, items, texts, suggest a fix);
+  the typed client `@rebbehub/client`. The rate limits need the
+  `[[ratelimits]]` bindings deployed ([configuration](configuration.md)).
+- **Covers from the shaar** ✅: `rebbehub covers` draws a sefer's cover
+  from the title page of its best served PDF (past blank pages and cover
+  sheets, by ink and words), labelled as the machine's choice; a keeper
+  chooses another page through a suggestion. Linked-only PDFs keep the
+  drawn cloth cover. Not yet in a workflow; needs the R2 keys
+  ([operations](operations.md)).
+- **Adding what the catalog lacks** ✅: `/add` takes a new hanacha (PDF
+  or words), a recording, or a sefer, letter or document; the machine
+  proposes where it belongs from its name, the person confirms or names
+  a farbrengen the catalog lacks, and it goes in as a suggestion with the
+  usual rights statement ([rights](rights.md), Uploads).
+- **Every item has a page, and every list its total** ✅: recordings,
+  people, scans, files (`/files/<sha256>`) and every other kind have a
+  page of facts, sources and history, and can be followed; each page
+  ends with all that points at it, counted, each kind listed in full a
+  page at a time (`/all/<id>`), so no list ends without saying so.
 - Still to come: letters reproduced in teshuros found by text
   (cross-linking reads citations only).
 

@@ -10,7 +10,7 @@ export {
   sichosKodeshOccasionsImporter,
   type CatalogEntry,
 } from './sichosKodeshOccasions.js';
-export { htmlToWikitext, sourceFooter } from './htmlToWikitext.js';
+export { articleOf, htmlToPageVersion, sourceFooter, type HtmlToPageOptions, type SourceFooter } from './htmlToPageText.js';
 export { REBBEHUB_API, textUrl, fetchTexts } from './sichosKodeshTexts.js';
 export { MAFTEIACH, driveFileId, mafteiachBody, mafteiachLinks, mafteiachPage, readMafteiachCrawl, type MafteiachRecord } from './mafteiachIndex.js';
 export { CHABAD_LIBRARY, LIBRARY_CREDIT, chabadLibraryImporter, crawlChabadLibrary, libraryHtml, libraryWorks, readChabadLibrary, renderLibraryPage, type LibraryTree } from './chabadLibrary.js';

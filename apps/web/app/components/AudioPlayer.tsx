@@ -63,7 +63,7 @@ export function AudioPlayer({ recordings, sources }: { recordings: Entity[]; sou
               <p>
                 <button
                   type="button"
-                  className="secondary"
+                  className="btn"
                   onClick={() => (active ? player.toggle() : player.play(tracks, tracks.findIndex((tr) => tr.id === recording.id)))}
                   aria-label={`${t(lang, 'play')}: ${nameOf(data.title, lang)}`}
                 >

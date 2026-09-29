@@ -2,6 +2,15 @@
   "name": "@rebbehub/core",
   "version": "0.1.0",
   "description": "The RebbeHub catalog engine: suggestions, review and merge with three-way field and line merging, history and revert, projects, reports, trust levels and permissions, automatic checks, files and their rights, catalog editions and search - over the versioned Postgres schema.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shmuky/RebbeHub.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/shmuky/RebbeHub/tree/main/packages/core",
+  "bugs": {
+    "url": "https://github.com/shmuky/RebbeHub/issues"
+  },
   "license": "AGPL-3.0-only",
   "type": "module",
   "main": "./dist/index.js",
@@ -12,7 +21,9 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b"
   },

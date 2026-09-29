@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { t, type Lang } from '../lib/i18n.js';
+import { Icon } from '../ui/Icon.js';
+import { Box, Label } from '../ui/primitives.js';
 
 /**
  * For developers: addresses every merge to the catalog is posted to,
@@ -36,30 +38,53 @@ export function Webhooks({ lang }: { lang: Lang }) {
   useEffect(() => void load(), [load]);
 
   return (
-    <details className="report">
-      <summary>{t(lang, 'webhooks')}</summary>
-      <p className="row-sub">{t(lang, 'webhooksIntro')}</p>
-      <ul className="rows">
-        {hooks.map((h) => (
-          <li key={h.id} className="row">
-            <span className="row-main">
-              <span className="row-title" dir="ltr">
-                {h.url}
+    <Box
+      as="section"
+      id="webhooks"
+      className="set-box"
+      header={
+        <>
+          <Icon name="link" />
+          <h2>{t(lang, 'webhooks')}</h2>
+        </>
+      }
+    >
+      <p className="set-intro">{t(lang, 'webhooksIntro')}</p>
+      {hooks.length ? (
+        <ul className="rows">
+          {hooks.map((h) => (
+            <li key={h.id} className="row">
+              <Icon name="link" />
+              <span className="row-main">
+                <span className="row-title mono" dir="ltr">
+                  {h.url}
+                </span>
+                <span className="row-sub">
+                  {h.active ? (h.failures ? `${h.failures} × ${h.lastError ?? ''}` : <Label size="sm" tone="sync">{t(lang, 'webhookOk')}</Label>) : <Label size="sm" tone="scan">{t(lang, 'webhookOff')}</Label>}
+                </span>
               </span>
-              <span className="row-sub">{h.active ? (h.failures ? `${h.failures} × ${h.lastError ?? ''}` : t(lang, 'webhookOk')) : t(lang, 'webhookOff')}</span>
-            </span>
-            <button type="button" className="link-button" onClick={async () => void (await call(`webhooks/${h.id}`, 'DELETE').then(load))}>
-              {t(lang, 'remove')}
-            </button>
-          </li>
-        ))}
-      </ul>
+              <button type="button" className="btn sm danger" onClick={async () => void (await call(`webhooks/${h.id}`, 'DELETE').then(load))}>
+                {t(lang, 'remove')}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {secret ? (
-        <p className="note" role="status">
-          {t(lang, 'webhookSecret')} <code dir="ltr">{secret}</code>
-        </p>
+        <div className="set-pad">
+          <div className="alert positive" role="status">
+            <Icon name="check" />
+            <div className="grow">
+              {t(lang, 'webhookSecret')}
+              <div className="secret-line">
+                <code dir="ltr">{secret}</code>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : null}
       <form
+        className="form set-form set-inline"
         onSubmit={async (e) => {
           e.preventDefault();
           setError(null);
@@ -73,15 +98,21 @@ export function Webhooks({ lang }: { lang: Lang }) {
           }
         }}
       >
-        <label>
+        <label className="field grow">
           {t(lang, 'webhookUrl')}
           <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://" dir="ltr" required />
         </label>
-        {error ? <p role="alert">{error}</p> : null}
-        <div>
-          <button type="submit">{t(lang, 'add')}</button>
-        </div>
+        <button type="submit" className="btn">
+          <Icon name="plus" />
+          {t(lang, 'add')}
+        </button>
+        {error ? (
+          <div className="alert negative set-inline-full" role="alert">
+            <Icon name="warn" />
+            <div>{error}</div>
+          </div>
+        ) : null}
       </form>
-    </details>
+    </Box>
   );
 }

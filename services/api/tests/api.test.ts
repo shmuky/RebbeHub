@@ -373,15 +373,77 @@ describe('the wiki model', () => {
     expect((await app.request(`/v1/texts/${sha}`)).status).toBe(404);
   });
 
-  it('keeps a page body in wikitext with where it came from, and edits it through a suggestion', async () => {
-    const withBody = { ...yudShvat(set), body: "== תוכן ==\n'''שיחה א'''", bodySource: { source: 'other', via: 'mafteiach-index', url: 'https://www.mafteiach.app/', licence: 'facts-and-links' } };
+  it('keeps a page body as structured words with where they came from, and fixes them segment by segment', async () => {
+    const outline = {
+      profile: 'outline',
+      versions: [{ id: 'he', language: 'he', segments: [{ id: 'contents', kind: 'section', text: [{ text: 'תוכן' }], children: [{ id: 'contents.1', kind: 'item', n: 1, text: [{ text: 'שיחה א', marks: ['b'] }] }] }] }],
+    };
+    const withBody = { ...yudShvat(set), body: outline, bodySource: { source: 'other', via: 'mafteiach-index', url: 'https://www.mafteiach.app/', licence: 'facts-and-links' } };
     const sent = await call('POST', '/v1/suggestions/quick', { as: 'chaim', body: { entityId: event, data: withBody, title: 'Add the outline' } });
     expect(sent.status).toBe(201);
     await call('POST', `/v1/suggestions/${sent.body.id}/approve`, { as: 'keeper' });
-    expect((await call('GET', `/v1/entities/${event}`)).body.data).toMatchObject({ body: "== תוכן ==\n'''שיחה א'''", bodySource: { via: 'mafteiach-index' } });
+    expect((await call('GET', `/v1/entities/${event}`)).body.data).toMatchObject({ body: outline, bodySource: { via: 'mafteiach-index' } });
     // What is not in the schema is still refused.
     const bad = await call('POST', '/v1/suggestions/quick', { as: 'chaim', body: { entityId: event, data: { ...withBody, bodySource: { via: 'x' } } } });
     expect(bad.body.status === 'open' ? bad.body.checks.some((c: { status: string }) => c.status === 'fail') : bad.status >= 400).toBe(true);
+
+    // One segment fixed in place: a suggestion that changes only that segment.
+    const words = (input: Record<string, unknown>, as = 'chaim') => call('POST', '/v1/suggestions/words', { as, body: { entityId: event, ...input } });
+    expect((await call('POST', '/v1/suggestions/words', { body: { entityId: event, change: 'edit' } })).status).toBe(401);
+    const fix = await words({ change: 'edit', version: 'he', segment: 'contents.1', before: [{ text: 'שיחה א', marks: ['b'] }], text: [{ text: 'שיחה א׳', marks: ['b'] }, { text: ' - ' }, { text: 'עיין', href: 'https://example.org/x' }], title: 'Fix a line of the outline' });
+    expect(fix.status).toBe(201);
+    const review = (await call('GET', `/v1/suggestions/${fix.body.id}`, { as: 'keeper' })).body;
+    expect(review.entries[0].changes.map((ch: { path: string }) => ch.path)).toEqual(['/body/versions/he/segments/contents/children/contents.1/text']);
+    // Someone else fixing the same segment from what it was before is told it has changed.
+    await call('POST', `/v1/suggestions/${fix.body.id}/approve`, { as: 'keeper' });
+    expect((await words({ change: 'edit', version: 'he', segment: 'contents.1', before: [{ text: 'שיחה א', marks: ['b'] }], text: [{ text: 'x' }] }, 'mendy')).status).toBe(409);
+    // Markup, unknown marks and unsafe links are never taken in: only runs of words.
+    expect((await words({ change: 'edit', version: 'he', segment: 'contents.1', text: [{ text: 'x', href: 'javascript:alert(1)' }] }, 'mendy')).body).toMatchObject({ status: 'open' });
+    const stored = (await call('GET', `/v1/entities/${event}`)).body.data.body.versions[0].segments[0].children[0];
+    expect(stored.text).toEqual([{ text: 'שיחה א׳', marks: ['b'] }, { text: ' - ' }, { text: 'עיין', href: 'https://example.org/x' }]);
+    expect((await words({ change: 'edit', version: 'he', segment: 'nope', text: [{ text: 'x' }] })).status).toBe(404);
+    expect((await words({ change: 'edit', version: 'he', segment: 'contents.1', text: [] })).status).toBe(422);
+    // A segment added after another, and one taken out.
+    const added = await words({ change: 'add', version: 'he', segment: 'contents.1', text: [{ text: 'שיחה ב' }] });
+    await call('POST', `/v1/suggestions/${added.body.id}/approve`, { as: 'keeper' });
+    const items = (await call('GET', `/v1/entities/${event}`)).body.data.body.versions[0].segments[0].children;
+    expect(items.map((s: { kind: string; text: Array<{ text: string }> }) => [s.kind, s.text[0]!.text])).toEqual([
+      ['item', 'שיחה א׳'],
+      ['item', 'שיחה ב'],
+    ]);
+    const removed = await words({ change: 'remove', version: 'he', segment: items[1].id });
+    await call('POST', `/v1/suggestions/${removed.body.id}/approve`, { as: 'keeper' });
+    expect((await call('GET', `/v1/entities/${event}`)).body.data.body.versions[0].segments[0].children).toHaveLength(1);
+    // A page with words cannot be started again.
+    expect((await words({ change: 'start', text: [{ text: 'x' }] })).status).toBe(409);
+  });
+
+  it('shows a page body kept as wiki markup before words had structure as structured words, and turns the catalog over', async () => {
+    const { convertLegacyBodies } = await import('@rebbehub/core');
+    const other = await add(catalog, 'mendy', 'keeper', 'event', { ...yudShvat(set), date: '5742-05-11' });
+    // A body as the catalog kept it before (straight into the store, as an old revision would be).
+    await catalog.db.query(`UPDATE revision SET data = jsonb_set(data, '{body}', to_jsonb($1::text)) WHERE id = (SELECT main_rev FROM entity WHERE id = $2)`, ["== תוכן ענינים ==\n\n1. '''שיחה''' א<ref>הערה</ref>", other]);
+    const shown = (await call('GET', `/v1/entities/${other}`)).body.data.body;
+    expect(shown).toEqual({
+      profile: 'plain',
+      versions: [
+        {
+          id: 'he',
+          language: 'he',
+          segments: [
+            { id: 'h1', kind: 'heading', level: 1, text: [{ text: 'תוכן ענינים' }] },
+            { id: 'p2', kind: 'paragraph', text: [{ text: '1. ' }, { text: 'שיחה', marks: ['b'] }, { text: ' א' }, { note: 'n1' }] },
+          ],
+          notes: [{ id: 'n1', kind: 'note', n: 1, text: [{ text: 'הערה' }] }],
+        },
+      ],
+    });
+    expect(await convertLegacyBodies(catalog, { batch: 1 })).toBe(1);
+    const history = (await call('GET', `/v1/entities/${other}/history`)).body;
+    expect(JSON.stringify(history)).toContain('Page words as structure');
+    const { rows } = await catalog.db.query<{ kind: string }>(`SELECT jsonb_typeof(r.data->'body') AS kind FROM entity e JOIN revision r ON r.id = e.main_rev WHERE e.id = $1`, [other]);
+    expect(rows[0]!.kind).toBe('object');
+    expect(await convertLegacyBodies(catalog)).toBe(0);
   });
 
   it('has a talk page for every page: read by all, written when signed in, answered in threads, hidden by its author', async () => {

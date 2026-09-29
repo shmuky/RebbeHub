@@ -1,0 +1,111 @@
+import type { Lang } from './i18n.js';
+
+/**
+ * The words of the site's frame and component library: the header, the
+ * command palette, the timeline, the review box, empty states, pagination.
+ * Kept apart from i18n.ts so that pages and components can grow their own
+ * words without touching one long table.
+ */
+const UI = {
+  navHome: { he: 'בית', en: 'Home' },
+  navLibrary: { he: 'ספרייה', en: 'Library' },
+  navFarbrengens: { he: 'התוועדויות', en: 'Farbrengens' },
+  navSuggestions: { he: 'הצעות', en: 'Suggestions' },
+  navReports: { he: 'דיווחים', en: 'Reports' },
+  navProjects: { he: 'פרויקטים', en: 'Projects' },
+  navHelp: { he: 'איך לעזור', en: 'How to help' },
+  mainNav: { he: 'ניווט ראשי', en: 'Main' },
+  searchPlaceholder: { he: 'חיפוש ספר, שיחה, פסוק, תאריך או שנה…', en: 'Search a book, sicha, verse, date or year…' },
+  searchShort: { he: 'חיפוש', en: 'Search' },
+  openPalette: { he: 'פתיחת החיפוש והפקודות', en: 'Open search and commands' },
+  paletteHint: { he: 'חיפוש, או הקלידו # למספר הצעה…', en: 'Search, or type # for a suggestion number…' },
+  paletteCommands: { he: 'פעולות', en: 'Commands' },
+  palettePages: { he: 'עמודים', en: 'Pages' },
+  paletteItems: { he: 'בקטלוג', en: 'In the catalog' },
+  paletteSuggestions: { he: 'הצעות', en: 'Suggestions' },
+  paletteReports: { he: 'דיווחים', en: 'Reports' },
+  palettePeople: { he: 'אנשים', en: 'People' },
+  paletteNone: { he: 'לא נמצא דבר.', en: 'Nothing found.' },
+  paletteSearchAll: { he: 'חיפוש מלא של', en: 'Search everything for' },
+  paletteNavigate: { he: 'ניווט', en: 'navigate' },
+  paletteOpen: { he: 'פתיחה', en: 'open' },
+  paletteClose: { he: 'סגירה', en: 'close' },
+  paletteGoSuggestion: { he: 'מעבר להצעה', en: 'Go to suggestion' },
+  notifications: { he: 'התראות ומעקב', en: 'Notifications and follows' },
+  signIn: { he: 'כניסה', en: 'Sign in' },
+  signOut: { he: 'יציאה', en: 'Sign out' },
+  account: { he: 'החשבון שלי', en: 'My account' },
+  menu: { he: 'תפריט', en: 'Menu' },
+  close: { he: 'סגירה', en: 'Close' },
+  back: { he: 'חזרה', en: 'Back' },
+  more: { he: 'עוד', en: 'More' },
+  theme: { he: 'מראה', en: 'Appearance' },
+  themeLight: { he: 'בהיר', en: 'Light' },
+  themeDark: { he: 'כהה', en: 'Dark' },
+  themeAuto: { he: 'לפי המכשיר', en: 'Device' },
+  language: { he: 'שפה', en: 'Language' },
+  keyboard: { he: 'קיצורי מקלדת', en: 'Keyboard shortcuts' },
+  admin: { he: 'ניהול', en: 'Admin' },
+  steward: { he: 'אחראי אוסף', en: 'Steward' },
+  bot: { he: 'בוט', en: 'bot' },
+  machineUnchecked: { he: 'טרם נבדק', en: 'Not yet checked' },
+  prev: { he: 'הקודם', en: 'Previous' },
+  next: { he: 'הבא', en: 'Next' },
+  pages: { he: 'עמודים', en: 'Pages' },
+  crumbs: { he: 'מיקום באתר', en: 'Breadcrumb' },
+  loading: { he: 'טוען…', en: 'Loading…' },
+  dismiss: { he: 'סגירת ההודעה', en: 'Dismiss' },
+  clearSearch: { he: 'ניקוי החיפוש', en: 'Clear search' },
+  saveSearch: { he: 'שמירת החיפוש', en: 'Save search' },
+  savedSearches: { he: 'חיפושים שמורים:', en: 'Saved searches:' },
+  freeTextHint: { he: 'אפשר גם לכתוב חופשי', en: 'Free text works too' },
+  filterKeys: { he: 'סינון', en: 'Filters' },
+  valuesOf: { he: 'ערכים של', en: 'Values of' },
+  wrote: { he: 'כתב', en: 'commented' },
+  yourReview: { he: 'הבדיקה שלך', en: 'Your review' },
+  comment: { he: 'הערה', en: 'Comment' },
+  commentHint: { he: 'תגובה בלי להכריע.', en: 'Reply without deciding.' },
+  approve: { he: 'אישור', en: 'Approve' },
+  approveHint: { he: 'השינוי ייכנס מיד. הגרסה הקודמת נשמרת בהיסטוריה.', en: 'The change goes in at once. The earlier version stays in the history.' },
+  sendBack: { he: 'החזרה עם הערה', en: 'Send back' },
+  sendBackHint: { he: 'ההצעה חוזרת למציע לתיקון.', en: 'The suggestion goes back to its author to fix.' },
+  approveSuggestion: { he: 'אישור ההצעה', en: 'Approve suggestion' },
+  sendBackSuggestion: { he: 'החזרה למציע', en: 'Send back' },
+  addComment: { he: 'הוספת הערה', en: 'Comment' },
+  words: { he: 'מילים', en: 'words' },
+  sideBySide: { he: 'הצגה זה מול זה', en: 'Side by side' },
+  inline: { he: 'בשורה אחת', en: 'Inline' },
+  was: { he: 'היה', en: 'Was' },
+  now: { he: 'עכשיו', en: 'Now' },
+  footOpen: { he: 'מפתח פתוח, קוד פתוח: כל אחד יכול להעתיק, לתקן ולהוסיף.', en: 'An open index and open code: anyone may copy, fix and add.' },
+  code: { he: 'קוד המקור', en: 'Source code' },
+  api: { he: 'API', en: 'API' },
+  about: { he: 'אודות', en: 'About' },
+  takedown: { he: 'בקשת הסרה', en: 'Takedown' },
+  mirrors: { he: 'הורדה ואתרי מראה', en: 'Download and mirrors' },
+  health: { he: 'מצב הקטלוג', en: 'Catalog health' },
+  missing: { he: 'מה חסר', en: "What's missing" },
+  waysToHelp: { he: 'לעזור', en: 'Help' },
+  contribute: { he: 'איך לעזור', en: 'Contribute' },
+  skip: { he: 'דלג לתוכן', en: 'Skip to content' },
+  shortcutsPalette: { he: 'חיפוש ופקודות', en: 'Search and commands' },
+  shortcutsHelp: { he: 'רשימת הקיצורים', en: 'This list' },
+  shortcutsGoHome: { he: 'לדף הבית', en: 'Go home' },
+  shortcutsGoSuggestions: { he: 'להצעות', en: 'Go to suggestions' },
+  shortcutsGoReports: { he: 'לדיווחים', en: 'Go to reports' },
+  shortcutsGoLibrary: { he: 'לספרייה', en: 'Go to the library' },
+  then: { he: 'ואז', en: 'then' },
+  copied: { he: 'הקישור הועתק', en: 'Link copied' },
+  copyLink: { he: 'העתקת קישור', en: 'Copy link' },
+} as const;
+
+export type UiKey = keyof typeof UI;
+
+export function tu(lang: Lang, key: UiKey): string {
+  return UI[key][lang];
+}
+
+/** A count in the page's language, with thousands separated ("11,059"). */
+export function num(n: number, lang: Lang = 'he'): string {
+  return n.toLocaleString(lang === 'he' ? 'he-IL' : 'en-US');
+}

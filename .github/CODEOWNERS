@@ -1,9 +1,10 @@
 # Who reviews what. Stewards approve changes to the model, the database
 # schema, rights and governance; add set keepers and maintainers here as
-# they are appointed (docs/governance.md).
+# they are appointed (GOVERNANCE.md).
 *                                @shmuky
 /packages/model/                 @shmuky
 /packages/db/src/migrations/     @shmuky
 /packages/model/src/rights.ts    @shmuky
+/services/api/src/openapi.ts     @shmuky
 /GOVERNANCE.md                   @shmuky
 /.github/                        @shmuky

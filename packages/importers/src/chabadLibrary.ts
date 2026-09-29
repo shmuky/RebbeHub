@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { joinPath, orderKeys, type LocalName } from '@rebbehub/model';
-import { htmlToWikitext } from './htmlToWikitext.js';
+import { joinPath, orderKeys, type LocalName, type PageText } from '@rebbehub/model';
+import { htmlToPageVersion } from './htmlToPageText.js';
 import { ref, type ImportRecord, type Importer } from './importer.js';
 import { textUrl } from './sichosKodeshTexts.js';
 import { workPath } from './sichosKodeshWorks.js';
@@ -27,8 +27,8 @@ import { workPath } from './sichosKodeshWorks.js';
 
 export const CHABAD_LIBRARY = 'https://chabadlibrary.org/books';
 
-/** How a page's words are credited. */
-export const LIBRARY_CREDIT = 'ספריית ליובאוויטש (chabadlibrary.org)';
+/** How a page's words are credited (in English, "The Lubavitch Library"), with a link to the page at chabadlibrary.org. */
+export const LIBRARY_CREDIT = 'ספריית ליובאוויטש';
 
 export interface LibraryNode {
   heading: string;
@@ -38,6 +38,8 @@ export interface LibraryNode {
   children?: number[];
   /** A page's text, kept as `texts/<sha256>.html` beside the tree; unset until a crawl with texts reads it. */
   sha256?: string;
+  /** The form that text was kept in (`LIBRARY_TEXT_FORM`). */
+  form?: number;
   /** Whether that text is in RebbeHub's own storage (`texts/<sha256>`), so the page can link to its copy. */
   kept?: boolean;
 }
@@ -61,24 +63,55 @@ const PAIRS: Array<[RegExp, string]> = [
   [/\[(small|smallitalic)_begin\]([\s\S]*?)\[\1_end\]/g, '<small>$2</small>'],
 ];
 
+/** A note's marker in the words (`[ftnref_3_1]`) and where the note itself begins (`[ftn_3_1]`), footnotes and endnotes alike. */
+const NOTE_REF = /\[(ftnref|ednref|ednrefm)_([^_\]]*)_([^\]]*)\]/g;
+const NOTE_START = /\[(ftn|edn)_([^_\]]*)_([^\]]*)\]/g;
+const noteKey = (kind: string, group: string, label: string) => `${kind.startsWith('edn') ? 'edn' : 'ftn'}:${group}:${label}`;
+/** Where a note begins, while the text is being read: its id between two control characters. */
+const START = /\u0001([^\u0002]*)\u0002/;
+const P_BLOCK = /<p\b[^>]*>([\s\S]*?)<\/p>/gi;
+const hasWords = (html: string) => /\S/.test(html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' '));
+
+/** The notes of one page: each gets an id (`n1`, `n2`, in the order they are met), its marker and its words. */
+class PageNotes {
+  private ids = new Map<string, { id: string; label: string }>();
+  readonly started = new Set<string>();
+  readonly notes: Array<{ id: string; label: string; html: string }> = [];
+  constructor(texts: string[]) {
+    for (const text of texts) for (const m of text.matchAll(NOTE_START)) this.started.add(noteKey(m[1]!, m[2]!, m[3]!));
+  }
+  of(key: string, label: string) {
+    let found = this.ids.get(key);
+    if (!found) this.ids.set(key, (found = { id: `n${this.ids.size + 1}`, label: label.trim() || String(this.ids.size + 1) }));
+    return found;
+  }
+  label(id: string) {
+    for (const note of this.ids.values()) if (note.id === id) return note.label;
+    return '';
+  }
+}
+
 /**
- * A page's text as the library stores it - HTML, or plain lines, with its
- * own marks in square brackets (`[ftnref_3_1]` a note's number, `[cup]`
- * an opening word, `[mafteach_gopage file="ls30" gopage="240"]` a page an
- * index points to, `[oldpage_לח]` where a page of the printed edition
- * begins) - as plain HTML. Marks it has no meaning for are
- * dropped and their words kept; Hebrew in square brackets is the text's own.
+ * One text of the library as the HTML RebbeHub reads (htmlToPageText.ts):
+ * its own marks in square brackets read for what they mean, a note's
+ * beginning left as a place for `withNotes` to take the note from.
  */
-export function libraryHtml(text: string): string {
+function readMarks(text: string, notes: PageNotes): string {
   let html = text.replace(/<!--[\s\S]*?-->/g, '').replace(/<\?xml[^>]*>|<\/?(o|w|v):[^>]*>/gi, '');
   for (const [pattern, to] of PAIRS) html = html.replace(pattern, to);
   html = html
-    .replace(/\[(?:ftnref|ednref|ednrefm)_[^_\]]*_([^\]]*)\]/g, '<sup>$1</sup>')
-    .replace(/\[(?:ftn|edn)_[^_\]]*_([^\]]*)\]/g, '$1')
+    .replace(NOTE_REF, (_, kind: string, group: string, label: string) => {
+      const key = noteKey(kind, group, label);
+      // A marker whose note the page does not have stays its number, raised.
+      if (!notes.started.has(key)) return `<sup>${escapeHtml(label)}</sup>`;
+      const note = notes.of(key, label);
+      return `<sup class="fn"><a href="#${note.id}">${escapeHtml(note.label)}</a></sup>`;
+    })
+    .replace(NOTE_START, (_, kind: string, group: string, label: string) => `\u0001${notes.of(noteKey(kind, group, label), label).id}\u0002`)
     .replace(/\[mafteach_gopage [^\]]*gopage="([^"]*)"[^\]]*\]/g, "עמ' $1")
     .replace(/\[mafteach_goterm [^\]]*goterm="([^"]*)"[^\]]*\]/g, '$1')
     .replace(/\[mrzlg_([^\]]*)\]/g, '$1')
-    .replace(/\[oldpage_([^\]]*)\]/g, "<small>(עמ' $1)</small>")
+    .replace(/\[oldpage_([^\]]*)\]/g, (_, page: string) => `<span class="mark">עמ' ${escapeHtml(page)}</span>`)
     .replace(/\[\/?[a-z][a-z0-9_]*(?:\s[^\]]*)?\]/gi, (mark) => (/[\u0590-\u05ff]/.test(mark) ? mark : ''));
   // A text of plain lines: each line a paragraph.
   if (!/<(p|div|br)\b/i.test(html)) {
@@ -89,16 +122,73 @@ export function libraryHtml(text: string): string {
       .map((line) => (/^<(h[1-6]|p|div|table|ul|ol)\b/i.test(line) ? line : `<p>${line}</p>`))
       .join('\n');
   }
-  return html;
+  // A note begins a paragraph of its own.
+  return html.replace(/(\u0001[^\u0002]*\u0002)/g, '</p><p>$1').replace(/<p\b[^>]*>(\s|&nbsp;)*<\/p>/gi, '');
 }
 
-/** A page of the library as the one HTML file RebbeHub keeps: its heading, text, notes, and where it is from. */
+/**
+ * Takes the notes out of a text's paragraphs: a paragraph that begins a
+ * note becomes that note. In the haoros (`all`), a paragraph that begins
+ * none goes on the note before it.
+ */
+function withNotes(html: string, notes: PageNotes, all = false): string {
+  let last: { html: string } | null = null;
+  const rest = html.replace(P_BLOCK, (whole, inner: string) => {
+    const at = START.exec(inner);
+    const before = at ? inner.slice(0, at.index) : '';
+    if (at && !hasWords(before)) {
+      // Its words, without the `)` or `.` the library writes after a note's number.
+      const words = inner.slice(at.index + at[0].length).replace(/^((?:\s|<\/[a-z][^>]*>)*)[).]\s*/i, '$1');
+      const note = { id: at[1]!, label: notes.label(at[1]!), html: before + words };
+      notes.notes.push(note);
+      last = all ? note : null;
+      return '';
+    }
+    if (all && last && hasWords(inner)) {
+      last.html += `<br>${inner}`;
+      return '';
+    }
+    return whole;
+  });
+  // A note's beginning that is not a paragraph's: its number, as the library shows it.
+  return rest.replace(new RegExp(START.source, 'g'), (_, id: string) => `${escapeHtml(notes.label(id))} `);
+}
+
+/**
+ * A page's text as the library stores it - HTML, or plain lines, with its
+ * own marks in square brackets (`[ftnref_3_1]` a note's marker, `[ftn_3_1]`
+ * where that note begins, `[cup]` an opening word, `[mafteach_gopage
+ * file="ls30" gopage="240"]` a page an index points to, `[oldpage_לח]`
+ * where a page of the printed edition begins) - and its haoros, as the
+ * HTML form Sichos-Kodesh's texts are in (htmlToPageText.ts): notes in an
+ * `<aside class="notes">`, each pointed to from its marker, old pages as
+ * markers. Marks it has no meaning for are dropped and their words kept;
+ * Hebrew in square brackets is the text's own.
+ */
+export function libraryHtml(text: string, haoros?: string): string {
+  const notes = new PageNotes([text, haoros ?? '']);
+  const words = withNotes(readMarks(text, notes), notes);
+  const extra = haoros?.trim() ? withNotes(readMarks(haoros, notes), notes, true) : '';
+  const aside = [hasWords(extra) ? extra : '', ...notes.notes.map((n) => `<p id="${n.id}"><a href="#r${n.id}">${escapeHtml(n.label)}</a> ${n.html.trim()}</p>`)].filter(Boolean);
+  return aside.length ? `${words}\n<aside class="notes">\n${aside.join('\n')}\n</aside>` : words;
+}
+
+/**
+ * The form of the texts a crawl keeps; a text kept in an older form is
+ * read again. 2: notes, haoros and old pages in Sichos-Kodesh's form.
+ */
+export const LIBRARY_TEXT_FORM = 2;
+
+/** A page of the library as the one HTML file RebbeHub keeps: its heading, text and notes, and where it is from. */
 export function renderLibraryPage(page: { id: number; heading: string; text: string; haoros?: string }): string {
   const url = `${CHABAD_LIBRARY}/${page.id}`;
-  const parts = [`<article lang="he" dir="rtl">`, `<h1>${escapeHtml(page.heading)}</h1>`, libraryHtml(page.text)];
-  if (page.haoros?.trim()) parts.push('<h3>הערות</h3>', libraryHtml(page.haoros));
-  parts.push(`<footer><span class="version">${escapeHtml(LIBRARY_CREDIT)}</span> <a href="${url}">${url}</a></footer>`, '</article>');
-  return parts.join('\n');
+  return [
+    `<article lang="he" dir="rtl" data-source="chabadlibrary">`,
+    `<h1>${escapeHtml(page.heading)}</h1>`,
+    libraryHtml(page.text, page.haoros),
+    `<footer class="source"><span class="version">${escapeHtml(LIBRARY_CREDIT)}</span> <a href="${url}">${url}</a></footer>`,
+    '</article>',
+  ].join('\n');
 }
 
 /**
@@ -116,7 +206,7 @@ export async function crawlChabadLibrary(
     deadline?: number;
     log?: (line: string) => void;
     save?: (tree: LibraryTree) => Promise<void>;
-    /** Keeps each page's text too (`renderLibraryPage`), by its sha256; a page read before without it is read again. */
+    /** Keeps each page's text too (`renderLibraryPage`), by its sha256; a page read before without it, or kept in an older form, is read again. */
     texts?: (sha256: string, html: string) => Promise<void>;
   } = {},
 ): Promise<boolean> {
@@ -138,7 +228,7 @@ export async function crawlChabadLibrary(
   let complete = true;
   const visit = async (id: number) => {
     const node = tree.nodes[id];
-    if (node?.kind === 'page' && (!options.texts || node.sha256)) return;
+    if (node?.kind === 'page' && (!options.texts || (node.sha256 && node.form === LIBRARY_TEXT_FORM))) return;
     if (node?.kind === 'section' && node.children) {
       queue.push(...node.children);
       return;
@@ -164,6 +254,7 @@ export async function crawlChabadLibrary(
         await options.texts(sha256, html);
         if (here.sha256 !== sha256) delete here.kept;
         here.sha256 = sha256;
+        here.form = LIBRARY_TEXT_FORM;
       }
     }
     if (fetched % 500 === 0) {
@@ -252,7 +343,8 @@ export function chabadLibraryImporter(input: ChabadLibraryInput | (() => Promise
           const url = `${CHABAD_LIBRARY}/${id}`;
           // The page's words, where the crawl kept them.
           const html = node.sha256 && text ? await text(node.sha256) : null;
-          const words = html ? htmlToWikitext(html) : '';
+          const version = html ? htmlToPageVersion(html, { id: 'he', language: 'he', links: true, credit: LIBRARY_CREDIT, licence, url }) : null;
+          const words: PageText | null = version?.segments.length ? { profile: 'chabad-library', versions: [version] } : null;
           const body = words
             ? {
                 body: words,

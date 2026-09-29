@@ -3,8 +3,8 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { toHebrewNumeral } from '@rebbehub/hebrew';
-import { joinPath, orderKeys, slugify, type Genre, type Licence, type LocalName } from '@rebbehub/model';
-import { htmlToWikitext } from './htmlToWikitext.js';
+import { joinPath, orderKeys, slugify, type Genre, type Licence, type LocalName, type PageVersion } from '@rebbehub/model';
+import { htmlToPageVersion } from './htmlToPageText.js';
 import { ref, type ImportRecord, type Importer } from './importer.js';
 import { GENRE_NAMES } from './sichosKodeshWorks.js';
 import { textUrl } from './sichosKodeshTexts.js';
@@ -548,16 +548,27 @@ export function sefariaImporter(input: SefariaInput | (() => Promise<SefariaInpu
         };
         const orders = orderKeys(book.units.length);
         for (const [i, unit] of book.units.entries()) {
-          // The page's words: its Hebrew where kept, else its English; each kept text's own copy on RebbeHub.
+          // The page's words: each kept version (its Hebrew first, then its English), segment by
+          // segment as Sefaria numbers them, so the two stand side by side; the first one's own copy on RebbeHub.
           const kept = unit.texts.filter((t) => t.sha256 && mayKeepText(t.licence)).sort((a, b) => Number(b.language === 'he') - Number(a.language === 'he'));
-          const parts: string[] = [];
+          const versions: PageVersion[] = [];
           let bodySource: Record<string, string> | undefined;
           for (const t of kept) {
             const html = await text(t.sha256!);
             if (!html) continue;
-            const words = htmlToWikitext(html);
+            if (versions.some((v) => v.id === t.language)) continue;
+            const version = htmlToPageVersion(html, {
+              id: t.language,
+              language: t.language,
+              numbered: true,
+              title: t.version,
+              credit: `Sefaria: ${t.version}`,
+              licence: t.licence,
+              url: `${sefariaPage(unit.ref)}?${t.language === 'he' ? 'vhe' : 'ven'}=${encodeURIComponent(t.version.replace(/ /g, '_'))}`,
+            });
+            if (!version.segments.length) continue;
+            versions.push(version);
             if (!bodySource) {
-              parts.push(words);
               bodySource = {
                 source: 'sefaria',
                 via: 'sefaria',
@@ -568,7 +579,7 @@ export function sefariaImporter(input: SefariaInput | (() => Promise<SefariaInpu
                 credit: `Sefaria: ${t.version}`,
                 rights: t.licence === 'cc0' || t.licence === 'public-domain' ? 'open' : 'credit',
               };
-            } else parts.push(`== ${t.version} ==\n\n${words}`);
+            }
           }
           yield {
             key: `sefaria-unit:${book.title}/${unit.id}`,
@@ -580,7 +591,7 @@ export function sefariaImporter(input: SefariaInput | (() => Promise<SefariaInpu
               order: orders[i]!,
               label: unit.label,
               externalIds: { sefaria: unit.ref.slice(0, 200) },
-              ...(bodySource ? { body: parts.join('\n\n'), bodySource } : {}),
+              ...(bodySource ? { body: { profile: 'sefaria', versions }, bodySource } : {}),
               editions: unit.texts.map((t) => ({
                 source: 'sefaria',
                 sourceId: unit.ref,

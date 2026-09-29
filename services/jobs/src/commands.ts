@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Catalog } from '@rebbehub/core';
+import { Catalog, convertLegacyBodies } from '@rebbehub/core';
 import { connectPostgres, one, type Db } from '@rebbehub/db';
 import { openPGlite } from '@rebbehub/db/pglite';
 import {
@@ -98,17 +98,26 @@ export async function migrateCommand(ctx: Context): Promise<void> {
 
 /**
  * What people have made in the catalog: a suggestion from anyone but an
- * importer bot (merged, open or draft), a report, a comment, a follow, a
- * file someone uploaded, a steward's rights decision on a file, a project,
- * a webhook. Files the
- * import registers itself (the Sichos Kodesh scans and their reading
+ * importer bot (merged, open or draft), a report or issue (with its labels
+ * and assignees), a comment, a review's words or a request for one, a
+ * mention, a follow, a label, anything that happened in a conversation, a
+ * file someone uploaded, a steward's rights decision on a file, a cover a
+ * person chose, a project, a webhook; and, kept with the person in `auth`
+ * but made for the catalog, an API token, an inbox line, a handle the
+ * person chose. Files the import registers itself (the Sichos Kodesh scans and their reading
  * copies) are rebuilt with it. SQL, so the import can check it again
  * inside the transaction that replaces the catalog.
  */
 export const PEOPLE_MADE_SQL = `SELECT EXISTS (SELECT 1 FROM changeset c JOIN account a ON a.id = c.author WHERE c.author <> 'system' AND NOT a.is_bot)
   OR EXISTS (SELECT 1 FROM report) OR EXISTS (SELECT 1 FROM comment) OR EXISTS (SELECT 1 FROM follow)
   OR EXISTS (SELECT 1 FROM file_source WHERE uploaded_by IS NOT NULL) OR EXISTS (SELECT 1 FROM audit_log WHERE action = 'file.rights')
-  OR EXISTS (SELECT 1 FROM project) OR EXISTS (SELECT 1 FROM webhook)`;
+  OR EXISTS (SELECT 1 FROM project) OR EXISTS (SELECT 1 FROM webhook)
+  OR EXISTS (SELECT 1 FROM thread_event e JOIN account a ON a.id = e.actor WHERE NOT a.is_bot AND e.actor <> 'system') OR EXISTS (SELECT 1 FROM label WHERE created_by IS NOT NULL)
+  OR EXISTS (SELECT 1 FROM review r JOIN account a ON a.id = r.reviewer WHERE NOT a.is_bot AND r.reviewer <> 'system' AND length(trim(coalesce(r.body, ''))) > 0) OR EXISTS (SELECT 1 FROM review_request)
+  OR EXISTS (SELECT 1 FROM mention) OR EXISTS (SELECT 1 FROM thread_link) OR EXISTS (SELECT 1 FROM report_label) OR EXISTS (SELECT 1 FROM report_assignee)
+  OR EXISTS (SELECT 1 FROM cover WHERE chosen_by = 'person')
+  OR EXISTS (SELECT 1 FROM auth.api_token) OR EXISTS (SELECT 1 FROM auth.notification)
+  OR EXISTS (SELECT 1 FROM auth.username_redirect) OR EXISTS (SELECT 1 FROM auth.person WHERE username_changed_at IS NOT NULL)`;
 
 /**
  * Whether everything in the catalog came from importers, so it can be
@@ -127,7 +136,7 @@ export async function catalogIsRebuildable(db: Db): Promise<boolean> {
  * whole-catalog copy runs it first, so it can never replace anything
  * people have made.
  */
-export const REBUILD_GUARD_SQL = `LOCK TABLE changeset, report, comment, follow, file, project, webhook IN ACCESS EXCLUSIVE MODE;
+export const REBUILD_GUARD_SQL = `LOCK TABLE changeset, report, comment, review, review_request, mention, thread_link, report_label, report_assignee, follow, file, cover, project, webhook, thread_event, label, auth.api_token, auth.notification, auth.username_redirect IN ACCESS EXCLUSIVE MODE;
 DO $$ BEGIN IF (${PEOPLE_MADE_SQL}) THEN RAISE EXCEPTION 'people have added to the catalog; not replacing it'; END IF; END $$;`;
 
 /**
@@ -205,6 +214,20 @@ export async function schemaCheckCommand(ctx: Context): Promise<void> {
   const registry = SchemaRegistry.builtin();
   for (const type of Object.keys(BUILTIN_SCHEMAS)) registry.validate(type, {});
   ctx.log(`${registry.types().length} entity types, every schema usable`);
+}
+
+/**
+ * Turns the pages whose words are still one string of wiki markup (from
+ * before built-in schemas version 5) into structured words, as system
+ * changes of `chunk` pages each. Safe to stop and run again: it takes up
+ * what is left. Until it has run, the API shows those pages as structured
+ * words anyway (they are read the same way on the way out).
+ */
+export async function convertBodiesCommand(ctx: Context, input: { chunk?: number } = {}): Promise<void> {
+  await withCatalog(ctx, async (catalog) => {
+    const done = await convertLegacyBodies(catalog, { batch: input.chunk, log: ctx.log });
+    ctx.log(done ? `${done} pages' words turned into structured words` : 'every page already has structured words');
+  });
 }
 
 export async function accountCommand(ctx: Context, input: { id: string; name: string; steward?: boolean; bot?: boolean }): Promise<void> {

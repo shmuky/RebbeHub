@@ -2,6 +2,15 @@
   "name": "@rebbehub/model",
   "version": "0.1.0",
   "description": "The RebbeHub data model: every kind of item (authors, works, units, events, publications, scans, text, recordings, sync, relations) as TypeScript types and as JSON Schema, permanent ids and paths, the rights policy, and the Sichos-Kodesh works contract it grew from.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shmuky/RebbeHub.git",
+    "directory": "packages/model"
+  },
+  "homepage": "https://github.com/shmuky/RebbeHub/tree/main/packages/model",
+  "bugs": {
+    "url": "https://github.com/shmuky/RebbeHub/issues"
+  },
   "license": "AGPL-3.0-only",
   "type": "module",
   "main": "./dist/index.js",
@@ -12,7 +21,9 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b"
   },

@@ -1,0 +1,927 @@
+/*
+ * People: a person's page (/u/…), the inbox, their own account, signing
+ * in, the follow button every item carries, and the handle field. The
+ * conversation pieces (timelines, the writing box, state badges) are in
+ * components.css, since talk pages and a new Report use them too.
+ * Everything is the tokens' colours only, so both themes and both
+ * directions come out right.
+ */
+
+/* ================================================================== follow */
+
+.btn.follow.is-on {
+  color: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.btn.follow.is-on:hover {
+  border-color: var(--accent);
+}
+
+/* ================================================================== a bar's account corner */
+
+.account-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 30px;
+}
+
+.account-link-me {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.account-link-me:hover {
+  text-decoration: none;
+  color: var(--accent);
+}
+
+/* ================================================================== the handle field (@mendy) */
+
+.handle-field {
+  margin-bottom: 0;
+}
+
+.handle-input {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.handle-input:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.handle-input .at {
+  display: grid;
+  place-items: center;
+  padding-inline: 10px;
+  background: var(--canvas);
+  border-inline-end: 1px solid var(--border);
+  color: var(--subtle);
+  font: 500 var(--fs-base) / 1 var(--mono);
+}
+
+/* Beats the form's own input rule: the box is drawn around the whole field. */
+.handle-input input.handle-in:not([type='radio']):not([type='checkbox']):not([type='file']) {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  font-family: var(--mono);
+  font-size: var(--fs-md);
+}
+
+.handle-input input.handle-in:focus-visible {
+  outline: none;
+}
+
+.handle-state {
+  min-height: 18px;
+  font-size: var(--fs-sm);
+  font-weight: 400;
+}
+
+.handle-state .hint,
+.handle-ok,
+.handle-bad {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.handle-state .i,
+.handle-ok .i {
+  margin-top: 2px;
+  flex: none;
+}
+
+.handle-ok {
+  color: var(--open);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+
+.handle-bad {
+  color: var(--closed);
+}
+
+.handle-bad .link-button {
+  font-family: var(--mono);
+}
+
+/* ================================================================== the account (settings) */
+
+.acct-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.acct-head .avatar.xl {
+  width: 56px;
+  height: 56px;
+  font-size: 19px;
+}
+
+.acct-who {
+  flex: 1;
+  min-width: 200px;
+}
+
+.acct-who .page-title {
+  margin-top: 0;
+}
+
+.acct-who .pmeta {
+  margin-top: 4px;
+  font-size: var(--fs-md);
+}
+
+.acct-who .pmeta a {
+  font-family: var(--mono);
+  font-size: var(--fs-md);
+}
+
+.acct-lede {
+  margin: 14px 0 22px;
+}
+
+.acct {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 32px;
+  padding-top: 24px;
+  padding-bottom: 56px;
+  align-items: start;
+}
+
+/* The sections, listed at the side as GitHub's settings are. */
+.acct-nav {
+  position: sticky;
+  top: calc(var(--header-h) + 16px);
+  display: grid;
+  gap: 12px;
+}
+
+.acct-nav ul {
+  display: grid;
+  gap: 2px;
+}
+
+.acct-nav ul + ul {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.acct-nav a {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 10px;
+  border-radius: var(--r);
+  color: var(--text);
+  font-size: var(--fs-md);
+  text-decoration: none;
+}
+
+.acct-nav a:hover {
+  background: var(--sunken);
+  text-decoration: none;
+}
+
+.acct-nav a .i {
+  color: var(--subtle);
+}
+
+.acct-nav .count {
+  margin-inline-start: auto;
+  background: var(--accent-strong);
+  color: #fff;
+  border-radius: 9px;
+  padding: 0 7px;
+  font: 600 11.5px / 18px var(--ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.acct-main {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.acct-main > .box {
+  scroll-margin-top: calc(var(--header-h) + 16px);
+}
+
+/* A box of settings: its heading in the box's head. */
+.set-box > .box-h h2 {
+  font: inherit;
+  margin: 0;
+}
+
+.set-box > .box-h > .i {
+  color: var(--muted);
+}
+
+.set-box > .box-h .count {
+  font: 500 12px / 1.5 var(--ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: var(--sunken);
+  border-radius: 9px;
+  padding: 0 7px;
+}
+
+.set-box > .box-h .end {
+  font-weight: 500;
+  font-size: var(--fs-sm);
+}
+
+.set-intro {
+  padding: 12px 16px;
+  color: var(--muted);
+  font-size: var(--fs-md);
+  line-height: 1.6;
+}
+
+.set-pad {
+  padding: 12px 16px;
+}
+
+.set-box > .rows + .set-pad,
+.set-box > .empty + .set-pad {
+  border-top: 1px solid var(--border);
+}
+
+.set-box > .empty.compact {
+  border-top: 1px solid var(--border);
+}
+
+.set-box > .box-h + .empty.compact {
+  border-top: 0;
+}
+
+/* One setting: what it is (and a word about it), its value, and the button that changes it. */
+.set-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 34%) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-md);
+}
+
+.box-h + .set-row {
+  border-top: 0;
+}
+
+.set-k {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.set-k b {
+  font-weight: 600;
+}
+
+.set-k .hint {
+  color: var(--subtle);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.set-v {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.set-v.mono {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+
+.set-v a[dir='ltr'] {
+  font-family: var(--mono);
+  font-size: var(--fs-md);
+}
+
+.set-row > .set-v:last-child {
+  grid-column: 2 / -1;
+}
+
+/* Changing it, in place: the form takes the value's and the button's room. */
+.set-edit {
+  grid-column: 2 / -1;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.set-edit .field {
+  margin-bottom: 0;
+}
+
+.set-edit .hint {
+  color: var(--subtle);
+  font-size: var(--fs-sm);
+}
+
+/* The field's own label repeats the row's; it stays for screen readers only. */
+.set-edit .handle-field > label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.set-form {
+  padding: 14px 16px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.set-sub {
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.set-inline {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.set-inline .field {
+  margin-bottom: 0;
+}
+
+.set-inline .grow {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.set-inline-full {
+  flex-basis: 100%;
+}
+
+.field-label {
+  font-weight: 600;
+  font-size: var(--fs-md);
+}
+
+.set-form .choices {
+  font-weight: 400;
+}
+
+/* A secret shown once: the words, and the button that copies them. */
+.secret-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.secret-line code {
+  flex: 1 1 260px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 5px 8px;
+  font-size: var(--fs-sm);
+}
+
+.alert .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.set-box .row code {
+  font-size: 12px;
+}
+
+@media (max-width: 960px) {
+  .acct {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    padding-top: 16px;
+  }
+  /* On a phone the sections are a row of links under the head, scrolled sideways. */
+  .acct-nav {
+    position: static;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-inline: calc(var(--gutter) * -1);
+    padding-inline: var(--gutter);
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .acct-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .acct-nav ul {
+    display: flex;
+    gap: 4px;
+  }
+  .acct-nav ul + ul {
+    border-top: 0;
+    padding-top: 0;
+    border-inline-start: 1px solid var(--border);
+    padding-inline-start: 4px;
+  }
+  .acct-nav a {
+    white-space: nowrap;
+    padding: 6px 10px;
+  }
+}
+
+@media (max-width: 720px) {
+  .acct-head {
+    gap: 12px;
+  }
+  .acct-head .avatar.xl {
+    width: 44px;
+    height: 44px;
+    font-size: 15px;
+  }
+  .acct-head .phead-acts {
+    width: 100%;
+  }
+  .acct-head .phead-acts .btn {
+    flex: 1;
+  }
+  .acct-lede {
+    margin-bottom: 16px;
+  }
+  .set-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 12px 14px;
+  }
+  .set-row > .set-k {
+    grid-column: 1 / -1;
+  }
+  .set-row > .set-v {
+    grid-column: 1;
+  }
+  .set-row > .set-v:last-child {
+    grid-column: 1 / -1;
+  }
+  .set-edit {
+    grid-column: 1 / -1;
+  }
+  .set-intro,
+  .set-pad,
+  .set-form {
+    padding-inline: 14px;
+  }
+  .set-inline .btn {
+    flex: 1 1 100%;
+  }
+}
+
+/* ================================================================== signing in */
+
+.auth {
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 40px var(--gutter) 64px;
+  display: grid;
+  gap: 16px;
+}
+
+.auth-head {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.auth-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 9px;
+  font-size: 26px;
+  text-decoration: none;
+}
+
+.auth-mark:hover {
+  text-decoration: none;
+}
+
+.auth-title {
+  font: 600 var(--fs-2xl) / 1.3 var(--ui);
+  letter-spacing: -0.01em;
+  margin-top: 8px;
+}
+
+.auth-lede {
+  color: var(--muted);
+  font-size: var(--fs-md);
+  line-height: 1.6;
+}
+
+.auth-box {
+  padding: 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.auth-box .form.stack > * + * {
+  margin-top: 14px;
+}
+
+.auth-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+
+.auth-h .i {
+  color: var(--muted);
+}
+
+.auth-text {
+  color: var(--muted);
+  font-size: var(--fs-md);
+  line-height: 1.6;
+}
+
+.auth-box .hint,
+.auth .form .hint {
+  color: var(--subtle);
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+/* Another way in, under a rule that says "or …". */
+.auth-way {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--subtle);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  margin: 6px 0 2px;
+}
+
+.auth-or::before,
+.auth-or::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+
+.auth-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 14px 16px;
+  font-size: var(--fs-md);
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.auth-note > .i {
+  color: var(--subtle);
+  margin-top: 3px;
+  flex: none;
+}
+
+.auth-note b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .auth {
+    padding-top: 24px;
+  }
+  .auth-box {
+    padding: 16px;
+  }
+  .auth-title {
+    font-size: 21px;
+  }
+}
+
+/* ================================================================== the inbox */
+
+.inbox-row {
+  position: relative;
+  align-items: flex-start;
+  padding-inline-start: 22px;
+}
+
+.inbox-row > .state-icon {
+  margin-top: 2px;
+}
+
+.inbox-row .unread-dot {
+  position: absolute;
+  inset-inline-start: 8px;
+  top: 17px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.inbox-row.unread .unread-dot {
+  background: var(--accent-strong);
+}
+
+.inbox-row .row-title {
+  font-weight: 400;
+  display: inline;
+}
+
+.inbox-row.unread .row-title {
+  font-weight: 600;
+}
+
+.inbox-row:not(.unread) {
+  background: var(--canvas);
+}
+
+.inbox-row:not(.unread) .row-title {
+  color: var(--muted);
+}
+
+.inbox-row .row-title .num,
+.activity-row .row-title .num {
+  font-weight: 400;
+  color: var(--subtle);
+}
+
+.inbox-row .row-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 4px;
+}
+
+.inbox-row .who {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+a.who:hover {
+  color: var(--accent);
+}
+
+.inbox-row .btn.icon {
+  margin-top: -3px;
+  flex: none;
+}
+
+.inbox-row .btn.icon:hover {
+  color: var(--accent);
+}
+
+/* ================================================================== a person's page */
+
+.profile {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 40px;
+  padding-top: 32px;
+  padding-bottom: 56px;
+  align-items: start;
+}
+
+.profile-card {
+  display: grid;
+  gap: 14px;
+  position: sticky;
+  top: calc(var(--header-h) + 20px);
+}
+
+.avatar.profile-avatar {
+  width: 200px;
+  height: 200px;
+  font-size: 64px;
+  font-weight: 600;
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.profile-names {
+  display: grid;
+  gap: 2px;
+}
+
+.profile-name {
+  font: 700 26px / 1.25 var(--display);
+  letter-spacing: -0.005em;
+  overflow-wrap: anywhere;
+}
+
+.profile-handle {
+  color: var(--subtle);
+  font: 400 var(--fs-lg) / 1.4 var(--mono);
+  text-align: start;
+}
+
+[dir='rtl'] .profile-handle {
+  text-align: right;
+}
+
+.profile-facts {
+  display: grid;
+  gap: 8px;
+  font-size: var(--fs-md);
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.profile-facts li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.profile-facts .i {
+  color: var(--subtle);
+  margin-top: 2px;
+  flex: none;
+}
+
+.profile-facts b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.profile-main {
+  min-width: 0;
+  display: grid;
+  gap: 0;
+  align-content: start;
+}
+
+.profile-main > .alert {
+  margin-bottom: 16px;
+}
+
+.profile-main > .h-block {
+  margin-top: 24px;
+}
+
+.profile-month + .profile-month {
+  margin-top: 22px;
+}
+
+.profile-month .h-sec {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.profile-month .h-sec::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+
+.activity-row {
+  align-items: flex-start;
+}
+
+.activity-row > .state-icon {
+  margin-top: 2px;
+}
+
+.activity-line {
+  display: block;
+  line-height: 1.5;
+}
+
+.activity-line .row-title {
+  display: inline;
+}
+
+.activity-excerpt {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 4px;
+  padding-inline-start: 10px;
+  border-inline-start: 2px solid var(--border);
+}
+
+.activity-row .when,
+.inbox-row .when {
+  color: var(--subtle);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+.activity-row > .when {
+  margin-top: 2px;
+  flex: none;
+}
+
+@media (max-width: 960px) {
+  .profile {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+    padding-top: 20px;
+  }
+  .profile-card {
+    position: static;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 16px;
+  }
+  .avatar.profile-avatar {
+    width: 72px;
+    height: 72px;
+    font-size: 24px;
+  }
+  .profile-card > :not(.profile-avatar):not(.profile-names) {
+    grid-column: 1 / -1;
+  }
+  .profile-name {
+    font-size: 22px;
+  }
+  .profile-handle {
+    font-size: var(--fs-md);
+  }
+}
+
+@media (max-width: 720px) {
+  .profile-main .tabs {
+    margin-inline: calc(var(--gutter) * -1);
+    padding-inline: var(--gutter);
+  }
+  .activity-row {
+    flex-wrap: wrap;
+  }
+  .activity-row > .when {
+    flex-basis: 100%;
+    padding-inline-start: 28px;
+    margin-top: -4px;
+  }
+}
+
+/* ================================================================== small settings details */
+
+/* An empty list in a box of settings says its sentence quietly. */
+.set-box .empty h3 {
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--muted);
+  max-width: 520px;
+  line-height: 1.6;
+}
+
+.set-form .check-line {
+  font-weight: 400;
+  margin-bottom: 6px;
+}
+
+.set-form fieldset.field,
+.set-form .choices,
+.auth .choices {
+  margin-bottom: 0;
+}

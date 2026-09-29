@@ -5,6 +5,8 @@ import { t, type Lang } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
 import { st } from '../lib/scanStrings.js';
 import { useAccount } from '../lib/useAccount.js';
+import { Icon } from '../ui/Icon.js';
+import { Panel } from '../ui/primitives.js';
 
 /**
  * "Map a teshura" (the plan, section 7): mark "pp. 3–8 are a letter from
@@ -29,7 +31,7 @@ function Pick({ type, lang, chosen, onChoose }: { type: 'unit' | 'work'; lang: L
     return (
       <p>
         <strong>{chosen.label}</strong>{' '}
-        <button type="button" className="secondary" onClick={() => onChoose(null)}>
+        <button type="button" className="btn" onClick={() => onChoose(null)}>
           ✕
         </button>
       </p>
@@ -37,7 +39,7 @@ function Pick({ type, lang, chosen, onChoose }: { type: 'unit' | 'work'; lang: L
   }
   return (
     <div>
-      <label>
+      <label className="field">
         {st(lang, type === 'unit' ? 'searchUnit' : 'searchSefer')}
         <input
           value={q}
@@ -51,14 +53,14 @@ function Pick({ type, lang, chosen, onChoose }: { type: 'unit' | 'work'; lang: L
           dir="auto"
         />
       </label>
-      <button type="button" className="secondary" onClick={() => void search()}>
+      <button type="button" className="btn" onClick={() => void search()}>
         {t(lang, 'search')}
       </button>
       {found.length ? (
         <ul className="lookup-results">
           {found.map((item) => (
             <li key={item.id}>
-              <button type="button" className="secondary" onClick={() => onChoose(item)}>
+              <button type="button" className="btn" onClick={() => onChoose(item)}>
                 {item.label}
               </button>
             </li>
@@ -111,8 +113,7 @@ export function ContentsForm({ publication, lang }: { publication: Pick<Entity, 
   const here = publication.path ?? `/${publication.id}`;
   const ready = Number(from) >= 1 && (how === 'existing' ? unit !== null : how === 'new' ? work !== null && label.trim() !== '' : label.trim() !== '');
   return (
-    <details className="report" id="map-pages">
-      <summary>{st(lang, 'mapPages')}</summary>
+    <Panel id="map-pages" icon="layers" title={st(lang, 'mapPages')}>
       {account === null ? (
         <p>
           {t(lang, 'uploadSignIn')} <Link to={href('/signin', lang, { return: `${here}#map-pages` })}>{t(lang, 'signIn')}</Link>
@@ -122,60 +123,78 @@ export function ContentsForm({ publication, lang }: { publication: Pick<Entity, 
           {st(lang, 'mapSent')} <Link to={href('/review', lang, { s: String(sent) })}>{t(lang, 'suggestSee')}</Link>
         </p>
       ) : (
-        <form onSubmit={send}>
-          <p className="row-sub">{st(lang, 'mapHow')}</p>
-          <label>
+        <form onSubmit={send} className="form stack">
+          <p className="hint">{st(lang, 'mapHow')}</p>
+          <div className="form-row">
+          <label className="field">
             {st(lang, 'fromPage')}
             <input value={from} onChange={(e) => setFrom(e.target.value)} inputMode="numeric" pattern="[1-9][0-9]*" required />
           </label>
-          <label>
+          <label className="field">
             {st(lang, 'toPage')}
             <input value={to} onChange={(e) => setTo(e.target.value)} inputMode="numeric" pattern="[1-9][0-9]*" />
           </label>
-          <label>
-            {st(lang, 'scheme')}
-            <select value={scheme} onChange={(e) => setScheme(e.target.value as 'printed' | 'pdf')}>
-              <option value="printed">{st(lang, 'scheme_printed')}</option>
-              <option value="pdf">{st(lang, 'scheme_pdf')}</option>
-            </select>
-          </label>
-          <fieldset className="rights-choice">
+          </div>
+          <fieldset className="field">
+            <legend>{st(lang, 'scheme')}</legend>
+            <div className="choices inline">
+              {(['printed', 'pdf'] as const).map((k) => (
+                <label key={k} className="choice">
+                  <input type="radio" name="scheme" value={k} checked={scheme === k} onChange={() => setScheme(k)} />
+                  <span>
+                    <b>{st(lang, k === 'printed' ? 'scheme_printed' : 'scheme_pdf')}</b>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset className="field">
             <legend>{st(lang, 'choose')}</legend>
-            {(['existing', 'new', 'words'] as const).map((h) => (
-              <label key={h}>
-                <input type="radio" name="how" value={h} checked={how === h} onChange={() => setHow(h)} /> {st(lang, h === 'existing' ? 'mapExisting' : h === 'new' ? 'mapNew' : 'mapWords')}
-              </label>
-            ))}
+            <div className="choices">
+              {(['existing', 'new', 'words'] as const).map((h) => (
+                <label key={h} className="choice">
+                  <input type="radio" name="how" value={h} checked={how === h} onChange={() => setHow(h)} />
+                  <span>
+                    <b>{st(lang, h === 'existing' ? 'mapExisting' : h === 'new' ? 'mapNew' : 'mapWords')}</b>
+                  </span>
+                </label>
+              ))}
+            </div>
           </fieldset>
           {how === 'existing' ? <Pick type="unit" lang={lang} chosen={unit} onChoose={setUnit} /> : null}
           {how === 'new' ? (
             <>
-              <p className="row-sub">{st(lang, 'inSefer')}</p>
+              <p className="hint">{st(lang, 'inSefer')}</p>
               <Pick type="work" lang={lang} chosen={work} onChoose={setWork} />
-              <label>
+              <label className="field">
                 {st(lang, 'unitName')}
                 <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={300} dir="auto" required />
               </label>
-              <label>
+              <label className="field">
                 {st(lang, 'unitDate')}
                 <input value={date} onChange={(e) => setDate(e.target.value)} maxLength={12} dir="ltr" placeholder="5718-01-05" pattern="\d{4}(-(0[1-9]|1[0-3]|06A|06B)(-\d{2})?)?" />
               </label>
             </>
           ) : null}
           {how === 'words' ? (
-            <label>
+            <label className="field">
               {st(lang, 'description')}
               <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={300} dir="auto" required />
             </label>
           ) : null}
-          {error ? <p role="alert">{error}</p> : null}
-          <div>
-            <button type="submit" disabled={!ready || busy}>
+          {error ? (
+            <p className="alert negative" role="alert">
+              <Icon name="warn" />
+              {error}
+            </p>
+          ) : null}
+          <div className="form-actions">
+            <button type="submit" className="btn primary" disabled={!ready || busy}>
               {t(lang, 'sendForReview')}
             </button>
           </div>
         </form>
       )}
-    </details>
+    </Panel>
   );
 }

@@ -28,15 +28,15 @@ export function cleanEmail(raw: unknown): string | null {
 
 /** The person an address signs into: their own address, else the email of a Google account they linked. */
 export async function personByEmail(db: Db, email: string): Promise<Person | null> {
-  const row = await one<{ id: string; display_name: string }>(
+  const row = await one<{ id: string; display_name: string; username: string }>(
     db,
-    `SELECT p.id, p.display_name FROM auth.email_address e JOIN auth.person p ON p.id = e.person_id WHERE e.email = $1
+    `SELECT p.id, p.display_name, p.username FROM auth.email_address e JOIN auth.person p ON p.id = e.person_id WHERE e.email = $1
      UNION ALL
-     SELECT p.id, p.display_name FROM auth.google_account g JOIN auth.person p ON p.id = g.person_id WHERE lower(g.email) = $1
+     SELECT p.id, p.display_name, p.username FROM auth.google_account g JOIN auth.person p ON p.id = g.person_id WHERE lower(g.email) = $1
      LIMIT 1`,
     [email],
   );
-  return row ? { id: row.id, displayName: row.display_name } : null;
+  return row ? { id: row.id, displayName: row.display_name, username: row.username } : null;
 }
 
 /** Adds an address to a person (once theirs, it stays theirs); notes when it was last used to sign in. */

@@ -1,5 +1,6 @@
 import type { Catalog, EntityView } from './catalog.js';
 import { getFile } from './files.js';
+import { withStructuredBody } from './legacyWords.js';
 import { RIGHTS_BY_LICENCE, mayExport, type EntityId, type Licence, type RightsState, type ScanData, type TextData, type TextLayerData } from '@rebbehub/model';
 
 /**
@@ -28,10 +29,14 @@ export class ExportGate {
    * words, a withheld OCR page its lines, and either says why.
    */
   async redact<T extends EntityView>(view: T): Promise<T & { withheld?: string }> {
+    // A body from before words had structure is shown as structured words, like every other.
+    const structured = withStructuredBody(view.data);
+    if (structured !== view.data) view = { ...view, data: structured } as T;
     // A page's body keeps the rights of where it was imported from.
-    const body = view.data as { body?: string; bodySource?: { rights?: RightsState; licence?: string } } | null;
+    const body = view.data as { body?: unknown; bodySource?: { rights?: RightsState; licence?: string } } | null;
     if (body?.body && body.bodySource?.rights && !mayExport(body.bodySource.rights)) {
-      return { ...view, withheld: `its source's terms (${body.bodySource.licence ?? body.bodySource.rights}) do not allow copies`, data: { ...(view.data as object), body: '' } as T['data'] };
+      const { body: _withheld, ...rest } = view.data as Record<string, unknown>;
+      return { ...view, withheld: `its source's terms (${body.bodySource.licence ?? body.bodySource.rights}) do not allow copies`, data: rest as T['data'] };
     }
     if (view.type === 'segment') {
       const reason = await this.textWithheld((view.data as { text: EntityId }).text);

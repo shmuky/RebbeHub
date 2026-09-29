@@ -2,6 +2,8 @@ import { Form, useActionData, useNavigation } from 'react-router';
 import { st } from '../lib/scanStrings.js';
 import { t } from '../lib/i18n.js';
 import { useLang } from '../lib/useLang.js';
+import { Icon } from '../ui/Icon.js';
+import { Panel } from '../ui/primitives.js';
 
 export type FamilyRequestResult = { familyRequested: true } | { familyRequested: false; error: string } | undefined;
 
@@ -17,39 +19,42 @@ export function FamilyRequestForm({ teshura }: { teshura: string }) {
   const navigation = useNavigation();
   const mine = result && 'familyRequested' in result ? result : undefined;
   return (
-    <details className="report" id="family-request" open={mine !== undefined}>
-      <summary>{st(lang, 'familyRequest')}</summary>
+    <Panel id="family-request" icon="shield" title={st(lang, 'familyRequest')} open={mine !== undefined}>
       {mine?.familyRequested ? (
-        <p role="status">{st(lang, 'familyThanks')}</p>
+        <p className="alert positive" role="status">
+          <Icon name="check" />
+          {st(lang, 'familyThanks')}
+        </p>
       ) : (
-        <Form method="post">
+        <Form method="post" className="form stack">
           {mine && !mine.familyRequested ? (
-            <p role="alert">
+            <p className="alert negative" role="alert">
+              <Icon name="warn" />
               {t(lang, 'reportFailed')} {mine.error}
             </p>
           ) : null}
-          <p className="row-sub">{st(lang, 'familyHow')}</p>
+          <p className="hint">{st(lang, 'familyHow')}</p>
           <input type="hidden" name="intent" value="family-request" />
           <input type="hidden" name="teshura" value={teshura} />
-          <label>
-            {st(lang, 'familyRelation')}
+          <label className="field">
+            <span className="field-label">{st(lang, 'familyRelation')}</span>
             <input name="relation" maxLength={300} dir="auto" required />
           </label>
-          <label>
-            {t(lang, 'reportNote')}
+          <label className="field">
+            <span className="field-label">{t(lang, 'reportNote')}</span>
             <textarea name="note" rows={3} maxLength={1500} dir="auto" />
           </label>
-          <label>
-            {st(lang, 'familyContact')}
+          <label className="field">
+            <span className="field-label">{st(lang, 'familyContact')}</span>
             <input name="contact" maxLength={300} dir="auto" />
           </label>
-          <div>
-            <button type="submit" disabled={navigation.state === 'submitting'}>
+          <div className="form-actions">
+            <button type="submit" className="btn primary" disabled={navigation.state === 'submitting'}>
               {st(lang, 'familySend')}
             </button>
           </div>
         </Form>
       )}
-    </details>
+    </Panel>
   );
 }

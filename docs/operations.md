@@ -12,6 +12,21 @@ rebbehub migrate                     # create or update the schema; seeds the bu
 rebbehub account --id shmuly --name "Shmuly" --steward
 ```
 
+Once, after deploying built-in schemas version 5 (a page's words as
+structure, no longer wiki markup; [data model](data-model.md#a-pages-words)):
+
+```sh
+rebbehub convert-bodies [--chunk 500]   # every page whose words are still markup, as structured words
+```
+
+It works in reviewed system changes of `--chunk` pages, and can be
+stopped and run again: it takes up only what is left (migration 0015
+indexes what is). Until it has run, the API reads those pages into
+structure on the way out, so nothing looks different. Where the catalog
+is still rebuildable, re-running `sichos-kodesh-works`,
+`sichos-kodesh-occasions` and `sefaria` gives the fullest structure
+(footnotes, the English beside the Hebrew), which markup had lost.
+
 Production is Postgres on Neon. The revision table is partitioned by time;
 `ensureRevisionPartitions(db, [2026, 2027])` (in `@rebbehub/db`) adds
 yearly partitions ahead of time.
@@ -227,6 +242,34 @@ use them to say "we already have this" or "another scan of this
 printing". A rebuild import clears them with the rest of the database;
 run both commands again after one. They are machine output and are only
 ever shown as a guess.
+
+## Covers from the shaar
+
+A sefer's cover on the site is its **title page** (the shaar), where one
+of its PDFs is served: `rebbehub covers` samples the first ten pages of
+the best one (a preferred, complete scan of its printings first, then a
+sicha's PDF on Drive that RebbeHub holds), reads their ink and their
+words (the PDF's own, or the machine OCR of the scan), skips blank pages
+and dark cover sheets, and takes the page that looks most like a shaar:
+little ink, a few centred lines, "ספר", a publisher, a year. Failing
+that, the first real page, else page 1. The page is drawn at 480px and
+180px wide into the public bucket, as derivations of the PDF
+(`cover/<n>`, `cover-thumb/<n>`, encoder `cover@1`), so a takedown of
+the PDF takes the cover down too (migration 0017, table `cover`).
+
+A keeper who disagrees chooses another page on the sefer's page ("Choose
+another page as the title page"), a suggestion that sets the work's
+`cover` (`{ file, page }`); once approved, the next run draws that page
+and keeps it as the person's choice. A cover the machine chose says so.
+
+```sh
+export CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=…   # R2 edit rights on rebbehub-public
+rebbehub covers --limit 200                              # or --work <id>; --again after the tool changes
+```
+
+Only PDFs the site serves (`open` or `credit`, in the public bucket) give
+covers: a linked-only PDF (the Otzros library, HebrewBooks) keeps the
+drawn cloth cover. The command is not in any workflow yet.
 
 ## The API
 

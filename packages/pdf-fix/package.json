@@ -2,6 +2,15 @@
   "name": "@rebbehub/pdf-fix",
   "version": "0.1.0",
   "description": "A scan's reading copy: every page turned level, its text centred with even margins and cut free of the scanner's edges, the scan itself untouched; each page's measurements kept for OCR.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shmuky/RebbeHub.git",
+    "directory": "packages/pdf-fix"
+  },
+  "homepage": "https://github.com/shmuky/RebbeHub/tree/main/packages/pdf-fix",
+  "bugs": {
+    "url": "https://github.com/shmuky/RebbeHub/issues"
+  },
   "license": "AGPL-3.0-only",
   "type": "module",
   "main": "./dist/index.js",
@@ -12,7 +21,9 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b"
   },

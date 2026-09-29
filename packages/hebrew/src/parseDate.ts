@@ -27,6 +27,10 @@ function yearOf(token: string): number | null {
   // Numerals are written largest letter first, so a leading ה followed by a
   // larger letter is the thousands (ה׳תשמ״ב), not five.
   if (letters.length >= 3 && letters[0] === 'ה' && LETTER_VALUE(letters[1]!) > 5) letters = letters.slice(1);
+  // A numeral runs from its largest letter down (תשמב); a word whose letters
+  // climb (באתי) only adds up to a year by chance.
+  const values = [...letters].map(LETTER_VALUE);
+  if (values.some((v, i) => i > 0 && v > values[i - 1]!)) return null;
   const value = parseHebrewNumeral(letters);
   return value !== null && value >= 100 && value < 1000 ? 5000 + value : null;
 }

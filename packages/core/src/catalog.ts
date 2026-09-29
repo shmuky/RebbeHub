@@ -17,10 +17,12 @@ import {
   type SetData,
 } from '@rebbehub/model';
 import { badState, CatalogError, forbidden, invalid, notFound } from './errors.js';
+import { withStructuredBody } from './legacyWords.js';
 import { diffData, threeWayMerge, resolveConflicts, UnresolvedConflictError, type Conflict, type FieldChange, type Json, type Resolution } from './merge.js';
 import { canApprove, canSuggest, earnedTrust, mayGoLive, type Account, type SetInfo } from './permissions.js';
 import { searchTextOf, toTsQuery } from './searchText.js';
 import { focusCounts } from './projectWork.js';
+import { commented, reportOpened, reportStateChanged, reviewGiven, suggestionMerged, suggestionReverted, suggestionStarted, suggestionSubmitted, suggestionWithdrawn } from './threads.js';
 
 /**
  * The catalog: GitHub's model over the versioned Postgres schema, in the
@@ -57,6 +59,8 @@ export type ChangesetKind = 'suggestion' | 'import' | 'revert' | 'live';
 
 export interface ChangesetRow {
   id: number;
+  /** Its number among Suggestions and Reports (`#12`); null for an import (migration 0016). */
+  number: number | null;
   title: string;
   description: string | null;
   author: string;
@@ -124,6 +128,9 @@ export interface NewRevision {
 }
 
 export type ReportReason = 'wrong-fact' | 'missing-page' | 'bad-scan' | 'audio-problem' | 'wrong-text' | 'duplicate' | 'rights' | 'offensive' | 'other';
+
+/** Reports only stewards and the set's keepers read, whatever the sender chose: rights claims (takedowns) and reports of something offensive. */
+export const PRIVATE_REASONS: ReadonlySet<ReportReason> = new Set(['rights', 'offensive']);
 
 /** A file Sichos-Kodesh's archive wants and upstream would not give (migration 0009). */
 export interface ArchiveGapRow {
@@ -365,15 +372,18 @@ export class Catalog {
 
   /**
    * An item's children on main in their own order (a work's units, a
-   * text's segments), a page at a time: `after` is the last `order` seen.
+   * text's segments), a page at a time: `after` is the last `order` seen,
+   * and `afterId` the last id, so children sharing an order are not skipped.
    */
-  async children(parentId: EntityId, field: string, type: EntityType, options: { after?: string; limit?: number } = {}): Promise<EntityView[]> {
+  async children(parentId: EntityId, field: string, type: EntityType, options: { after?: string; afterId?: string; limit?: number } = {}): Promise<EntityView[]> {
     const { rows } = await this.db.query<RevisionRow>(
       `SELECT r.* FROM entity_ref x JOIN entity e ON e.id = x.from_id JOIN revision r ON r.id = e.main_rev
        WHERE x.to_id = $1 AND x.field = $2 AND e.type = $3 AND NOT e.deleted
-         AND ($4::text IS NULL OR coalesce(r.data->>'order', '') COLLATE "C" > $4::text COLLATE "C")
+         AND ($4::text IS NULL
+              OR coalesce(r.data->>'order', '') COLLATE "C" > $4::text COLLATE "C"
+              OR ($5::text IS NOT NULL AND coalesce(r.data->>'order', '') COLLATE "C" = $4::text COLLATE "C" AND e.id > $5::text))
        ORDER BY coalesce(r.data->>'order', '') COLLATE "C", e.id LIMIT ${Math.min(Math.max(options.limit ?? 100, 1), 1000)}`,
-      [parentId, field, type, options.after ?? null],
+      [parentId, field, type, options.after ?? null, options.afterId ?? null],
     );
     return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }));
   }
@@ -611,6 +621,7 @@ export class Catalog {
          VALUES ($1, $2, $3, $4, $5, (SELECT coalesce(max(seq), 0) FROM commit)) RETURNING *`,
         [input.title.trim(), input.description ?? null, author, kind, input.project ?? null],
       );
+      await suggestionStarted(tx, { id: row!.id, author, description: row!.description, number: row!.number === null ? null : Number(row!.number) });
       return row!;
     });
   }
@@ -621,16 +632,20 @@ export class Catalog {
     return row;
   }
 
-  async listChangesets(options: { status?: ChangesetStatus; author?: string; project?: number; postReview?: boolean; limit?: number } = {}): Promise<ChangesetRow[]> {
+  /** Suggestions, oldest sent first; `after` (the last one seen: when it was sent, and its id) gives the next page. */
+  async listChangesets(options: { status?: ChangesetStatus; author?: string; project?: number; postReview?: boolean; limit?: number; after?: { at: string; id: number } } = {}): Promise<ChangesetRow[]> {
     const params: unknown[] = [];
     const where: string[] = [];
     if (options.status) where.push(`status = $${params.push(options.status)}`);
     if (options.author) where.push(`author = $${params.push(options.author)}`);
     if (options.project !== undefined) where.push(`project_id = $${params.push(options.project)}`);
     if (options.postReview) where.push("post_review = 'pending'");
+    // To the millisecond, as a cursor carries it (JavaScript's dates have no finer).
+    const at = "date_trunc('milliseconds', coalesce(submitted_at, created_at))";
+    if (options.after) where.push(`(${at}, id) > ($${params.push(options.after.at)}::timestamptz, $${params.push(options.after.id)}::bigint)`);
     const { rows } = await this.db.query<ChangesetRow>(
       `SELECT * FROM changeset ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-       ORDER BY coalesce(submitted_at, created_at) ASC LIMIT ${Math.min(options.limit ?? 50, 500)}`,
+       ORDER BY ${at} ASC, id ASC LIMIT ${Math.min(Math.max(options.limit ?? 50, 1), 500)}`,
       params,
     );
     return rows;
@@ -671,12 +686,14 @@ export class Catalog {
         path = path.toLowerCase();
         if (!isEntityPath(path)) throw invalid(`"${path}" is not a path: lower-case letters, digits and hyphens between slashes`);
       }
-      const hash = await contentHash({ type: input.type, data: input.data, path });
+      // A body in the markup kept before words had structure is taken in as structured words (legacyWords.ts).
+      const data = input.data === null ? null : withStructuredBody(input.data);
+      const hash = await contentHash({ type: input.type, data, path });
       if (parent && parent.hash === hash) return id; // no change
       await tx.query(
         `INSERT INTO revision (entity_id, entity_type, parent_rev, data, path, hash, changeset_id, author)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [id, input.type, parent?.id ?? null, input.data === null ? null : JSON.stringify(input.data), path, hash, cs.id, by],
+        [id, input.type, parent?.id ?? null, data === null ? null : JSON.stringify(data), path, hash, cs.id, by],
       );
       return id;
     });
@@ -737,6 +754,15 @@ export class Catalog {
       const sets = await this.setsOfProposals(tx, proposals);
       const live =
         cs.project_id === null && !checks.some((c) => c.status === 'fail' && BLOCKING_CHECKS.has(c.check)) && mayGoLive(author, { types: new Set(proposals.map((p) => p.type)), sets });
+      await suggestionSubmitted(tx, {
+        id: cs.id,
+        by,
+        entityIds: proposals.map((p) => p.entityId),
+        setIds: sets.map((s) => s.id),
+        keepers: [...new Set(sets.flatMap((s) => s.keepers))],
+        live,
+        authorIsBot: author.is_bot,
+      });
       return { live };
     });
     if (result.live) {
@@ -754,6 +780,7 @@ export class Catalog {
       if (cs.author !== by && !actor.is_steward) throw forbidden('only its author withdraws a suggestion');
       if (cs.status === 'merged' || cs.status === 'withdrawn') throw badState(`this suggestion is ${cs.status}`);
       await tx.query("UPDATE changeset SET status = 'withdrawn', closed_at = now() WHERE id = $1", [cs.id]);
+      await suggestionWithdrawn(tx, { id: cs.id, by });
     });
   }
 
@@ -764,25 +791,43 @@ export class Catalog {
       if (cs.status !== 'open') throw badState(`this suggestion is ${cs.status}`);
       await this.assertMayApprove(tx, cs, by);
       if (note.trim().length === 0) throw invalid('say what should change');
-      await tx.query("INSERT INTO review (changeset_id, reviewer, verdict, body) VALUES ($1, $2, 'send_back', $3)", [cs.id, by, note]);
+      const review = await one<{ id: number }>(tx, "INSERT INTO review (changeset_id, reviewer, verdict, body) VALUES ($1, $2, 'send_back', $3) RETURNING id", [cs.id, by, note]);
       await tx.query("UPDATE changeset SET status = 'sent_back' WHERE id = $1", [cs.id]);
+      await reviewGiven(tx, { changesetId: cs.id, by, verdict: 'send_back', reviewId: Number(review!.id), body: note });
       await this.audit(tx, by, 'changeset.send_back', 'changeset', String(cs.id), { note });
     });
   }
 
-  /** A comment on a suggestion, report, item or project. */
-  async comment(by: string, target: { kind: 'changeset' | 'report' | 'entity' | 'project'; id: string }, body: string, parent?: number): Promise<number> {
+  /**
+   * A comment on a suggestion, report, item or project. On a suggestion it
+   * may be about one field of one item in its change (`anchor`), and belong
+   * to a review. The people it names are told, and on a suggestion or
+   * report its writer follows it and its followers are told.
+   */
+  async comment(
+    by: string,
+    target: { kind: 'changeset' | 'report' | 'entity' | 'project'; id: string },
+    body: string,
+    parent?: number,
+    options: { anchor?: { entity: EntityId; field: string }; review?: number } = {},
+  ): Promise<number> {
     const account = await this.requireAccount(by);
     if (!canSuggest(account)) throw forbidden('this account cannot comment');
     if (body.trim().length === 0) throw invalid('an empty comment');
-    const row = await one<{ id: number }>(this.db, 'INSERT INTO comment (target_kind, target_id, parent_id, author, body) VALUES ($1, $2, $3, $4, $5) RETURNING id', [
-      target.kind,
-      target.id,
-      parent ?? null,
-      by,
-      body,
-    ]);
-    return row!.id;
+    return this.db.transaction(async (tx) => {
+      const row = await one<{ id: number }>(tx, 'INSERT INTO comment (target_kind, target_id, parent_id, author, body, anchor, review_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id', [
+        target.kind,
+        target.id,
+        parent ?? null,
+        by,
+        body,
+        options.anchor ? JSON.stringify(options.anchor) : null,
+        options.review ?? null,
+      ]);
+      const id = Number(row!.id);
+      await commented(tx, { id, author: by, body, target, review: options.review !== undefined });
+      return id;
+    });
   }
 
   /**
@@ -842,16 +887,19 @@ export class Catalog {
       if (failed.length > 0) throw invalid(`failed checks: ${failed.map((c) => c.message).join('; ')}`, failed);
       const proposals = await this.proposals(cs.id, tx);
       if (!options.skipPermission) {
-        await tx.query("INSERT INTO review (changeset_id, reviewer, verdict, body) VALUES ($1, $2, 'approve', $3)", [cs.id, by, options.note ?? null]);
+        const review = await one<{ id: number }>(tx, "INSERT INTO review (changeset_id, reviewer, verdict, body) VALUES ($1, $2, 'approve', $3) RETURNING id", [cs.id, by, options.note ?? null]);
+        await reviewGiven(tx, { changesetId: cs.id, by, verdict: 'approve', reviewId: Number(review!.id), body: options.note });
       }
       if (cs.project_id !== null) {
         await this.applyToProject(tx, cs, proposals, by, resolutions);
         await tx.query("UPDATE changeset SET status = 'merged', closed_at = now() WHERE id = $1", [cs.id]);
+        await suggestionMerged(tx, { id: cs.id, by, commit: null });
         return { commit: null, author: cs.author };
       }
       const seq = await this.applyToMain(tx, cs.id, proposals, by, cs.title, resolutions);
       await tx.query("UPDATE changeset SET status = 'merged', merged_commit = $2, closed_at = now() WHERE id = $1", [cs.id, seq]);
       await this.audit(tx, by, 'changeset.merge', 'changeset', String(cs.id), { commit: seq });
+      await suggestionMerged(tx, { id: cs.id, by, commit: seq, live: options.skipPermission });
       return { commit: seq, author: cs.author };
     });
     await this.credit(result.author, 'approved');
@@ -864,8 +912,9 @@ export class Catalog {
     if (cs.post_review !== 'pending') throw badState('this change is not waiting for review');
     await this.db.transaction(async (tx) => {
       await this.assertMayApprove(tx, cs, by);
-      await tx.query('INSERT INTO review (changeset_id, reviewer, verdict, body) VALUES ($1, $2, $3, $4)', [cs.id, by, verdict === 'approve' ? 'approve' : 'send_back', note ?? null]);
+      const review = await one<{ id: number }>(tx, 'INSERT INTO review (changeset_id, reviewer, verdict, body) VALUES ($1, $2, $3, $4) RETURNING id', [cs.id, by, verdict === 'approve' ? 'approve' : 'send_back', note ?? null]);
       await tx.query("UPDATE changeset SET post_review = 'done' WHERE id = $1", [cs.id]);
+      await reviewGiven(tx, { changesetId: cs.id, by, verdict: verdict === 'approve' ? 'approve' : 'send_back', reviewId: Number(review!.id), body: note });
     });
     if (verdict === 'approve') return {};
     const revert = await this.revert(changesetId, by, note);
@@ -906,7 +955,9 @@ export class Catalog {
     for (const p of proposals) {
       const current = await this.targetRev(tx, null, p.entityId);
       if ((current?.id ?? null) === p.baseRev) {
-        planned.push({ proposal: p, current, data: p.rev.data, path: p.rev.path, direct: true });
+        // A suggestion sent before words had structure lands with its body read as structured words.
+        const data = withStructuredBody(p.rev.data);
+        planned.push({ proposal: p, current, data, path: p.rev.path, direct: data === p.rev.data });
         continue;
       }
       const base = p.baseRev === null ? null : await this.revision(p.baseRev, tx);
@@ -921,6 +972,7 @@ export class Catalog {
         }
         data = resolveConflicts(merged, decided!);
       }
+      data = withStructuredBody(data);
       // A path changed on one side only follows that side; changed on both, theirs wins unless the reviewer said otherwise.
       const path = (base?.path ?? null) === (current?.path ?? null) ? p.rev.path : (base?.path ?? null) === p.rev.path ? (current?.path ?? null) : p.rev.path;
       planned.push({ proposal: p, current, data, path, direct: false });
@@ -1073,7 +1125,10 @@ export class Catalog {
       // Not theirs to merge (or it clashes): the revert waits for review as a suggestion.
       if (!(error instanceof CatalogError && error.code === 'forbidden') && !(error instanceof UnresolvedConflictError)) throw error;
     }
-    if (commit !== null) await this.credit(target.author, 'reverted');
+    if (commit !== null) {
+      await this.credit(target.author, 'reverted');
+      await suggestionReverted(this.db, { id: target.id, by, revert: revert.id });
+    }
     return { changeset: revert.id, commit };
   }
 
@@ -1277,8 +1332,13 @@ export class Catalog {
 
   // ------------------------------------------------------------ reports, follows
 
-  /** "Report a problem": no account needed. Lands in the inbox of the item's set. */
-  async report(input: { entityId?: EntityId; reason: ReportReason; note?: string; reporter?: string; reporterHash?: string }): Promise<number> {
+  /**
+   * "Report a problem": no account needed. Lands in the inbox of the item's
+   * set, whose keepers are told. A report is read by everyone, kept as an
+   * issue, unless it is `private`: a rights claim or something offensive
+   * always is (PRIVATE_REASONS).
+   */
+  async report(input: { entityId?: EntityId; reason: ReportReason; note?: string; reporter?: string; reporterHash?: string; title?: string; private?: boolean }): Promise<number> {
     return this.db.transaction(async (tx) => {
       let setId: string | null = null;
       if (input.entityId) {
@@ -1287,13 +1347,16 @@ export class Catalog {
         const sets = await this.setsOf(tx, main.entity_type, main.data);
         setId = sets[0]?.id ?? null;
       }
-      if (input.note && input.note.length > 2000) throw invalid('a report note is at most 2000 characters');
+      if (input.note && input.note.length > 10_000) throw invalid('a report note is at most 10,000 characters');
+      const title = input.title?.replace(/\s+/g, ' ').trim().slice(0, 200) || null;
       const row = await one<{ id: number }>(
         tx,
-        'INSERT INTO report (entity_id, set_id, reason, note, reporter, reporter_hash) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-        [input.entityId ?? null, setId, input.reason, input.note ?? null, input.reporter ?? null, input.reporterHash ?? null],
+        'INSERT INTO report (entity_id, set_id, reason, note, reporter, reporter_hash, title, private) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
+        [input.entityId ?? null, setId, input.reason, input.note ?? null, input.reporter ?? null, input.reporterHash ?? null, title, (input.private ?? false) || PRIVATE_REASONS.has(input.reason)],
       );
-      return row!.id;
+      const id = Number(row!.id);
+      await reportOpened(tx, { id, reporter: input.reporter ?? null, note: input.note ?? null, entityId: input.entityId ?? null, setId });
+      return id;
     });
   }
 
@@ -1314,12 +1377,13 @@ export class Catalog {
       const actor = await this.requireAccount(by, tx);
       const set = report.set_id ? await this.setInfo(tx, report.set_id) : null;
       if (!actor.is_steward && !(set && set.keepers.includes(by))) throw forbidden("reports are closed by the set's keepers");
-      await tx.query('UPDATE report SET status = $2, resolved_by = $3, resolution_changeset = $4, closed_at = now() WHERE id = $1', [reportId, outcome, by, resolution?.changeset ?? null]);
+      await tx.query('UPDATE report SET status = $2, resolved_by = $3, resolution_changeset = $4, closed_at = now(), updated_at = now() WHERE id = $1', [reportId, outcome, by, resolution?.changeset ?? null]);
       await this.audit(tx, by, `report.${outcome}`, 'report', String(reportId), { note: resolution?.note });
+      await reportStateChanged(tx, { id: reportId, by, outcome, note: resolution?.note, changeset: resolution?.changeset });
     });
   }
 
-  async follow(accountId: string, target: { kind: 'entity' | 'set' | 'project' | 'changeset'; id: string }, on = true): Promise<void> {
+  async follow(accountId: string, target: { kind: 'entity' | 'set' | 'project' | 'changeset' | 'report'; id: string }, on = true): Promise<void> {
     if (on) {
       await this.db.query('INSERT INTO follow (account_id, target_kind, target_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [accountId, target.kind, target.id]);
     } else {
@@ -1328,8 +1392,8 @@ export class Catalog {
   }
 
   /** What a person follows: items and sets, newest first. */
-  async follows(accountId: string): Promise<Array<{ kind: 'entity' | 'set' | 'project' | 'changeset'; id: string; since: string }>> {
-    const { rows } = await this.db.query<{ target_kind: 'entity' | 'set' | 'project' | 'changeset'; target_id: string; created_at: Date | string }>(
+  async follows(accountId: string): Promise<Array<{ kind: 'entity' | 'set' | 'project' | 'changeset' | 'report'; id: string; since: string }>> {
+    const { rows } = await this.db.query<{ target_kind: 'entity' | 'set' | 'project' | 'changeset' | 'report'; target_id: string; created_at: Date | string }>(
       'SELECT target_kind, target_id, created_at FROM follow WHERE account_id = $1 ORDER BY created_at DESC',
       [accountId],
     );

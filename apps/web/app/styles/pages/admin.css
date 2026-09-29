@@ -1,0 +1,179 @@
+/*
+ * The stewards' page (people, reports, takedown requests) and the public
+ * takedown form. Rows with their actions at the end, as GitHub's admin
+ * pages are; on a phone the actions drop under the row.
+ */
+
+.admin-search {
+  position: relative;
+  max-width: 520px;
+}
+
+.admin-search > .i {
+  position: absolute;
+  inset-inline-start: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--subtle);
+  pointer-events: none;
+}
+
+.admin-search .input {
+  padding-inline-start: 34px;
+  height: 36px;
+}
+
+.admin-search .input:focus {
+  outline: none;
+}
+
+.admin-row {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.admin-row > .avatar,
+.admin-row > .state-icon {
+  margin-top: 2px;
+}
+
+.admin-row .row-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.admin-row .row-title a {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.admin-row .row-title a:hover {
+  color: var(--accent);
+}
+
+.admin-row .handle {
+  font: 400 var(--fs-sm) / 1 var(--mono);
+  color: var(--subtle);
+}
+
+.admin-row .row-sub .mono {
+  font-size: 11.5px;
+}
+
+.admin-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  flex: none;
+}
+
+.admin-target {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: var(--fs-md);
+}
+
+/* What the reader or the rights holder wrote, set off as a quotation. */
+.admin-note {
+  display: block;
+  margin: 6px 0 2px;
+  padding: 2px 0 2px 0;
+  padding-inline-start: 10px;
+  border-inline-start: 2px solid var(--border-strong);
+  color: var(--text);
+  font-size: var(--fs-md);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.takedown-box > .box-h {
+  font-weight: 500;
+}
+
+.takedown-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
+}
+
+.takedown-who b {
+  font-weight: 600;
+}
+
+.takedown-box > .box-h .end {
+  font-size: var(--fs-sm);
+  font-weight: 400;
+}
+
+dl.facts.takedown-facts {
+  padding: 14px 16px 4px;
+  grid-template-columns: 180px minmax(0, 1fr);
+}
+
+.takedown-statement {
+  margin: 8px 16px 14px;
+}
+
+.takedown-pad {
+  padding: 0 16px 14px;
+}
+
+.takedown-files {
+  border-top: 1px solid var(--border);
+}
+
+.takedown-files > .row:first-child {
+  border-top: 0;
+}
+
+.takedown-files .row-title {
+  font-size: var(--fs-md);
+}
+
+/* The public form. */
+.takedown .form-row {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.takedown-form-box {
+  padding: 20px;
+}
+
+.takedown-form .field {
+  margin-bottom: 0;
+}
+
+.takedown-form .choices {
+  font-weight: 400;
+}
+
+@media (max-width: 720px) {
+  .admin-acts {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    padding-inline-start: 32px;
+  }
+  dl.facts.takedown-facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px 0;
+  }
+  dl.facts.takedown-facts dd + dt {
+    margin-top: 8px;
+  }
+  .takedown-form-box {
+    padding: 16px;
+  }
+  .takedown-box > .box-h {
+    flex-wrap: wrap;
+  }
+}
+
+.takedown-form .choices {
+  margin-bottom: 0;
+}

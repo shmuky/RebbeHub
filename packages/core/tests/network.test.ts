@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { pageTextPlain, plainPage } from '@rebbehub/model';
 import {
   EMBEDDING_DIMENSIONS,
   bestLine,
@@ -16,6 +17,9 @@ import {
 } from '@rebbehub/core';
 import type { EntityId } from '@rebbehub/model';
 import { add, freshCatalog, yudShvat } from './helpers.js';
+
+/** Plain words as a page's body, as the catalog takes data. */
+const page = (text: string) => JSON.parse(JSON.stringify(plainPage(text)));
 
 describe('citations in text', () => {
   it('reads sefarim by volume, page and letter, however they are written', () => {
@@ -51,7 +55,7 @@ describe('citations in text', () => {
       position: [{ level: 'volume', value: '20' }, { level: 'sicha', value: '1' }],
       order: 'V',
       label: { he: 'בא א' },
-      body: 'משיחת יו"ד שבט תשמ"ב. ראה לקו"ש חי"ב עמ\' 5, ולקו"ש חט"ו.',
+      body: page('משיחת יו"ד שבט תשמ"ב. ראה לקו"ש חי"ב עמ\' 5, ולקו"ש חט"ו.'),
       sets: [set],
     });
 
@@ -77,7 +81,7 @@ describe('citations in text', () => {
     expect(await proposeCitations(catalog)).toMatchObject({ read: 0, proposed: 0 });
     const cs = await catalog.createChangeset('mendy', { title: 'עריכה' });
     const current = (await catalog.get(sicha))!;
-    await catalog.putRevision(cs.id, 'mendy', { id: sicha, type: 'unit', data: { ...(current.data as object), body: `${(current.data as { body: string }).body} ועוד.` } });
+    await catalog.putRevision(cs.id, 'mendy', { id: sicha, type: 'unit', data: { ...(current.data as object), body: page(`${pageTextPlain((current.data as { body: unknown }).body)} ועוד.`) } });
     await catalog.submit(cs.id, 'mendy');
     await catalog.merge(cs.id, 'keeper');
     expect(await proposeCitations(catalog)).toMatchObject({ read: 1, found: 3, proposed: 0 });
@@ -143,7 +147,7 @@ describe('search by meaning', () => {
     const { catalog, set } = await freshCatalog();
     const author = await add(catalog, 'shmuly', 'shmuly', 'author', { name: { he: 'הרבי' }, kind: 'rebbe', sets: [set] });
     const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'שיחות' }, slug: 'sichos', authors: [author], genre: 'sichos', levels: ['sicha'], sets: [set] });
-    const unit = (label: string, order: string, body: string) => add(catalog, 'mendy', 'keeper', 'unit', { work, position: [{ level: 'sicha', value: label }], order, label: { he: label }, body, sets: [set] });
+    const unit = (label: string, order: string, body: string) => add(catalog, 'mendy', 'keeper', 'unit', { work, position: [{ level: 'sicha', value: label }], order, label: { he: label }, body: page(body), sets: [set] });
     const love = await unit('א', 'V', 'אהבת ישראל ואחדות');
     await unit('ב', 'k', 'שמחה בעבודה');
     expect(embeddingInput({ type: 'unit', data: { label: { he: 'א' }, body: "'''אהבת''' [[ישראל]]" } })).toBe('א אהבת ישראל');

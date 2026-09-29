@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "description": "RebbeHub's public site: sets, the events calendar, item, publication and event pages, search, the audio player and scan viewer, permanent links, SEO. React Router 7 with server rendering, Hebrew first.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shmuky/RebbeHub.git",
+    "directory": "apps/web"
+  },
+  "homepage": "https://github.com/shmuky/RebbeHub/tree/main/apps/web",
+  "bugs": {
+    "url": "https://github.com/shmuky/RebbeHub/issues"
+  },
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {

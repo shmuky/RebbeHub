@@ -3,6 +3,9 @@ import type { MirrorsInfo } from '../lib/api.js';
 import { siteOf } from '../lib/context.server.js';
 import { langFrom, type Lang } from '../lib/i18n.js';
 import { pageMeta } from '../lib/seo.js';
+import { Icon } from '../ui/Icon.js';
+import { Box, EmptyState, Label } from '../ui/primitives.js';
+import '../styles/pages/info.css';
 
 /**
  * Download everything, and keep a copy (the plan: "It belongs to the
@@ -57,6 +60,14 @@ const W = {
   },
   others: { he: 'אתרי מראה', en: 'Mirrors' },
   api: { he: 'הכול גם כ-JSON:', en: 'All of this as JSON:' },
+  onThisPage: { he: 'בדף הזה', en: 'On this page' },
+  licence: { he: 'רישיון', en: 'Licence' },
+  licences: [
+    { he: 'עובדות הקטלוג', en: 'Catalog facts', id: 'CC0' },
+    { he: 'טקסט קהילתי', en: 'Community text', id: 'CC BY-SA' },
+  ],
+  ownLicence: { he: 'טקסט ממקור אחר שומר על הרישיון שלו.', en: 'A text from elsewhere keeps its own licence.' },
+  latest: { he: 'אחרונה', en: 'latest' },
   unavailable: { he: 'לא הצלחנו לקרוא את הרשימה כרגע.', en: 'The list could not be read just now.' },
 } as const;
 
@@ -79,108 +90,231 @@ export function meta({ loaderData }: Route.MetaArgs) {
 export default function Mirrors({ loaderData }: Route.ComponentProps) {
   const { lang, mirrors, apiUrl } = loaderData;
   const pin = mirrors?.keys[0]?.publicKey ?? '<public key>';
+  const when = (at: string) => new Date(at).toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US');
   return (
-    <article className="mirrors">
-      <h1>{W.title[lang]}</h1>
-      <p>{W.intro[lang]}</p>
-      {!mirrors ? <p className="notice">{W.unavailable[lang]}</p> : null}
+    <>
+      <div className="phead">
+        <div className="wrap">
+          <h1 className="page-title">{W.title[lang]}</h1>
+          <p className="lede">{W.intro[lang]}</p>
+        </div>
+      </div>
+      <div className="wrap cols mirrors">
+        <div className="stack-lg">
+          {!mirrors ? (
+            <div className="alert negative" role="status">
+              <Icon name="warn" />
+              {W.unavailable[lang]}
+            </div>
+          ) : null}
 
-      <h2>{W.git[lang]}</h2>
-      <p>{W.gitText[lang]}</p>
-      {mirrors?.git.length ? (
-        <pre dir="ltr">{mirrors.git.map((url) => `git clone ${url}`).join('\n')}</pre>
-      ) : (
-        <p className="row-sub">{W.gitSoon[lang]}</p>
-      )}
-
-      <h2>{W.editions[lang]}</h2>
-      <p>{W.editionsText[lang]}</p>
-      {mirrors?.editions.length ? (
-        <ul className="rows editions">
-          {mirrors.editions.map((e) => (
-            <li key={e.tag}>
-              <h3>
-                {e.tag}{' '}
-                <span className="row-sub">
-                  · {new Date(e.created_at).toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US')} · {W.commit[lang]} {e.commit_seq}
-                  {e.dumps ? ` · ${e.dumps.signature ? `${W.signed[lang]} ${e.dumps.signature.keyId}` : W.unsigned[lang]}` : ` · ${W.noFiles[lang]}`}
-                </span>
-              </h3>
-              {e.notes ? <p>{e.notes}</p> : null}
-              {e.dumps ? (
-                <table className="checksums" dir="ltr">
-                  <tbody>
-                    {e.dumps.files.map((f) => (
-                      <tr key={f.name}>
-                        <td>
-                          <a href={f.url} download>
-                            {f.name}
-                          </a>
-                        </td>
-                        <td>{size(f.bytes, lang)}</td>
-                        <td>
-                          <code title={f.sha256}>{`sha256 ${f.sha256}`}</code>
-                        </td>
-                      </tr>
-                    ))}
-                    <tr>
-                      <td colSpan={3}>
-                        <a href={e.dumps.manifest}>manifest.json</a> · <a href={e.dumps.sha256sums}>SHA256SUMS</a>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="row-sub">{W.none[lang]}</p>
-      )}
-
-      <h2>{W.keys[lang]}</h2>
-      <p>{W.keysText[lang]}</p>
-      {mirrors?.keys.length ? (
-        <ul className="list" dir="ltr">
-          {mirrors.keys.map((k) => (
-            <li key={k.keyId}>
-              <div className="row">
-                <code>
-                  {k.alg} {k.keyId}: {k.publicKey}
-                </code>
+          <section id="git" aria-labelledby="git-h">
+            <h2 className="h-side" id="git-h">
+              <Icon name="code" className="subtle" />
+              {W.git[lang]}
+            </h2>
+            <p className="muted mirror-say">{W.gitText[lang]}</p>
+            {mirrors?.git.length ? (
+              <pre className="mirror-code" dir="ltr">
+                {mirrors.git.map((url) => `git clone ${url}`).join('\n')}
+              </pre>
+            ) : (
+              <div className="box">
+                <EmptyState compact icon="code" title={W.gitSoon[lang]} />
               </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="row-sub">{W.keysNone[lang]}</p>
-      )}
+            )}
+          </section>
 
-      <h2>{W.how[lang]}</h2>
-      <p>{W.howText[lang]}</p>
-      <pre dir="ltr">
-        {`git clone https://github.com/shmuky/RebbeHub && cd RebbeHub && npm ci
+          <section id="editions" aria-labelledby="editions-h">
+            <h2 className="h-side" id="editions-h">
+              <Icon name="database" className="subtle" />
+              {W.editions[lang]}
+              {mirrors?.editions.length ? <span className="count">{mirrors.editions.length}</span> : null}
+            </h2>
+            <p className="muted mirror-say">{W.editionsText[lang]}</p>
+            {mirrors?.editions.length ? (
+              <div className="stack">
+                {mirrors.editions.map((e, i) => (
+                  <Box
+                    key={e.tag}
+                    as="section"
+                    className="edition"
+                    header={
+                      <>
+                        <Icon name="database" className="subtle" />
+                        <b className="mono" dir="ltr">
+                          {e.tag}
+                        </b>
+                        {i === 0 ? <Label tone="sync">{W.latest[lang]}</Label> : null}
+                        <span className="end muted small">
+                          {`${when(e.created_at)} · ${W.commit[lang]} ${e.commit_seq}`}
+                        </span>
+                      </>
+                    }
+                  >
+                    {e.notes ? <p className="edition-notes">{e.notes}</p> : null}
+                    {e.dumps ? (
+                      <>
+                        <ul className="edition-files" dir="ltr">
+                          {e.dumps.files.map((f) => (
+                            <li key={f.name} className="row">
+                              <Icon name="down" className="subtle" />
+                              <span className="grow edition-file">
+                                <a href={f.url} download>
+                                  {f.name}
+                                </a>
+                                <code className="edition-sha" title={f.sha256}>{`sha256 ${f.sha256}`}</code>
+                              </span>
+                              <span className="row-end num subtle" dir="ltr">{size(f.bytes, lang)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="box-f edition-f">
+                          <span className="edition-sig">
+                            <Icon name={e.dumps.signature ? 'shield' : 'warn'} className="subtle" />
+                            {e.dumps.signature ? <span>{`${W.signed[lang]} ${e.dumps.signature.keyId}`}</span> : W.unsigned[lang]}
+                          </span>
+                          <span className="end" dir="ltr">
+                            <a href={e.dumps.manifest}>manifest.json</a>
+                            {' · '}
+                            <a href={e.dumps.sha256sums}>SHA256SUMS</a>
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="edition-notes muted">{W.noFiles[lang]}</p>
+                    )}
+                  </Box>
+                ))}
+              </div>
+            ) : (
+              <div className="box">
+                <EmptyState compact icon="database" title={W.none[lang]} />
+              </div>
+            )}
+          </section>
+
+          <section id="keys" aria-labelledby="keys-h">
+            <h2 className="h-side" id="keys-h">
+              <Icon name="shield" className="subtle" />
+              {W.keys[lang]}
+            </h2>
+            <p className="muted mirror-say">{W.keysText[lang]}</p>
+            {mirrors?.keys.length ? (
+              <Box as="ul">
+                {mirrors.keys.map((k) => (
+                  <li key={k.keyId} className="row mirror-key" dir="ltr">
+                    <Icon name="lock" className="subtle" />
+                    <span className="grow">
+                      <b className="mono">{`${k.alg} ${k.keyId}`}</b>
+                      <code className="file-hash">{k.publicKey}</code>
+                    </span>
+                  </li>
+                ))}
+              </Box>
+            ) : (
+              <div className="box">
+                <EmptyState compact icon="shield" title={W.keysNone[lang]} />
+              </div>
+            )}
+          </section>
+
+          <section id="how" aria-labelledby="how-h">
+            <h2 className="h-side" id="how-h">
+              <Icon name="mirror" className="subtle" />
+              {W.how[lang]}
+            </h2>
+            <p className="muted mirror-say">{W.howText[lang]}</p>
+            <pre className="mirror-code" dir="ltr">
+              {`git clone https://github.com/shmuky/RebbeHub && cd RebbeHub && npm ci
 npm run rebbehub -- mirror-pull --api ${apiUrl} --out /srv/rebbehub --key ${pin}
 # or by hand, for one edition:
 curl -O ${apiUrl}/v1/editions/<tag>/SHA256SUMS && sha256sum -c SHA256SUMS`}
-      </pre>
+            </pre>
+          </section>
 
-      {mirrors?.others.length ? (
-        <>
-          <h2>{W.others[lang]}</h2>
-          <ul className="list">
-            {mirrors.others.map((o) => (
-              <li key={o.url}>
-                <a href={o.url}>{o.name}</a>
+          {mirrors?.others.length ? (
+            <section id="others" aria-labelledby="others-h">
+              <h2 className="h-side" id="others-h">
+                <Icon name="globe" className="subtle" />
+                {W.others[lang]}
+              </h2>
+              <Box as="ul">
+                {mirrors.others.map((o) => (
+                  <li key={o.url}>
+                    <a className="row" href={o.url}>
+                      <Icon name="globe" />
+                      <span className="grow row-title">{o.name}</span>
+                      <span className="row-end subtle" dir="ltr">
+                        {o.url.replace(/^https?:\/\//, '')}
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </Box>
+            </section>
+          ) : null}
+        </div>
+
+        <aside className="side" aria-label={W.onThisPage[lang]}>
+          <section>
+            <h4>{W.onThisPage[lang]}</h4>
+            <ul className="side-list help-now">
+              <li>
+                <a href="#git">
+                  <Icon name="code" />
+                  <span className="grow">{W.git[lang]}</span>
+                </a>
               </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-
-      <p className="row-sub">
-        {W.api[lang]} <a href={`${apiUrl}/v1/mirrors`}>{`${apiUrl}/v1/mirrors`}</a> · <a href="https://github.com/shmuky/RebbeHub/blob/main/docs/mirrors.md">docs/mirrors.md</a>
-      </p>
-    </article>
+              <li>
+                <a href="#editions">
+                  <Icon name="database" />
+                  <span className="grow">{W.editions[lang]}</span>
+                  {mirrors ? <span className="num subtle">{mirrors.editions.length}</span> : null}
+                </a>
+              </li>
+              <li>
+                <a href="#keys">
+                  <Icon name="shield" />
+                  <span className="grow">{W.keys[lang]}</span>
+                </a>
+              </li>
+              <li>
+                <a href="#how">
+                  <Icon name="mirror" />
+                  <span className="grow">{W.how[lang]}</span>
+                </a>
+              </li>
+            </ul>
+          </section>
+          <section>
+            <h4>{W.licence[lang]}</h4>
+            <dl>
+              {W.licences.map((l) => (
+                <div key={l.id} className="dl-row">
+                  <dt>{l[lang]}</dt>
+                  <dd>
+                    <bdi className="mono">{l.id}</bdi>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            <p className="muted small">{W.ownLicence[lang]}</p>
+          </section>
+          <section>
+            <h4>JSON</h4>
+            <p className="muted small">
+              {W.api[lang]}{' '}
+              <a href={`${apiUrl}/v1/mirrors`} dir="ltr" className="mono">{`${apiUrl}/v1/mirrors`}</a>
+            </p>
+            <p className="small">
+              <a href="https://github.com/shmuky/RebbeHub/blob/main/docs/mirrors.md" dir="ltr">
+                docs/mirrors.md
+              </a>
+            </p>
+          </section>
+        </aside>
+      </div>
+    </>
   );
 }

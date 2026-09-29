@@ -1,8 +1,9 @@
 import { one } from '@rebbehub/db';
 import { parseDateText, parseHebrewNumeral, type DateKey } from '@rebbehub/hebrew';
-import type { EntityId, RelationData, RelationKind } from '@rebbehub/model';
+import { pageTextPlain, type EntityId, type RelationData, type RelationKind } from '@rebbehub/model';
 import type { Catalog, RevisionRow } from './catalog.js';
 import type { Json } from './merge.js';
+import { withStructuredBody } from './legacyWords.js';
 
 /**
  * Cross-linking (the plan, section 9: "detect citations in text ('ראה
@@ -193,7 +194,7 @@ async function sourcesToRead(catalog: Catalog, limit: number): Promise<Source[]>
           text: Array.isArray(d.lines) ? (d.lines as Array<{ text?: string }>).map((l) => l.text ?? '').join(' ') : '',
         };
       default:
-        return { id: r.entity_id, rev: r.id, from: r.entity_id, text: typeof d.body === 'string' ? d.body : '' };
+        return { id: r.entity_id, rev: r.id, from: r.entity_id, text: pageTextPlain(withStructuredBody(d).body) };
     }
   });
 }

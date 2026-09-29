@@ -1,0 +1,545 @@
+/*
+ * A page's words (components/PageWords.tsx), by the display rules of where
+ * they came from, and fixing them in place (the Edit tab, SegmentEditor).
+ * The words of the Torah in the Torah face (--torah, the reader's choice),
+ * large and open, each paragraph's number in the margin as a sefer's
+ * se'ifim are; Hebrew right to left whatever the page's language.
+ *
+ *   sichos-kodesh   paragraphs numbered in the margin, headings centred
+ *   chabad-library  the same, set justified, old page numbers in brackets
+ *   sefaria         verses numbered in Hebrew letters, Hebrew and English side by side
+ *   outline         a farbrengen's contents: numbered rows
+ *   plain           what people wrote here: the UI face, no numbers
+ */
+
+.page-words {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.words-versions {
+  justify-self: start;
+  min-width: 260px;
+}
+
+.words-versions > button {
+  font: 500 13px var(--ui);
+}
+
+.words {
+  font-family: var(--torah);
+  font-size: 20px;
+  line-height: 1.9;
+  color: var(--text);
+  counter-reset: words-p;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+/* English in the Torah face too: Frank Ruhl Libre (--display) is loaded bold only. */
+.words[dir='ltr'],
+.words-cell[dir='ltr'] {
+  font-family: var(--torah);
+  font-size: 17px;
+  line-height: 1.75;
+}
+
+/* ------------------------------------------------------------ headings */
+
+.words-heading {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 1.05em;
+  line-height: 1.4;
+  margin: 1.1em 0 0.5em;
+  scroll-margin-top: calc(var(--header-h) + 16px);
+}
+
+.words > .words-heading:first-child,
+.words > .words-section:first-child > .words-heading:first-child {
+  margin-top: 0;
+}
+
+h2.words-heading {
+  font-size: 1.15em;
+}
+
+.words-sichos-kodesh .words-heading,
+.words-chabad-library .words-heading {
+  text-align: center;
+}
+
+.words-section {
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------ paragraphs and verses, numbered in the margin */
+
+.words-p,
+.words-verse {
+  position: relative;
+  margin: 0 0 0.75em;
+  padding-inline-start: 38px;
+  scroll-margin-top: calc(var(--header-h) + 16px);
+}
+
+.words-p {
+  counter-increment: words-p;
+}
+
+.words-p.end {
+  text-align: end;
+}
+
+.words-anchor,
+.words-verse .words-n {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0.55em;
+  width: 28px;
+  font: 400 11.5px / 1.6 var(--ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--subtle);
+  text-align: start;
+  text-decoration: none;
+}
+
+.words-anchor:empty::before {
+  content: counter(words-p);
+}
+
+.words-anchor:hover,
+.words-verse .words-n:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* What people wrote here: no numbers, the paragraph's mark only on hover. */
+.words-plain {
+  font-family: var(--ui);
+  font-size: var(--fs-lg);
+  line-height: 1.75;
+}
+
+.words-plain .words-p {
+  padding-inline-start: 0;
+}
+
+.words-plain .words-anchor {
+  inset-inline-start: -22px;
+  opacity: 0;
+}
+
+.words-plain .words-anchor:empty::before {
+  content: '¶';
+}
+
+.words-plain .words-p:hover .words-anchor,
+.words-plain .words-anchor:focus-visible {
+  opacity: 1;
+}
+
+.words-chabad-library .words-p {
+  text-align: justify;
+}
+
+/* The one a link points at, or the one being heard: a bar of the accent beside it. */
+.words-p:target,
+.words-verse:target,
+.words-row:target,
+.words-heading:target,
+.words li:target {
+  background: var(--accent-soft);
+  box-shadow: inset -2px 0 0 var(--accent);
+  border-radius: 2px;
+}
+
+html[dir='ltr'] .words-p:target,
+html[dir='ltr'] .words-verse:target,
+html[dir='ltr'] .words-row:target,
+html[dir='ltr'] .words li:target {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.words-p:target .words-anchor,
+.words-verse:target .words-n {
+  color: var(--accent);
+}
+
+/* Machine output nobody has checked: a dotted amber line beside it, always. */
+.words .machine,
+.words-p.machine,
+.words-verse.machine {
+  border-inline-start: 2px dotted var(--machine);
+  padding-inline-start: 36px;
+}
+
+.words.machine {
+  border-inline-start: 0;
+}
+
+.words li.machine {
+  padding-inline-start: 8px;
+}
+
+/* ------------------------------------------------------------ inline marks */
+
+.words-marker {
+  font: 400 11.5px var(--ui);
+  color: var(--subtle);
+  margin-inline: 0.3em;
+  vertical-align: 0.15em;
+  white-space: nowrap;
+}
+
+/* The Chabad Library's old page numbers, in brackets as the library prints them. */
+.words-chabad-library .words-marker::before {
+  content: '(';
+}
+
+.words-chabad-library .words-marker::after {
+  content: ')';
+}
+
+.words-note-ref {
+  font: 600 0.6em var(--ui);
+  line-height: 0;
+  margin-inline: 1px;
+}
+
+.words-note-ref a,
+.words-note-back {
+  text-decoration: none;
+}
+
+.words a:not(.words-anchor):not(.words-n):not(.words-note-back):not(.words-note-ref a) {
+  color: var(--accent);
+}
+
+/* ------------------------------------------------------------ notes and credit */
+
+.words-notes {
+  font-size: 0.8em;
+  line-height: 1.75;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  margin-top: 1.2em;
+  padding-top: 10px;
+}
+
+.words-notes ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.words-notes li {
+  scroll-margin-top: calc(var(--header-h) + 16px);
+}
+
+.words-note-back {
+  font: 600 11.5px var(--ui);
+  margin-inline-end: 4px;
+}
+
+.words-credit {
+  margin-top: 1em;
+  font: 400 var(--fs-sm) / 1.5 var(--ui);
+  color: var(--subtle);
+}
+
+.words-credit a {
+  color: var(--muted);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+}
+
+/* ------------------------------------------------------------ an outline: numbered rows */
+
+ol.words-outline,
+ul.words-outline,
+.words-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.75em;
+}
+
+/* The list, not the page's root (which carries the profile's name too). */
+ol.words-outline,
+ul.words-outline {
+  counter-reset: outline;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  font-size: 18px;
+  line-height: 1.6;
+  background: var(--bg);
+}
+
+.words-outline > li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  scroll-margin-top: calc(var(--header-h) + 16px);
+  counter-increment: outline;
+}
+
+.words-outline > li:first-child {
+  border-top: 0;
+}
+
+.words-outline > li::before {
+  /* A grid row is not a list item, so it keeps its own count. */
+  content: counter(outline);
+  font: 400 12px var(--ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--subtle);
+  text-align: center;
+}
+
+ul.words-outline > li::before {
+  content: '·';
+}
+
+.words-list > li {
+  position: relative;
+  padding-inline-start: 38px;
+  margin-bottom: 0.3em;
+}
+
+.words-list > li::before {
+  content: counter(list-item) '.';
+  position: absolute;
+  inset-inline-start: 0;
+  font: 400 11.5px / 2.6 var(--ui);
+  color: var(--subtle);
+}
+
+ul.words-list > li::before {
+  content: '•';
+}
+
+.words-outline .words-heading {
+  text-align: start;
+}
+
+/* ------------------------------------------------------------ two versions side by side (Sefaria) */
+
+.words-pair {
+  counter-reset: none;
+}
+
+.words-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 32px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border-muted);
+  scroll-margin-top: calc(var(--header-h) + 16px);
+}
+
+.words-row:first-child {
+  border-top: 0;
+}
+
+.words-row-heading {
+  border-top: 0;
+  padding-top: 14px;
+}
+
+.words-cell {
+  min-width: 0;
+  font-family: var(--torah);
+  font-size: 20px;
+  line-height: 1.9;
+}
+
+.words-cell .words-verse,
+.words-cell .words-p {
+  margin: 0;
+}
+
+.words-cell[lang='he'] {
+  direction: rtl;
+}
+
+@media (max-width: 720px) {
+  .words {
+    font-size: 19px;
+    line-height: 1.85;
+  }
+  .words-p,
+  .words-verse {
+    padding-inline-start: 26px;
+  }
+  .words .machine,
+  .words-p.machine,
+  .words-verse.machine {
+    padding-inline-start: 24px;
+  }
+  .words-anchor,
+  .words-verse .words-n {
+    width: 22px;
+  }
+  .words-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+    padding: 8px 0;
+  }
+  .words-cell {
+    font-size: 19px;
+  }
+  .words-cell[dir='ltr'] {
+    font-size: 16px;
+    color: var(--muted);
+  }
+  .words-versions {
+    justify-self: stretch;
+    min-width: 0;
+  }
+}
+
+/* ------------------------------------------------------------ fixing a segment in place (the Edit tab) */
+
+.words-editable {
+  cursor: text;
+  border-radius: var(--r-sm);
+  transition: background-color 0.12s var(--ease), box-shadow 0.12s var(--ease);
+}
+
+.words-editable:hover,
+.words-editable:focus-visible {
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: none;
+}
+
+.edit-words .words-p:has(.words-editable:hover) .words-anchor,
+.edit-words .words-verse:has(.words-editable:hover) .words-n {
+  color: var(--accent);
+}
+
+.words-editor {
+  display: block;
+  margin: 2px 0 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r);
+  background: var(--bg);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  overflow: hidden;
+  font-size: 1em;
+}
+
+.words-toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--canvas);
+}
+
+.words-toolbar .btn {
+  font-family: var(--display);
+  font-size: 14px;
+}
+
+.words-input {
+  display: block;
+  min-height: 3.4em;
+  padding: 10px 14px;
+  white-space: pre-wrap;
+  outline: none;
+  font-family: var(--torah);
+}
+
+.words-cell[dir='ltr'] .words-input,
+.words[dir='ltr'] .words-input {
+  font-family: var(--display);
+}
+
+.words-atom {
+  font: 400 0.6em var(--ui);
+  color: var(--muted);
+  background: var(--sunken);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-inline: 2px;
+  user-select: none;
+  vertical-align: 0.2em;
+}
+
+input.words-note {
+  display: block;
+  width: calc(100% - 20px);
+  margin: 0 10px 8px;
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--text);
+  font: 400 var(--fs-md) / 1.4 var(--ui);
+}
+
+input.words-note:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: none;
+}
+
+.words-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--canvas);
+  font-family: var(--ui);
+  line-height: 1;
+}
+
+.words-sent,
+.words-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 10px;
+  font: 400 var(--fs-md) / 1.5 var(--ui);
+  color: var(--muted);
+}
+
+.words-sent {
+  color: var(--open);
+}
+
+.words-error {
+  color: var(--closed);
+  padding: 0 10px 8px;
+}
+
+/* ------------------------------------------------------------ where the words came from (PageBody) */
+
+.page-body {
+  min-width: 0;
+}
+
+.body-source {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  font-size: var(--fs-sm);
+  color: var(--subtle);
+}
+
+.body-source b {
+  color: var(--muted);
+  font-weight: 600;
+}

@@ -141,9 +141,26 @@ describe("Sefaria's Chabad books", () => {
         { source: 'sefaria', language: 'en', licence: 'unknown' },
       ],
     });
-    const body = (chapter!.data as { body: string; bodySource: { copy: string } }).body;
-    expect(body).toContain('אות א');
-    expect(body).not.toContain('First');
+    // Sefaria's own structure: numbered segments, a footnote pointed to from its segment, the page marker kept as one, the credit per version.
+    expect((chapter!.data as { body: unknown }).body).toEqual({
+      profile: 'sefaria',
+      versions: [
+        {
+          id: 'he',
+          language: 'he',
+          title: 'Test Edition',
+          credit: 'Sefaria: Test Edition',
+          licence: 'cc-by-nc',
+          url: 'https://www.sefaria.org/Made_Up_Discourses,_Discourses_1?vhe=Test_Edition',
+          segments: [
+            { id: '1', kind: 'verse', n: 1, text: [{ text: 'אות א' }, { note: 'n1' }] },
+            { id: '2', kind: 'verse', n: 2, text: [{ text: 'אות ב ' }, { marker: '[דף ב]' }] },
+          ],
+          notes: [{ id: 'n1', kind: 'note', n: 1, text: [{ text: 'הערה ' }, { text: 'פנימית', marks: ['i'] }] }],
+        },
+      ],
+    });
+    expect(JSON.stringify((chapter!.data as { body: unknown }).body)).not.toContain('First');
     expect((chapter!.data as { bodySource: { copy: string } }).bodySource.copy).toMatch(/^https:\/\/api\.rebbehub\.org\/v1\/texts\/[0-9a-f]{64}$/);
     // A text not yet on RebbeHub's storage is not linked as a copy there.
     expect((await catalog.get(await idForKey('sefaria-unit:Made Up Discourses/2/2')))?.data).not.toHaveProperty('bodySource.copy');

@@ -12,15 +12,21 @@ keeper** approves, and every version is kept (see
 [docs/versioning.md](docs/versioning.md)). An export of the whole catalog
 is published after every change for anyone to download.
 
-Until the RebbeHub site opens for contributions (phase 2 of the
-[roadmap](docs/roadmap.md)), use GitHub issues:
+The easiest way is on [rebbehub.org](https://rebbehub.org) itself: every
+page has *Report a problem* (no account needed) and *Suggest a fix*. With
+an account you can edit, add scans and recordings, proofread, and join a
+**project**. Scripts and AI agents can do the same through the API with a
+personal token, and their suggestions are reviewed like anyone's
+([developer docs](https://rebbehub.org/developers)).
+
+GitHub issues work too, and a keeper turns each into a suggestion and
+credits you:
 
 - **Something is wrong** - a date, a name, a missing page, a bad scan:
   [open a report](https://github.com/shmuky/RebbeHub/issues/new?template=1-catalog-report.yml).
 - **Something is missing**: [tell us](https://github.com/shmuky/RebbeHub/issues/new?template=2-missing.yml).
-- **A rights question or takedown**: [ask here](https://github.com/shmuky/RebbeHub/issues/new?template=3-rights.yml).
-
-A keeper turns each report into a suggestion and credits you.
+- **A rights question or takedown**: [ask here](https://github.com/shmuky/RebbeHub/issues/new?template=3-rights.yml),
+  or on the site at [/takedown](https://rebbehub.org/takedown).
 
 Please never attach files you do not have the right to share, and never
 paste the text of a copyrighted sefer. Link to where it is instead.
@@ -79,6 +85,13 @@ REBBEHUB_TEST_DATABASE_URL=postgres://localhost/rebbehub_test npx vitest run --n
 - **No restricted content in the repository**: no texts, scans or
   recordings. Tests use short made-up or public-domain samples.
 - **Secrets never in git**: signing keys, database URLs, API tokens.
+  Settings that differ from one deployment to another are listed, by name,
+  in [docs/configuration.md](docs/configuration.md).
+- **The API is versioned.** Nothing under `/v1` is removed or changes
+  meaning; every route is in `services/api/src/openapi.ts`, and a test
+  fails when one is not. After changing it, run
+  `npm run generate -w @rebbehub/client` and note the change in
+  [CHANGELOG.md](CHANGELOG.md).
 
 ### Labels
 

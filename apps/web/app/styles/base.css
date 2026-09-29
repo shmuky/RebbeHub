@@ -1,0 +1,288 @@
+/*
+ * The page itself: type, links, focus, and the few rules every element
+ * shares. Logical properties throughout (inline-start, not left), so the
+ * same rules lay out Hebrew right to left and English left to right.
+ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-top: calc(var(--header-h) + 12px);
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: var(--fs-base) / 1.5 var(--ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'kern';
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+ul,
+ol,
+dl,
+dd,
+figure,
+blockquote,
+pre {
+  margin: 0;
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+img,
+svg,
+canvas,
+video,
+iframe {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--mono);
+  font-size: 0.9em;
+}
+
+code {
+  background: var(--sunken);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+}
+
+pre {
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-size: 12.5px;
+  line-height: 1.6;
+  direction: ltr;
+  text-align: left;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
+}
+
+mark {
+  background: var(--mark);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+del {
+  background: var(--del-bg);
+  color: var(--del-fg);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+ins {
+  background: var(--add-bg);
+  color: var(--add-fg);
+  text-decoration: none;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+/* One focus ring, the accent's, on everything a keyboard reaches. */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
+/* Words of the Torah: set in Frank Ruhl, as a sefer is. */
+.torah {
+  font-family: var(--torah);
+}
+
+/* Numbers in the UI's own face, each digit the same width, so columns line up. */
+.num {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ids and code: the one place a monospace face is used. */
+.mono {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: -0.01em;
+}
+
+/* Titles that carry a page: Frank Ruhl Libre, bold, as Sichos-Kodesh sets them. */
+.display {
+  font-family: var(--display);
+  font-weight: 700;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.subtle {
+  color: var(--subtle);
+}
+
+.small {
+  font-size: var(--fs-sm);
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip-link {
+  position: fixed;
+  inset-inline-start: 12px;
+  top: -60px;
+  z-index: 100;
+  background: var(--accent-strong);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: var(--r);
+  font-weight: 600;
+}
+
+.skip-link:focus {
+  top: 10px;
+  text-decoration: none;
+}
+
+/* Left-to-right runs (addresses, ids, code) inside a Hebrew page. */
+[dir='ltr'] {
+  unicode-bidi: isolate;
+}
+
+/*
+ * Arrows and chevrons turn with the page's direction. Icons are drawn for
+ * Hebrew (forward points left): `.flip-ltr` mirrors them in English;
+ * `.flip` mirrors an icon drawn the other way in Hebrew.
+ */
+[dir='rtl'] .flip,
+[dir='ltr'] .flip-ltr {
+  transform: scaleX(-1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}

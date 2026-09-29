@@ -1,0 +1,265 @@
+/* The lists of reports and of suggestions (routes/issues.tsx,
+   routes/suggestions-list.tsx), and a report's own page. */
+
+.list-head {
+  align-items: flex-start;
+}
+
+.list-head .phead-acts {
+  margin-top: 8px;
+}
+
+.phead .tsearch-row {
+  margin-top: 20px;
+}
+
+.saved-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  margin: 12px 0 18px;
+  font-size: 13.5px;
+}
+
+.saved-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.saved-item a {
+  color: var(--accent);
+}
+
+.saved-item a[aria-current='true'] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.saved-item .icon-btn {
+  width: 20px;
+  height: 20px;
+}
+
+.list-page {
+  padding-top: 18px;
+}
+
+.pad-box {
+  padding: 16px;
+}
+
+/* The bar over the list: open and closed, and the filters' menus. */
+.list-bar {
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+}
+
+.st-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--fs-md);
+}
+
+.st-tab.on {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.st-tab:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.list-bar .menus {
+  gap: 18px;
+}
+
+details.fmenu > summary {
+  color: var(--muted);
+  font-size: 13.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+details.fmenu > summary:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+
+details.fmenu[open] > summary {
+  color: var(--text);
+}
+
+details.pick .pop.down {
+  top: calc(100% + 8px);
+  bottom: auto;
+  inset-inline-end: 0;
+  inset-inline-start: auto;
+  width: 260px;
+  min-width: 0;
+}
+
+.pop.down .pop-o {
+  gap: 8px;
+}
+
+.pop.down .pop-o .c {
+  margin-inline-start: auto;
+}
+
+.invisible {
+  visibility: hidden;
+}
+
+/* A report or a suggestion in the list. */
+.issue-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.issue-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+}
+
+.issue-row .state-icon {
+  margin-top: 3px;
+}
+
+.row-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.issue-row .row-title {
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.issue-row .row-title:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.issue-row .row-sub {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--subtle);
+}
+
+.issue-row .row-sub a {
+  color: var(--muted);
+}
+
+.issue-row .row-sub a:hover {
+  color: var(--accent);
+}
+
+.row-side {
+  display: grid;
+  grid-template-columns: auto auto 44px;
+  align-items: center;
+  gap: 14px;
+  font-size: 12.5px;
+}
+
+.row-side .assignees {
+  display: inline-flex;
+}
+
+.row-side .assignees .avatar + .avatar {
+  margin-inline-start: -6px;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+.row-side .comments {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.fix-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.badge-private {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+@media (max-width: 760px) {
+  /* The saved-search button goes under the field, which keeps its height. */
+  .phead .tsearch-row {
+    flex-direction: column;
+  }
+  .phead .tsearch-row > .tsearch-field {
+    flex: none;
+  }
+  .phead .tsearch-row > .btn {
+    align-self: flex-start;
+  }
+  .list-bar .menus {
+    margin-inline-start: 0;
+    width: 100%;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  details.pick .pop.down {
+    inset-inline-end: auto;
+    inset-inline-start: 0;
+  }
+  .issue-row {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+  .issue-row .row-side {
+    grid-column: 2;
+    display: flex;
+    gap: 12px;
+  }
+  .row-side .comments:empty {
+    display: none;
+  }
+}
+
+
+/* A new report: the kinds as rows inside their box, then the words. */
+.new-report .box > .choices {
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+}
+
+.new-report .choice b {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.new-report .about-field .row-line {
+  gap: 4px;
+}

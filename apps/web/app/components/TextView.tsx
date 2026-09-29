@@ -59,7 +59,7 @@ function FixParagraph({ segment, content, lang }: { segment: string; content: st
         >
           {t(lang, 'sendForReview')}
         </button>
-        <button type="button" className="secondary" onClick={() => setEditing(null)}>
+        <button type="button" className="btn" onClick={() => setEditing(null)}>
           {t(lang, 'cancel')}
         </button>
       </span>

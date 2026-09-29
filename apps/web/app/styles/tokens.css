@@ -1,0 +1,258 @@
+/*
+ * RebbeHub's design tokens: every colour, font, size and radius the site
+ * uses, named for what it is for. Light is the default; dark follows the
+ * device, or the reader's own choice (`data-theme` on <html>, set from the
+ * menu and kept in this browser). Components use these names only, never a
+ * colour of their own, so both themes and both directions come out right.
+ *
+ * One accent (links, focus, the primary action). Status has its own
+ * colours, as GitHub's do: open is green, approved purple, closed red.
+ * Machine output that no person has checked is amber, always.
+ */
+:root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg: #ffffff;
+  --canvas: #f6f7f8;
+  --sunken: #f1f2f4;
+  --overlay: #ffffff;
+  --border: #e2e4e8;
+  --border-strong: #cdd1d6;
+  --border-muted: #eceef1;
+
+  /* Ink */
+  --text: #15181d;
+  --muted: #545b66;
+  --subtle: #6b727d;
+  --faint: #9aa0a9;
+  --on-strong: #ffffff;
+  --strong: #15181d;
+
+  /* The one accent */
+  --accent: #1d4ed8;
+  --accent-strong: #1d4ed8;
+  --accent-hover: #1a44bd;
+  --accent-soft: #eef2fc;
+  --accent-line: rgba(29, 78, 216, 0.45);
+  --focus: #1d4ed8;
+
+  /* Status */
+  --open: #1a7f37;
+  --open-strong: #1a7f37;
+  --open-soft: #e9f5ec;
+  --approved: #6639ba;
+  --approved-strong: #6639ba;
+  --approved-soft: #f1ecfa;
+  --closed: #b42318;
+  --closed-strong: #b42318;
+  --closed-soft: #fcedec;
+  --attention: #9a6700;
+  --attention-soft: #fdf6e3;
+
+  /* Machine output, unchecked */
+  --machine: #9a6700;
+  --machine-soft: #fdf6e3;
+  --machine-line: #ead9a8;
+
+  /* Diffs */
+  --add-bg: #e6f4ea;
+  --add-fg: #135c2a;
+  --add-line: #b7e1c3;
+  --del-bg: #fbe9e8;
+  --del-fg: #8e1b12;
+  --del-line: #f3c2be;
+  --mark: #fff1b8;
+
+  /* Label colours (a square swatch beside the name) */
+  --l-text: #1d4ed8;
+  --l-source: #8a5a00;
+  --l-scan: #b42318;
+  --l-date: #9a6700;
+  --l-meta: #545b66;
+  --l-audio: #6639ba;
+  --l-translation: #0f766e;
+  --l-sync: #1a7f37;
+
+  /* Paper: title pages and scans, as printed */
+  --paper: #f3eee3;
+  --paper-edge: #cfc6b3;
+  --paper-ink: #2e271c;
+  --paper-rule: #6e6250;
+  --paper-line: #6b604f;
+
+  /*
+   * Type: Sichos-Kodesh's faces (styles/fonts.css). The UI in Noto Sans
+   * Hebrew and Noto Sans (the other order for English, so a Hebrew date
+   * inside English still comes from the pair); titles in Frank Ruhl Libre;
+   * the words of the Torah in Frank Ruehl CLM, or the face the reader chose
+   * (`data-text-font` on <html>). Numbers stay in the UI face, tabular.
+   */
+  --ui: 'Noto Sans Hebrew', 'Noto Sans', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+  --display: 'Frank Ruhl Libre', 'FrankRuehlCLM', 'Noto Serif Hebrew', Georgia, serif;
+  --torah: 'FrankRuehlCLM', 'Frank Ruhl Libre', 'Noto Serif Hebrew', Georgia, serif;
+  --mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --fs-xs: 11.5px;
+  --fs-sm: 12.5px;
+  --fs-md: 13.5px;
+  --fs-base: 14px;
+  --fs-lg: 15px;
+  --fs-xl: 20px;
+  --fs-2xl: 24px;
+
+  /* Shape and space */
+  --r: 6px;
+  --r-lg: 8px;
+  --r-sm: 4px;
+  --header-h: 56px;
+  --wrap: 1280px;
+  --gutter: 32px;
+  --shadow-pop: 0 8px 24px rgba(20, 24, 30, 0.08), 0 1px 2px rgba(20, 24, 30, 0.06);
+  --shadow-dialog: 0 16px 48px rgba(20, 24, 30, 0.18), 0 2px 6px rgba(20, 24, 30, 0.08);
+  --shadow-paper: 0 1px 0 #e6decd, 0 2px 6px rgba(20, 20, 20, 0.06);
+  --player-h: 0px;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Dark, by the device's setting unless the reader chose light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #15171a;
+    --canvas: #0f1113;
+    --sunken: #1d2025;
+    --overlay: #1b1e22;
+    --border: #2b3037;
+    --border-strong: #3b414a;
+    --border-muted: #22262c;
+    --text: #e8eaed;
+    --muted: #a4abb6;
+    --subtle: #8b929d;
+    --faint: #6b727d;
+    --on-strong: #0f1113;
+    --strong: #e8eaed;
+    --accent: #7ea6ff;
+    --accent-strong: #2f63e0;
+    --accent-hover: #3a6ff0;
+    --accent-soft: #172440;
+    --accent-line: rgba(126, 166, 255, 0.5);
+    --focus: #7ea6ff;
+    --open: #4cc26a;
+    --open-strong: #238636;
+    --open-soft: #12291a;
+    --approved: #b39dff;
+    --approved-strong: #7a52d6;
+    --approved-soft: #251c3d;
+    --closed: #ff8a80;
+    --closed-strong: #c9362b;
+    --closed-soft: #331715;
+    --attention: #e0b34a;
+    --attention-soft: #2b2310;
+    --machine: #e0b34a;
+    --machine-soft: #2b2310;
+    --machine-line: #5b4717;
+    --add-bg: #12301c;
+    --add-fg: #8ee3a8;
+    --add-line: #1f5a33;
+    --del-bg: #3a1614;
+    --del-fg: #ffaba3;
+    --del-line: #6b2a25;
+    --mark: #4a3f10;
+    --l-text: #7ea6ff;
+    --l-source: #d49a3a;
+    --l-scan: #ff8a80;
+    --l-date: #e0b34a;
+    --l-meta: #a4abb6;
+    --l-audio: #b39dff;
+    --l-translation: #4fd1c5;
+    --l-sync: #4cc26a;
+    --paper: #26231d;
+    --paper-edge: #4a4335;
+    --paper-ink: #e9e1cf;
+    --paper-rule: #a8987a;
+    --paper-line: #b3a58a;
+    --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-dialog: 0 16px 48px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
+    --shadow-paper: 0 1px 0 #3a3428, 0 2px 6px rgba(0, 0, 0, 0.35);
+  }
+}
+
+/* The reader's own choice of dark, whatever the device says. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #15171a;
+  --canvas: #0f1113;
+  --sunken: #1d2025;
+  --overlay: #1b1e22;
+  --border: #2b3037;
+  --border-strong: #3b414a;
+  --border-muted: #22262c;
+  --text: #e8eaed;
+  --muted: #a4abb6;
+  --subtle: #8b929d;
+  --faint: #6b727d;
+  --on-strong: #0f1113;
+  --strong: #e8eaed;
+  --accent: #7ea6ff;
+  --accent-strong: #2f63e0;
+  --accent-hover: #3a6ff0;
+  --accent-soft: #172440;
+  --accent-line: rgba(126, 166, 255, 0.5);
+  --focus: #7ea6ff;
+  --open: #4cc26a;
+  --open-strong: #238636;
+  --open-soft: #12291a;
+  --approved: #b39dff;
+  --approved-strong: #7a52d6;
+  --approved-soft: #251c3d;
+  --closed: #ff8a80;
+  --closed-strong: #c9362b;
+  --closed-soft: #331715;
+  --attention: #e0b34a;
+  --attention-soft: #2b2310;
+  --machine: #e0b34a;
+  --machine-soft: #2b2310;
+  --machine-line: #5b4717;
+  --add-bg: #12301c;
+  --add-fg: #8ee3a8;
+  --add-line: #1f5a33;
+  --del-bg: #3a1614;
+  --del-fg: #ffaba3;
+  --del-line: #6b2a25;
+  --mark: #4a3f10;
+  --l-text: #7ea6ff;
+  --l-source: #d49a3a;
+  --l-scan: #ff8a80;
+  --l-date: #e0b34a;
+  --l-meta: #a4abb6;
+  --l-audio: #b39dff;
+  --l-translation: #4fd1c5;
+  --l-sync: #4cc26a;
+  --paper: #26231d;
+  --paper-edge: #4a4335;
+  --paper-ink: #e9e1cf;
+  --paper-rule: #a8987a;
+  --paper-line: #b3a58a;
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-dialog: 0 16px 48px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --shadow-paper: 0 1px 0 #3a3428, 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+html[lang='en'] {
+  --ui: 'Noto Sans', 'Noto Sans Hebrew', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+}
+
+html[data-text-font='david'] {
+  --torah: 'DavidCLM', 'FrankRuehlCLM', 'Noto Serif Hebrew', serif;
+}
+
+html[data-text-font='noto'] {
+  --torah: 'NotoSerifHebrew', 'Noto Serif Hebrew', 'FrankRuehlCLM', serif;
+}
+
+@media (max-width: 720px) {
+  :root {
+    --gutter: 16px;
+    --header-h: 52px;
+  }
+}

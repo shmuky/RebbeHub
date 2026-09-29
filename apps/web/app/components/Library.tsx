@@ -1,30 +1,13 @@
-import { Link } from 'react-router';
 import type { LocalName } from '@rebbehub/model';
-import type { Entity } from '../lib/api.js';
+import type { Cover, Entity } from '../lib/api.js';
 import { nameOf, type Lang } from '../lib/i18n.js';
 import { href, itemPath } from '../lib/links.js';
+import { Shaar } from '../ui/Shaar.js';
 
 /**
- * The library's pieces: a book as a cover coloured by its shelf, a Rebbe as
- * a portrait circle, a shelf as a line on the page. Covers are dark cloth,
- * one colour per kind of sefer, lettered in gold as seforim are.
+ * The library's pieces: a book as its title page (the shaar, as the
+ * library's own row of sefarim draws it), a Rebbe as a portrait circle.
  */
-
-export const GENRE_COLOURS: Record<string, string> = {
-  chassidus: '#1d3d2e',
-  maamarim: '#1f2f4a',
-  sichos: '#4a3322',
-  igros: '#5e1f26',
-  halacha: '#1e3f41',
-  siddur: '#3a2a4d',
-  minhagim: '#50391f',
-  history: '#33352f',
-  diaries: '#2b3444',
-  recordings: '#1e3f41',
-  farbrengens: '#1d3d2e',
-};
-
-export const colourOf = (genre: string | undefined) => GENRE_COLOURS[genre ?? ''] ?? '#4d5a52';
 
 /** The Rebbeim in their order: the Baal Shem Tov and the Maggid, then the seven Rebbeim of Chabad. */
 export function rebbeOrder(author: Entity): number {
@@ -34,8 +17,6 @@ export function rebbeOrder(author: Entity): number {
   if (d.slug === 'maggid') return -1;
   return 99;
 }
-
-const PORTRAIT_COLOURS = ['#23466e', '#5b3f99', '#8c2a3c', '#0f6e6e', '#7e5800', '#16744a', '#45536b', '#6b4f2a', '#16744a'];
 
 /** What each is called for short, as chassidim say it, for his portrait. */
 const SHORT_NAMES: Record<string, { he: string; en: string }> = {
@@ -50,46 +31,44 @@ const SHORT_NAMES: Record<string, { he: string; en: string }> = {
   'the-rebbe': { he: 'הרבי', en: 'Rebbe' },
 };
 
-export function RebbePortrait({ author, index, lang = 'he', size = 62 }: { author: Entity; index: number; lang?: Lang; size?: number }) {
+export function RebbePortrait({ author, lang = 'he', size = 62 }: { author: Entity; lang?: Lang; size?: number }) {
   const d = author.data as { name?: LocalName; slug?: string };
   const short = SHORT_NAMES[d.slug ?? '']?.[lang] ?? nameOf(d.name, lang).charAt(0);
   return (
-    <span className="portrait" style={{ background: PORTRAIT_COLOURS[index % PORTRAIT_COLOURS.length], width: size, height: size, fontSize: short.length > 3 ? size / 4.4 : size / 3.4 }} aria-hidden="true">
+    <span className="portrait" style={{ width: size, height: size, fontSize: short.length > 3 ? size / 4.4 : size / 3.4 }} aria-hidden="true">
       {short}
     </span>
   );
 }
 
-/** A book's own shade of its shelf's colour, fixed by its id, so a shelf of one kind is not a wall of one colour. */
-export function coverColour(work: Pick<Entity, 'id' | 'data'>): string {
-  let hash = 0;
-  for (const ch of work.id) hash = (hash * 31 + ch.charCodeAt(0)) % 997;
-  const shade = (hash % 5) * 7 - 12; // -12% (lighter) to +16% (darker)
-  const base = colourOf((work.data as { genre?: string }).genre);
-  return shade < 0 ? `color-mix(in srgb, ${base}, white ${-shade}%)` : `color-mix(in srgb, ${base}, black ${shade}%)`;
-}
-
-export function BookCover({ work, lang, meta, size = 'medium' }: { work: Entity; lang: Lang; meta?: string; size?: 'medium' | 'large' }) {
-  const d = work.data as { title?: LocalName; genre?: string };
+/**
+ * Sefarim as their title pages, in the row the library draws them in (a
+ * grid on wide screens, a row that scrolls sideways on a phone): the page a
+ * PDF the site serves shows (core/covers.ts) where the jobs have drawn one,
+ * else the title page set from the catalog's words.
+ */
+export function Books({ works, lang, meta, covers }: { works: Entity[]; lang: Lang; meta?: (w: Entity) => string | undefined; covers?: Record<string, Cover> }) {
   return (
-    <Link to={href(itemPath(work), lang)} className={`book ${size}`}>
-      <span className="cover" style={{ background: coverColour(work) }}>
-        <span className="cover-title">{nameOf(d.title, lang)}</span>
-      </span>
-      {meta ? <span className="book-meta">{meta}</span> : null}
-    </Link>
-  );
-}
-
-/** Covers in a row that scrolls sideways, or in a grid. */
-export function Books({ works, lang, meta, grid }: { works: Entity[]; lang: Lang; meta?: (w: Entity) => string | undefined; grid?: boolean }) {
-  return (
-    <ul className={grid ? 'books grid' : 'books'}>
-      {works.map((w) => (
-        <li key={w.id}>
-          <BookCover work={w} lang={lang} meta={meta?.(w)} />
-        </li>
-      ))}
+    <ul className="shaar-row">
+      {works.map((w) => {
+        const title = nameOf((w.data as { title?: LocalName }).title, lang);
+        const more = meta?.(w);
+        return (
+          <li key={w.id}>
+            <Shaar
+              title={title}
+              image={covers?.[w.id]?.thumb.url ?? null}
+              to={href(itemPath(w), lang)}
+              caption={
+                <>
+                  <b className="torah">{title}</b>
+                  {more ? <span>{more}</span> : null}
+                </>
+              }
+            />
+          </li>
+        );
+      })}
     </ul>
   );
 }

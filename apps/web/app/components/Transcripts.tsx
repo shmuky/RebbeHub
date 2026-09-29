@@ -16,8 +16,8 @@ import { usePlayer, type Track } from '../player/PlayerProvider.js';
  * set to this moment and locked, and what follows moves with it (the
  * plan's "fix a drifting line in two taps"). Paragraphs and sync the
  * machine made and nobody checked are marked as such; a signed-in listener
- * fixes a paragraph's words as they hear them. Where the farbrengen's
- * hanacha is synced too, it follows the player the same way.
+ * fixes a paragraph's words as they hear them. (A hanacha synced to the
+ * recording is the farbrengen page's own text, EventPage's Words.)
   * A search hit opens here at its paragraph (`?at=`), lit up, with a
   * button to play from the moment it is heard.
  */
@@ -47,10 +47,6 @@ interface Transcript {
   paragraphs: Paragraph[];
 }
 
-interface Hanacha {
-  recording: string;
-  paragraphs: Array<{ id: string; content: string; startMs: number | null; endMs: number | null; checked: boolean }>;
-}
 
 async function get<T>(path: string): Promise<T> {
   const response = await fetch(`/_/steward/${path}`, { credentials: 'same-origin', headers: { accept: 'application/json' } });
@@ -156,7 +152,7 @@ function Para({
           >
             {t(lang, 'sendForReview')}
           </button>
-          <button type="button" className="secondary" onClick={() => setEditing(null)}>
+          <button type="button" className="btn" onClick={() => setEditing(null)}>
             {t(lang, 'cancel')}
           </button>
         </div>
@@ -215,7 +211,7 @@ function ConfirmSync({ recording, lang }: { recording: string; lang: Lang }) {
     <p className="confirm-page">
       <button
         type="button"
-        className="secondary"
+        className="btn"
         onClick={async () => {
           try {
             await postJson(`recordings/${recording}/sync/confirm`);
@@ -241,7 +237,6 @@ export function Transcripts({ tracks, lang }: { tracks: Track[]; lang: Lang }) {
   const [params] = useSearchParams();
   const found = params.get('at');
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
-  const [hanachos, setHanachos] = useState<Hanacha[]>([]);
   const ids = tracks.map((tr) => tr.id).join(',');
   const playingHere = tracks.some((tr) => tr.id === player.current?.id);
   const nowMs = useNowMs(playingHere);
@@ -251,9 +246,6 @@ export function Transcripts({ tracks, lang }: { tracks: Track[]; lang: Lang }) {
     // Most recordings have no transcript yet; those answer "not found" and are left out.
     void Promise.all(tracks.map((tr) => get<Transcript>(`recordings/${tr.id}/transcript`).catch(() => null))).then((all) => {
       if (live) setTranscripts(all.filter((x): x is Transcript => x !== null));
-    });
-    void Promise.all(tracks.map((tr) => get<Omit<Hanacha, 'recording'>>(`recordings/${tr.id}/hanacha`).then((h) => ({ ...h, recording: tr.id })).catch(() => null))).then((all) => {
-      if (live) setHanachos(all.filter((x): x is Hanacha => x !== null));
     });
     return () => {
       live = false;
@@ -273,7 +265,7 @@ export function Transcripts({ tracks, lang }: { tracks: Track[]; lang: Lang }) {
     );
   }
 
-  if (!transcripts.length && !hanachos.length) return null;
+  if (!transcripts.length) return null;
   const unchecked = transcripts.some((tr) => tr.paragraphs.some((p) => !p.checked));
   const syncUnchecked = transcripts.some((tr) => tr.paragraphs.some((p) => p.syncChecked === false));
   return (
@@ -306,33 +298,6 @@ export function Transcripts({ tracks, lang }: { tracks: Track[]; lang: Lang }) {
             </ol>
             {account && tr.paragraphs.some((p) => p.syncChecked === false) ? <ConfirmSync recording={tr.recording} lang={lang} /> : null}
           </div>
-        );
-      })}
-      {hanachos.map((h) => {
-        const index = tracks.findIndex((track) => track.id === h.recording);
-        const playing = player.current?.id === h.recording;
-        return (
-          <details key={`h-${h.recording}`} className="hanacha-sync">
-            <summary>
-              {t(lang, 'hanachaSynced')}
-              {hanachos.length > 1 ? ` · ${tracks[index]?.title ?? ''}` : ''}
-            </summary>
-            <ol className="transcript">
-              {h.paragraphs.map((p) => (
-                <li key={p.id} className={['transcript-para', playing && within(nowMs, p) ? 'active' : '', p.checked ? '' : 'sync-unchecked'].filter(Boolean).join(' ')}>
-                  <button
-                    type="button"
-                    className="transcript-text"
-                    dir="rtl"
-                    disabled={p.startMs === null}
-                    onClick={() => (playing ? player.seek((p.startMs ?? 0) / 1000) : player.play(tracks, index, (p.startMs ?? 0) / 1000))}
-                  >
-                    {p.content}
-                  </button>
-                </li>
-              ))}
-            </ol>
-          </details>
         );
       })}
       {account === null ? (

@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { joinPath, orderKeys, slugify, type Genre, type LocalName } from '@rebbehub/model';
-import { htmlToWikitext, sourceFooter } from './htmlToWikitext.js';
+import { joinPath, orderKeys, slugify, type Genre, type LocalName, type PageText, type PageVersion } from '@rebbehub/model';
+import { articleOf, htmlToPageVersion, sourceFooter } from './htmlToPageText.js';
 import { ref, type ImportRecord, type Importer } from './importer.js';
 import { fetchTexts, textUrl } from './sichosKodeshTexts.js';
 
@@ -75,20 +75,40 @@ const VIA: Record<string, string> = { sefaria: 'sefaria-index', 'igros-app': 'ig
 const RIGHTS: Record<string, 'open' | 'credit' | 'link' | 'preserved'> = { ship: 'open', 'ship-with-credit': 'credit', 'link-only': 'link', 'local-only': 'preserved' };
 
 /**
- * A unit's page words: its first Hebrew text whose rights let it ship, then
- * any other (a translation) under a heading of its own; and the record of
- * where the first came from.
+ * A unit's page words: every text of it whose rights let it ship, each a
+ * version of the page, its Hebrew first; and the record of where the
+ * first came from. A text Sichos-Kodesh took from Sefaria keeps Sefaria's
+ * display rules (numbered segments, its Hebrew and English side by side);
+ * any other is drawn as Sichos-Kodesh draws its texts.
  */
-function bodyOf(unit: CatalogWorkContents['units'][number], sources: CatalogWorkSource[], texts: Map<string, string> | undefined, api?: string): { body: string; bodySource: Record<string, string> } | null {
+function bodyOf(unit: CatalogWorkContents['units'][number], sources: CatalogWorkSource[], texts: Map<string, string> | undefined, api?: string): { body: PageText; bodySource: Record<string, string> } | null {
   if (!texts) return null;
   const found = unit.editions
     .map((e) => ({ source: sources[e.source], html: e.sha256 ? texts.get(e.sha256) : undefined, sha256: e.sha256 }))
     .filter((x): x is { source: CatalogWorkSource; html: string; sha256: string } => Boolean(x.source && x.html) && (x.source!.rights === 'ship' || x.source!.rights === 'ship-with-credit'))
     .sort((a, b) => Number(b.source.language === 'he') - Number(a.source.language === 'he'));
   if (!found.length) return null;
-  const [first, ...rest] = found;
-  const parts = [htmlToWikitext(first!.html)];
-  for (const other of rest) parts.push(`== ${other.source.version ?? other.source.language ?? other.source.source} ==\n\n${htmlToWikitext(other.html)}`);
+  const [first] = found;
+  const sefaria = first!.source.source === 'sefaria' || articleOf(first!.html).source === 'sefaria';
+  const versions: PageVersion[] = [];
+  for (const text of found) {
+    const article = articleOf(text.html);
+    const footer = sourceFooter(text.html);
+    const language = text.source.language ?? article.language ?? 'he';
+    // Each version's id is its language, or, for a second of the same language, its place.
+    const id = versions.some((v) => v.id === language) ? `v${versions.length + 1}` : language;
+    const version = htmlToPageVersion(text.html, {
+      id,
+      language,
+      numbered: sefaria,
+      title: text.source.version ?? article.version ?? footer.version,
+      credit: text.source.credit ?? footer.version,
+      licence: footer.licence ?? text.source.licence,
+      url: footer.url,
+    });
+    if (version.segments.length) versions.push(version);
+  }
+  if (!versions.length) return null;
   const footer = sourceFooter(first!.html);
   const bodySource: Record<string, string> = { source: first!.source.source, via: VIA[first!.source.source] ?? first!.source.source, sourceId: unit.ref ?? unit.id };
   if (footer.url) bodySource.url = footer.url;
@@ -98,7 +118,7 @@ function bodyOf(unit: CatalogWorkContents['units'][number], sources: CatalogWork
   const credit = first!.source.credit ?? footer.version;
   if (credit) bodySource.credit = credit;
   bodySource.rights = RIGHTS[first!.source.rights] ?? 'link';
-  return { body: parts.filter(Boolean).join('\n\n'), bodySource };
+  return { body: { profile: sefaria ? 'sefaria' : 'sichos-kodesh', versions }, bodySource };
 }
 
 /**

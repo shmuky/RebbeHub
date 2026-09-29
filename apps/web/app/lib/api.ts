@@ -1,3 +1,4 @@
+import type { Issue, IssueLabel, IssueRights, IssueTemplate, People, SuggestionListItem, TimelineItem } from './threads.js';
 import type { EntityType, LocalName } from '@rebbehub/model';
 
 /**
@@ -185,6 +186,50 @@ export interface SimilarItem {
 }
 
 /** One of an item's links, seen from the item. */
+/** A group of items pointing at one item through one field (a set's sefarim, a farbrengen's recordings). */
+export interface LinkGroup {
+  type: string;
+  field: string;
+  count: number;
+}
+
+/** A sefer's cover, drawn from a page of a served PDF; `machine` until a person chose the page. */
+export interface Cover {
+  file: string;
+  page: number;
+  machine: boolean;
+  reasons: string[];
+  credit: string | null;
+  image: { url: string; width: number; height: number };
+  thumb: { url: string; width: number; height: number };
+}
+
+export interface WorkCover {
+  work: string;
+  chosen: { file: string; page: number } | null;
+  cover: Cover | null;
+  sources: Array<{ sha256: string; via: string; item: string; pages: number | null }>;
+}
+
+export interface FileAbout {
+  sha256: string;
+  bytes: number;
+  mime: string;
+  rights: FileInfo['rights'];
+  credit: string | null;
+  storage: string;
+  url: string | null;
+  createdAt: string;
+  sources: Array<{ source: string; url: string | null; fetchedAt: string | null; attestation: string | null; uploaded: boolean; at: string }>;
+  derivations: Array<{ profile: string; sha256: string; bytes: number; encoder: string }>;
+  derivedFrom: Array<{ profile: string; sha256: string }>;
+  measured: { kind: 'pdf-pages' | 'audio'; pages: number | null; durationMs: number | null; encoder: string } | null;
+  pageImages: number;
+  pageFix: { verdict: string; reason: string | null; encoder: string } | null;
+  covers: Array<{ entity: string; page: number; machine: boolean }>;
+  usedBy: { total: number; items: Entity[] };
+}
+
 export interface RelationLink {
   id: string;
   kind: string;
@@ -207,6 +252,50 @@ export interface CatalogHealth {
   links: { checked: number; dead: number; lastChecked: string | null };
   deadLinks: Array<{ url: string; status: number | null; error: string | null; checkedAt: string; failingSince: string | null; entities: string[] }>;
   embeddings: { embedded: number; waiting: number };
+}
+
+/** A suggestion as GET /v1/suggestions lists it. */
+export interface SuggestionRow {
+  id: number;
+  /** Its #number, shared with issues; imports have none. */
+  number?: number | null;
+  title: string;
+  description: string | null;
+  author: string;
+  status: 'draft' | 'open' | 'merged' | 'sent_back' | 'withdrawn';
+  kind: 'suggestion' | 'import' | 'revert' | 'live';
+  post_review: 'pending' | 'done' | null;
+  project_id?: number | null;
+  submitted_at: string | null;
+  created_at: string;
+  closed_at?: string | null;
+  merged_commit?: number | null;
+  checks: Array<{ check: string; status: 'pass' | 'warn' | 'fail'; message: string; entityId?: string; path?: string }>;
+}
+
+/** One change a suggestion makes to one item. */
+export interface SuggestionEntry {
+  entityId: string;
+  type: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  changes: Array<{ path: string; before?: unknown; after?: unknown }>;
+  conflicts: unknown[];
+  withheld?: string;
+}
+
+/** A suggestion as GET /v1/suggestions/:id gives it, for its page. */
+export interface SuggestionDetail {
+  changeset: SuggestionRow;
+  entries: SuggestionEntry[];
+  reviews: Array<{ reviewer: string; verdict: 'approve' | 'send_back' | 'comment'; body: string | null; created_at: string }>;
+  names: Record<string, string>;
+  files: Record<string, { url: string | null; mime: string; bytes: number; rights: string; similar?: Array<{ kind: 'same' | 'shares'; matched?: number; of?: number; items: Array<{ id: string; type: string; path: string | null }> }> }>;
+  mayApprove: boolean;
+  mayApproveReason?: string | null;
+  mine: boolean;
+  /** The reviewer's advice, written by a machine (null until one has been written). */
+  advice: { summary: string; model: string; at: string; machine: true } | null;
 }
 
 export class ApiError extends Error {
@@ -283,6 +372,11 @@ export class RebbeHubApi {
 
   stats() {
     return this.get<{ head: number; counts: Record<string, number> }>('/v1/stats');
+  }
+
+  /** The API's own description of itself (OpenAPI 3.1), for the developer docs. */
+  openapi<T = Record<string, unknown>>() {
+    return this.get<T>('/openapi.json');
   }
 
   entity<T = Record<string, unknown>>(id: string) {
@@ -368,6 +462,35 @@ export class RebbeHubApi {
 
   async backlinks(id: string, options: { field?: string; type?: string } = {}) {
     return (await this.get<{ backlinks: Backlink[] }>(`/v1/entities/${encodeURIComponent(id)}/backlinks`, options)).backlinks;
+  }
+
+  /** What points at an item, by type and field, with how many of each (an item page's "all of it"). */
+  async linkedCounts(id: string) {
+    return (await this.get<{ groups: LinkGroup[] }>(`/v1/entities/${encodeURIComponent(id)}/linked/counts`)).groups;
+  }
+
+  /** One group of what points at an item, in its own order, a page at a time, with the total. */
+  linked(id: string, options: { field: string; type?: string; after?: string; limit?: number }) {
+    const { after, ...rest } = options;
+    return this.get<{ items: Entity[]; total: number; next: string | null }>(`/v1/entities/${encodeURIComponent(id)}/linked`, { ...rest, cursor: after });
+  }
+
+  /** Sefarim's covers from their title pages, by id; none for those without one. */
+  async covers(ids: readonly string[]): Promise<Record<string, Cover>> {
+    const unique = [...new Set(ids)].filter((id) => /^rh-[0-9a-z]+$/.test(id));
+    const out: Record<string, Cover> = {};
+    for (let i = 0; i < unique.length; i += 200) Object.assign(out, (await this.get<{ covers: Record<string, Cover> }>('/v1/covers', { ids: unique.slice(i, i + 200).join(',') })).covers);
+    return out;
+  }
+
+  /** A sefer's cover and the served PDFs a keeper may choose its title page from. */
+  workCover(id: string) {
+    return this.maybe(this.get<WorkCover>(`/v1/works/${encodeURIComponent(id)}/cover`));
+  }
+
+  /** A file's own page. */
+  fileAbout(sha256: string, limit?: number) {
+    return this.maybe(this.get<FileAbout>(`/v1/files/${encodeURIComponent(sha256)}/about`, { limit }));
   }
 
   async history(id: string) {
@@ -459,10 +582,89 @@ export class RebbeHubApi {
     if (!response.ok) throw new ApiError(response.status, body.message ?? response.statusText);
     return { id: body.id! };
   }
+  /** Suggestions, oldest first (public): by status, author, or those live and waiting for review after. */
+  async suggestions(options: { status?: string; author?: string; postReview?: boolean; limit?: number } = {}) {
+    return (await this.get<{ suggestions: SuggestionRow[] }>('/v1/suggestions', { status: options.status, author: options.author, postReview: options.postReview ? 'true' : undefined, limit: options.limit })).suggestions;
+  }
+
+  /** One suggestion with its changes, reviews and who wrote them; null when there is none. */
+  suggestion(id: number) {
+    return this.maybe(this.get<SuggestionDetail>(`/v1/suggestions/${id}`));
+  }
+
+  /** The commits after `since`, oldest first, each with the items it changed (as they became). */
+  async commits(since: number, limit = 20) {
+    return (await this.get<{ commits: Array<{ seq: number; at: string; message: string; mergedBy: string; author: string; changes: Array<{ id: string; type: string; path: string | null; rev: number; data: Record<string, unknown> | null }> }> }>('/v1/commits', { since, limit })).commits;
+  }
+
   /** What a mirror needs: the git mirror, the release keys, every edition's dumps (services/api/src/mirrors.ts). */
   async mirrors() {
     return this.get<MirrorsInfo>('/v1/mirrors');
   }
+
+  /** Issues, newest first, with open and closed counts (public ones, and private ones the asker may read). */
+  issues(options: { state?: 'open' | 'closed' | 'all'; label?: string; type?: string; set?: string; entity?: string; assignee?: string; author?: string; q?: string; limit?: number; cursor?: string } = {}) {
+    return this.get<{ items: Issue[]; people: People; counts: { open: number; closed: number }; next: string | null }>('/v1/issues', options);
+  }
+
+  /** Suggestions as conversations, newest first by number, with reviewers and approvals and open and closed counts. */
+  conversations(options: { state?: 'open' | 'closed' | 'all'; author?: string; reviewer?: string; q?: string; limit?: number; cursor?: string } = {}) {
+    return this.get<{ suggestions: SuggestionListItem[]; people: People; counts: { open: number; closed: number }; next: string | null }>('/v1/suggestions', { state: 'open', ...options });
+  }
+
+  /** Who these accounts are (a set's keepers): name and handle; an API from before handles gives none. */
+  async peopleByIds(ids: readonly string[]) {
+    if (!ids.length) return [];
+    return (await this.get<{ people: Array<{ id: string; username: string | null; displayName: string; bot: boolean }> }>('/v1/people', { ids: [...new Set(ids)].join(',') }).catch(() => ({ people: [] }))).people;
+  }
+
+  /** One issue with its conversation, as someone not signed in sees it; null when there is none (or it is private). */
+  issue(number: number) {
+    return this.maybe(
+      this.get<{ issue: Issue; rights: IssueRights; timeline: TimelineItem[]; people: People; fixedBy: Array<{ number: number; title: string; status: string }>; subscribed: boolean }>(`/v1/issues/${number}`).catch((error: unknown) => {
+        if (error instanceof ApiError && error.status === 403) return null;
+        throw error;
+      }),
+    );
+  }
+
+  /** What #n is: a suggestion or an issue (they share one numbering); null when nothing has it. */
+  threadByNumber(number: number) {
+    return this.maybe(this.get<{ kind: 'suggestion' | 'issue'; number: number; id: number }>(`/v1/threads/${number}`));
+  }
+
+  /** The hanacha synced to a recording, paragraph by paragraph with where each is heard; null when none is. */
+  hanachaSync(recording: string) {
+    return this.maybe(this.get<{ text: string; alignment: string; paragraphs: Array<{ id: string; content: string; startMs: number | null; endMs: number | null; checked: boolean }> }>(`/v1/recordings/${encodeURIComponent(recording)}/hanacha`));
+  }
+
+  /** The kinds of issue, each with the words it starts with. */
+  async issueTemplates() {
+    return (await this.get<{ templates: IssueTemplate[] }>('/v1/issues/templates')).templates;
+  }
+
+  /** Every label, with how many open issues carry it. */
+  async labels() {
+    return (await this.get<{ labels: Array<IssueLabel & { open: number }> }>('/v1/labels')).labels;
+  }
+
+  /** A person's page by their handle (an old handle finds them too, with `movedFrom`); null when nobody has it. */
+  person(username: string) {
+    return this.maybe(this.get<Profile>(`/v1/people/${encodeURIComponent(username)}`, { limit: 40 }));
+  }
+}
+
+export interface Profile {
+  person: { id: string; username: string; displayName: string; since: string; steward: boolean; admin: boolean; trust: 'contributor' | 'trusted'; suspended: boolean };
+  movedFrom?: string;
+  counts: { suggestions: number; merged: number; reviews: number; issues: number; comments: number };
+  activity: Array<{
+    kind: 'suggestion' | 'review' | 'issue' | 'comment';
+    at: string;
+    thread: { kind: 'changeset' | 'report' | 'entity'; id: string; number: number | null; title: string | null; state: string | null; path: string | null };
+    verdict?: string;
+    excerpt?: string;
+  }>;
 }
 
 export interface MirrorsInfo {

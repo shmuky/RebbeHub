@@ -2,7 +2,11 @@
 
 `https://api.rebbehub.org` serves the whole catalog, read without an
 account; `/openapi.json` lists every route. What changes the catalog
-needs a signed-in session, from the site's own pages.
+needs a signed-in person: the site's session, or a personal API token made
+on `/account` ([auth](developers/auth.md)). The developer docs, with every
+route's examples and a reference to try them in, are at
+[rebbehub.org/developers](https://rebbehub.org/developers)
+([developers/](developers/index.md)).
 
 ## Reading
 
@@ -67,22 +71,25 @@ needs a signed-in session, from the site's own pages.
   thumbnails.
 - `GET /v1/files/<sha256>/similar`: other files that look like this one
   (the same pages, or the same recording), a machine guess.
+- `GET /v1/entities/<id>/linked/counts`: everything that points at an
+  item, by type and field, with how many of each.
+- `GET /v1/entities/<id>/linked?field=work&type=unit&after=…&limit=…`:
+  one of those groups in its own order (order key, date, part, page), up
+  to 500 at a time, with `total` and `next` (null at the end).
+- `GET /v1/covers?ids=rh-…,rh-…` (up to 200): sefarim's covers, drawn
+  from their title pages, while their PDFs are served; `machine: true`
+  until a person chose the page. `GET /v1/works/<id>/cover`: one sefer's
+  cover, the page chosen, and the PDFs it may be chosen from.
+- `GET /v1/files/<sha256>/about`: a file's own page: rights, where it
+  came from, what was made from it and measured in it, the covers drawn
+  from it, and the items that use it (`usedBy.total` and the first of
+  them).
 
 ## OAI-PMH for libraries
 
 `https://api.rebbehub.org/oai` speaks OAI-PMH 2.0 (when switched on,
-[deploy](deploy.md)): sefarim, sichos, farbrengens, printings and
-recordings as Dublin Core (`oai_dc`), harvested by the commit that last
-changed them (`from`, `until`), by kind (`set=type:unit`) or by set
-(`set=set:rh-…`), a hundred at a time with a resumption token. Deleted
-items are reported as deleted (`deletedRecord: persistent`); identifiers
-are `oai:rebbehub.org:rh-…`. Records are CC0.
-
-```
-/oai?verb=Identify
-/oai?verb=ListRecords&metadataPrefix=oai_dc&from=2026-09-01
-/oai?verb=GetRecord&metadataPrefix=oai_dc&identifier=oai:rebbehub.org:rh-…
-```
+[deploy](deploy.md)), Dublin Core records under CC0: see
+[OAI-PMH and IIIF](developers/oai-pmh.md).
 
 ## Translations
 
@@ -105,38 +112,128 @@ there. Personal: never cached, never exported.
 
 ## Adding
 
-With a signed-in session:
+With a signed-in session or a token with the `write` scope:
 
 - `POST /v1/uploads/check` (`{ sha256, pageHashes?, work?, publication? }`):
   before an upload, whether RebbeHub has the file or one like it, and
   whether it looks like another scan of a printing, a new printing or a
   new teshura.
+- `POST /v1/uploads` also takes `what=hanacha` (a PDF for a farbrengen
+  or sicha, `kind=mugah|bilti-mugah|…`) and `what=document` (`as=sefer`,
+  `letter` or `document`, with `title`, and `set`, `author`, `genre`,
+  `year`, `unit` as they apply); a recording or a hanacha may name a
+  farbrengen the catalog lacks (`eventTitle`, `eventDate`) instead of
+  `for`, and it is added with it.
+- `POST /v1/uploads/propose` (`{ what, name, sha256? }`): the machine's
+  guess of where something new belongs, from the date and words in its
+  name, and where the file already is.
+- `POST /v1/hanachos/text` (`{ for | eventTitle+eventDate, content,
+  rights, language?, credit? }`): a hanacha's words, a paragraph to a
+  segment, as a suggestion.
 - `POST /v1/suggestions/contents-map`: *Map pages*, what pages of a
   publication hold, as a suggestion.
+- `POST /v1/suggestions/words` (`{ entityId, change, version, segment,
+  text, before?, kind?, language?, title?, note? }`): a page's words fixed
+  segment by segment ([data model](data-model.md#a-pages-words)).
+  `change` is `edit` (the segment's new `text`, as runs), `add` (a new
+  segment after it), `remove`, or `start` (a page's first words). `before`
+  is the segment as the person saw it: if it has changed since, the
+  answer is 409 and nothing is overwritten. Words are only runs with the
+  fixed marks; anything else is refused or dropped.
 - `POST /v1/teshuros/<id>/family-request` (no account, captcha as for
   reports): a family asks that a teshura stop being shown
   ([rights](rights.md)).
+
+## People and conversations
+
+It works the way GitHub works. Suggestions are pull requests and Reports
+are issues, numbered together (`#12` is one or the other, never both;
+`GET /v1/threads/12` says which). Imports are not conversations and have
+no number. Reading needs no account (private issues aside); writing
+needs a signed-in session. People are named by their handle
+([accounts](accounts.md#handles-and-mentions)).
+
+**People**
+
+- `GET /v1/people?q=men&thread=changeset:<id>`: people to @mention,
+  those already in the conversation first.
+- `GET /v1/people/<handle>`: a person's public page (an old handle finds
+  them too, with `movedFrom`).
+- `GET /v1/threads?q=`: suggestions and issues to #mention, by number or
+  words.
+
+**Suggestions**
+
+- `GET /v1/suggestions?state=open|closed|all&author=&reviewer=&q=`:
+  the list, with each one's number, reviewers, approvals, comments and
+  the issues it closes, and the open and closed counts. Without `state`
+  the older list (`status=`) answers as before.
+- `GET /v1/suggestions/<id>/conversation`: the timeline in order
+  (comments, reviews, and events: sent for review, review requested,
+  renamed, referenced from elsewhere, merged, withdrawn, reverted), who
+  is asked to review, and the issues it closes.
+- `POST /v1/suggestions/<id>/reviews`:
+  `{ verdict: "approve" | "request_changes" | "comment", body?, comments?: [{ entity, field, body }] }`,
+  a whole review in one: Approve merges it (as `/approve` does), Request
+  changes sends it back (as `/send-back` does), and the comments on
+  fields are kept with the review.
+- `POST /v1/suggestions/<id>/comments`: `{ body, parent?, anchor?: { entity, field } }`.
+- `POST /v1/suggestions/<id>/review-requests` `{ reviewers: [handle] }`
+  (asking someone who reviewed asks again),
+  `DELETE /v1/suggestions/<id>/review-requests/<handle>`.
+- `PATCH /v1/suggestions/<id>` `{ title?, description? }`. `Fixes #12`
+  (or `closes`, `resolves`, `סוגר`, `מתקן`…) in the description links
+  issue 12; merging the suggestion closes it.
+
+When a suggestion is sent for review, the keepers of the sets it touches
+are asked to review it on their own (as CODEOWNERS are), except for a
+bot's suggestions. When it comes back after changes were requested,
+those who requested them are asked again.
+
+**Issues**
+
+- `GET /v1/issues?state=&label=&type=&set=&entity=&assignee=&author=&q=`:
+  newest first, with the open and closed counts; `assignee=none` for
+  those nobody has taken.
+- `GET /v1/issues/templates`: the kinds of issue and the words each
+  starts with.
+- `POST /v1/issues` `{ title, body?, type, entityId?, labels? }`.
+- `GET /v1/issues/<number>`: the issue, its timeline, the suggestions
+  that close it, and `rights`: what the reader may do.
+- `PATCH /v1/issues/<number>` `{ title?, body? }`,
+  `POST …/state` `{ state: "open" | "completed" | "not_planned", note? }`,
+  `PUT …/labels` `{ labels }`, `PUT …/assignees` `{ assignees }`,
+  `POST …/visibility` `{ private }`, `POST …/comments` `{ body, parent? }`.
+- `GET /v1/labels`; stewards make them with `POST /v1/labels`.
+
+The suggestion list (with `state`), the issues and the inbox page like
+every list of the API: each answers `next`, passed back as `cursor`
+(`before` is still read). With a personal API token, the write scope
+opens issues, comments and reviews; handles are chosen on the site only
+(`/v1/auth/username`), never with a token.
+
+Issues are public, as on GitHub, except those about rights or offensive
+content, which only stewards, the set's keepers, the reporter and those
+assigned may read. Every report sent before issues existed stays private.
+`POST /v1/reports` (no account) still works and now takes a `title` too;
+it answers with the new issue's `number`.
+
+**Comments and the inbox**
+
+- `PATCH /v1/comments/<id>` `{ body }` (its writer);
+  `POST /v1/comments/<id>/resolve` `{ resolved }` (a comment on a field).
+- `GET /v1/inbox?filter=unread|all|mention|review_requested|assigned|…`,
+  `GET /v1/inbox/count`, `POST /v1/inbox/read`
+  `{ ids? | subject?: { kind, id } | all?, unread? }`.
+- `POST /v1/follows` takes `{ kind: "report", id }` for an issue.
 
 ## Webhooks
 
 On `/account` (*For developers: webhooks*), or `POST /v1/webhooks` with
 `{ "url": "https://…" }`, a signed-in person registers up to five
-addresses. Every merge from then on is posted to each, in order and at
-least once, every few minutes:
-
-```http
-POST <your address>
-Content-Type: application/json
-X-RebbeHub-Signature: sha256=<HMAC-SHA256 of the body, keyed with the hook's secret>
-
-{ "commits": [ { "seq": 9, "at": "…", "message": "…", "author": "…", "mergedBy": "…",
-                 "changes": [ { "id": "rh-…", "type": "event", "path": "/events/…", "rev": 22993, "data": { … } } ] } ] }
-```
-
-The secret is shown once, when the address is added. Answer with a 2xx
-status; anything else is tried again, and after 20 failures in a row the
-hook is switched off. Words withheld for rights are left out, as in
-`/v1/commits`.
+addresses; every merge from then on is posted to each, signed with the
+hook's secret. The body, the signature and retries:
+[webhooks](developers/webhooks.md).
 
 ## Embeds
 

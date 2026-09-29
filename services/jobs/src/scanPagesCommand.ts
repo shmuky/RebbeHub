@@ -1,5 +1,6 @@
 import type { EntityId } from '@rebbehub/model';
 import { withCatalog, type Context } from './commands.js';
+import { makeCovers } from './covers.js';
 import { R2Store } from './readingCopies.js';
 import { fingerprintFiles, makePageImages } from './scanPages.js';
 
@@ -41,5 +42,15 @@ export async function fingerprintsCommand(ctx: Context, input: { limit?: number;
       log: ctx.log,
     });
     ctx.log(`measured ${done.length} files; ${done.filter((d) => d.similar > 0).length} look like files already held`);
+  });
+}
+
+/** `rebbehub covers`: sefarim's covers from their title pages; see covers.ts. */
+export async function coversCommand(ctx: Context, input: { work?: string; limit?: number; again?: boolean; files?: string; bucket?: string }): Promise<void> {
+  const store = bucket(input.bucket ?? 'rebbehub-public');
+  if (!store) throw new Error('set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (a token with R2 edit rights): covers go into the public bucket');
+  await withCatalog(ctx, async (catalog) => {
+    const done = await makeCovers(catalog, { fetchFile: fetcher(input.files), store, work: input.work as EntityId | undefined, limit: input.limit, again: input.again, log: ctx.log });
+    ctx.log(`covers of ${done.length} sefarim, ${done.filter((d) => d.machine).length} chosen by the machine`);
   });
 }

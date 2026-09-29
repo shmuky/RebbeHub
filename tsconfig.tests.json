@@ -28,6 +28,9 @@
       "@rebbehub/pdf-fix": [
         "./packages/pdf-fix/src/index.ts"
       ],
+      "@rebbehub/client": [
+        "./packages/client/src/index.ts"
+      ],
       "@rebbehub/db/pglite": [
         "./packages/db/src/pglite.ts"
       ]

@@ -1,6 +1,7 @@
 import { Catalog, adviseSuggestions, deliverWebhooks, embedderFromEnv, sendNotifications } from '@rebbehub/core';
 import { connectPostgres } from '@rebbehub/db';
 import { createApp, turnstileVerifier, type FileStore } from './app.js';
+import { DEFAULT_IP_PER_MINUTE, DEFAULT_KEY_PER_MINUTE, type RateLimiter } from './platform.js';
 import { authFor } from './auth.js';
 import { resendMailer, workersAiAdvisor } from './mail.js';
 
@@ -12,7 +13,9 @@ import { resendMailer, workersAiAdvisor } from './mail.js';
  * GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, for email (sign-in links,
  * notifications) RESEND_API_KEY, for the reviewer's advice and search by
  * meaning CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_AI_TOKEN, and for OAI-PMH the
- * administrators' address OAI_ADMIN_EMAIL. Each is off until set.
+ * administrators' address OAI_ADMIN_EMAIL. Each is off until set. Rate
+ * limits come from the RATE_LIMIT_ADDRESS and RATE_LIMIT_TOKEN bindings
+ * (docs/configuration.md); without them nothing is counted.
  */
 interface R2ObjectBody {
   body: ReadableStream;
@@ -55,6 +58,12 @@ interface Env {
   RELEASE_PUBLIC_KEYS?: string;
   /** and where dumps are served when not this Worker's /dumps. */
   DUMPS_BASE_URL?: string;
+  /** Cloudflare rate limiting bindings (wrangler.toml, [[ratelimits]]): requests per caller's address, and per API token. */
+  RATE_LIMIT_ADDRESS?: RateLimiter;
+  RATE_LIMIT_TOKEN?: RateLimiter;
+  /** What those bindings allow a minute, for the RateLimit-Policy header (they are set in wrangler.toml). */
+  RATE_LIMIT_ADDRESS_PER_MINUTE?: string;
+  RATE_LIMIT_TOKEN_PER_MINUTE?: string;
 }
 
 const mailerOf = (env: Env) => (env.RESEND_API_KEY ? resendMailer({ apiKey: env.RESEND_API_KEY, from: env.EMAIL_FROM }) : undefined);
@@ -107,6 +116,12 @@ export default {
       oai: env.OAI_ADMIN_EMAIL ? { adminEmail: env.OAI_ADMIN_EMAIL, siteUrl: env.SITE_URL } : undefined,
       mirrors: { gitUrls: list(env.CATALOG_GIT_URL), publicKeys: list(env.RELEASE_PUBLIC_KEYS), dumpsBaseUrl: env.DUMPS_BASE_URL || undefined },
       siteUrl: env.SITE_URL,
+      rateLimits: {
+        ip: env.RATE_LIMIT_ADDRESS,
+        key: env.RATE_LIMIT_TOKEN,
+        ipPerMinute: Number(env.RATE_LIMIT_ADDRESS_PER_MINUTE) || DEFAULT_IP_PER_MINUTE,
+        keyPerMinute: Number(env.RATE_LIMIT_TOKEN_PER_MINUTE) || DEFAULT_KEY_PER_MINUTE,
+      },
       auth: env.SITE_URL ? authFor(env.SITE_URL, { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }) : undefined,
       mailer: mailerOf(env),
     });

@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { MONTHS, parseDateKey } from '@rebbehub/hebrew';
+import { parseDateText } from '@rebbehub/hebrew';
 import type { Entity } from '../lib/api.js';
 import { dateLabel } from '../lib/dates.js';
 import { t, type Lang } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
 import { useAccount } from '../lib/useAccount.js';
+import { Icon } from '../ui/Icon.js';
+import { Panel } from '../ui/primitives.js';
 
 /**
  * "Suggest a fix" (the plan, section 7): change what is wrong on the page
@@ -35,27 +37,22 @@ function nameFieldOf(data: Record<string, unknown>): NameField | null {
 interface Fields {
   he: string;
   en: string;
-  year: string;
-  month: string;
-  day: string;
+  /** The date as a person writes it: "י״ג תמוז תשמ״ה", "13 Tammuz 5745", "תשכ״ב". */
+  date: string;
 }
 
-/** A Hebrew year is a leap year (with Adar I and II) seven times in nineteen. */
-const isLeap = (year: number) => (7 * year + 1) % 19 < 7;
-
-function fieldsOf(data: Record<string, unknown>, nameField: NameField): Fields {
+function fieldsOf(data: Record<string, unknown>, nameField: NameField, lang: Lang): Fields {
   const title = (data[nameField] ?? {}) as { he?: string; en?: string };
-  const parts = typeof data.date === 'string' ? parseDateKey(data.date) : null;
-  return { he: title.he ?? '', en: title.en ?? '', year: parts ? String(parts.year) : '', month: parts?.month ?? '', day: parts?.day ? String(parts.day) : '' };
+  return { he: title.he ?? '', en: title.en ?? '', date: typeof data.date === 'string' ? dateLabel(data.date, lang, { civil: false }) : '' };
 }
 
-/** The date as the catalog keeps it (`5742-05-10`, or `5742-05` without a day); null when the year is missing or out of range. */
+/** The date as the catalog keeps it (`5742-05-10`, a month, or a year), read from what was typed; null when it cannot be read. */
 function dateKeyOf(f: Fields): string | null {
-  const year = Number(f.year);
-  if (!Number.isInteger(year) || year < 5600 || year > 5900) return null;
-  if (!f.month) return String(year);
-  const day = f.day ? `-${f.day.padStart(2, '0')}` : '';
-  return `${year}-${f.month}${day}`;
+  if (!f.date.trim()) return null;
+  const parsed = parseDateText(f.date);
+  if (!parsed.ok) return null;
+  const year = Number(parsed.key.slice(0, 4));
+  return year >= 5600 && year <= 5900 ? parsed.key : null;
 }
 
 export function SuggestFix({ entity, lang }: { entity: Pick<Entity, 'id' | 'type' | 'data' | 'path'>; lang: Lang }) {
@@ -64,7 +61,7 @@ export function SuggestFix({ entity, lang }: { entity: Pick<Entity, 'id' | 'type
   const nameField = nameFieldOf(data) ?? 'title';
   const hadDate = typeof data.date === 'string';
   const dated = DATED.has(entity.type) || hadDate;
-  const original = fieldsOf(data, nameField);
+  const original = fieldsOf(data, nameField, lang);
   const [fields, setFields] = useState<Fields>(original);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -73,8 +70,6 @@ export function SuggestFix({ entity, lang }: { entity: Pick<Entity, 'id' | 'type
   const set = (key: keyof Fields) => (e: { target: { value: string } }) => setFields((f) => ({ ...f, [key]: e.target.value }));
 
   const date = dateKeyOf(fields);
-  const leap = isLeap(Number(fields.year));
-  const months = MONTHS.filter((m) => m.years === 'all' || (m.years === 'leap') === leap);
   const changedName = fields.he.trim() !== original.he || fields.en.trim() !== original.en;
   const changedDate = dated && date !== (hadDate ? data.date : null);
   // A date may be left empty only where there was none.
@@ -109,64 +104,55 @@ export function SuggestFix({ entity, lang }: { entity: Pick<Entity, 'id' | 'type
 
   const here = entity.path ?? `/${entity.id}`;
   return (
-    <details className="report suggest" id="suggest">
-      <summary>{t(lang, 'suggestFix')}</summary>
+    <Panel id="suggest" icon="suggest" title={t(lang, 'suggestFix')} hint={lang === 'he' ? 'נשלח לבדיקה' : 'Sent for review'}>
       {account === null ? (
         <p>
           {t(lang, 'suggestSignIn')} <Link to={href('/signin', lang, { return: `${here}#suggest` })}>{t(lang, 'signIn')}</Link>
         </p>
       ) : sent !== null ? (
-        <p role="status">
-          {t(lang, 'suggestSent')} <Link to={href('/review', lang, { s: String(sent) })}>{t(lang, 'suggestSee')}</Link>
+        <p className="alert positive" role="status">
+          <Icon name="check" />
+          <span>
+            {t(lang, 'suggestSent')} <Link to={href('/review', lang, { s: String(sent) })}>{t(lang, 'suggestSee')}</Link>
+          </span>
         </p>
       ) : (
-        <form onSubmit={send}>
-          <label>
-            {t(lang, 'nameHe')}
-            <input value={fields.he} onChange={set('he')} required maxLength={300} dir="rtl" />
-          </label>
-          <label>
-            {t(lang, 'nameEn')}
-            <input value={fields.en} onChange={set('en')} maxLength={300} dir="ltr" />
-          </label>
+        <form onSubmit={send} className="form stack">
+          <div className="form-row">
+            <label className="field">
+              <span className="field-label">{t(lang, 'nameHe')}</span>
+              <input value={fields.he} onChange={set('he')} required maxLength={300} dir="rtl" />
+            </label>
+            <label className="field">
+              <span className="field-label">{t(lang, 'nameEn')}</span>
+              <input value={fields.en} onChange={set('en')} maxLength={300} dir="ltr" />
+            </label>
+          </div>
           {dated ? (
-            <>
-              <fieldset className="date-fields">
-                <legend>{t(lang, 'date')}</legend>
-                <select aria-label={t(lang, 'day')} value={fields.day} onChange={set('day')}>
-                  <option value="">—</option>
-                  {Array.from({ length: 30 }, (_, i) => (
-                    <option key={i + 1} value={String(i + 1)}>
-                      {i + 1}
-                    </option>
-                  ))}
-                </select>
-                <select aria-label={t(lang, 'month')} value={fields.month} onChange={set('month')}>
-                  <option value="">—</option>
-                  {months.map((m) => (
-                    <option key={m.token} value={m.token}>
-                      {m[lang]}
-                    </option>
-                  ))}
-                </select>
-                <input aria-label={t(lang, 'year')} value={fields.year} onChange={set('year')} inputMode="numeric" maxLength={4} size={5} dir="ltr" />
-              </fieldset>
-              <p className="row-sub">{date ? dateLabel(date, lang) : hadDate ? t(lang, 'yearNeeded') : ''}</p>
-            </>
+            <label className="field">
+              <span className="field-label">{t(lang, 'date')}</span>
+              <input value={fields.date} onChange={set('date')} maxLength={80} dir="auto" placeholder={lang === 'he' ? 'י״ג תמוז תשמ״ה' : '13 Tammuz 5745'} aria-invalid={fields.date.trim() !== '' && !date} />
+              <span className="hint">{date ? dateLabel(date, lang) : fields.date.trim() ? (lang === 'he' ? 'לא הצלחתי לקרוא את התאריך. כתבו יום, חודש ושנה, או שנה לבד.' : 'That date could not be read. Write a day, month and year, or a year alone.') : hadDate ? t(lang, 'yearNeeded') : ''}</span>
+            </label>
           ) : null}
-          <label>
-            {t(lang, 'suggestWhy')}
-            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={2000} />
+          <label className="field">
+            <span className="field-label">{t(lang, 'suggestWhy')}</span>
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={2000} dir="auto" />
           </label>
-          {error ? <p role="alert">{error}</p> : null}
-          <div>
-            <button type="submit" disabled={busy || !changed || !dateOk || !fields.he.trim()}>
+          {error ? (
+            <p className="alert negative" role="alert">
+              <Icon name="warn" />
+              {error}
+            </p>
+          ) : null}
+          <div className="form-actions">
+            <button type="submit" className="btn primary" disabled={busy || !changed || !dateOk || !fields.he.trim()}>
               {busy ? t(lang, 'waiting') : t(lang, 'sendForReview')}
             </button>
+            <span className="hint">{t(lang, 'suggestHow')}</span>
           </div>
-          <p className="row-sub">{t(lang, 'suggestHow')}</p>
         </form>
       )}
-    </details>
+    </Panel>
   );
 }
