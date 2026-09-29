@@ -1,5 +1,5 @@
 import type { Context, Hono } from 'hono';
-import { machineRequests, machineSummary, requestMachineWork, summariseTraining, trainingClips, type Catalog, type MachineKind, type MachineRequestStatus } from '@rebbehub/core';
+import { machineRequests, machineSummary, requestMachineWork, summariseTraining, trainingClips, trainingGoal, type Catalog, type MachineKind, type MachineRequestStatus } from '@rebbehub/core';
 import { readId, type EntityId } from '@rebbehub/model';
 import { HttpError } from './app.js';
 
@@ -37,19 +37,24 @@ export function machineRoutes(app: Hono, catalog: Catalog, signedIn: (c: Context
   app.get('/v1/machine', async (c) => c.json({ ...(await machineSummary(catalog)), startsAtOnce: Boolean(options.dispatch) }));
 
   // The retraining cycle's data: what people's checking has made so far. One query each; the words are the site's own, the audio stays where it is.
+  // Shown on every transcript, so kept for ten minutes at the edge: the database is asked a few times an hour, not once a page.
   app.get('/v1/machine/training', async (c) => {
     const since = c.req.query('since');
     if (since && Number.isNaN(Date.parse(since))) throw new HttpError(400, 'since is a date, like 2026-09-29');
-    c.header('Cache-Control', 'public, max-age=3600');
-    return c.json(summariseTraining(await trainingClips(catalog), since));
-  });
-
-  app.get('/v1/machine/training/clips', async (c) => {
-    const { clips } = await trainingClips(catalog);
-    return new Response(clips.map((clip) => JSON.stringify(clip)).join('\n') + (clips.length ? '\n' : ''), {
-      headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'public, max-age=3600', 'Content-Disposition': 'inline; filename="clips-site.jsonl"' },
+    return edgeCached(c.req.raw, 600, async () => {
+      const all = await trainingClips(catalog);
+      return Response.json({ ...summariseTraining(all, since), goal: await trainingGoal(catalog, all) });
     });
   });
+
+  app.get('/v1/machine/training/clips', async (c) =>
+    edgeCached(c.req.raw, 3600, async () => {
+      const { clips } = await trainingClips(catalog);
+      return new Response(clips.map((clip) => JSON.stringify(clip)).join('\n') + (clips.length ? '\n' : ''), {
+        headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Content-Disposition': 'inline; filename="clips-site.jsonl"' },
+      });
+    }),
+  );
 
   app.get('/v1/machine/requests', async (c) => {
     const kind = c.req.query('kind');
@@ -115,4 +120,16 @@ export function githubDispatch(input: { token: string; repo?: string; ref?: stri
     if (!response.ok) throw new Error(`GitHub: ${response.status} ${await response.text().catch(() => '')}`);
     return true;
   };
+}
+
+/** A public answer kept in the Workers cache for `seconds` (where there is one; elsewhere, made every time). */
+async function edgeCached(request: Request, seconds: number, make: () => Promise<Response>): Promise<Response> {
+  const cache = (globalThis as { caches?: { default?: { match(r: Request): Promise<Response | undefined>; put(r: Request, res: Response): Promise<void> } } }).caches?.default;
+  const hit = cache ? await cache.match(request) : undefined;
+  if (hit) return hit;
+  const made = await make();
+  const response = new Response(made.body, made);
+  response.headers.set('Cache-Control', `public, max-age=${seconds}`);
+  if (cache && response.ok) await cache.put(request, response.clone());
+  return response;
 }

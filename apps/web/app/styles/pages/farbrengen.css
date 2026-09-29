@@ -573,3 +573,12 @@ button.part.on:hover {
   margin: 0.25rem 0 0.5rem;
   font-size: 0.85em;
 }
+
+/* The next model's goal, above the paragraphs people check. */
+.training-goal {
+  margin: 0.5rem 0 1rem;
+}
+.training-goal progress {
+  width: 100%;
+  height: 6px;
+}
