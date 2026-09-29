@@ -1,5 +1,5 @@
 import type { Context, Hono } from 'hono';
-import { CatalogError, ExportGate, SITEMAP_PAGE_SIZE, SITEMAP_TYPES, coverSources, sitemapChunks, sitemapPage, coversOf, fileAbout, linkedCounts, linkedPage, pdfPageCount, type Catalog, type CoverView, type EntityView } from '@rebbehub/core';
+import { CatalogError, ExportGate, SITEMAP_PAGE_SIZE, SITEMAP_TYPES, coverSources, sitemapChunks, sitemapPage, coversOf, fileAbout, linkedCounts, linkedOfEach, linkedPage, pdfPageCount, textsProgress, type Catalog, type CoverView, type EntityView } from '@rebbehub/core';
 import { mayServe, readId, type EntityId, type EntityType } from '@rebbehub/model';
 import { HttpError } from './app.js';
 import { cursor, nextLink } from './platform.js';
@@ -47,6 +47,28 @@ export function pageRoutes(app: Hono, catalog: Catalog, options: PageRouteOption
     const gate = new ExportGate(catalog);
     return Promise.all(views.map((v) => gate.redact(v)));
   };
+
+  const idsOf = (c: Context): EntityId[] => {
+    const ids = (c.req.query('ids') ?? '').split(',').filter(Boolean).map(idOf);
+    if (ids.length > 200) throw new HttpError(400, 'at most 200 ids at a time');
+    return ids;
+  };
+
+  // One group of what points at each of several items, a few of each (`?ids=rh-…,rh-…&field=unit&type=text&limit=20`):
+  // what a list needs of every row in one request, however long the list (a sefer's sichos' texts, a farbrengen's sichos' words).
+  app.get('/v1/entities/batch/linked', async (c) => {
+    const field = c.req.query('field');
+    const type = c.req.query('type');
+    if (!field) throw new HttpError(400, 'say which field points at them (field=unit)');
+    if (type && !(await catalog.registry()).has(type)) throw new HttpError(400, `unknown type "${type}"`);
+    const found = await linkedOfEach(catalog.db, idsOf(c), { field, type: type as EntityType | undefined, limit: whole(c.req.query('limit'), 'limit', 500) });
+    const linked: Record<string, EntityView[]> = {};
+    for (const [id, items] of found) linked[id] = await redact(items);
+    return c.json({ linked });
+  });
+
+  // How many paragraphs each of several texts has, and how many a person checked: a sefer's list says so of every sicha without reading a word.
+  app.get('/v1/texts/batch/progress', async (c) => c.json({ progress: Object.fromEntries(await textsProgress(catalog.db, idsOf(c))) }));
 
   // What points at an item, by kind and field, with how many of each: the groups an item's page lists.
   app.get('/v1/entities/:id/linked/counts', async (c) => c.json({ groups: await linkedCounts(catalog.db, idOf(c.req.param('id'))) }));

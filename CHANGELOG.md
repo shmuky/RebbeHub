@@ -92,8 +92,24 @@ any time. `@rebbehub/client` carries the API's version.
   suggestion, with a link to it; a keeper who may approve it can apply it
   at once. Signed-out people see the actions and are asked to sign in.
 
+- **What points at each of several items, in one request.**
+  `GET /v1/entities/batch/linked?ids=…&field=…&type=…&limit=…` gives, by
+  item, the items pointing at each of up to 200 items (a few of each, in
+  the group's order), and `GET /v1/texts/batch/progress?ids=…` how many
+  paragraphs each of up to 200 texts has and how many a person checked.
+
 ### Fixed
 
+- **A sefer's volume and a farbrengen no longer make a request per
+  sicha.** A volume's page asked the API for each sicha's texts, then for
+  each edition's paragraphs: 166 requests for a volume of Igros Kodesh,
+  more than a request may make on any plan, so those pages failed. A
+  farbrengen's page did the same for each sicha said at it and each
+  one's words. Each now asks once for all of them (16 requests and 25
+  statements for that volume), however many sichos. Item pages
+  ask for what points at them as items (`/linked`) rather than as ids to
+  read after, one request fewer per list; a search's results are checked
+  for their rights once per text, not once per paragraph.
 - **A suggestion's page reads only its page of items.** `GET
   /v1/suggestions/{id}` used to read and compare every item of a
   suggestion for each page of it (a bot's import of 500 items, on every

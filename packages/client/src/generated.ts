@@ -1222,6 +1222,22 @@ export interface Operations {
       }>;
     };
   };
+  /** One group of what points at each of several items, a few of each in the group's order: what a list needs of every row in one request (a sefer's sichos' texts, a farbrengen's sichos' words) */
+  linkedOfEach: {
+    input: {
+      /** The items */
+      ids: string;
+      /** The field that points at them (unit, text, publication…) */
+      field: string;
+      /** Only items of this type */
+      type?: string;
+      /** How many (at most 500) */
+      limit?: number;
+    };
+    output: {
+      linked: Record<string, Array<Item>>;
+    };
+  };
   /** An item's children in their own order (a work's units, a text's paragraphs), a page at a time */
   listChildren: {
     input: {
@@ -2219,6 +2235,19 @@ export interface Operations {
     };
     output: Record<string, unknown>;
   };
+  /** How many paragraphs each of several texts has, and how many of them a person checked */
+  textsProgress: {
+    input: {
+      /** The texts */
+      ids: string;
+    };
+    output: {
+      progress: Record<string, {
+        paragraphs: number;
+        checked: number;
+      }>;
+    };
+  };
   /** Which of the two #12 is: a suggestion or an issue, and its id */
   threadByNumber: {
     input: {
@@ -2474,6 +2503,7 @@ export const OPERATIONS = {
   itemRelations: {"method":"GET","path":"/v1/entities/{id}/relations","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   itemTalk: {"method":"GET","path":"/v1/entities/{id}/talk","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   linkedCounts: {"method":"GET","path":"/v1/entities/{id}/linked/counts","pathParams":["id"],"query":[],"body":null,"answer":"json"},
+  linkedOfEach: {"method":"GET","path":"/v1/entities/batch/linked","pathParams":[],"query":["ids","field","type","limit"],"body":null,"answer":"json"},
   listChildren: {"method":"GET","path":"/v1/entities/{id}/children","pathParams":["id"],"query":["field","type","after","limit","cursor"],"body":null,"answer":"json","items":"items"},
   listCommits: {"method":"GET","path":"/v1/commits","pathParams":[],"query":["since","limit","changes","cursor"],"body":null,"answer":"json","items":"commits"},
   listEvents: {"method":"GET","path":"/v1/events","pathParams":[],"query":["within","day","dates","missing","limit"],"body":null,"answer":"json"},
@@ -2552,6 +2582,7 @@ export const OPERATIONS = {
   suggestFix: {"method":"POST","path":"/v1/suggestions/quick","pathParams":[],"query":[],"body":"json","answer":"json"},
   suggestionConversation: {"method":"GET","path":"/v1/suggestions/{id}/conversation","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   suggestWords: {"method":"POST","path":"/v1/suggestions/words","pathParams":[],"query":[],"body":"json","answer":"json"},
+  textsProgress: {"method":"GET","path":"/v1/texts/batch/progress","pathParams":[],"query":["ids"],"body":null,"answer":"json"},
   threadByNumber: {"method":"GET","path":"/v1/threads/{number}","pathParams":["number"],"query":[],"body":null,"answer":"json"},
   trainingClips: {"method":"GET","path":"/v1/machine/training/clips","pathParams":[],"query":[],"body":null,"answer":"json"},
   trainingSummary: {"method":"GET","path":"/v1/machine/training","pathParams":[],"query":["since"],"body":null,"answer":"json"},
@@ -2922,6 +2953,11 @@ export abstract class GeneratedMethods {
   /** What points at an item, by type and field, with how many of each (GET /v1/entities/{id}/linked/counts) */
   linkedCounts(input: Operations['linkedCounts']['input']): Promise<Operations['linkedCounts']['output']> {
     return this.call('linkedCounts', input ?? {} as Operations['linkedCounts']['input']);
+  }
+
+  /** One group of what points at each of several items, a few of each in the group's order: what a list needs of every row in one request (a sefer's sichos' texts, a farbrengen's sichos' words) (GET /v1/entities/batch/linked) */
+  linkedOfEach(input: Operations['linkedOfEach']['input']): Promise<Operations['linkedOfEach']['output']> {
+    return this.call('linkedOfEach', input ?? {} as Operations['linkedOfEach']['input']);
   }
 
   /** An item's children in their own order (a work's units, a text's paragraphs), a page at a time (GET /v1/entities/{id}/children) */
@@ -3312,6 +3348,11 @@ export abstract class GeneratedMethods {
   /** A page's words fixed segment by segment: one segment's new words, a segment added after it or taken out, or a page's first words, sent for review (POST /v1/suggestions/words) */
   suggestWords(input: Operations['suggestWords']['input']): Promise<Operations['suggestWords']['output']> {
     return this.call('suggestWords', input ?? {} as Operations['suggestWords']['input']);
+  }
+
+  /** How many paragraphs each of several texts has, and how many of them a person checked (GET /v1/texts/batch/progress) */
+  textsProgress(input: Operations['textsProgress']['input']): Promise<Operations['textsProgress']['output']> {
+    return this.call('textsProgress', input ?? {} as Operations['textsProgress']['input']);
   }
 
   /** Which of the two #12 is: a suggestion or an issue, and its id (GET /v1/threads/{number}) */

@@ -483,6 +483,7 @@ that day's changes):
 | --- | --- | --- |
 | Home | 62 → 60 | 21 → 21 |
 | A sefer | 40 → 24 | 16 → 14 |
+| A volume of Igros Kodesh (150 letters) | 177 → 25 | 166 → 16 |
 | A sicha or letter | 39 → 23 | 17 → 15 |
 | A farbrengen with 40 parts | 80 → 17 | 58 → 15 |
 | A set (the farbrengens) | 36 → 12 | 14 → 10 |
@@ -493,12 +494,19 @@ that day's changes):
 
 What the budget rules out: opening many suggestions in full (the review
 queue once loaded 18 bot imports of 500 items each, 36,000 statements a
-view, and used the day's allowance by noon), one request per part of a
-farbrengen (58 subrequests exceeds the plan's 50: the page errored
-whatever the quota), and a commit feed that carries every change of an
-import (thousands). Batch routes exist for what pages need many of:
-`/v1/entities/batch`, `/v1/files/batch`, `/v1/recordings/batch/hanacha`,
-`/v1/suggestions?about=`, and `/v1/commits?changes=`. A suggestion is
+view, and used the day's allowance by noon), one request per row of a
+list (a farbrengen asked for each part's file and hanacha, 58 requests
+for forty parts; a volume's page asked for each sicha's texts, 166 for
+a volume of Igros Kodesh: past the plan's 50 subrequests and the 32
+invocations of any plan, so those pages errored whatever the quota), and
+a commit feed that carries every change of an import (thousands). Batch
+routes exist for what pages need many of: `/v1/entities/batch`,
+`/v1/entities/batch/linked` (one group of what points at each of many
+items: a sefer's sichos' texts, a farbrengen's sichos' words),
+`/v1/texts/batch/progress`, `/v1/files/batch`,
+`/v1/recordings/batch/hanacha`, `/v1/suggestions?about=`, and
+`/v1/commits?changes=`; `/v1/entities/{id}/linked` gives the items
+themselves where `backlinks` gives ids to read after. A suggestion is
 read a page at a time (`/v1/suggestions/{id}?limit=`), and its summary of
 every item only when asked (`summary=1`); the conversation list says of
 each what it changes (`types`, `first`), so a page can label and place

@@ -63,6 +63,33 @@ describe('all that belongs to an item', () => {
     expect((await get(`/v1/entities/${event}/linked`)).status).toBe(400);
     expect((await get(`/v1/entities/${event}/linked?field=event&after=nonsense!`)).status).toBe(422);
   });
+
+  it('gives one group of what points at each of several items in one request, a few of each in order, and how far each text is checked', async () => {
+    const other = await add(catalog, 'mendy', 'keeper', 'event', { ...yudShvat(set), date: '5743-05-10', title: { he: 'התוועדות אחרת' } }, '/events/5743-05-10');
+    const alone = await add(catalog, 'mendy', 'keeper', 'event', { ...yudShvat(set), date: '5744-05-10', title: { he: 'בלי הקלטות' } }, '/events/5744-05-10');
+    for (const [e, parts] of [[event, 3], [other, 2]] as const) for (let part = parts; part >= 1; part--) await add(catalog, 'mendy', 'keeper', 'recording', { event: e, title: { he: `חלק ${part}` }, part, url: `https://example.org/${part}.mp3`, sets: [set] });
+    const both = await get(`/v1/entities/batch/linked?ids=${event},${other},${alone}&field=event&type=recording`);
+    expect(both.status).toBe(200);
+    expect(Object.keys(both.body.linked).sort()).toEqual([event, other].sort());
+    expect(both.body.linked[event].map((r: { data: { part: number } }) => r.data.part)).toEqual([1, 2, 3]);
+    expect(both.body.linked[other].map((r: { data: { part: number } }) => r.data.part)).toEqual([1, 2]);
+    // At most `limit` of each, in the group's order, whatever the others have.
+    const few = await get(`/v1/entities/batch/linked?ids=${event},${other}&field=event&type=recording&limit=1`);
+    expect(few.body.linked[event].map((r: { data: { part: number } }) => r.data.part)).toEqual([1]);
+    expect(few.body.linked[other]).toHaveLength(1);
+    expect((await get(`/v1/entities/batch/linked?ids=${event}`)).status).toBe(400);
+    expect((await get(`/v1/entities/batch/linked?ids=${event}&field=event&type=nonsense`)).status).toBe(400);
+    expect((await get(`/v1/entities/batch/linked?ids=${Array.from({ length: 201 }, () => event).join(',')}&field=event`)).status).toBe(400);
+    // Texts' progress: paragraphs (headings aside) and how many a person checked, for many texts at once.
+    const unit = await add(catalog, 'mendy', 'keeper', 'unit', { work: await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'ספר' }, slug: 'sefer', authors: [], genre: 'sichos', levels: ['sicha'], sets: [set] }, '/sefer'), position: [{ level: 'sicha', value: '1' }], order: 'a', label: { he: 'שיחה' } });
+    const text = await add(catalog, 'mendy', 'keeper', 'text', { kind: 'edition', unit, language: 'he' });
+    const empty = await add(catalog, 'mendy', 'keeper', 'text', { kind: 'hanacha', unit, language: 'he' });
+    await add(catalog, 'mendy', 'keeper', 'segment', { text, order: 'a', kind: 'heading', content: 'כותרת', proofread: 1 });
+    for (const [order, proofread] of [['b', 1], ['c', 0], ['d', 2]] as const) await add(catalog, 'mendy', 'keeper', 'segment', { text, order, kind: 'paragraph', content: `פסקה ${order}`, proofread });
+    const progress = await get(`/v1/texts/batch/progress?ids=${text},${empty}`);
+    expect(progress.status).toBe(200);
+    expect(progress.body.progress).toEqual({ [text]: { paragraphs: 3, checked: 2 } });
+  });
 });
 
 describe('covers and files', () => {

@@ -62,14 +62,9 @@ export async function workToc(api: RebbeHubApi, units: Entity[], publications: E
   // This volume's printings (all of them for a sefer of one volume).
   const ofPart = publications.filter((p) => !part || !(p.data as D).volume || String((p.data as D).volume) === part);
 
-  // Where each sicha is in each printing: the printings' contents maps.
-  const maps = await Promise.all(
-    ofPart.map(async (p) => {
-      const links = await api.backlinks(p.id, { field: 'publication', type: 'contents-map' }).catch(() => []);
-      const found = await api.entities(links.map((l) => l.from)).catch(() => new Map<string, Entity>());
-      return { printing: p, maps: [...found.values()] };
-    }),
-  );
+  // Where each sicha is in each printing: the printings' contents maps, all in one request.
+  const mapsOf = await api.linkedOfEach(ofPart.map((p) => p.id), { field: 'publication', type: 'contents-map', limit: 500 }).catch(() => new Map<string, Entity[]>());
+  const maps = ofPart.map((p) => ({ printing: p, maps: mapsOf.get(p.id) ?? [] }));
   const withMaps = maps.filter((m) => m.maps.length);
   const chosen = withMaps.find((m) => m.printing.id === options.printing) ?? withMaps[0] ?? null;
   const pageOf = new Map<string, { from: number; to: number }>();
@@ -80,29 +75,27 @@ export async function workToc(api: RebbeHubApi, units: Entity[], publications: E
   const scanned = new Set<string>();
   for (const m of maps) if (scanCounts[m.printing.id]) for (const x of m.maps) scanned.add(String((x.data as D).unit ?? ''));
 
-  // Each sicha's texts: its words (sections, and how many a person checked) and its translations.
-  const texts = await Promise.all(rowsOf.map((u) => api.backlinks(u.id, { field: 'unit', type: 'text' }).catch(() => [])));
-  const textItems = await api.entities(texts.flat().map((l) => l.from)).catch(() => new Map<string, Entity>());
+  // Each sicha's texts (its words and its translations), all the rows' in one request; then how far each edition is
+  // checked, in one more. A volume of a hundred and fifty sichos used to ask once per sicha, and once more per edition.
+  const textsOf = await api.linkedOfEach(rowsOf.map((u) => u.id), { field: 'unit', type: 'text', limit: 20 }).catch(() => new Map<string, Entity[]>());
   const editionOf = new Map<string, Entity>();
   const translated = new Set<string>();
-  rowsOf.forEach((u, i) => {
-    for (const link of texts[i]!) {
-      const t = textItems.get(link.from);
-      if (!t) continue;
+  for (const u of rowsOf) {
+    for (const t of textsOf.get(u.id) ?? []) {
       const kind = (t.data as D).kind;
       if (kind === 'translation') translated.add(u.id);
       else if (kind === 'edition' && !editionOf.has(u.id)) editionOf.set(u.id, t);
     }
-  });
-  const segs = await Promise.all(rowsOf.map((u) => (editionOf.has(u.id) ? api.children(editionOf.get(u.id)!.id, 'text', 'segment', { limit: 1000 }).then((r) => r.items).catch(() => []) : Promise.resolve([] as Entity[]))));
+  }
+  const progress = await api.textsProgress([...editionOf.values()].map((t) => t.id)).catch(() => new Map<string, { paragraphs: number; checked: number }>());
+  const progressOf = (u: Entity) => (editionOf.has(u.id) ? progress.get(editionOf.get(u.id)!.id) : undefined);
   let total = 0;
   let checked = 0;
-  for (const list of segs)
-    for (const s of list) {
-      if ((s.data as D).kind === 'heading') continue;
-      total++;
-      if (Number((s.data as D).proofread ?? 0) >= 1) checked++;
-    }
+  for (const u of rowsOf) {
+    const p = progressOf(u);
+    total += p?.paragraphs ?? 0;
+    checked += p?.checked ?? 0;
+  }
 
   // The farbrengen each was said at, and whether it has a recording.
   const eventIds = [...new Set(rowsOf.flatMap((u) => ((u.data as D).events as string[] | undefined) ?? []))];
@@ -114,7 +107,7 @@ export async function workToc(api: RebbeHubApi, units: Entity[], publications: E
     for (const e of found) recorded.set(e.id, e.recordings);
   }
 
-  const rows: Array<TocRow & { group: string | null }> = rowsOf.map((u, i) => {
+  const rows: Array<TocRow & { group: string | null }> = rowsOf.map((u) => {
     const d = u.data as { events?: string[]; date?: string; position?: Array<{ level: string; value: string; label?: LocalName }>; editions?: Array<{ kind: string }> };
     const event = d.events?.map((id) => events.get(id)).find(Boolean);
     const steps = d.position ?? [];
@@ -125,7 +118,7 @@ export async function workToc(api: RebbeHubApi, units: Entity[], publications: E
       title: labelOf(u, lang),
       sub: event ? nameOf((event.data as { title?: LocalName }).title, lang) : d.date ? dateLabel(d.date, lang, { civil: false }) : null,
       page: pageOf.get(u.id)?.from ?? null,
-      sections: segs[i]!.length ? segs[i]!.filter((s) => (s.data as D).kind !== 'heading').length : null,
+      sections: progressOf(u)?.paragraphs || null,
       scan: scanned.has(u.id) || Boolean(d.editions?.some((e) => e.kind === 'scan' || e.kind === 'pdf')),
       audio: Boolean(d.events?.some((id) => (recorded.get(id) ?? 0) > 0)),
       translation: translated.has(u.id),

@@ -70,9 +70,9 @@ const orNone = <T>(promise: Promise<T>, none: T): Promise<T> => promise.catch(()
 
 const ids = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : typeof value === 'string' ? [value] : []);
 
-async function entitiesOf(api: RebbeHubApi, links: Backlink[]): Promise<Entity[]> {
-  const found = await api.entities(links.map((l) => l.from));
-  return links.map((l) => found.get(l.from)).filter((e): e is Entity => e !== undefined);
+/** What points at an item through one field, the items themselves in their own order, in one request (`/linked`), up to a page of them. */
+async function linkedItems(api: RebbeHubApi, id: string, field: string, type: string): Promise<Entity[]> {
+  return (await api.linked(id, { field, type, limit: 500 })).items;
 }
 
 /** A year to sort a printing by: its Hebrew year, else its civil year made Hebrew; undated ones last. */
@@ -114,7 +114,7 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
       // Its volumes first; one volume's units when one is opened (?part=), else the units of a work of one level.
       const [outline, publications, cover] = await Promise.all([
         api.workOutline(entity.id),
-        entitiesOf(api, await api.backlinks(entity.id, { field: 'work', type: 'publication' })),
+        linkedItems(api, entity.id, 'work', 'publication'),
         orNone(api.workCover(entity.id), null),
       ]);
       view.outline = outline;
@@ -137,19 +137,19 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
     }
     case 'unit': {
       [...ids(d.work), ...ids(d.events)].forEach((id) => wanted.add(id));
-      const texts = await entitiesOf(api, await api.backlinks(entity.id, { field: 'unit', type: 'text' }));
+      const texts = await linkedItems(api, entity.id, 'unit', 'text');
       view.lists.texts = texts;
       const segments = await Promise.all(texts.map((text) => allSegments(api, text.id)));
       texts.forEach((text, i) => (view.segments[text.id] = segments[i]!));
-      const maps = await entitiesOf(api, await api.backlinks(entity.id, { field: 'unit', type: 'contents-map' }));
+      const maps = await linkedItems(api, entity.id, 'unit', 'contents-map');
       view.lists.printedIn = maps;
       maps.forEach((m) => ids((m.data as { publication?: string }).publication).forEach((id) => wanted.add(id)));
       break;
     }
     case 'event': {
       ids(d.place).forEach((id) => wanted.add(id));
-      view.lists.units = await entitiesOf(api, await api.backlinks(entity.id, { field: 'events', type: 'unit' }));
-      const recordings = await entitiesOf(api, await api.backlinks(entity.id, { field: 'event', type: 'recording' }));
+      view.lists.units = await linkedItems(api, entity.id, 'events', 'unit');
+      const recordings = await linkedItems(api, entity.id, 'event', 'recording');
       view.lists.recordings = recordings;
       // Each part's file, all in one request (a farbrengen may have forty parts).
       const files = await api.files(recordings.map((r) => String((r.data as { file?: string }).file ?? '')).filter(Boolean));
@@ -167,15 +167,15 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
     }
     case 'publication': {
       [...ids(d.work), ...ids(d.reprintOf)].forEach((id) => wanted.add(id));
-      const scans = await entitiesOf(api, await api.backlinks(entity.id, { field: 'publication', type: 'scan' }));
+      const scans = await linkedItems(api, entity.id, 'publication', 'scan');
       scans.sort((a, b) => Number(Boolean((b.data as { preferred?: boolean }).preferred)) - Number(Boolean((a.data as { preferred?: boolean }).preferred)));
       view.lists.scans = scans;
       const files = await api.files(scans.map((s) => (s.data as { file: string }).file));
       scans.forEach((s) => (view.files[s.id] = files.get((s.data as { file: string }).file) ?? null));
       await loadPages(scans);
       // The sefer's other printings, and what this one reprints.
-      if (typeof d.work === 'string') view.lists.otherPrintings = sortPrintings((await entitiesOf(api, await api.backlinks(d.work, { field: 'work', type: 'publication' }))).filter((p) => p.id !== entity.id));
-      const maps = await entitiesOf(api, await api.backlinks(entity.id, { field: 'publication', type: 'contents-map' }));
+      if (typeof d.work === 'string') view.lists.otherPrintings = sortPrintings((await linkedItems(api, d.work, 'work', 'publication')).filter((p) => p.id !== entity.id));
+      const maps = await linkedItems(api, entity.id, 'publication', 'contents-map');
       maps.sort((a, b) => (a.data as { pages: { from: number } }).pages.from - (b.data as { pages: { from: number } }).pages.from);
       view.lists.contents = maps;
       maps.forEach((m) => ids((m.data as { unit?: string }).unit).forEach((id) => wanted.add(id)));
@@ -192,15 +192,15 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
       view.files[entity.id] = typeof d.file === 'string' ? await api.file(d.file) : null;
       // The farbrengen's other parts, and the texts of this one (transcripts, a hanacha synced to it).
       const [parts, texts] = await Promise.all([
-        typeof d.event === 'string' ? entitiesOf(api, await api.backlinks(d.event, { field: 'event', type: 'recording' })) : [],
-        entitiesOf(api, await api.backlinks(entity.id, { field: 'recording', type: 'text' })),
+        typeof d.event === 'string' ? linkedItems(api, d.event, 'event', 'recording') : [],
+        linkedItems(api, entity.id, 'recording', 'text'),
       ]);
       view.lists.parts = parts.sort((a, b) => ((a.data as { part?: number }).part ?? 0) - ((b.data as { part?: number }).part ?? 0));
       view.lists.texts = texts;
       break;
     }
     case 'author': {
-      const [works, units] = await Promise.all([entitiesOf(api, await api.backlinks(entity.id, { field: 'authors', type: 'work' })), api.refCounts('work', 'unit')]);
+      const [works, units] = await Promise.all([linkedItems(api, entity.id, 'authors', 'work'), api.refCounts('work', 'unit')]);
       view.lists.works = works;
       view.counts = units;
       view.covers = await orNone(api.covers(works.map((w) => w.id)), {});
