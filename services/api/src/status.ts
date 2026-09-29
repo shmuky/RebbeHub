@@ -3,8 +3,9 @@ import type { Hono } from 'hono';
 /**
  * Is RebbeHub up? (docs/operations.md, "Status"). Every five minutes the
  * API's scheduled run checks the site, the API, the MCP server, the
- * database, the database's daily query allowance and the scheduled jobs,
- * and keeps what it found, with ninety days of it and the last incidents,
+ * database, the database's daily query allowance, the Workers' load (the
+ * CPU a request takes, and how many were stopped for taking too much)
+ * and the scheduled jobs, and keeps what it found, with ninety days of it and the last incidents,
  * as one small JSON file in R2. GET /v1/status reads that file and nothing
  * else, so the site's /status page still answers when the database does not.
  *
@@ -14,7 +15,7 @@ import type { Hono } from 'hono';
  * analytics, not from the database.
  */
 
-export const CHECKS = ['site', 'api', 'mcp', 'database', 'quota', 'jobs'] as const;
+export const CHECKS = ['site', 'api', 'mcp', 'database', 'quota', 'workers', 'jobs'] as const;
 export type CheckId = (typeof CHECKS)[number];
 
 /** `unknown`: not checked this time (not configured, or waiting on something that is down); it counts for nothing. */
@@ -38,6 +39,21 @@ export interface QueryAllowance {
   resetsAt: string;
   /** At today's pace so far, when it would run out, if before it resets. */
   runsOutAt: string | null;
+}
+
+/** One Worker's load since 00:00 UTC today, from Cloudflare's analytics. */
+export interface WorkerLoad {
+  /** The Worker's name in Cloudflare (`rebbehub-web`, `rebbehub-api`). */
+  script: string;
+  /** Requests today. */
+  requests: number;
+  /** Of them, ended by the runtime with an error: an exception, resources exceeded, or its own failure. */
+  errors: number;
+  /** Of them, stopped for going over the CPU allowance (error 1102, "exceeded resources"): pages nobody got. */
+  exceeded: number;
+  /** The CPU a request takes, in milliseconds: the median, and the slowest hundredth. Null with no requests. */
+  cpuP50Ms: number | null;
+  cpuP99Ms: number | null;
 }
 
 export interface DayTally {
@@ -69,6 +85,8 @@ export interface StatusReport {
   state: CheckState;
   checks: CheckResult[];
   quota: QueryAllowance | null;
+  /** Each Worker's load today; missing in reports made before it was measured. */
+  workers?: WorkerLoad[] | null;
   /** Oldest first, at most DAYS_KEPT. */
   days: StatusDay[];
   /** Newest first, at most INCIDENTS_KEPT. */
@@ -81,6 +99,8 @@ export const INCIDENTS_KEPT = 30;
 export const STATUS_KEY = 'status/report.json';
 /** Hyperdrive's free daily allowance of queries. */
 export const FREE_DAILY_QUERIES = 100_000;
+/** The free plan's CPU allowance for one request, in milliseconds; past it the runtime stops the request (error 1102). */
+export const FREE_CPU_MS = 10;
 /** An answer slower than this is working, but slowly. */
 const SLOW_MS = 5000;
 const TIMEOUT_MS = 10_000;
@@ -225,6 +245,85 @@ export async function hyperdriveQueriesToday(options: { accountId: string; token
 }
 
 /**
+ * Each Worker's load since 00:00 UTC, from the same analytics: its
+ * requests, how many the runtime stopped for going over the CPU allowance
+ * (error 1102, "exceeded resources"), and the CPU a request takes at the
+ * median and at the slowest hundredth. One request for all the Workers,
+ * each asked twice: whole, for its counts and quantiles, and by
+ * invocation status, for the stopped ones. Null when it could not be read.
+ */
+export async function workersLoadToday(options: { accountId: string; token: string; scripts: string[]; now: Date; fetch?: typeof fetch }): Promise<WorkerLoad[] | null> {
+  const scripts = options.scripts.filter((script) => /^[a-z0-9-]{1,63}$/.test(script));
+  if (!scripts.length) return null;
+  const fields = scripts
+    .map(
+      (_, i) => `
+      w${i}: workersInvocationsAdaptive(limit: 1, filter: { scriptName: $s${i}, datetime_geq: $from, datetime_leq: $to }) { sum { requests errors } quantiles { cpuTimeP50 cpuTimeP99 } }
+      x${i}: workersInvocationsAdaptive(limit: 20, filter: { scriptName: $s${i}, datetime_geq: $from, datetime_leq: $to }) { sum { requests } dimensions { status } }`,
+    )
+    .join('');
+  const query = `query ($account: string!, $from: Time!, $to: Time!, ${scripts.map((_, i) => `$s${i}: string!`).join(', ')}) {
+    viewer { accounts(filter: { accountTag: $account }) {${fields}
+    } }
+  }`;
+  const variables: Record<string, string> = { account: options.accountId, from: startOfDay(options.now).toISOString(), to: options.now.toISOString() };
+  scripts.forEach((script, i) => (variables[`s${i}`] = script));
+  type Whole = Array<{ sum?: { requests?: number; errors?: number }; quantiles?: { cpuTimeP50?: number; cpuTimeP99?: number } }>;
+  type ByStatus = Array<{ sum?: { requests?: number }; dimensions?: { status?: string } }>;
+  try {
+    const response = await (options.fetch ?? fetch)('https://api.cloudflare.com/client/v4/graphql', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${options.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, variables }),
+    });
+    const body = (await response.json()) as { data?: { viewer?: { accounts?: Array<Record<string, Whole | ByStatus>> } }; errors?: unknown };
+    if (!response.ok || body.errors) {
+      console.error('status: analytics', response.status, JSON.stringify(body.errors ?? null));
+      return null;
+    }
+    const account = body.data?.viewer?.accounts?.[0];
+    if (!account) {
+      console.error('status: analytics', 'the token cannot read this account, or CLOUDFLARE_ACCOUNT_ID is wrong');
+      return null;
+    }
+    return scripts.map((script, i) => {
+      const whole = ((account[`w${i}`] as Whole | undefined) ?? [])[0];
+      const requests = whole?.sum?.requests ?? 0;
+      const exceeded = ((account[`x${i}`] as ByStatus | undefined) ?? []).filter((g) => g.dimensions?.status === 'exceededResources').reduce((n, g) => n + (g.sum?.requests ?? 0), 0);
+      // The quantiles come in microseconds.
+      const ms = (us: number | undefined) => (requests && us !== undefined && us !== null ? Math.round(us / 100) / 10 : null);
+      return { script, requests, errors: whole?.sum?.errors ?? 0, exceeded, cpuP50Ms: ms(whole?.quantiles?.cpuTimeP50), cpuP99Ms: ms(whole?.quantiles?.cpuTimeP99) };
+    });
+  } catch (error) {
+    console.error('status: analytics', error);
+    return null;
+  }
+}
+
+/**
+ * The Workers' load: a request the runtime stopped for CPU (error 1102)
+ * is a page somebody did not get, so any today is degraded and one in
+ * twenty is down; a slowest hundredth over the plan's allowance is
+ * degraded too, since the next ones will be stopped. `load` null means it
+ * could not be read; `cpuLimitMs` null means the plan sets none that matters.
+ */
+export function workersCheck(load: WorkerLoad[] | null, cpuLimitMs: number | null): CheckResult {
+  if (load === null) return { id: 'workers', state: 'unknown', ms: null, detail: 'Not measured: the analytics token is not set, or did not answer.' };
+  let state: CheckState = 'up';
+  const lines: string[] = [];
+  const n = (x: number) => x.toLocaleString('en');
+  for (const w of load) {
+    if (!w.requests) continue;
+    const slow = cpuLimitMs !== null && w.cpuP99Ms !== null && w.cpuP99Ms > cpuLimitMs;
+    if (w.exceeded / w.requests >= 0.05) state = 'down';
+    else if ((w.exceeded || slow) && state !== 'down') state = 'degraded';
+    if (w.exceeded) lines.push(`${w.script}: ${n(w.exceeded)} of ${n(w.requests)} requests today went over the CPU allowance and were stopped (error 1102)${w.cpuP99Ms !== null ? `; the slowest 1% take ${w.cpuP99Ms} ms${cpuLimitMs !== null ? ` of the ${cpuLimitMs} allowed` : ''}` : ''}.`);
+    else if (slow) lines.push(`${w.script}: the slowest 1% of requests take ${w.cpuP99Ms} ms of CPU, over the ${cpuLimitMs} the plan allows; the next may be stopped (error 1102).`);
+  }
+  return { id: 'workers', state, ms: null, detail: lines.length ? lines.join(' ') : null };
+}
+
+/**
  * The day's allowance: used up is down; past 80%, or on pace to run out
  * before 00:00 UTC, is degraded. `used` null means it could not be read.
  */
@@ -258,7 +357,7 @@ export function jobsCheck(failed: string[] | null): CheckResult {
 // ------------------------------------------------------------------ the record
 
 /** This run's checks added to what was kept: today's tally, and incidents opened, made worse, or closed. */
-export function record(previous: StatusReport | null, checks: CheckResult[], at: Date, quota: QueryAllowance | null): StatusReport {
+export function record(previous: StatusReport | null, checks: CheckResult[], at: Date, quota: QueryAllowance | null, workers: WorkerLoad[] | null = null): StatusReport {
   const iso = at.toISOString();
   const date = iso.slice(0, 10);
   const days = (previous?.days ?? []).filter((d) => d.date < date).map((d) => ({ ...d }));
@@ -292,6 +391,7 @@ export function record(previous: StatusReport | null, checks: CheckResult[], at:
     state: worst(checks.map((c) => c.state)),
     checks,
     quota,
+    workers,
     days: days.slice(-DAYS_KEPT),
     incidents: incidents.slice(0, INCIDENTS_KEPT),
   };

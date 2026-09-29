@@ -127,6 +127,24 @@
   font-size: var(--fs-sm);
 }
 
+/* Each Worker's load today, one line each: its name, then its numbers. */
+.st-workers {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  font-size: var(--fs-sm);
+}
+.st-workers li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  padding: 2px 0;
+}
+.st-worker-name {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.92em;
+}
+
 .st-history {
   margin-top: 10px;
 }

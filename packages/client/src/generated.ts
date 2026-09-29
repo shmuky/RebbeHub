@@ -45,6 +45,18 @@ export type StatusReport = {
     resetsAt: string;
     runsOutAt: string | null;
   } | null;
+  workers?: Array<{
+    /** The Worker's name */
+    script: string;
+    /** Requests since 00:00 UTC */
+    requests: number;
+    /** Of them, ended by the runtime with an error */
+    errors: number;
+    /** Of them, stopped for going over the CPU allowance (error 1102) */
+    exceeded: number;
+    cpuP50Ms: number | null;
+    cpuP99Ms: number | null;
+  }> | null;
   /** Oldest first, at most 90 */
   days: Array<{
     /** YYYY-MM-DD, UTC */
@@ -66,7 +78,7 @@ export type StatusReport = {
   }>;
 };
 
-export type CheckId = "site" | "api" | "mcp" | "database" | "quota" | "jobs";
+export type CheckId = "site" | "api" | "mcp" | "database" | "quota" | "workers" | "jobs";
 
 /** unknown: not checked this time; it counts for nothing */
 export type CheckState = "up" | "degraded" | "down" | "unknown";
@@ -2180,7 +2192,7 @@ export interface Operations {
       counts: Record<string, number>;
     };
   };
-  /** Whether RebbeHub is up: the last checks of the site, the API, the MCP server, the database, its daily query allowance and the scheduled jobs, with 90 days of them and the latest incidents */
+  /** Whether RebbeHub is up: the last checks of the site, the API, the MCP server, the database, its daily query allowance, the Workers' load and the scheduled jobs, with 90 days of them and the latest incidents */
   status: {
     input: Record<string, never>;
     output: {
@@ -3336,7 +3348,7 @@ export abstract class GeneratedMethods {
     return this.call('stats', {} as Operations['stats']['input']);
   }
 
-  /** Whether RebbeHub is up: the last checks of the site, the API, the MCP server, the database, its daily query allowance and the scheduled jobs, with 90 days of them and the latest incidents (GET /v1/status) */
+  /** Whether RebbeHub is up: the last checks of the site, the API, the MCP server, the database, its daily query allowance, the Workers' load and the scheduled jobs, with 90 days of them and the latest incidents (GET /v1/status) */
   status(): Promise<Operations['status']['output']> {
     return this.call('status', {} as Operations['status']['input']);
   }

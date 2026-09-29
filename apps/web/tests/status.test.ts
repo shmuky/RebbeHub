@@ -33,7 +33,16 @@ describe('the status page', () => {
     const now = new Date();
     const earlier = new Date(now.getTime() - 10 * 60_000);
     let report = record(null, [{ id: 'site', state: 'up', ms: 40, detail: null }, { id: 'database', state: 'down', ms: 20, detail: 'The database did not answer.' }], earlier, null);
-    report = record(report, [{ id: 'site', state: 'up', ms: 40, detail: null }, { id: 'database', state: 'up', ms: 20, detail: null }, { id: 'quota', state: 'up', ms: null, detail: null }], now, { used: 1234, limit: 100_000, resetsAt: now.toISOString(), runsOutAt: null });
+    report = record(
+      report,
+      [{ id: 'site', state: 'up', ms: 40, detail: null }, { id: 'database', state: 'up', ms: 20, detail: null }, { id: 'quota', state: 'up', ms: null, detail: null }, { id: 'workers', state: 'up', ms: null, detail: null }],
+      now,
+      { used: 1234, limit: 100_000, resetsAt: now.toISOString(), runsOutAt: null },
+      [
+        { script: 'rebbehub-web', requests: 4300, errors: 0, exceeded: 0, cpuP50Ms: 3.1, cpuP99Ms: 8.9 },
+        { script: 'rebbehub-api', requests: 0, errors: 0, exceeded: 0, cpuP50Ms: null, cpuP99Ms: null },
+      ],
+    );
     const handler = site(async (path) => (path === '/v1/status' ? Response.json({ now: now.toISOString(), report }) : new Response('{}', { status: 404 })));
     const { status, html, cache } = await page(handler);
     expect(status).toBe(200);
@@ -41,6 +50,10 @@ describe('the status page', () => {
     expect(html).toContain('Everything is working');
     expect(html).toContain('The MCP server');
     expect(html).toContain('1,234 of 100,000 database queries today');
+    // Each Worker's load today, one line each.
+    expect(html).toContain('The servers&#x27; load');
+    expect(html).toContain('4,300 requests today · half take 3.1 ms of CPU, the slowest 1% 8.9 ms · 0 stopped for taking too much');
+    expect(html).toContain('No requests yet today.');
     expect(html).toContain('Lasted 10 min');
     expect(html).toContain('http://api.test/v1/status');
   });

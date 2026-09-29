@@ -356,8 +356,9 @@ It runs from the **Upkeep (manual)** workflow ([deploy](deploy.md)),
 
 `/status` on the site (and `GET /v1/status` for programs) says whether
 the site, the API, the MCP server, the database, the database's daily
-query allowance and the scheduled jobs are working, with ninety days of
-it and the latest incidents.
+query allowance, the Workers (the CPU a request takes, and how many were
+stopped for taking too much) and the scheduled jobs are working, with
+ninety days of it and the latest incidents.
 
 - The API's scheduled run, every five minutes, checks them first
   (`services/api/src/status.ts`) and keeps one report in the public
@@ -375,6 +376,16 @@ it and the latest incidents.
   once the `CLOUDFLARE_ANALYTICS_TOKEN` secret is set (a token allowed
   Account Analytics: Read): past 80%, or on pace to run out before 00:00
   UTC, the page says so before the site goes down.
+- The Workers' load comes from the same analytics
+  (`workersInvocationsAdaptive`): for each of `STATUS_WORKERS` (default
+  `rebbehub-web,rebbehub-api`), today's requests, how many the runtime
+  stopped for going over the CPU allowance (error 1102, "exceeded
+  resources": a page nobody got), and the CPU a request takes at the
+  median and at the slowest hundredth. Any request stopped today is
+  degraded, one in twenty is down, and a slowest hundredth over
+  `WORKERS_CPU_MS` (default 10, the free plan's) is degraded, since the
+  next ones will be stopped; the numbers are on the page whatever the
+  state, so a page that grows heavier shows before anyone is refused.
 - If `checkedAt` is more than twenty minutes old, the page says the
   checks have stopped: the API's scheduled run is not running.
 
