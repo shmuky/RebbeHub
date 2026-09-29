@@ -38,6 +38,7 @@ import {
   sichosKodeshWorksImporter,
   type DriveFolder,
   type Importer,
+  type LibraryTree,
   type SefariaCrawl,
 } from '@rebbehub/importers';
 import { clearMirror, directorySink, exportCommits, exportSnapshot, generateKeyPair, writeDump, type KeyPair } from '@rebbehub/mirror';
@@ -161,10 +162,11 @@ export const IMPORTERS: Record<string, (from: string) => Importer> = {
   'rebbehub-sets': () => rebbehubSetsImporter(),
   // Otzros HaRebbe's Drive library of seforim, listed from Drive at run time (`--from` is not used).
   otzros: () => driveLibraryImporter(() => listDriveFolder(OTZROS_FOLDER, { log: (line) => console.log(line) })),
-  // With CHABADLIBRARY_TREE (the contents `rebbehub crawl-library` gathered), a page for every chapter in the library.
+  // With CHABADLIBRARY_TREE (the contents `rebbehub crawl-library` gathered), a page for every chapter in the library,
+  // with its words where the crawl kept them (`--texts`).
   chabadlibrary: (from) => {
     if (!process.env.CHABADLIBRARY_TREE) throw new Error('CHABADLIBRARY_TREE is not set: run rebbehub crawl-library first');
-    return chabadLibraryImporter(() => readChabadLibrary(from, process.env.CHABADLIBRARY_TREE!));
+    return chabadLibraryImporter(() => readChabadLibrary(from, process.env.CHABADLIBRARY_TREE!, { api: process.env.REBBEHUB_API_URL }));
   },
   'sichos-kodesh-occasions': (from) =>
     sichosKodeshOccasionsImporter(() => readSichosKodeshOccasions(from), { mafteiach: process.env.MAFTEIACH_DATA && existsSync(process.env.MAFTEIACH_DATA) ? () => readMafteiachCrawl(process.env.MAFTEIACH_DATA!) : undefined }),
@@ -297,9 +299,12 @@ export async function archiveGapsCommand(ctx: Context, input: { db: string }): P
 /**
  * Crawls chabadlibrary.org's contents for every work of Sichos-Kodesh's
  * registry in the library, into `out`, continuing an earlier crawl there,
- * for `minutes` at most (the importer takes what is known so far).
+ * for `minutes` at most (the importer takes what is known so far). With
+ * `texts`, each page's text too, as `texts/<sha256>.html` beside `out`;
+ * with `keep`, each of those is put on RebbeHub's own storage
+ * (`texts/<sha256>` in rebbehub-public), once.
  */
-export async function crawlLibraryCommand(ctx: Context, input: { from: string; out: string; minutes?: number }): Promise<void> {
+export async function crawlLibraryCommand(ctx: Context, input: { from: string; out: string; minutes?: number; texts?: boolean; keep?: boolean; bucket?: string }): Promise<void> {
   const dir = input.from.endsWith('works') ? input.from : join(input.from, 'apps/mobile/src/catalog/data/works');
   const index = JSON.parse(await readFile(join(dir, 'works.json'), 'utf8'));
   // A work Sichos-Kodesh has chapters for keeps those; its contents in the library are not needed.
@@ -308,7 +313,35 @@ export async function crawlLibraryCommand(ctx: Context, input: { from: string; o
   const tree = existsSync(input.out) ? JSON.parse(await readFile(input.out, 'utf8')) : { nodes: {} };
   const save = async (t: unknown) => writeFile(input.out, JSON.stringify(t));
   const deadline = input.minutes ? Date.now() + input.minutes * 60_000 : undefined;
-  await crawlChabadLibrary(roots, tree, { deadline, log: ctx.log, save });
+  const textsDir = join(input.out, '..', 'texts');
+  if (input.texts) await mkdir(textsDir, { recursive: true });
+  const texts = input.texts ? (sha256: string, html: string) => writeFile(join(textsDir, `${sha256}.html`), html) : undefined;
+  await crawlChabadLibrary(roots, tree, { deadline, log: ctx.log, save, texts });
+  if (!input.keep) return;
+  const kept = await keepLibraryTexts(tree, textsDir, r2(input.bucket ?? 'rebbehub-public'), ctx.log);
+  await save(tree);
+  ctx.log(`${kept.stored} texts stored, ${kept.already} already there`);
+}
+
+/** Stores each page text of a library crawl as `texts/<sha256>`, checked against its hash, and marks it kept. */
+export async function keepLibraryTexts(tree: LibraryTree, dir: string, store: ObjectStore, log: (line: string) => void = () => {}): Promise<{ stored: number; already: number }> {
+  let stored = 0;
+  let already = 0;
+  for (const node of Object.values(tree.nodes)) {
+    if (!node.sha256 || node.kept) continue;
+    const file = join(dir, `${node.sha256}.html`);
+    if (!existsSync(file)) continue;
+    const key = `texts/${node.sha256}`;
+    const bytes = new Uint8Array(await readFile(file));
+    if (createHash('sha256').update(bytes).digest('hex') !== node.sha256) throw new Error(`${key}: the file does not match its hash`);
+    if (await store.has(key)) already++;
+    else {
+      await store.put(key, bytes, 'text/html; charset=utf-8');
+      if (++stored % 1000 === 0) log(`${stored} texts stored`);
+    }
+    node.kept = true;
+  }
+  return { stored, already };
 }
 
 export async function importCommand(ctx: Context, input: { source: string; from: string; approveAs?: string; dryRun?: boolean; chunkSize?: number }): Promise<void> {

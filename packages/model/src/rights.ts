@@ -79,13 +79,14 @@ export const RIGHTS_BY_LICENCE: Record<Licence, RightsState> = {
  * Decisions per source, over what its licence alone allows (each one a
  * steward's decision; flipping one is that decision and nothing else):
  * - HebrewBooks stays link-only per its terms;
- * - chabadlibrary.org: read and link until the library agrees;
+ * - chabadlibrary.org's texts are kept and shown with credit (a steward's
+ *   decision, 2026-09-28), so it has no entry here: its importer marks each
+ *   page's words `credit` itself;
  * - the Igros app's files are kept, never served, until their rights are
  *   decided per collection (Sichos-Kodesh decides for its own apps).
  */
 export const RIGHTS_BY_SOURCE: Partial<Record<CatalogSourceId, RightsState>> = {
   hebrewbooks: 'link',
-  chabadlibrary: 'link',
   'igros-app': 'preserved',
 };
 
