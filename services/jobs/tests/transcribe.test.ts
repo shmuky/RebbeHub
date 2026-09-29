@@ -136,3 +136,27 @@ describe('word-level sync', () => {
     expect((await catalog.history(synced.alignment))[0]).toMatchObject({ author: 'bot:align', mergedBy: 'shmuly' });
   });
 });
+
+describe('fetching a recording', () => {
+  it('tries again when the connection drops, and not when the file is not there', async () => {
+    const { fetchAudio } = await import('../src/transcribeCommand.js');
+    let calls = 0;
+    const flaky = (async () => {
+      calls++;
+      if (calls < 3) throw new TypeError('fetch failed');
+      return new Response(new Uint8Array([1, 2, 3]));
+    }) as unknown as typeof fetch;
+    const waits: number[] = [];
+    const wait = async (ms: number) => void waits.push(ms);
+    expect(await fetchAudio('https://api.test', { file: null, url: 'https://audio.test/a.mp3' }, { fetch: flaky, wait })).toEqual(new Uint8Array([1, 2, 3]));
+    expect(waits).toEqual([2000, 4000]);
+
+    calls = 0;
+    const missing = (async () => {
+      calls++;
+      return new Response('no', { status: 404 });
+    }) as unknown as typeof fetch;
+    await expect(fetchAudio('https://api.test', { file: 'a'.repeat(64), url: null }, { fetch: missing, wait })).rejects.toThrow(/objects\/a+: 404/);
+    expect(calls).toBe(1);
+  });
+});
