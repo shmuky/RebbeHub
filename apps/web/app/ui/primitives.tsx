@@ -58,6 +58,39 @@ export function MachineLabel({ children, lang, size }: { children?: ReactNode; l
   );
 }
 
+/** What an agent sent for a person: which of their API tokens, or which app they connected (the API's `via`). */
+export interface AgentVia {
+  kind: 'token' | 'oauth';
+  name: string;
+}
+
+const AGENT_WORDS = {
+  he: { for: 'בשביל', token: 'נשלח על ידי סוכן, בטוקן ה-API של', oauth: 'נשלח על ידי אפליקציה מחוברת (סוכן) בשם', agent: 'סוכן' },
+  en: { for: 'for', token: 'Sent by an agent, with the API token of', oauth: 'Sent by a connected app (an agent) for', agent: 'agent' },
+} as const;
+
+/**
+ * Work an agent sent for a person, shown as the agent's, never as the
+ * person typing: "Claude · for @shmuly", with the agent mark, in the
+ * machine's amber (like machine output, it reads as the agent's until a
+ * person reviews it). `children` is the person. Without `via`, the person
+ * alone.
+ */
+export function AgentBy({ via, lang, children, who }: { via: AgentVia | null | undefined; lang: Lang; children: ReactNode; who?: string }) {
+  if (!via) return <>{children}</>;
+  const w = AGENT_WORDS[lang];
+  return (
+    <span className="agent-by" title={`${via.kind === 'oauth' ? w.oauth : w.token} ${who ?? ''}`.trim()}>
+      <span className="machine sm agent-mark">
+        <Icon name="bot" size={12} />
+        <bdi>{via.name}</bdi>
+      </span>
+      <span className="muted"> · {w.for} </span>
+      {children}
+    </span>
+  );
+}
+
 export function MachineNote({ children }: { children: ReactNode }) {
   return (
     <div className="machine-note" role="note">

@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, getDerivations, getFile, getPageFix, hanachaSync, itemsUsingFile, listWebhooks, pageImageCount, printingsOf, projectTodo, recordingTranscript, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type Mailer, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, getDerivations, getFile, getPageFix, hanachaSync, itemsUsingFile, listWebhooks, pageImageCount, printingsOf, projectTodo, recordingTranscript, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type Mailer, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType, type Language, type PageInline, type PageSegmentKind } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
@@ -14,6 +14,7 @@ import { readingRoutes } from './reading.js';
 import { tokenGate, tokenGrantOf, tokenRoutes } from './tokens.js';
 import { ERROR_CODES, PUBLIC_SUMMARY, caching, cors, cursor, nextLink, type RateLimits } from './platform.js';
 import { mcpRoutes } from './mcp.js';
+import { oauthRoutes } from './oauth.js';
 import { pageRoutes } from './pages.js';
 import { threadRoutes } from './threads.js';
 
@@ -61,6 +62,8 @@ export interface ApiOptions {
   oai?: OaiOptions;
   /** Requests allowed per address and per token (platform.ts); unset, none are counted (local work, tests). */
   rateLimits?: RateLimits;
+  /** Reads an app's own description (a Client ID Metadata Document) when it connects with OAuth; unset, fetch. Replaced in tests. */
+  fetchClientMetadata?: MetadataFetch;
 }
 
 /** A byte range asked for with `Range: bytes=…`. */
@@ -164,6 +167,7 @@ export function createApp(options: ApiOptions): Hono {
   adminRoutes(app, catalog, signedIn);
   tokenRoutes(app, catalog, signedIn);
   mcpRoutes(app, { siteUrl, version: options.version ?? API_VERSION });
+  oauthRoutes(app, catalog, signedIn, { siteUrl, fetchClientMetadata: options.fetchClientMetadata });
   const filesBase = (c: Context) => options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
   uploadRoutes(app, catalog, signedIn, options.uploads, filesBase);
   pageRoutes(app, catalog, { filesBase });
@@ -984,7 +988,7 @@ function apiLlmsTxt(api: string, site: string): string {
 > The open, community-edited index of Chabad Torah and media: sefarim, sichos, letters, farbrengens, recordings and scans, with their texts. Reading needs no account.
 
 - [OpenAPI 3.1 description](${api}/openapi.json): every route
-- [MCP server](${api}/mcp): tools search, get_item, list_children, get_text, suggest_fix, list_issues, open_issue (Streamable HTTP, POST)
+- [MCP server](${api}/mcp): tools search, get_item, list_children, get_text, suggest_fix, list_issues, open_issue (Streamable HTTP, POST). Reading needs no account; the writing tools ask to connect with OAuth (${api}/.well-known/oauth-protected-resource/mcp) or take a personal token
 - [Developer docs](${home}/developers): getting started, tokens, rate limits, rights
 - [Full docs for LLMs](${home}/llms-full.txt)
 

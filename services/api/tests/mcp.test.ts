@@ -52,6 +52,29 @@ describe('the MCP server', () => {
     expect((await app.request('/mcp')).status).toBe(405);
   });
 
+  it('reads without an account, and asks for one (step-up) only when a tool would write', async () => {
+    expect((await rpc('initialize', { protocolVersion: '2025-11-25' })).body.result.serverInfo.name).toBe('rebbehub');
+    const call = (token?: string) =>
+      app.request('/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'suggest_fix', arguments: { id: event, changes: { note: 'x' }, title: 'A note' } } }) });
+    // No token: 401, saying where to connect (RFC 9728), so a client set to sign in when needed asks the person.
+    const anonymous = await call();
+    expect(anonymous.status).toBe(401);
+    expect(anonymous.headers.get('WWW-Authenticate')).toBe('Bearer resource_metadata="http://localhost/.well-known/oauth-protected-resource/mcp", scope="read write"');
+    expect(anonymous.headers.get('Cache-Control')).toBe('no-store');
+    expect(((await anonymous.json()) as any)).toMatchObject({ jsonrpc: '2.0', id: 7, error: { code: -32001 } });
+    // A token that may only read: 403 insufficient_scope, asking for write.
+    const me = (await createPerson(catalog.db, 'Reader')).id;
+    const made = await app.request('/v1/tokens', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Test-Account': me }, body: JSON.stringify({ name: 'reader' }) });
+    const { token } = (await made.json()) as { token: string };
+    const reader = await call(token);
+    expect(reader.status).toBe(403);
+    expect(reader.headers.get('WWW-Authenticate')).toMatch(/^Bearer resource_metadata="[^"]+", scope="read write", error="insufficient_scope"/);
+    // A token that is not valid is told so, the same way, so the client refreshes it or connects again.
+    const stale = await app.request('/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer rho_${'x'.repeat(43)}` }, body: '{}' });
+    expect(stale.status).toBe(401);
+    expect(stale.headers.get('WWW-Authenticate')).toContain('error="invalid_token"');
+  });
+
   it('searches, gets items by id or path, lists children and reads texts with machine words marked', async () => {
     const found = await tool('search', { query: 'יו״ד שבט תשמ״ב' });
     expect(found.isError).toBe(false);
@@ -81,9 +104,8 @@ describe('the MCP server', () => {
   });
 
   it('suggests a fix only with a write token, as its person, for review', async () => {
-    const refused = await tool('suggest_fix', { id: event, changes: { note: 'x' }, title: 'A note' });
-    expect(refused.isError).toBe(true);
-    expect(refused.content[0].text).toMatch(/sign in/);
+    const refused = await rpc('tools/call', { name: 'suggest_fix', arguments: { id: event, changes: { note: 'x' }, title: 'A note' } });
+    expect(refused.status).toBe(401);
 
     const me = (await createPerson(catalog.db, 'Agent owner')).id;
     const made = await app.request('/v1/tokens', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Test-Account': me }, body: JSON.stringify({ name: 'my agent', scopes: ['read', 'write'] }) });

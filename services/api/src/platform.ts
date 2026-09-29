@@ -67,7 +67,7 @@ export function nextLink(c: Context, next: string | null): void {
 // ------------------------------------------------------------------ CORS
 
 const ALLOW_HEADERS = 'Authorization, Content-Type, If-None-Match, Range, Accept, Mcp-Session-Id, Mcp-Protocol-Version';
-const EXPOSE_HEADERS = 'ETag, Link, Retry-After, RateLimit-Policy, Content-Range, Accept-Ranges, Content-Length, X-Credit, Mcp-Session-Id, Deprecation, Sunset';
+const EXPOSE_HEADERS = 'ETag, Link, Retry-After, RateLimit-Policy, Content-Range, Accept-Ranges, Content-Length, X-Credit, Mcp-Session-Id, Deprecation, Sunset, WWW-Authenticate';
 
 /**
  * Any site's pages may read the API and send a token with it. Cookies are
@@ -115,8 +115,8 @@ export function etagMatches(header: string | undefined, etag: string): boolean {
  * Whether a request may be answered from Cloudflare's edge cache (the
  * Worker's `CachedApi` entrypoint, worker.ts): a GET or HEAD from nobody in
  * particular - no token, no session cookie - not asked for fresh
- * (`Cache-Control: no-cache`), that is not sign-in, the MCP
- * server, or a part of a file (a player asks for a file's bytes in ranges;
+ * (`Cache-Control: no-cache`), that is not sign-in, connecting an
+ * app (OAuth), the MCP server, or a part of a file (a player asks for a file's bytes in ranges;
  * each range is read from R2 as it is asked for). The answers are the same for everyone who asks
  * so, so one kept answer serves them all.
  */
@@ -126,7 +126,8 @@ export function mayUseEdgeCache(request: Request): boolean {
   // Asked for fresh (the site does so for someone signed in, who may have just changed it; a browser's hard reload does too).
   if (/no-cache|no-store/.test(request.headers.get('cache-control') ?? '') || request.headers.get('pragma') === 'no-cache') return false;
   const path = new URL(request.url).pathname;
-  if (path === '/mcp' || path.startsWith('/v1/auth/')) return false;
+  // The MCP server, sign-in, and connecting apps (OAuth: its asking, codes, tokens and metadata) are never kept.
+  if (path === '/mcp' || path.startsWith('/v1/auth/') || path.startsWith('/v1/oauth/') || path.startsWith('/oauth/') || path.startsWith('/.well-known/')) return false;
   if (path.startsWith('/objects/') && request.headers.has('range')) return false;
   return true;
 }

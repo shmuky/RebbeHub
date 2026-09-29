@@ -1,9 +1,20 @@
 import type { Context, Hono } from 'hono';
 import { ENTITY_TYPES } from '@rebbehub/model';
+import { mcpChallenge } from './oauth.js';
+import { mcpInnerCalls, tokenGrantOf } from './tokens.js';
 
 /**
  * RebbeHub for AI agents: a Model Context Protocol server at /mcp
- * (docs/developers/agents.md). It speaks MCP's Streamable HTTP transport
+ * (docs/developers/agents.md). Reading needs no account. A writing tool
+ * (suggest_fix, open_issue) asks for the person the way the MCP
+ * authorization spec says: without a token, HTTP 401 with
+ * WWW-Authenticate naming the Protected Resource Metadata (oauth.ts), so
+ * a client set to "sign in when needed" (claude.ai) asks the person to
+ * connect and tries again; with a token that may only read, HTTP 403
+ * `insufficient_scope` asking for `read write` (step-up). A personal API
+ * token works as well as an OAuth one.
+ *
+ * It speaks MCP's Streamable HTTP transport
  * without sessions: every POST is one JSON-RPC message (or a batch) and is
  * answered with JSON; there is no event stream to open (GET is 405).
  *
@@ -245,7 +256,7 @@ function tools(siteUrl: string): Tool[] {
       name: 'suggest_fix',
       title: 'Suggest a fix',
       description:
-        "Suggest a correction to one item: the fields to change (a field set to null is removed), with a short title and why. It becomes a suggestion under your account, checked and reviewed by the item's keepers like any other; nothing changes until they approve. Needs a RebbeHub API token with the write scope (Authorization: Bearer rhp_…).",
+        "Suggest a correction to one item: the fields to change (a field set to null is removed), with a short title and why. It becomes a suggestion under your account, checked and reviewed by the item's keepers like any other; nothing changes until they approve. Needs your RebbeHub account with the write scope: without it, the server asks your client to connect (OAuth), or send an API token.",
       inputSchema: {
         type: 'object',
         properties: {
@@ -302,7 +313,7 @@ function tools(siteUrl: string): Tool[] {
       name: 'open_issue',
       title: 'Open an issue',
       description:
-        'Open an issue about an item or the catalog: what is wrong or missing, for people to look into. It is public (reports of rights or of something offensive go to stewards only). @handles in the words are told; #12 links to that suggestion or issue. Needs a RebbeHub API token with the write scope (Authorization: Bearer rhp_…). To change an item yourself, use suggest_fix.',
+        'Open an issue about an item or the catalog: what is wrong or missing, for people to look into. It is public (reports of rights or of something offensive go to stewards only). @handles in the words are told; #12 links to that suggestion or issue. Needs your RebbeHub account with the write scope: without it, the server asks your client to connect (OAuth), or send an API token. To change an item yourself, use suggest_fix.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -324,13 +335,24 @@ function tools(siteUrl: string): Tool[] {
   ];
 }
 
+/**
+ * A writing tool called by someone who may not write: answered at the HTTP
+ * level (401, or 403 for a token that may only read), so the client asks
+ * the person to connect, or to allow writing, and calls again.
+ */
+class NeedsSignIn extends Error {
+  constructor(readonly status: 401 | 403) {
+    super(status === 401 ? 'this tool sends a suggestion as you: connect your RebbeHub account (OAuth) or send an API token with the write scope' : 'this connection may only read: connect again and allow sending suggestions (the write scope)');
+  }
+}
+
 const rpcError = (id: JsonRpcRequest['id'], code: number, message: string) => ({ jsonrpc: '2.0' as const, id: id ?? null, error: { code, message } });
 
 export function mcpRoutes(app: Hono, options: { siteUrl: string; version: string }): void {
   const list = tools(options.siteUrl);
   const byName = new Map(list.map((t) => [t.name, t]));
 
-  const handle = async (message: JsonRpcRequest, call: ApiCall) => {
+  const handle = async (message: JsonRpcRequest, call: ApiCall, may: { signedIn: boolean; write: boolean }) => {
     const { id, method, params = {} } = message;
     switch (method) {
       case 'initialize': {
@@ -340,7 +362,7 @@ export function mcpRoutes(app: Hono, options: { siteUrl: string; version: string
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: MCP_SERVER_NAME, title: 'RebbeHub', version: options.version, websiteUrl: `${options.siteUrl.replace(/\/+$/, '')}/developers` },
           instructions:
-            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix needs an API token with the write scope and makes a suggestion that people review; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into.',
+            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix (write scope; you will be asked to connect your RebbeHub account) makes a suggestion under the connected person\'s account that people review before anything changes; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into.',
         };
       }
       case 'ping':
@@ -352,6 +374,7 @@ export function mcpRoutes(app: Hono, options: { siteUrl: string; version: string
         if (!tool) return rpcError(id, -32602, `no tool named "${String(params.name)}"; see tools/list`);
         const args = (params.arguments ?? {}) as Record<string, unknown>;
         if (typeof args !== 'object' || Array.isArray(args)) return rpcError(id, -32602, 'arguments must be an object');
+        if (!tool.annotations.readOnlyHint && !may.write) throw new NeedsSignIn(may.signedIn ? 403 : 401);
         try {
           const result = await tool.run(args, call);
           return { content: [{ type: 'text', text: result.text }], ...(result.structured ? { structuredContent: result.structured as Json } : {}), isError: false };
@@ -375,6 +398,8 @@ export function mcpRoutes(app: Hono, options: { siteUrl: string; version: string
   app.post('/mcp', async (c: Context) => {
     const version = c.req.header('MCP-Protocol-Version');
     if (version && !(MCP_PROTOCOL_VERSIONS as readonly string[]).includes(version)) return c.json(rpcError(null, -32600, `unsupported MCP-Protocol-Version ${version}`), 400);
+    const grant = tokenGrantOf(c);
+    const may = { signedIn: Boolean(grant), write: Boolean(grant?.scopes.includes('write')) };
     let payload: unknown;
     try {
       payload = await c.req.json();
@@ -387,7 +412,10 @@ export function mcpRoutes(app: Hono, options: { siteUrl: string; version: string
       const headers: Record<string, string> = { accept: 'application/json' };
       if (authorization) headers.authorization = authorization;
       if (body !== undefined) headers['content-type'] = 'application/json';
-      const response = await app.request(`${origin}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+      const request = new Request(`${origin}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+      // A token given for the MCP server alone may make its tools' calls, and only those (tokens.ts).
+      mcpInnerCalls.add(request);
+      const response = await app.request(request);
       return { status: response.status, body: await response.json().catch(() => null) };
     };
 
@@ -401,7 +429,15 @@ export function mcpRoutes(app: Hono, options: { siteUrl: string; version: string
         continue;
       }
       if (message.id === undefined) continue; // a notification (notifications/initialized…): nothing to say back
-      const result = await handle(message, call);
+      let result;
+      try {
+        result = await handle(message, call, may);
+      } catch (error) {
+        if (!(error instanceof NeedsSignIn)) throw error;
+        // Step-up (MCP authorization, "Scope Challenge Handling"): the client connects, or asks for more, and calls again.
+        const challenge = error.status === 401 ? mcpChallenge(c) : mcpChallenge(c, { code: 'insufficient_scope', description: error.message });
+        return c.json(rpcError(message.id, -32001, error.message), error.status, { 'WWW-Authenticate': challenge, 'Cache-Control': 'no-store' });
+      }
       answers.push(result && typeof result === 'object' && 'error' in result && 'jsonrpc' in result ? result : { jsonrpc: '2.0', id: message.id, result });
     }
     if (answers.length === 0) return c.body(null, 202);

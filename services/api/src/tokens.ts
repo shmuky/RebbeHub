@@ -1,7 +1,8 @@
 import type { Context, Hono, MiddlewareHandler } from 'hono';
-import { createApiToken, listApiTokens, looksLikeToken, revokeApiToken, tokenGrant, type Catalog, type TokenGrant } from '@rebbehub/core';
+import { actingVia, createApiToken, listApiTokens, looksLikeToken, revokeApiToken, tokenGrant, type Catalog, type TokenGrant, type Via } from '@rebbehub/core';
 import { HttpError } from './app.js';
 import { SEARCH_PATHS, callerAddress, type RateLimits } from './platform.js';
+import { mcpChallenge, mcpResource } from './oauth.js';
 
 /**
  * Personal API tokens (packages/core/src/tokens.ts): made and revoked on
@@ -11,8 +12,17 @@ import { SEARCH_PATHS, callerAddress, type RateLimits } from './platform.js';
  *
  * What a token may not do, whatever its scopes: sign in or manage sign-in
  * (/v1/auth), make or revoke tokens (/v1/tokens), or use the stewards'
- * tools (/v1/admin). Those need the person on the site's own pages.
+ * tools (/v1/admin), or answer an app's request to connect (/v1/oauth).
+ * Those need the person on the site's own pages.
+ *
+ * An app connected with OAuth (oauth.ts) sends its access token (`rho_…`)
+ * the same way. A token given for the MCP server alone (RFC 8707) opens
+ * only /mcp, and the calls the MCP server's tools make for it.
  */
+
+/** What a change sent with this token is marked as sent through (packages/core/src/via.ts). */
+export const viaOf = (grant: TokenGrant): Via =>
+  grant.client ? { kind: 'oauth', id: grant.tokenId, name: grant.name, client: grant.client.id } : { kind: 'token', id: grant.tokenId, name: grant.name };
 
 /** Who each request's token signed in, while the request lasts. */
 const grants = new WeakMap<Request, TokenGrant>();
@@ -20,7 +30,16 @@ const grants = new WeakMap<Request, TokenGrant>();
 export const tokenGrantOf = (c: Context): TokenGrant | undefined => grants.get(c.req.raw);
 
 /** Paths a token never opens. */
-const SITE_ONLY = /^\/v1\/(auth|tokens|admin)(\/|$)/;
+const SITE_ONLY = /^\/v1\/(auth|tokens|admin|oauth)(\/|$)/;
+
+/**
+ * The requests the MCP server's tools make to the API's own routes for an
+ * agent (mcp.ts): they carry the agent's token, and a token given for the
+ * MCP server alone may make them. Only this process can put a request here.
+ */
+export const mcpInnerCalls = new WeakSet<Request>();
+
+const isMcp = (path: string) => path === '/mcp';
 
 /**
  * Reads the bearer token, if any, before anything else: a bad token is
@@ -50,10 +69,15 @@ export function tokenGate(catalog: Catalog, limits: RateLimits | undefined): Mid
       if (!grant) {
         // Failed tries count against the address, so guessing tokens is slow.
         if (ip && limits?.ip && !(await limits.ip.limit({ key: ip })).success) tooMany(c);
+        // An MCP client that is told why (RFC 6750) refreshes its token or connects again.
+        if (isMcp(c.req.path)) c.header('WWW-Authenticate', mcpChallenge(c, { code: 'invalid_token', description: 'unknown, revoked or expired' }));
         throw new HttpError(401, 'this API token is not valid: unknown, revoked or expired');
       }
+      if (grant.resource === mcpResource(c) && !isMcp(c.req.path) && !mcpInnerCalls.has(c.req.raw)) {
+        throw new HttpError(401, 'this token was given for the MCP server (/mcp) alone; connect for the whole API to use it here');
+      }
       if (SITE_ONLY.test(c.req.path)) throw new HttpError(403, 'API tokens cannot sign in, manage tokens or use stewards\' tools; do that on the site');
-      const reads = c.req.method === 'GET' || c.req.method === 'HEAD' || c.req.path === '/mcp' || c.req.path === '/oai';
+      const reads = c.req.method === 'GET' || c.req.method === 'HEAD' || isMcp(c.req.path) || c.req.path === '/oai';
       if (!reads && !grant.scopes.includes('write')) throw new HttpError(403, 'this token may only read; make one with the write scope to send suggestions');
       if (limits?.key && !(await limits.key.limit({ key: grant.tokenId })).success) tooMany(c);
       // The person's catalog account, made again if a rebuild of the catalog dropped it (as a session does).
@@ -65,7 +89,9 @@ export function tokenGate(catalog: Catalog, limits: RateLimits | undefined): Mid
     }
     // Searches from an address count twice: against its allowance, and against the smaller one for searching (a token's own allowance covers its searches).
     if (searching && ip && limits?.search && !tokenGrantOf(c) && !(await limits.search.limit({ key: ip })).success) tooMany(c);
-    await next();
+    // Everything the request writes is marked as the token's work for its person, not their own hands.
+    const grant = tokenGrantOf(c);
+    await actingVia(grant ? viaOf(grant) : null, () => next());
   };
 }
 

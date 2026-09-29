@@ -8,11 +8,14 @@ import { Box, ChoiceList, EmptyState, Label } from '../ui/primitives.js';
 /**
  * For developers and agents: personal API tokens (docs/developers/auth.md).
  * Made and revoked only here, on the site's own page; the token itself is
- * shown once, when it is made, and never again.
+ * shown once, when it is made, and never again. Apps connected with OAuth
+ * (Claude and other agents, through the consent page) are listed here too,
+ * by the app's name and where it lives, and disconnected the same way.
  */
 
 interface Token {
   id: string;
+  kind?: 'personal' | 'oauth';
   name: string;
   prefix: string;
   scopes: Array<'read' | 'write'>;
@@ -20,6 +23,7 @@ interface Token {
   lastUsedAt: string | null;
   expiresAt: string | null;
   revokedAt: string | null;
+  client?: { id: string; name: string; uri: string | null; host: string | null };
 }
 
 const WORDS = {
@@ -46,6 +50,10 @@ const WORDS = {
     none: 'אין עדיין טוקנים.',
     scopes: 'הרשאות',
     newToken: 'טוקן חדש',
+    app: 'אפליקציה מחוברת',
+    connected: 'חוברה',
+    disconnect: 'ניתוק',
+    apps: 'אפליקציות כמו Claude שחיברתם לחשבון מופיעות כאן גם הן.',
   },
   en: {
     title: 'For developers: API tokens',
@@ -70,6 +78,10 @@ const WORDS = {
     none: 'No tokens yet.',
     scopes: 'What it may do',
     newToken: 'A new token',
+    app: 'connected app',
+    connected: 'connected',
+    disconnect: 'Disconnect',
+    apps: 'Apps you connected to your account, like Claude, are listed here too.',
   },
 } as const;
 
@@ -115,26 +127,33 @@ export function ApiTokens({ lang }: { lang: Lang }) {
         </>
       }
     >
-      <p className="set-intro">{w.intro}</p>
+      <p className="set-intro">
+        {w.intro} {w.apps}
+      </p>
       {tokens.length === 0 ? (
         <EmptyState compact icon="key" title={w.none} />
       ) : (
         <ul className="rows">
           {tokens.map((t) => (
             <li key={t.id} className="row">
-              <Icon name="key" />
+              <Icon name={t.kind === 'oauth' ? 'bot' : 'key'} />
               <span className="row-main">
                 <span className="row-title">
-                  {t.name} <code dir="ltr">{t.prefix}…</code> {state(t) ? <Label size="sm">{state(t)}</Label> : null}
+                  {t.name} {t.kind === 'oauth' ? <Label size="sm">{w.app}</Label> : <code dir="ltr">{t.prefix}…</code>} {state(t) ? <Label size="sm">{state(t)}</Label> : null}
                 </span>
                 <span className="row-sub">
-                  {t.scopes.join(' + ')} · {w.made} {date(t.createdAt)} · {t.lastUsedAt ? `${w.used} ${date(t.lastUsedAt)}` : w.unused}
-                  {t.expiresAt && !t.revokedAt ? ` · ${w.expires} ${date(t.expiresAt)}` : ''}
+                  {t.client?.host ? (
+                    <>
+                      <span dir="ltr">{t.client.host}</span> ·{' '}
+                    </>
+                  ) : null}
+                  {t.scopes.join(' + ')} · {t.kind === 'oauth' ? w.connected : w.made} {date(t.createdAt)} · {t.lastUsedAt ? `${w.used} ${date(t.lastUsedAt)}` : w.unused}
+                  {t.expiresAt && !t.revokedAt && t.kind !== 'oauth' ? ` · ${w.expires} ${date(t.expiresAt)}` : ''}
                 </span>
               </span>
               {state(t) ? null : (
                 <button type="button" className="btn sm danger" onClick={async () => void (await call(`tokens/${t.id}`, 'DELETE').then(load))}>
-                  {w.revoke}
+                  {t.kind === 'oauth' ? w.disconnect : w.revoke}
                 </button>
               )}
             </li>

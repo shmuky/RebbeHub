@@ -249,6 +249,15 @@ a.label:hover {
   font-size: 11.5px;
 }
 
+/* An agent's work for a person: "Claude · for @shmuly" (AgentBy). */
+.agent-by {
+  display: inline;
+}
+
+.agent-mark {
+  margin-inline-end: 2px;
+}
+
 .machine-note {
   display: flex;
   gap: 10px;

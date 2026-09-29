@@ -11,7 +11,7 @@ import { personName } from '../lib/people.js';
 import { pageMeta } from '../lib/seo.js';
 import { useAccount } from '../lib/useAccount.js';
 import { Icon } from '../ui/Icon.js';
-import { Avatar, EmptyState, Label, RelativeTime } from '../ui/primitives.js';
+import { AgentBy, Avatar, EmptyState, Label, RelativeTime } from '../ui/primitives.js';
 import { Timeline, TimelineComment } from '../ui/Timeline.js';
 import { ItemSubpage } from '../views/ItemSubpage.js';
 import '../styles/pages/contribute.css';
@@ -156,10 +156,12 @@ export default function History({ loaderData }: Route.ComponentProps) {
                 id={`v${h.rev}`}
                 author={author}
                 authorId={h.author}
-                bot={h.authorIsBot}
+                bot={h.authorIsBot || Boolean(h.via)}
                 header={
                   <>
-                    <b>{author}</b>
+                    <AgentBy via={h.via} lang={lang} who={author}>
+                      <b>{author}</b>
+                    </AgentBy>
                     <span className="hist-msg">{h.message}</span>
                     <span className="subtle">
                       · <RelativeTime at={h.at} lang={lang} />

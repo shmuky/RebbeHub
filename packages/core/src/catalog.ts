@@ -23,6 +23,7 @@ import { canApprove, canSuggest, earnedTrust, mayGoLive, type Account, type SetI
 import { searchTextOf, toTsQuery } from './searchText.js';
 import { focusCounts } from './projectWork.js';
 import { commented, reportOpened, reportStateChanged, reviewGiven, suggestionMerged, suggestionReverted, suggestionStarted, suggestionSubmitted, suggestionWithdrawn } from './threads.js';
+import { viaColumn, type Via } from './via.js';
 
 /**
  * The catalog: GitHub's model over the versioned Postgres schema, in the
@@ -75,6 +76,8 @@ export interface ChangesetRow {
   created_at: string;
   submitted_at: string | null;
   closed_at: string | null;
+  /** Sent by an agent for its author: which token or connected app (via.ts); null when by the person's own hands. */
+  via: Via | null;
 }
 
 export interface Check {
@@ -191,6 +194,8 @@ export interface HistoryEntry {
   author: string;
   authorName: string | null;
   authorIsBot: boolean;
+  /** The agent that sent the change for its author, if one did (via.ts). */
+  via: Via | null;
   rev: number;
   deleted: boolean;
   /** Whether this version made the item (it had none before). */
@@ -485,15 +490,15 @@ export class Catalog {
    * anyone could help with. Counts only: reports themselves stay private.
    */
   async community(limit = 8): Promise<{
-    recent: Array<{ seq: number; at: string; message: string; author: string; authorName: string; authorIsBot: boolean; mergedBy: string; mergedByName: string | null; changes: number }>;
+    recent: Array<{ seq: number; at: string; message: string; author: string; authorName: string; authorIsBot: boolean; via: Via | null; mergedBy: string; mergedByName: string | null; changes: number }>;
     openReports: number;
     openSuggestions: number;
     people: number;
     gaps: { events: number; eventsWithoutRecordings: number; eventsWithoutTexts: number };
   }> {
     const [recent, reports, suggestions, people, gaps] = await Promise.all([
-      this.db.query<{ seq: string; at: Date | string; message: string; author: string; author_name: string; author_is_bot: boolean; merged_by: string; merged_by_name: string | null; changes: number }>(
-        `SELECT c.seq, c.at, c.message, cs.author, a.display_name AS author_name, a.is_bot AS author_is_bot, c.merged_by, m.display_name AS merged_by_name,
+      this.db.query<{ seq: string; at: Date | string; message: string; author: string; author_name: string; author_is_bot: boolean; via: Via | null; merged_by: string; merged_by_name: string | null; changes: number }>(
+        `SELECT c.seq, c.at, c.message, cs.author, a.display_name AS author_name, a.is_bot AS author_is_bot, cs.via, c.merged_by, m.display_name AS merged_by_name,
                 (SELECT count(*)::int FROM commit_change cc WHERE cc.commit_seq = c.seq) AS changes
          FROM commit c JOIN changeset cs ON cs.id = c.changeset_id JOIN account a ON a.id = cs.author LEFT JOIN account m ON m.id = c.merged_by
          WHERE cs.author <> 'system' ORDER BY c.seq DESC LIMIT ${Math.min(Math.max(limit, 1), 50)}`,
@@ -517,6 +522,7 @@ export class Catalog {
         author: r.author,
         authorName: r.author_name,
         authorIsBot: r.author_is_bot,
+        via: r.via ?? null,
         mergedBy: r.merged_by,
         mergedByName: r.merged_by_name,
         changes: r.changes,
@@ -562,9 +568,10 @@ export class Catalog {
   async history(id: EntityId): Promise<HistoryEntry[]> {
     const { rows } = await this.db.query<Omit<HistoryEntry, 'changes' | 'created'> & { data: Json | null; prev: Json | null; has_prev: boolean }>(
       `SELECT c.seq AS commit, c.at, c.message, c.merged_by AS "mergedBy", m.display_name AS "mergedByName", c.changeset_id AS changeset,
-              r.author, a.display_name AS "authorName", coalesce(a.is_bot, FALSE) AS "authorIsBot", cc.rev_id AS rev, (r.data IS NULL) AS deleted,
+              r.author, a.display_name AS "authorName", coalesce(a.is_bot, FALSE) AS "authorIsBot", cs.via, cc.rev_id AS rev, (r.data IS NULL) AS deleted,
               r.data, p.data AS prev, (cc.prev_rev_id IS NOT NULL) AS has_prev
        FROM commit_change cc JOIN commit c ON c.seq = cc.commit_seq JOIN revision r ON r.id = cc.rev_id
+       LEFT JOIN changeset cs ON cs.id = r.changeset_id
        LEFT JOIN revision p ON p.id = cc.prev_rev_id
        LEFT JOIN account a ON a.id = r.author LEFT JOIN account m ON m.id = c.merged_by
        WHERE cc.entity_id = $1 ORDER BY c.seq DESC`,
@@ -617,9 +624,9 @@ export class Catalog {
       const kind = input.kind ?? (account.is_bot ? 'import' : 'suggestion');
       const row = await one<ChangesetRow>(
         tx,
-        `INSERT INTO changeset (title, description, author, kind, project_id, base_commit)
-         VALUES ($1, $2, $3, $4, $5, (SELECT coalesce(max(seq), 0) FROM commit)) RETURNING *`,
-        [input.title.trim(), input.description ?? null, author, kind, input.project ?? null],
+        `INSERT INTO changeset (title, description, author, kind, project_id, base_commit, via)
+         VALUES ($1, $2, $3, $4, $5, (SELECT coalesce(max(seq), 0) FROM commit), $6) RETURNING *`,
+        [input.title.trim(), input.description ?? null, author, kind, input.project ?? null, viaColumn()],
       );
       await suggestionStarted(tx, { id: row!.id, author, description: row!.description, number: row!.number === null ? null : Number(row!.number) });
       return row!;
@@ -791,7 +798,7 @@ export class Catalog {
       if (cs.status !== 'open') throw badState(`this suggestion is ${cs.status}`);
       await this.assertMayApprove(tx, cs, by);
       if (note.trim().length === 0) throw invalid('say what should change');
-      const review = await one<{ id: number }>(tx, "INSERT INTO review (changeset_id, reviewer, verdict, body) VALUES ($1, $2, 'send_back', $3) RETURNING id", [cs.id, by, note]);
+      const review = await one<{ id: number }>(tx, "INSERT INTO review (changeset_id, reviewer, verdict, body, via) VALUES ($1, $2, 'send_back', $3, $4) RETURNING id", [cs.id, by, note, viaColumn()]);
       await tx.query("UPDATE changeset SET status = 'sent_back' WHERE id = $1", [cs.id]);
       await reviewGiven(tx, { changesetId: cs.id, by, verdict: 'send_back', reviewId: Number(review!.id), body: note });
       await this.audit(tx, by, 'changeset.send_back', 'changeset', String(cs.id), { note });
@@ -815,7 +822,7 @@ export class Catalog {
     if (!canSuggest(account)) throw forbidden('this account cannot comment');
     if (body.trim().length === 0) throw invalid('an empty comment');
     return this.db.transaction(async (tx) => {
-      const row = await one<{ id: number }>(tx, 'INSERT INTO comment (target_kind, target_id, parent_id, author, body, anchor, review_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id', [
+      const row = await one<{ id: number }>(tx, 'INSERT INTO comment (target_kind, target_id, parent_id, author, body, anchor, review_id, via) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id', [
         target.kind,
         target.id,
         parent ?? null,
@@ -823,6 +830,7 @@ export class Catalog {
         body,
         options.anchor ? JSON.stringify(options.anchor) : null,
         options.review ?? null,
+        viaColumn(),
       ]);
       const id = Number(row!.id);
       await commented(tx, { id, author: by, body, target, review: options.review !== undefined });
@@ -887,7 +895,7 @@ export class Catalog {
       if (failed.length > 0) throw invalid(`failed checks: ${failed.map((c) => c.message).join('; ')}`, failed);
       const proposals = await this.proposals(cs.id, tx);
       if (!options.skipPermission) {
-        const review = await one<{ id: number }>(tx, "INSERT INTO review (changeset_id, reviewer, verdict, body) VALUES ($1, $2, 'approve', $3) RETURNING id", [cs.id, by, options.note ?? null]);
+        const review = await one<{ id: number }>(tx, "INSERT INTO review (changeset_id, reviewer, verdict, body, via) VALUES ($1, $2, 'approve', $3, $4) RETURNING id", [cs.id, by, options.note ?? null, viaColumn()]);
         await reviewGiven(tx, { changesetId: cs.id, by, verdict: 'approve', reviewId: Number(review!.id), body: options.note });
       }
       if (cs.project_id !== null) {
@@ -912,7 +920,7 @@ export class Catalog {
     if (cs.post_review !== 'pending') throw badState('this change is not waiting for review');
     await this.db.transaction(async (tx) => {
       await this.assertMayApprove(tx, cs, by);
-      const review = await one<{ id: number }>(tx, 'INSERT INTO review (changeset_id, reviewer, verdict, body) VALUES ($1, $2, $3, $4) RETURNING id', [cs.id, by, verdict === 'approve' ? 'approve' : 'send_back', note ?? null]);
+      const review = await one<{ id: number }>(tx, 'INSERT INTO review (changeset_id, reviewer, verdict, body, via) VALUES ($1, $2, $3, $4, $5) RETURNING id', [cs.id, by, verdict === 'approve' ? 'approve' : 'send_back', note ?? null, viaColumn()]);
       await tx.query("UPDATE changeset SET post_review = 'done' WHERE id = $1", [cs.id]);
       await reviewGiven(tx, { changesetId: cs.id, by, verdict: verdict === 'approve' ? 'approve' : 'send_back', reviewId: Number(review!.id), body: note });
     });
@@ -1318,9 +1326,9 @@ export class Catalog {
       if (!decision.ok) throw forbidden(decision.reason);
       const carrier = await one<{ id: number }>(
         tx,
-        `INSERT INTO changeset (title, author, status, kind, project_id, base_commit, submitted_at)
-         VALUES ($1, $2, 'open', 'suggestion', $3, (SELECT coalesce(max(seq), 0) FROM commit), now()) RETURNING id`,
-        [`Project: ${project.name}`, by, projectId],
+        `INSERT INTO changeset (title, author, status, kind, project_id, base_commit, submitted_at, via)
+         VALUES ($1, $2, 'open', 'suggestion', $3, (SELECT coalesce(max(seq), 0) FROM commit), now(), $4) RETURNING id`,
+        [`Project: ${project.name}`, by, projectId, viaColumn()],
       );
       const seq = await this.applyToMain(tx, carrier!.id, proposals, by, `Project: ${project.name}`, resolutions);
       await tx.query("UPDATE changeset SET status = 'merged', merged_commit = $2, closed_at = now() WHERE id = $1", [carrier!.id, seq]);
@@ -1351,8 +1359,8 @@ export class Catalog {
       const title = input.title?.replace(/\s+/g, ' ').trim().slice(0, 200) || null;
       const row = await one<{ id: number }>(
         tx,
-        'INSERT INTO report (entity_id, set_id, reason, note, reporter, reporter_hash, title, private) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
-        [input.entityId ?? null, setId, input.reason, input.note ?? null, input.reporter ?? null, input.reporterHash ?? null, title, (input.private ?? false) || PRIVATE_REASONS.has(input.reason)],
+        'INSERT INTO report (entity_id, set_id, reason, note, reporter, reporter_hash, title, private, via) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id',
+        [input.entityId ?? null, setId, input.reason, input.note ?? null, input.reporter ?? null, input.reporterHash ?? null, title, (input.private ?? false) || PRIVATE_REASONS.has(input.reason), viaColumn()],
       );
       const id = Number(row!.id);
       await reportOpened(tx, { id, reporter: input.reporter ?? null, note: input.note ?? null, entityId: input.entityId ?? null, setId });
@@ -1411,8 +1419,8 @@ export class Catalog {
     accountId: string,
     limit = 20,
     options: { afterSeq?: number; notOwn?: boolean } = {},
-  ): Promise<Array<{ seq: number; at: string; message: string; authorName: string; authorIsBot: boolean; entityId: string; changes: number }>> {
-    const { rows } = await this.db.query<{ seq: string; at: Date | string; message: string; author_name: string; author_is_bot: boolean; entity_id: string; changes: number }>(
+  ): Promise<Array<{ seq: number; at: string; message: string; authorName: string; authorIsBot: boolean; via: Via | null; entityId: string; changes: number }>> {
+    const { rows } = await this.db.query<{ seq: string; at: Date | string; message: string; author_name: string; author_is_bot: boolean; via: Via | null; entity_id: string; changes: number }>(
       `WITH targets AS (SELECT target_id, created_at FROM follow WHERE account_id = $1 AND target_kind IN ('entity', 'set')),
             touched AS (
               SELECT cc.commit_seq, cc.entity_id, t.created_at FROM commit_change cc JOIN targets t ON t.target_id = cc.entity_id
@@ -1421,14 +1429,14 @@ export class Catalog {
                 JOIN commit_change cc ON cc.entity_id = r.from_id
               WHERE r.field IN ('work', 'event', 'sets')
             )
-       SELECT c.seq, c.at, c.message, a.display_name AS author_name, a.is_bot AS author_is_bot, min(x.entity_id) AS entity_id, count(*)::int AS changes
+       SELECT c.seq, c.at, c.message, a.display_name AS author_name, a.is_bot AS author_is_bot, cs.via, min(x.entity_id) AS entity_id, count(*)::int AS changes
        FROM touched x JOIN commit c ON c.seq = x.commit_seq JOIN changeset cs ON cs.id = c.changeset_id JOIN account a ON a.id = cs.author
        WHERE c.at >= x.created_at AND c.seq > $2 AND NOT ($3 AND cs.author = $1)
-       GROUP BY c.seq, c.at, c.message, a.display_name, a.is_bot
+       GROUP BY c.seq, c.at, c.message, a.display_name, a.is_bot, cs.via
        ORDER BY c.seq DESC LIMIT ${Math.min(Math.max(limit, 1), 100)}`,
       [accountId, options.afterSeq ?? 0, options.notOwn ?? false],
     );
-    return rows.map((r) => ({ seq: Number(r.seq), at: new Date(r.at).toISOString(), message: r.message, authorName: r.author_name, authorIsBot: r.author_is_bot, entityId: r.entity_id, changes: r.changes }));
+    return rows.map((r) => ({ seq: Number(r.seq), at: new Date(r.at).toISOString(), message: r.message, authorName: r.author_name, authorIsBot: r.author_is_bot, via: r.via ?? null, entityId: r.entity_id, changes: r.changes }));
   }
 
   /** Who is told when this item changes: its own followers and those of its sets. */
@@ -1509,15 +1517,15 @@ export class Catalog {
   }
 
   /** The commits after `since`, each with the items it changed (null data: deleted), for incremental export. */
-  async commitsSince(since: number, limit = 100): Promise<Array<{ seq: number; at: string; message: string; mergedBy: string; author: string; changes: Array<{ id: EntityId; type: EntityType; path: string | null; rev: number; data: Json | null }> }>> {
-    const { rows: commits } = await this.db.query<{ seq: number; at: string; message: string; merged_by: string; author: string }>(
-      'SELECT c.seq, c.at, c.message, c.merged_by, cs.author FROM commit c JOIN changeset cs ON cs.id = c.changeset_id WHERE c.seq > $1 ORDER BY c.seq LIMIT $2',
+  async commitsSince(since: number, limit = 100): Promise<Array<{ seq: number; at: string; message: string; mergedBy: string; author: string; via: Via | null; changes: Array<{ id: EntityId; type: EntityType; path: string | null; rev: number; data: Json | null }> }>> {
+    const { rows: commits } = await this.db.query<{ seq: number; at: string; message: string; merged_by: string; author: string; via: Via | null }>(
+      'SELECT c.seq, c.at, c.message, c.merged_by, cs.author, cs.via FROM commit c JOIN changeset cs ON cs.id = c.changeset_id WHERE c.seq > $1 ORDER BY c.seq LIMIT $2',
       [since, limit],
     );
     const out = [];
     for (const c of commits) {
       const { rows } = await this.db.query<RevisionRow>('SELECT r.* FROM commit_change cc JOIN revision r ON r.id = cc.rev_id WHERE cc.commit_seq = $1 ORDER BY cc.entity_id', [c.seq]);
-      out.push({ seq: c.seq, at: c.at, message: c.message, mergedBy: c.merged_by, author: c.author, changes: rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data })) });
+      out.push({ seq: c.seq, at: c.at, message: c.message, mergedBy: c.merged_by, author: c.author, via: c.via ?? null, changes: rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data })) });
     }
     return out;
   }

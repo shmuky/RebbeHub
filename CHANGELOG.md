@@ -12,6 +12,26 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Connect Claude to your account.** The API is now an OAuth 2.1
+  authorization server for MCP clients: Protected Resource Metadata
+  (`/.well-known/oauth-protected-resource/mcp`), Authorization Server
+  Metadata (`/.well-known/oauth-authorization-server`), registration
+  (`/oauth/register`) and Client ID Metadata Documents, `/oauth/authorize`
+  with PKCE (S256) and resource indicators, `/oauth/token` (codes and
+  refresh tokens, turned over at each use) and `/oauth/revoke`. You
+  approve an app on the site's new consent page (`/oauth/consent`), where
+  you see its name, where it sends you back, and may allow reading only.
+  Connected apps are listed on the account page beside your tokens
+  (`kind: "oauth"` in `/v1/tokens`) and disconnected there. In claude.ai:
+  Settings → Connectors → Add custom connector →
+  `https://api.rebbehub.org/mcp`, *Sign in when needed*, Claude's
+  published identity (CIMD).
+- **An agent's work shows as the agent's.** Suggestions, comments,
+  issues and reviews sent with a personal token or a connected app keep
+  what sent them (`via`, migration 0022), returned on suggestions, their
+  conversation, issues, history and commits, and shown on the site with
+  the agent mark: "Claude · for @you" (Hebrew too).
+
 - **Ready for search engines and crowds.** Sitemaps a page of 10,000 items
   at a time in both languages, with when each item last changed
   (`/sitemap.xml`; the API's new `/v1/sitemap` and
@@ -56,6 +76,11 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Changed
 
+- **The MCP server's writing tools ask for sign-in**: called without a
+  token, `suggest_fix` and `open_issue` answer HTTP `401` with
+  `WWW-Authenticate` naming the resource metadata (MCP step-up), and with
+  a read-only token `403` `insufficient_scope`, instead of a tool error.
+  Reading without an account works as before.
 - Every `401` answer says `unauthorized` (sign-in routes said
   `bad-request`), and every `429` says
   `rate-limited` (was `too-many`).

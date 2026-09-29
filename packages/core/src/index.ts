@@ -116,6 +116,8 @@ export {
   type UploadProposal,
 } from './print.js';
 export { MAX_TOKENS_PER_PERSON, TOKEN_PREFIX, TOKEN_SCOPES, createApiToken, listApiTokens, looksLikeToken, revokeAllApiTokens, revokeApiToken, tokenGrant, type ApiTokenView, type TokenGrant, type TokenScope } from './tokens.js';
+export { ACCESS_PREFIX, ACCESS_SECONDS, OAuthError, REFRESH_PREFIX, authenticateClient, authorizationRequest, canonicalResource, decideAuthorization, exchangeCode, getClient, isMetadataClientId, listConnections, oauthGrant, parseScopes, redirectMatches, redirectUriProblem, refreshTokens, registerClient, revokeConnection, revokeOAuthToken, startAuthorization, type AuthorizationView, type MetadataFetch, type OAuthClient, type TokenAnswer } from './oauth.js';
+export { actingVia, currentVia, type Via } from './via.js';
 export {
   COVER_ENCODER,
   COVER_SAMPLE_PAGES,

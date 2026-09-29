@@ -9,7 +9,7 @@ describe('migrations', () => {
     expect(await migrate(db)).toEqual([]);
     // Sign-in is kept apart from the catalog (migrations 0003 to 0005).
     const auth = await db.query<{ table_name: string }>("SELECT table_name FROM information_schema.tables WHERE table_schema = 'auth' ORDER BY table_name");
-    expect(auth.rows.map((r) => r.table_name)).toEqual(['api_token', 'challenge', 'email_address', 'email_link', 'google_account', 'notification', 'notification_setting', 'passkey', 'person', 'reading_place', 'session', 'username_redirect']);
+    expect(auth.rows.map((r) => r.table_name)).toEqual(['api_token', 'challenge', 'email_address', 'email_link', 'google_account', 'notification', 'notification_setting', 'oauth_client', 'oauth_connection', 'oauth_request', 'passkey', 'person', 'reading_place', 'session', 'username_redirect']);
     const { rows } = await db.query<{ table_name: string }>(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name NOT LIKE 'revision_%' ORDER BY table_name",
     );

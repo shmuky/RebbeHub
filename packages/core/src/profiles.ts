@@ -1,5 +1,6 @@
 import { one, type Db } from '@rebbehub/db';
 import { personByUsername } from './usernames.js';
+import type { Via } from './via.js';
 
 /**
  * A person's page (/u/<handle>): who they are, since when, what they
@@ -17,6 +18,8 @@ export interface ProfileActivity {
   verdict?: string;
   /** The first words of a comment or review. */
   excerpt?: string;
+  /** Sent by an agent for the person (via.ts): which token or connected app. */
+  via?: Via;
 }
 
 export interface Profile {
@@ -61,18 +64,19 @@ export async function profile(db: Db, username: string, options: { limit?: numbe
     path: string | null;
     verdict: string | null;
     body: string | null;
+    via: Via | null;
   }>(
     `SELECT * FROM (
-       SELECT 'suggestion' AS kind, coalesce(c.submitted_at, c.created_at) AS at, 'changeset' AS thread_kind, c.id::text AS thread_id, c.number, c.title, c.status AS state, NULL AS path, NULL AS verdict, NULL AS body
+       SELECT 'suggestion' AS kind, coalesce(c.submitted_at, c.created_at) AS at, 'changeset' AS thread_kind, c.id::text AS thread_id, c.number, c.title, c.status AS state, NULL AS path, NULL AS verdict, NULL AS body, c.via
        FROM changeset c WHERE c.author = $1 AND c.number IS NOT NULL AND c.status <> 'draft'
        UNION ALL
-       SELECT 'review', v.created_at, 'changeset', c.id::text, c.number, c.title, c.status, NULL, v.verdict, v.body
+       SELECT 'review', v.created_at, 'changeset', c.id::text, c.number, c.title, c.status, NULL, v.verdict, v.body, v.via
        FROM review v JOIN changeset c ON c.id = v.changeset_id WHERE v.reviewer = $1 AND c.number IS NOT NULL
        UNION ALL
-       SELECT 'issue', r.created_at, 'report', r.id::text, r.number, r.title, r.status, NULL, NULL, r.note
+       SELECT 'issue', r.created_at, 'report', r.id::text, r.number, r.title, r.status, NULL, NULL, r.note, r.via
        FROM report r WHERE r.reporter = $1 AND NOT r.private
        UNION ALL
-       SELECT 'comment', m.created_at, m.target_kind, m.target_id, coalesce(c.number, r.number), coalesce(c.title, r.title), coalesce(c.status, r.status), e.path, NULL, m.body
+       SELECT 'comment', m.created_at, m.target_kind, m.target_id, coalesce(c.number, r.number), coalesce(c.title, r.title), coalesce(c.status, r.status), e.path, NULL, m.body, m.via
        FROM comment m
        LEFT JOIN changeset c ON m.target_kind = 'changeset' AND c.id::text = m.target_id
        LEFT JOIN report r ON m.target_kind = 'report' AND r.id::text = m.target_id
@@ -101,6 +105,7 @@ export async function profile(db: Db, username: string, options: { limit?: numbe
       thread: { kind: r.thread_kind, id: r.thread_id, number: r.number === null ? null : Number(r.number), title: r.title, state: r.state, path: r.path },
       ...(r.verdict ? { verdict: r.verdict } : {}),
       ...(r.body ? { excerpt: excerpt(r.body) } : {}),
+      ...(r.via ? { via: r.via } : {}),
     })),
   };
 }

@@ -1,4 +1,4 @@
-import type { Issue, IssueLabel, IssueRights, IssueTemplate, People, SuggestionListItem, TimelineItem } from './threads.js';
+import type { Issue, IssueLabel, IssueRights, IssueTemplate, People, SuggestionListItem, TimelineItem, Via } from './threads.js';
 import type { EntityType, LocalName } from '@rebbehub/model';
 
 /**
@@ -28,6 +28,8 @@ export interface HistoryEntry {
   author: string;
   authorName: string | null;
   authorIsBot: boolean;
+  /** Sent by an agent for its author (a token, a connected app). */
+  via?: Via | null;
   rev: number;
   deleted: boolean;
   created: boolean;
@@ -271,6 +273,8 @@ export interface SuggestionRow {
   closed_at?: string | null;
   merged_commit?: number | null;
   checks: Array<{ check: string; status: 'pass' | 'warn' | 'fail'; message: string; entityId?: string; path?: string }>;
+  /** Sent by an agent for its author (a token, a connected app). */
+  via?: Via | null;
 }
 
 /** One change a suggestion makes to one item. */
@@ -447,7 +451,7 @@ export class RebbeHubApi {
 
   community(limit?: number) {
     return this.get<{
-      recent: Array<{ seq: number; at: string; message: string; author: string; authorName: string; authorIsBot: boolean; mergedBy: string; mergedByName: string | null; changes: number }>;
+      recent: Array<{ seq: number; at: string; message: string; author: string; authorName: string; authorIsBot: boolean; via?: Via | null; mergedBy: string; mergedByName: string | null; changes: number }>;
       openReports: number;
       openSuggestions: number;
       people: number;
@@ -604,7 +608,7 @@ export class RebbeHubApi {
 
   /** The commits after `since`, oldest first, each with the items it changed (as they became). */
   async commits(since: number, limit = 20) {
-    return (await this.get<{ commits: Array<{ seq: number; at: string; message: string; mergedBy: string; author: string; changes: Array<{ id: string; type: string; path: string | null; rev: number; data: Record<string, unknown> | null }> }> }>('/v1/commits', { since, limit })).commits;
+    return (await this.get<{ commits: Array<{ seq: number; at: string; message: string; mergedBy: string; author: string; via?: Via | null; changes: Array<{ id: string; type: string; path: string | null; rev: number; data: Record<string, unknown> | null }> }> }>('/v1/commits', { since, limit })).commits;
   }
 
   /** What a mirror needs: the git mirror, the release keys, every edition's dumps (services/api/src/mirrors.ts). */
@@ -674,6 +678,7 @@ export interface Profile {
     thread: { kind: 'changeset' | 'report' | 'entity'; id: string; number: number | null; title: string | null; state: string | null; path: string | null };
     verdict?: string;
     excerpt?: string;
+    via?: Via;
   }>;
 }
 

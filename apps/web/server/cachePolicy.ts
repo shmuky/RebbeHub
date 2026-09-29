@@ -22,8 +22,8 @@ export const PERSONAL = 'private, no-cache';
 /** What a page anyone may see says: a minute in the browser, five at the edge, then served stale for an hour while it is made again. */
 export const PUBLIC_PAGE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=3600';
 
-/** Addresses that only pass a signed-in person's requests on to the API: never from the edge. */
-const PASSAGES = /^\/_\//;
+/** Addresses that only pass a signed-in person's requests on to the API, and connecting an app (each asking is its own): never from the edge. */
+const PASSAGES = /^\/(_|oauth)\//;
 
 /** Links shared on social sites and in newsletters carry these; the page is the same without them. */
 const TRACKING = /^(utm_[a-z]+|fbclid|gclid|dclid|msclkid|mc_cid|mc_eid|igshid|ref_src)$/i;
