@@ -73,8 +73,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   // The feed: suggestions asking for review (newest first), with the words they change.
   const newestOpen = open.filter((s) => s.kind !== 'import').slice(-6).reverse();
-  // A few items of each are enough for a row: its first change of words, its labels, and how many items in all.
-  const details = (await Promise.all(newestOpen.map((s) => api.suggestion(s.id, { limit: 8 }).catch(() => null)))).filter((d): d is SuggestionDetail => d !== null);
+  // A few items of each are enough for a row, their facts without their words (brief): its first change of words is
+  // in `changes`, its labels, and how many items in all.
+  const details = (await Promise.all(newestOpen.map((s) => api.suggestion(s.id, { limit: 8, brief: true }).catch(() => null)))).filter((d): d is SuggestionDetail => d !== null);
   const targets = await describeTargets(api, details.flatMap((d) => d.entries), lang);
   const suggestionItems: FeedItem[] = details.map((d) => {
     const first = d.entries[0];

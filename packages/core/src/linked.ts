@@ -1,6 +1,6 @@
 import { one, type Db } from '@rebbehub/db';
 import type { EntityId, EntityType } from '@rebbehub/model';
-import type { EntityView, RevisionRow } from './catalog.js';
+import { FACTS, type EntityView, type RevisionRow } from './catalog.js';
 import { invalid } from './errors.js';
 
 /**
@@ -72,7 +72,7 @@ export async function linkedOfEach(db: Db, ids: readonly EntityId[], options: { 
   const typed = options.type ? `AND e.type = $${params.push(options.type)}` : '';
   const { rows } = await db.query<RevisionRow & { to: EntityId; n: number }>(
     `SELECT * FROM (
-       SELECT x.to_id AS "to", r.*, row_number() OVER (PARTITION BY x.to_id ORDER BY ${SORT_KEY}) AS n
+       SELECT x.to_id AS "to", ${FACTS}, row_number() OVER (PARTITION BY x.to_id ORDER BY ${SORT_KEY}) AS n
        FROM entity_ref x JOIN entity e ON e.id = x.from_id AND NOT e.deleted AND e.main_rev IS NOT NULL JOIN revision r ON r.id = e.main_rev
        WHERE x.to_id = ANY($1::text[]) AND x.field = $2 ${typed}
      ) l WHERE l.n <= ${limit} ORDER BY l."to", l.n`,
@@ -127,7 +127,7 @@ export async function linkedPage(
   ))!.n;
   const after = options.after ? `AND ${SORT_KEY} > $${params.push(decode(options.after))}` : '';
   const { rows } = await db.query<RevisionRow & { sort_key: string }>(
-    `SELECT r.*, ${SORT_KEY} AS sort_key FROM entity_ref x JOIN entity e ON e.id = x.from_id AND NOT e.deleted AND e.main_rev IS NOT NULL JOIN revision r ON r.id = e.main_rev
+    `SELECT ${FACTS}, ${SORT_KEY} AS sort_key FROM entity_ref x JOIN entity e ON e.id = x.from_id AND NOT e.deleted AND e.main_rev IS NOT NULL JOIN revision r ON r.id = e.main_rev
      WHERE x.to_id = $1 AND x.field = $2 ${typed} ${after}
      ORDER BY ${SORT_KEY} LIMIT ${limit + 1}`,
     params,

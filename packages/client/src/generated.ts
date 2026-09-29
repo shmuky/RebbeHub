@@ -90,7 +90,7 @@ export type Item = {
   path: string | null;
   /** The revision shown */
   rev: number;
-  /** The item's data, as its type's JSON Schema (/v1/types) says */
+  /** The item's data, as its type's JSON Schema (/v1/types) says. In a list, without `body` (the words a page keeps in itself, kilobytes each): read the item by id, or several with /v1/entities/batch, for them */
   data: Record<string, unknown>;
   /** Set when its words are held back for rights: the item is listed, its text is not served */
   withheld?: string;
@@ -266,11 +266,18 @@ export type Suggestion = {
   base_commit?: number;
   merged_commit?: number | null;
   post_review?: "pending" | "done" | null;
+  /** The checks that did not pass, of this page's items and of the whole; `checkCounts` counts them all */
   checks?: Array<{
     check?: string;
     status?: "pass" | "fail" | "warn";
     message?: string;
   }>;
+  /** All its checks, by status */
+  checkCounts?: {
+    pass: number;
+    warn: number;
+    fail: number;
+  };
   created_at?: string;
   submitted_at?: string | null;
   closed_at?: string | null;
@@ -1104,6 +1111,8 @@ export interface Operations {
       limit?: number;
       /** With 1: also `summary`, every item grouped by how it changes (all of them are read and compared for it) */
       summary?: "1";
+      /** With 1: each item's facts, not its words (`before` and `after` without `body`; what changed is whole in `changes`), for a feed */
+      brief?: "1";
     };
     output: Record<string, unknown>;
   };
@@ -2491,7 +2500,7 @@ export const OPERATIONS = {
   getProject: {"method":"GET","path":"/v1/projects/{slug}","pathParams":["slug"],"query":[],"body":null,"answer":"json"},
   getRevision: {"method":"GET","path":"/v1/revisions/{rev}","pathParams":["rev"],"query":[],"body":null,"answer":"json"},
   getSourceText: {"method":"GET","path":"/v1/texts/{sha256}","pathParams":["sha256"],"query":[],"body":null,"answer":"text"},
-  getSuggestion: {"method":"GET","path":"/v1/suggestions/{id}","pathParams":["id"],"query":["offset","limit","summary"],"body":null,"answer":"json"},
+  getSuggestion: {"method":"GET","path":"/v1/suggestions/{id}","pathParams":["id"],"query":["offset","limit","summary","brief"],"body":null,"answer":"json"},
   health: {"method":"GET","path":"/v1/health","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
   hideComment: {"method":"POST","path":"/v1/comments/{id}/hide","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   iiifManifest: {"method":"GET","path":"/manifests/iiif/{file}","pathParams":["file"],"query":[],"body":null,"answer":"json"},

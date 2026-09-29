@@ -469,8 +469,8 @@ So every page has a budget, and the budget is a test:
 the API in one process, over a small PGlite catalog with the shapes that
 matter (a sefer of thirty sichos, a farbrengen of six parts with a synced
 hanacha, open suggestions of twenty items), counting every statement the
-API sends and every request the site makes, and fails when a page goes
-past its ceiling. A PR that needs more raises the ceiling in the test, on
+API sends, every request the site makes and the kilobytes the page is,
+and fails when a page goes past its ceiling. A PR that needs more raises the ceiling in the test, on
 purpose, saying why; run alone with console output shown
 (`npx vitest run apps/web/tests/budget.test.ts --reporter=verbose --silent=false`) it
 prints each page's counts and every request the page made.
@@ -511,6 +511,28 @@ read a page at a time (`/v1/suggestions/{id}?limit=`), and its summary of
 every item only when asked (`summary=1`); the conversation list says of
 each what it changes (`types`, `first`), so a page can label and place
 suggestions without opening them.
+
+Lists carry an item's facts, not its words. An item's `body` (the words a
+page keeps in itself: Sichos-Kodesh's import puts each letter's or sicha's
+text in its unit) is kilobytes, and every list route (`/v1/entities`,
+`children`, `linked`, `batch/linked`, `/v1/works/{id}/parts/{part}`,
+`/v1/events`, search) leaves it out (`FACTS` in
+packages/core/src/catalog.ts); an item read by id, or several with
+`/v1/entities/batch`, has it. A page carries its loader's data to the
+browser, hidden, for hydration, so whatever a loader keeps that the page
+does not show is paid twice, in the API's answer and in the page: a volume
+of Igros Kodesh was 1.1 MB, 1 MB of it the words of its 150 letters,
+listed with each and read by no one; it is 170 kB now, and a third of the
+CPU (a request's CPU is limited too; the free plan's 10 ms is what error
+1102 "exceeded resource limits" is about). The set of the farbrengens
+listed five hundred of its three thousand, 900 kB; a set's page lists its
+sefarim and the first sixty of anything else in it, with how many there
+are (133 kB). A suggestion's page carries the checks of its own page of
+items and the count of them all (`checkCounts`), not one line per item
+of an import; `brief=1` gives a feed each item's facts without its words;
+the suggestions list carries no checks (six imports' checks were 500 kB).
+The budget test holds each page to a size for the same reason, and its
+sample sichos have words, so a list that leaks them shows.
 
 Latency comes from the same place: each API read is a Worker call and its
 statements are round trips to Postgres in Virginia, one after the other.

@@ -121,6 +121,8 @@ export function SetPage({ entity, view, lang }: { entity: Entity; view: ItemView
   const members = view.lists.members ?? [];
   const works = members.filter((m) => m.type === 'work');
   const others = members.filter((m) => m.type !== 'work');
+  // How many there are in all: the page lists the first of them (itemData.server.ts).
+  const othersTotal = view.linked.filter((g) => g.field === 'sets' && g.type !== 'work').reduce((n, g) => n + g.count, 0) || others.length;
   const counts = view.counts ?? {};
   return (
     <ItemShell
@@ -132,7 +134,7 @@ export function SetPage({ entity, view, lang }: { entity: Entity; view: ItemView
         sub: d.description ? nameOf(d.description, lang) : undefined,
         facts: [
           works.length ? { icon: 'book', children: <><b>{num(works.length, lang)}</b> {t(lang, 'seforim')}</> } : null,
-          others.length ? { icon: 'layers', children: <><b>{num(others.length, lang)}</b> {t(lang, 'unitsShort')}</> } : null,
+          others.length ? { icon: 'layers', children: <><b>{num(othersTotal, lang)}</b> {t(lang, 'unitsShort')}</> } : null,
           view.keepers.length ? { icon: 'users', children: <><b>{num(view.keepers.length, lang)}</b> {p(lang, 'keepers')}</> } : null,
         ].filter((f): f is NonNullable<typeof f> => f !== null) as never,
         tabs: [{ key: 'page', label: t(lang, 'seforim'), icon: 'book', to: href(itemPath(entity), lang), count: works.length || undefined }, ...commonTabs(entity, view, lang)],

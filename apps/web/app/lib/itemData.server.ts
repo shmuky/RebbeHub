@@ -103,10 +103,15 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
 
   switch (entity.type) {
     case 'set': {
-      const [members, units] = await Promise.all([api.list({ set: entity.id, limit: 500 }), api.refCounts('work', 'unit')]);
-      view.lists.members = members.items;
+      // Its sefarim, all of them (a shelf), with how many sichos each holds; of whatever else is in it, the first sixty of
+      // each kind and how many there are (a set of three thousand farbrengens listed five hundred, 700 kB no one scrolled).
+      const [groups, works, units] = await Promise.all([orNone(api.linkedCounts(entity.id), []), api.list({ set: entity.id, type: 'work', limit: 500 }), api.refCounts('work', 'unit')]);
+      const otherTypes = [...new Set(groups.filter((g) => g.field === 'sets' && g.type !== 'work').map((g) => g.type))];
+      const others = await Promise.all(otherTypes.map((type) => api.list({ set: entity.id, type, limit: 60 })));
+      view.lists.members = [...works.items, ...others.flatMap((o) => o.items)];
+      view.linked = groups;
       view.counts = units;
-      view.covers = await orNone(api.covers(members.items.filter((m) => m.type === 'work').map((m) => m.id)), {});
+      view.covers = await orNone(api.covers(works.items.map((m) => m.id)), {});
       break;
     }
     case 'work': {
@@ -225,7 +230,7 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
   // Asked for together: each is its own round trip to the API.
   [view.backlinks, view.linked, view.relations] = await Promise.all([
     api.backlinks(entity.id),
-    orNone(api.linkedCounts(entity.id), []),
+    view.linked.length ? Promise.resolve(view.linked) : orNone(api.linkedCounts(entity.id), []),
     // An API from before links were served has none to give.
     api.relations(entity.id).catch(() => []),
   ]);
@@ -241,5 +246,8 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
   // A sicha's or a printing's sefer's cover: the picture its page shows when it is shared.
   if ((entity.type === 'unit' || entity.type === 'publication') && typeof d.work === 'string') view.covers = await orNone(api.covers([d.work]), {});
   if (keepers.length) view.keepers = (await api.peopleByIds(keepers)).map((p) => ({ id: p.id, username: p.username, displayName: p.displayName }));
+  // A sefer's sichos are on its page as its contents (`toc`), a farbrengen's as what was said there (`event`): the
+  // items themselves stay out of what the page carries to the browser (a volume's hundred and fifty, a kilobyte each).
+  delete view.lists.units;
   return view;
 }

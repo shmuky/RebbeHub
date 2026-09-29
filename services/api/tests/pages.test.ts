@@ -92,6 +92,54 @@ describe('all that belongs to an item', () => {
   });
 });
 
+describe("a list carries an item's facts, not its words", () => {
+  it('leaves body out of every list, keeps it when an item is read by id, and gives a feed a suggestion without it', async () => {
+    const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'ספר' }, slug: 'sefer', authors: [], genre: 'sichos', levels: ['volume', 'sicha'], sets: [set] }, '/sefer');
+    const body = { profile: 'sichos-kodesh', versions: [{ id: 'he', language: 'he', segments: [{ id: 'p1', kind: 'paragraph', text: [{ text: 'דברי השיחה' }] }] }] };
+    const unit = await add(catalog, 'mendy', 'keeper', 'unit', { work, position: [{ level: 'volume', value: '1' }, { level: 'sicha', value: '1' }], order: 'a', label: { he: 'שיחה' }, body });
+    const facts = (items: Array<{ id: string; data: Record<string, unknown> }>) => {
+      const row = items.find((i) => i.id === unit);
+      expect(row?.data).toMatchObject({ label: { he: 'שיחה' }, order: 'a' });
+      for (const i of items) expect(i.data).not.toHaveProperty('body');
+    };
+    facts((await get(`/v1/entities/${work}/linked?field=work&type=unit`)).body.items);
+    facts((await get(`/v1/entities/batch/linked?ids=${work}&field=work`)).body.linked[work]);
+    facts((await get(`/v1/entities/${work}/children?field=work&type=unit`)).body.items);
+    facts((await get(`/v1/works/${work}/parts/1`)).body.items);
+    facts((await get('/v1/entities?type=unit')).body.items);
+    expect((await get(`/v1/entities/${unit}`)).body.data.body).toEqual(body);
+    expect((await get(`/v1/entities/batch?ids=${unit}`)).body.items[0].data.body).toEqual(body);
+
+    // A suggestion's page carries each item before and after in full for its reviewer; a feed asks for the facts (brief=1),
+    // and finds what changed whole in `changes`. Its checks: those that did not pass, and how many did.
+    const cs = await catalog.createChangeset('chaim', { title: 'Relabel' });
+    await catalog.putRevision(cs.id, 'chaim', { id: unit, type: 'unit', data: { work, position: [{ level: 'volume', value: '1' }, { level: 'sicha', value: '1' }], order: 'a', label: { he: 'שיחה א' }, body } });
+    const added = await catalog.putRevision(cs.id, 'chaim', { type: 'unit', data: { work, position: [{ level: 'volume', value: '1' }, { level: 'sicha', value: '2' }], order: 'b', label: { he: 'שיחה ב' }, body } });
+    await catalog.submit(cs.id, 'chaim');
+    const entryOf = (page: { entries: Array<{ entityId: string }> }, id: string) => page.entries.find((e) => e.entityId === id) as any;
+    const full = (await get(`/v1/suggestions/${cs.id}`)).body;
+    expect(entryOf(full, unit).before.body).toEqual(body);
+    expect(entryOf(full, unit).after.body).toEqual(body);
+    expect(entryOf(full, added).changes[0].after.body).toEqual(body);
+    const brief = (await get(`/v1/suggestions/${cs.id}?brief=1`)).body;
+    expect(entryOf(brief, unit).before).toEqual({ work, position: [{ level: 'volume', value: '1' }, { level: 'sicha', value: '1' }], order: 'a', label: { he: 'שיחה' } });
+    expect(entryOf(brief, unit).after.label).toEqual({ he: 'שיחה א' });
+    expect(entryOf(brief, unit).after).not.toHaveProperty('body');
+    expect(entryOf(brief, unit).changes).toEqual([{ path: '/label/he', before: 'שיחה', after: 'שיחה א' }]);
+    // A new item is one change, of the whole: its facts there too.
+    expect(entryOf(brief, added).before).toBeNull();
+    expect(entryOf(brief, added).after.label).toEqual({ he: 'שיחה ב' });
+    expect(entryOf(brief, added).changes).toEqual([{ path: '', after: { work, position: [{ level: 'volume', value: '1' }, { level: 'sicha', value: '2' }], order: 'b', label: { he: 'שיחה ב' } } }]);
+    expect(brief.changeset.checks.every((k: { status: string }) => k.status !== 'pass')).toBe(true);
+    expect(brief.changeset.checkCounts).toMatchObject({ fail: 0 });
+    expect(brief.changeset.checkCounts.pass).toBeGreaterThan(0);
+    // The list says nothing of the checks (a list of imports carried thousands).
+    const listed = (await get('/v1/suggestions?status=open')).body.suggestions.find((s: { id: number }) => s.id === cs.id);
+    expect(listed).toMatchObject({ title: 'Relabel', items: 2 });
+    expect(listed).not.toHaveProperty('checks');
+  });
+});
+
 describe('covers and files', () => {
   it("gives a sefer's cover while its PDF is served, and a file's own page", async () => {
     const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'ספר' }, slug: 'sefer', authors: [], genre: 'sichos', levels: ['volume'], sets: [set] });

@@ -150,6 +150,11 @@ async function body<T>(c: Context): Promise<T> {
   }
 }
 
+/** An item's data without its words (`body`): what a list carries, and a feed's page of a suggestion (docs/operations.md, "The statement budget"). */
+function withoutWords(data: Json | null): Json | null {
+  return data && typeof data === 'object' && !Array.isArray(data) && 'body' in data ? Object.fromEntries(Object.entries(data).filter(([key]) => key !== 'body')) : data;
+}
+
 export function createApp(options: ApiOptions): Hono {
   const { catalog } = options;
   const app = new Hono();
@@ -880,9 +885,10 @@ export function createApp(options: ApiOptions): Hono {
     const last = suggestions[suggestions.length - 1];
     const next = last && suggestions.length === limit ? cursor.encode([new Date(last.submitted_at ?? last.created_at).toISOString(), Number(last.id)]) : null;
     nextLink(c, next);
-    // How many items each changes, and who wrote them (a bot's, said to be one), so a list is drawn without opening each.
+    // How many items each changes, and who wrote them (a bot's, said to be one), so a list is drawn without opening each;
+    // not its checks, one per item (a list of six imports carried three thousand): a suggestion's own page has them.
     const counts = await catalog.itemCounts(suggestions.map((s) => Number(s.id)));
-    return c.json({ suggestions: suggestions.map((s) => ({ ...s, items: counts.get(Number(s.id)) ?? 0 })), people: await peopleOf(catalog.db, suggestions.map((s) => s.author)), next });
+    return c.json({ suggestions: suggestions.map(({ checks: _checks, ...s }) => ({ ...s, items: counts.get(Number(s.id)) ?? 0 })), people: await peopleOf(catalog.db, suggestions.map((s) => s.author)), next });
   });
 
   app.get('/v1/suggestions/:id', async (c) => {
@@ -897,6 +903,20 @@ export function createApp(options: ApiOptions): Hono {
       const withheld = (await hide(entry.type, entry.entityId, entry.after)) ?? (await hide(entry.type, entry.entityId, entry.before));
       if (withheld) Object.assign(entry, { before: null, after: null, changes: [], conflicts: [], withheld });
     }
+    // For a feed (brief=1): each item's facts, not its words; what changed is whole in `changes`, except that a new
+    // item (one change, of the whole) is its facts there too.
+    if (c.req.query('brief') === '1')
+      for (const entry of view.entries) {
+        entry.before = withoutWords(entry.before);
+        entry.after = withoutWords(entry.after);
+        entry.changes = entry.changes.map((change) => (change.path === '' ? { ...change, before: change.before === undefined ? undefined : withoutWords(change.before), after: change.after === undefined ? undefined : withoutWords(change.after) } : change));
+      }
+    // The checks that did not pass, of this page's items and of the whole, and the count of them all by status: a bot's
+    // import of five hundred items has five hundred date checks, and a page of it carries its own, not all of them.
+    const { checks, ...changeset } = view.changeset;
+    const onPage = new Set(view.entries.map((e) => e.entityId));
+    const checkCounts = { pass: 0, warn: 0, fail: 0 };
+    for (const k of checks) checkCounts[k.status]++;
     // Names instead of ids, and whether the person asking may approve it (to show the buttons or not).
     const names = async (ids: string[]) => Object.fromEntries(await Promise.all([...new Set(ids)].map(async (id) => [id, (await catalog.account(id))?.display_name ?? id])));
     const viewer = (await authenticate?.(c)) ?? null;
@@ -917,6 +937,7 @@ export function createApp(options: ApiOptions): Hono {
     const next = view.offset + view.entries.length < view.total ? view.offset + view.entries.length : null;
     return c.json({
       ...view,
+      changeset: { ...changeset, checks: checks.filter((k) => k.status !== 'pass' && (!k.entityId || onPage.has(k.entityId))), checkCounts },
       limit,
       next,
       files,

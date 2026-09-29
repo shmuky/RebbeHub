@@ -291,7 +291,9 @@ export interface SuggestionRow {
   created_at: string;
   closed_at?: string | null;
   merged_commit?: number | null;
-  checks: Array<{ check: string; status: 'pass' | 'warn' | 'fail'; message: string; entityId?: string; path?: string }>;
+  /** On its page: the checks that did not pass, of that page's items and of the whole, and the count of all of them. A list carries neither. */
+  checks?: Array<{ check: string; status: 'pass' | 'warn' | 'fail'; message: string; entityId?: string; path?: string }>;
+  checkCounts?: { pass: number; warn: number; fail: number };
   /** Sent by an agent for its author (a token, a connected app). */
   via?: Via | null;
   /** How many items it changes (in the API's list). */
@@ -682,9 +684,10 @@ export class RebbeHubApi {
 
   /** One suggestion with a page of its changes (25 unless `limit` says), reviews and who wrote them; null when there is none. */
   /** A suggestion's review view, a page of items at a time; `summary` (every item grouped by how it changes) only when asked, since it reads them all. */
-  suggestion(id: number, options: { offset?: number; limit?: number; summary?: boolean } = {}) {
-    const { summary, ...rest } = options;
-    return this.maybe(this.get<SuggestionDetail>(`/v1/suggestions/${id}`, { ...rest, ...(summary ? { summary: '1' } : {}) }));
+  /** A page of a suggestion's items; `summary` groups every item by how it changes (the review page), `brief` gives each item's facts without its words (a feed). */
+  suggestion(id: number, options: { offset?: number; limit?: number; summary?: boolean; brief?: boolean } = {}) {
+    const { summary, brief, ...rest } = options;
+    return this.maybe(this.get<SuggestionDetail>(`/v1/suggestions/${id}`, { ...rest, ...(summary ? { summary: '1' } : {}), ...(brief ? { brief: '1' } : {}) }));
   }
 
   /** The commits after `since`, oldest first, each with the items it changed (as they became), or with `changes` only so many of them (`changed` and `types` count them all). */
