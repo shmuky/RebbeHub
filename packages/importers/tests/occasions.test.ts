@@ -89,7 +89,7 @@ describe('the Sichos-Kodesh occasions importer', () => {
     ];
     await runImport(catalog, sichosKodeshOccasionsImporter(entries(), { mafteiach: index }), { approveAs: 'shmuly' });
     const event = await catalog.get(await idForKey('mafteiach-occasion:11113014'));
-    const data = event!.data as { links: Array<{ kind: string; url: string; label: { he: string } }>; body: string; bodySource: object };
+    const data = event!.data as { links: Array<{ kind: string; url: string; label: { he: string } }>; body: unknown; bodySource: object };
     expect(data.links.map((l) => [l.kind, l.url])).toEqual([
       ['bilti-mugah', expect.any(String)],
       ['mugah', pdfUrl({ driveFileId: '1KgxR1B-ab3l4kp_VMg-1WgudgSZpxfdJ' })],
@@ -102,9 +102,29 @@ describe('the Sichos-Kodesh occasions importer', () => {
       ['audio', 'https://ashreinu.app/#/player/parentEvent~5080_event~5080'],
     ]);
     expect(data.links.find((l) => l.kind === 'maamar')!.label.he).toBe('ד"ה כרע שכב · ראה מאמר');
-    expect(data.body).toBe("== תוכן ענינים ==\n\n1. הפיכת העינוי - לעת רצון\n\n2. פרטי עניני צום גדלי'");
+    // The outline keeps its own shape: a titled section of numbered items, drawn by the outline's display rules.
+    expect(data.body).toEqual({
+      profile: 'outline',
+      versions: [
+        {
+          id: 'he',
+          language: 'he',
+          segments: [
+            {
+              id: 'contents',
+              kind: 'section',
+              text: [{ text: 'תוכן ענינים' }],
+              children: [
+                { id: 'contents.1', kind: 'item', n: 1, text: [{ text: 'הפיכת העינוי - לעת רצון' }] },
+                { id: 'contents.2', kind: 'item', n: 2, text: [{ text: "פרטי עניני צום גדלי'" }] },
+              ],
+            },
+          ],
+        },
+      ],
+    });
     expect(data.bodySource).toMatchObject({ source: 'mafteiach', via: 'mafteiach-index', sourceId: '11113014', url: 'https://www.mafteiach.app/all/by_year/5714' });
     const onlyInIndex = await catalog.get(await idForKey('mafteiach-occasion:11119999'));
-    expect(onlyInIndex?.data).toMatchObject({ date: '5714-03-20', body: '== תוכן ענינים ==\n\nשיחה' });
+    expect(onlyInIndex?.data).toMatchObject({ date: '5714-03-20', body: { profile: 'outline', versions: [{ segments: [{ id: 'contents', children: [{ id: 'contents.1', kind: 'item', text: [{ text: 'שיחה' }] }] }] }] } });
   });
 });

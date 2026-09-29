@@ -19,7 +19,10 @@ export function Footer({ lang }: { lang: Lang }) {
           <Link to={href('/help', lang)}>{tu(lang, 'contribute')}</Link>
           <Link to={href('/missing', lang)}>{tu(lang, 'missing')}</Link>
           <Link to={href('/health', lang)}>{tu(lang, 'health')}</Link>
+          <Link to={href('/suggestions', lang)}>{tu(lang, 'navSuggestions')}</Link>
+          <Link to={href('/issues', lang)}>{tu(lang, 'navReports')}</Link>
           <Link to={href('/mirrors', lang)}>{tu(lang, 'mirrors')}</Link>
+          <Link to={href('/developers', lang)}>{lang === 'he' ? 'למפתחים' : 'Developers'}</Link>
           <Link to={href('/takedown', lang)}>{tu(lang, 'takedown')}</Link>
           <a href="https://github.com/shmuky/RebbeHub">{tu(lang, 'code')}</a>
         </nav>

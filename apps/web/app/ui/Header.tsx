@@ -20,8 +20,8 @@ const NAV: Array<{ to: string; key: UiKey; icon: IconName }> = [
   { to: '/', key: 'navHome', icon: 'home' },
   { to: '/sets', key: 'navLibrary', icon: 'book' },
   { to: '/calendar', key: 'navFarbrengens', icon: 'cal' },
-  { to: '/review', key: 'navSuggestions', icon: 'suggest' },
-  { to: '/reports', key: 'navReports', icon: 'report' },
+  { to: '/suggestions', key: 'navSuggestions', icon: 'suggest' },
+  { to: '/issues', key: 'navReports', icon: 'report' },
   { to: '/projects', key: 'navProjects', icon: 'target' },
 ];
 
@@ -29,10 +29,10 @@ const NAV: Array<{ to: string; key: UiKey; icon: IconName }> = [
 export function sectionOf(pathname: string): string {
   if (pathname === '/') return '/';
   if (pathname.startsWith('/calendar') || pathname.startsWith('/events') || pathname.startsWith('/sets/farbrengens')) return '/calendar';
-  if (pathname.startsWith('/review')) return '/review';
-  if (pathname.startsWith('/reports')) return '/reports';
+  if (pathname.startsWith('/review') || pathname.startsWith('/suggestions')) return '/suggestions';
+  if (pathname.startsWith('/issues')) return '/issues';
   if (pathname.startsWith('/projects') || pathname.startsWith('/missing') || pathname.startsWith('/health') || pathname.startsWith('/help')) return '/projects';
-  if (['/search', '/signin', '/account', '/admin', '/about', '/takedown', '/mirrors', '/read', '/_'].some((p) => pathname.startsWith(p))) return '';
+  if (['/search', '/signin', '/account', '/inbox', '/u/', '/admin', '/about', '/takedown', '/mirrors', '/developers', '/read', '/_'].some((p) => pathname.startsWith(p))) return '';
   return '/sets';
 }
 
@@ -77,6 +77,39 @@ function ThemeSwitch({ lang }: { lang: Lang }) {
         </button>
       ))}
     </div>
+  );
+}
+
+/**
+ * The bell: the inbox, with how many lines wait unread. The first count
+ * comes with who is signed in; it is asked again on each new page and when
+ * a page reads some (the `rebbehub:inbox` event).
+ */
+function InboxLink({ lang, first }: { lang: Lang; first: number }) {
+  const [unread, setUnread] = useState(first);
+  const { pathname } = useLocation();
+  const seen = useRef(false);
+  useEffect(() => {
+    let live = true;
+    const ask = () =>
+      void fetch('/_/threads/inbox/count', { credentials: 'same-origin', headers: { accept: 'application/json' } })
+        .then((r) => (r.ok ? (r.json() as Promise<{ unread: number }>) : null))
+        .then((body) => live && body && setUnread(body.unread))
+        .catch(() => undefined);
+    window.addEventListener('rebbehub:inbox', ask);
+    if (seen.current) ask();
+    seen.current = true;
+    return () => {
+      live = false;
+      window.removeEventListener('rebbehub:inbox', ask);
+    };
+  }, [pathname]);
+  const label = unread ? `${tu(lang, 'notifications')} (${unread})` : tu(lang, 'notifications');
+  return (
+    <Link className="icon-link" to={href('/inbox', lang)} aria-label={label} title={label}>
+      <Icon name="bell" />
+      {unread ? <span className="dot-count">{unread > 99 ? '99+' : unread}</span> : null}
+    </Link>
   );
 }
 
@@ -125,11 +158,17 @@ function AccountMenu({ lang }: { lang: Lang }) {
             <Icon name="user" />
             {tu(lang, 'account')}
           </Link>
-          <Link role="menuitem" to={href('/review', lang, { q: lang === 'he' ? 'מחבר:אני' : 'author:me' })}>
+          {account.person.username ? (
+            <Link role="menuitem" to={href(`/u/${account.person.username}`, lang)}>
+              <Icon name="user" />
+              {lang === 'he' ? 'הדף שלי' : 'Your page'}
+            </Link>
+          ) : null}
+          <Link role="menuitem" to={href('/suggestions', lang, { q: 'author:@me' })}>
             <Icon name="suggest" />
             {lang === 'he' ? 'ההצעות שלי' : 'My suggestions'}
           </Link>
-          <Link role="menuitem" to={href('/account', lang, { tab: 'follows' })}>
+          <Link role="menuitem" to={href('/inbox', lang)}>
             <Icon name="bell" />
             {tu(lang, 'notifications')}
           </Link>
@@ -188,7 +227,7 @@ export function Header({ lang }: { lang: Lang }) {
         setPalette({ open: true, initial: '?' });
       } else if (e.key === 'g') g = Date.now();
       else if (Date.now() - g < 1200) {
-        const to = { h: '/', l: '/sets', f: '/calendar', s: '/review', r: '/reports', p: '/projects' }[e.key];
+        const to = { h: '/', l: '/sets', f: '/calendar', s: '/suggestions', r: '/issues', i: '/inbox', p: '/projects' }[e.key];
         g = 0;
         if (to) navigate(href(to, lang));
       }
@@ -265,11 +304,7 @@ export function Header({ lang }: { lang: Lang }) {
               </>
             )}
           </a>
-          {account ? (
-            <Link className="icon-link" to={href('/account', lang, { tab: 'follows' })} aria-label={tu(lang, 'notifications')} title={tu(lang, 'notifications')}>
-              <Icon name="bell" />
-            </Link>
-          ) : null}
+          {account ? <InboxLink lang={lang} first={account.unread ?? 0} /> : null}
           <AccountMenu lang={lang} />
         </div>
       </header>
@@ -358,7 +393,7 @@ export function Header({ lang }: { lang: Lang }) {
                     <Avatar name={account.person.displayName} id={account.person.id} size="sm" />
                     {account.person.displayName}
                   </Link>
-                  <Link to={href('/account', lang, { tab: 'follows' })}>
+                  <Link to={href('/inbox', lang)}>
                     <Icon name="bell" />
                     {tu(lang, 'notifications')}
                   </Link>

@@ -46,6 +46,11 @@ export function referencesOf(type: EntityType, data: unknown): Reference[] {
   const walk = (value: unknown, path: string[]): void => {
     if (typeof value === 'string') {
       if (!isEntityId(value)) return;
+      // In a page's words only a link is one: an item named in a run of text is just words.
+      if (path[0] === 'body') {
+        if (path[path.length - 1] === 'href') out.push({ field: 'body.href', id: value, expected: [] });
+        return;
+      }
       const field = path.filter((p) => !/^\d+$/.test(p)).join('.');
       out.push({ field, id: value, expected: fields[field] ?? fields[path[0] ?? ''] ?? (field === 'page.scan' ? ['scan'] : []) });
       return;

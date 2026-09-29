@@ -1,6 +1,7 @@
 import type { DateKey } from '@rebbehub/hebrew';
 import type { RightsState } from './rights.js';
 import type { EntityId } from './ids.js';
+import type { PageText } from './pageText.js';
 import type { EditionKind, Genre, Licence, SourceId } from './works.js';
 
 /**
@@ -114,11 +115,13 @@ export interface CommonFields {
   topics?: EntityId[];
   note?: string;
   /**
-   * The page itself, as wikitext: a letter's words, a chapter's text, a
-   * farbrengen's outline. Everything in the catalog is a page people read
-   * and edit, as on a wiki; the other fields are its infobox.
+   * The page's own words: a letter, a chapter, a farbrengen's outline, as
+   * versions of segments with a few marks (pageText.ts), drawn by the
+   * display rules of where they came from. Everything in the catalog is a
+   * page people read and fix segment by segment; the other fields are
+   * what is known about it.
    */
-  body?: string;
+  body?: PageText;
   /** Where the body came from, when an importer brought it: the source, how, its licence and credit. */
   bodySource?: BodySource;
 }
@@ -238,6 +241,19 @@ export interface WorkData extends CommonFields {
   levels: string[];
   sourceCopies?: WorkSourceData[];
   description?: LocalName;
+  /**
+   * The page a person chose as its cover: the title page (shaar) of one of
+   * its PDFs. Unset, the jobs choose one and label it as the machine's
+   * choice (`rebbehub covers`); set through a suggestion, the person's
+   * choice wins.
+   */
+  cover?: CoverChoice;
+}
+
+/** A page of a PDF, by the file's sha256 and the page's number from 1. */
+export interface CoverChoice {
+  file: string;
+  page: number;
 }
 
 /** A unit's place in its work, one step per level: `{ level: 'volume', value: '12' }`. */

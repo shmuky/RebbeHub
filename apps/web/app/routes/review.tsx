@@ -31,6 +31,8 @@ export function meta({ loaderData }: Route.MetaArgs) {
 
 interface Suggestion {
   id: number;
+  /** Its #number, shared with issues; imports have none. */
+  number?: number | null;
   title: string;
   description: string | null;
   author: string;
@@ -124,7 +126,17 @@ function SuggestionCard({ detail, lang, onDone, open }: { detail: Detail; lang: 
   return (
     <article className={`suggestion${open ? ' is-focused' : ''}`} id={`s${cs.id}`}>
       <header>
-        <h2 className="suggestion-title">{cs.title}</h2>
+        <h2 className="suggestion-title">
+          {cs.title}
+          {cs.number ? (
+            <>
+              {' '}
+              <Link className="row-sub" to={href(`/suggestions/${cs.number}`, lang)}>
+                #{cs.number}
+              </Link>
+            </>
+          ) : null}
+        </h2>
         <p className="row-sub">
           {detail.names[cs.author] ?? cs.author} · {when(cs.submitted_at ?? cs.created_at)}
           {cs.status !== 'open' ? ` · ${t(lang, `status_${cs.status}`)}` : ''}

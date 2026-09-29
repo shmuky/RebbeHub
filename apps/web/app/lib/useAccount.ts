@@ -8,7 +8,9 @@ import { useEffect, useState } from 'react';
  */
 
 export interface SignedIn {
-  person: { id: string; displayName: string; steward?: boolean; admin?: boolean };
+  person: { id: string; displayName: string; username?: string; steward?: boolean; admin?: boolean };
+  /** Inbox lines not read yet (mentions, review requests, what they follow). */
+  unread: number;
   passkeys: Array<{ credentialId: string; deviceType: string | null; backedUp: boolean; createdAt: string; lastUsedAt: string | null }>;
   googleAccounts: Array<{ email: string | null; createdAt: string }>;
   /** Addresses that sign this person in by email link (their Google accounts' too). */
@@ -44,6 +46,7 @@ function ask(): Promise<Answer> {
             emails: body.emails ?? [],
             notifications: body.notifications ?? { mode: 'off' as const, email: null, lang: 'he' as const },
             trust: body.trust ?? 'contributor',
+            unread: body.unread ?? 0,
           }
         : null,
       google: body.google ?? false,

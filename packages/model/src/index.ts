@@ -1,5 +1,6 @@
 export * from './works.js';
 export * from './entities.js';
+export * from './pageText.js';
 export { canonicalJson, contentHash, sha256Hex, toHex } from './canonical.js';
 export { idFromSeed, isEntityId, newId, readId, type EntityId } from './ids.js';
 export { isEntityPath, joinPath, slugify, type EntityPath } from './paths.js';
@@ -43,3 +44,4 @@ export {
   type AudioMatch,
   type GreyImage,
 } from './fingerprints.js';
+export { itemsIn, mentionsIn, referencesIn, tokenize, type Token } from './mentions.js';

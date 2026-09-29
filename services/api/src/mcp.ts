@@ -1,0 +1,410 @@
+import type { Context, Hono } from 'hono';
+import { ENTITY_TYPES } from '@rebbehub/model';
+
+/**
+ * RebbeHub for AI agents: a Model Context Protocol server at /mcp
+ * (docs/developers/agents.md). It speaks MCP's Streamable HTTP transport
+ * without sessions: every POST is one JSON-RPC message (or a batch) and is
+ * answered with JSON; there is no event stream to open (GET is 405).
+ *
+ * Written by hand rather than with the official SDK: the SDK's HTTP
+ * transport wants Node's request objects or a stateful session, and this
+ * server needs neither. Every tool calls the API's own routes, with the
+ * caller's token, so an agent reads exactly what anyone reads, words
+ * withheld for rights stay withheld, and a fix it sends is a suggestion
+ * reviewed like any other.
+ */
+
+export const MCP_PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'] as const;
+export const MCP_SERVER_NAME = 'rebbehub';
+
+interface JsonRpcRequest {
+  jsonrpc: '2.0';
+  id?: string | number | null;
+  method: string;
+  params?: Record<string, unknown>;
+}
+
+type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+
+interface Tool {
+  name: string;
+  title: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  annotations: { readOnlyHint: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint: boolean };
+  run(args: Record<string, unknown>, call: ApiCall): Promise<ToolResult>;
+}
+
+interface ToolResult {
+  text: string;
+  structured?: Record<string, unknown>;
+}
+
+/** A call to the API's own routes, as the agent (its token, if it sent one). */
+type ApiCall = (method: string, path: string, body?: unknown) => Promise<{ status: number; body: any }>;
+
+class ToolError extends Error {}
+
+const ID = { type: 'string', pattern: '^[rR][hH]-[0-9A-Za-z-]+$', description: 'A RebbeHub id, rh-…' };
+
+async function need(call: ApiCall, method: string, path: string, body?: unknown): Promise<any> {
+  const answer = await call(method, path, body);
+  if (answer.status >= 400) throw new ToolError(`${answer.body?.message ?? `the API answered ${answer.status}`} (${answer.body?.error ?? answer.status})`);
+  return answer.body;
+}
+
+/** What an item is called, in Hebrew and English where it has both. */
+function nameOf(item: { id: string; type: string; data?: any }): string {
+  const d = item.data ?? {};
+  const local = d.name ?? d.title ?? d.label;
+  if (local && typeof local === 'object') return [local.he, local.en].filter(Boolean).join(' / ') || item.id;
+  if (typeof local === 'string') return local;
+  if (d.date) return `${item.type} of ${d.date}`;
+  if (d.page) return `${item.type} page ${d.page}`;
+  return item.id;
+}
+
+/**
+ * Which children an item has, by its type: the field that points at it and
+ * the type of the children. A set lists its items instead.
+ */
+export const CHILDREN_BY_TYPE: Record<string, { field: string; type: string }> = {
+  work: { field: 'work', type: 'unit' },
+  text: { field: 'text', type: 'segment' },
+  event: { field: 'event', type: 'recording' },
+  publication: { field: 'publication', type: 'scan' },
+  scan: { field: 'scan', type: 'text-layer' },
+  'text-layer': { field: 'layer', type: 'text-page' },
+  recording: { field: 'recording', type: 'alignment' },
+  alignment: { field: 'alignment', type: 'alignment-span' },
+};
+
+/** The reminder every text answer carries where a machine made the words and no person has checked them. */
+const MACHINE_NOTE = 'Lines marked [machine] were read or heard by a machine (OCR or transcription) and no person has checked them yet; do not quote them as the Rebbe\'s words without saying so.';
+
+function tools(siteUrl: string): Tool[] {
+  const site = siteUrl.replace(/\/+$/, '');
+  const summary = (item: any) => ({ id: item.id, type: item.type, name: nameOf(item), path: item.path ?? null, url: `${site}${item.path ?? `/${item.id}`}`, ...(item.withheld ? { withheld: item.withheld } : {}) });
+
+  return [
+    {
+      name: 'search',
+      title: 'Search RebbeHub',
+      description:
+        'Search the catalog of Chabad Torah and media (sefarim, sichos, letters, farbrengens, recordings, scans) by name or date, in Hebrew or English; or, with where="words", find the lines of scans and paragraphs of texts and transcripts that hold the words. Hebrew dates are understood (יו"ד שבט תשכ"ב, 10 Shevat 5722).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', minLength: 1, maxLength: 500 },
+          where: { enum: ['names', 'words'], default: 'names', description: 'names: items by their names and dates; words: inside texts, scans and transcripts' },
+          type: { enum: [...ENTITY_TYPES], description: 'Only items of this type (names only)' },
+          limit: { type: 'integer', minimum: 1, maximum: 50, default: 10 },
+        },
+        required: ['query'],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      async run(args, call) {
+        const query = String(args.query ?? '').trim();
+        if (!query) throw new ToolError('give a query');
+        const limit = Math.min(Math.max(Number(args.limit ?? 10) || 10, 1), 50);
+        if (args.where === 'words') {
+          const found = await need(call, 'GET', `/v1/search/moments?q=${encodeURIComponent(query)}&limit=${limit}`);
+          const moments = (found.moments as any[]).map((m) =>
+            m.kind === 'scan-line'
+              ? { kind: m.kind, scan: m.scan, page: m.page, text: m.line.text, machine: m.machine, url: `${site}/text/${m.scan}?page=${m.page}&line=${encodeURIComponent(m.line.id)}` }
+              : { kind: m.kind, text: m.snippet, unit: m.unit, recording: m.recording, event: m.event, startMs: m.startMs, machine: m.machine },
+          );
+          const lines = moments.map((m) => `- ${m.machine ? '[machine] ' : ''}${m.text}  (${m.kind === 'scan-line' ? `scan ${m.scan}, page ${m.page}` : [m.unit, m.recording, m.event].filter(Boolean).join(', ')}${m.startMs != null ? `, at ${Math.round(m.startMs / 1000)}s` : ''})`);
+          return { text: moments.length ? `${lines.join('\n')}\n\n${moments.some((m) => m.machine) ? MACHINE_NOTE : ''}`.trim() : 'Nothing found inside the texts.', structured: { query, moments } };
+        }
+        const type = typeof args.type === 'string' ? `&type=${encodeURIComponent(args.type)}` : '';
+        const found = await need(call, 'GET', `/v1/search?q=${encodeURIComponent(query)}&limit=${limit}${type}`);
+        const results = (found.results as any[]).map(summary);
+        const date = found.date ? `The query names the date ${found.date.en} (${found.date.he}, key ${found.date.key}).\n` : '';
+        return { text: results.length ? `${date}${results.map((r) => `- ${r.name} (${r.type}, ${r.id}) ${r.url}`).join('\n')}` : `${date}Nothing found.`, structured: { query, date: found.date, results } };
+      },
+    },
+    {
+      name: 'get_item',
+      title: 'Get an item',
+      description: "One item of the catalog with all its data, by its id (rh-…) or its readable path (/likkutei-sichos/12/3, /events/5742-05-10). Items whose words are withheld for rights are listed with `withheld` saying why.",
+      inputSchema: { type: 'object', properties: { id: ID, path: { type: 'string', description: 'A readable path, starting with /' } }, additionalProperties: false },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      async run(args, call) {
+        let id = typeof args.id === 'string' ? args.id : undefined;
+        if (!id && typeof args.path === 'string') id = (await need(call, 'GET', `/v1/resolve?path=${encodeURIComponent(args.path)}`)).id;
+        if (!id) throw new ToolError('give an id or a path');
+        const item = await need(call, 'GET', `/v1/entities/${encodeURIComponent(id)}`);
+        return { text: `${nameOf(item)} (${item.type}, ${item.id}) ${summary(item).url}\n${JSON.stringify(item.data, null, 1)}`, structured: { ...summary(item), rev: item.rev, data: item.data } };
+      },
+    },
+    {
+      name: 'list_children',
+      title: 'List what an item holds',
+      description:
+        "What is under an item, in order: a sefer's sichos or letters, a text's paragraphs, a farbrengen's recordings, a printing's scans, a set's items. The kind of children is chosen by the item's type unless field and type are given. Pages come a few at a time; pass `next` back as cursor.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: ID,
+          field: { type: 'string', description: 'The field of the children that points at the item (work, text, event…)' },
+          type: { enum: [...ENTITY_TYPES], description: 'The type of the children' },
+          cursor: { type: 'string' },
+          limit: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
+        },
+        required: ['id'],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      async run(args, call) {
+        const id = String(args.id ?? '');
+        const limit = Math.min(Math.max(Number(args.limit ?? 50) || 50, 1), 200);
+        const cursor = typeof args.cursor === 'string' && args.cursor ? `&cursor=${encodeURIComponent(args.cursor)}` : '';
+        let field = typeof args.field === 'string' ? args.field : undefined;
+        let type = typeof args.type === 'string' ? args.type : undefined;
+        let page: { items: any[]; next: string | null };
+        if (!field || !type) {
+          const parent = await need(call, 'GET', `/v1/entities/${encodeURIComponent(id)}`);
+          if (parent.type === 'set') {
+            page = await need(call, 'GET', `/v1/entities?set=${encodeURIComponent(parent.id)}&limit=${limit}${cursor}`);
+            return listed(page, `the items of the set ${nameOf(parent)}`);
+          }
+          const known = CHILDREN_BY_TYPE[parent.type];
+          if (!known) {
+            const { backlinks } = await need(call, 'GET', `/v1/entities/${encodeURIComponent(parent.id)}/backlinks`);
+            const items = (backlinks as any[]).slice(0, limit).map((b) => ({ id: b.from, type: b.type, field: b.field, path: b.path, url: `${site}${b.path ?? `/${b.from}`}` }));
+            return { text: items.length ? `Items that point at ${nameOf(parent)}:\n${items.map((i) => `- ${i.type} ${i.id} (by ${i.field}) ${i.url}`).join('\n')}` : `Nothing points at ${nameOf(parent)}.`, structured: { items, next: null } };
+          }
+          field ??= known.field;
+          type ??= known.type;
+        }
+        page = await need(call, 'GET', `/v1/entities/${encodeURIComponent(id)}/children?field=${encodeURIComponent(field)}&type=${encodeURIComponent(type)}&limit=${limit}${cursor}`);
+        return listed(page, `${type} items under ${id}`);
+
+        function listed(found: { items: any[]; next: string | null }, what: string): ToolResult {
+          const items = found.items.map(summary);
+          const more = found.next ? `\nMore: call again with cursor "${found.next}".` : '';
+          return { text: items.length ? `${what}:\n${items.map((i) => `- ${i.name} (${i.type}, ${i.id})${i.withheld ? ' [withheld]' : ''}`).join('\n')}${more}` : `No ${what}.`, structured: { items, next: found.next } };
+        }
+      },
+    },
+    {
+      name: 'get_text',
+      title: 'Get the words',
+      description:
+        "The words of an item: a sicha's or letter's text (by its unit or text id), a page of a scan's text (OCR, proofread line by line), or a recording's transcript with when each paragraph is heard. Words a machine read or heard, and no person has checked, are marked [machine]. Texts whose rights do not allow copies are withheld.",
+      inputSchema: {
+        type: 'object',
+        properties: { id: ID, page: { type: 'integer', minimum: 1, description: "For a scan: the page (default 1)" }, language: { type: 'string', description: 'For a unit: the language of the text wanted (he, en…), when it has several' } },
+        required: ['id'],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      async run(args, call) {
+        const item = await need(call, 'GET', `/v1/entities/${encodeURIComponent(String(args.id ?? ''))}`);
+        if (item.withheld) throw new ToolError(`the words of ${item.id} are withheld: ${item.withheld}`);
+        if (item.type === 'scan') {
+          const page = await need(call, 'GET', `/v1/scans/${item.id}/text?page=${Math.max(Number(args.page ?? 1) || 1, 1)}`);
+          const lines = (page.lines as any[]).map((l) => `${l.checked ? '' : '[machine] '}${l.text}`);
+          return { text: `Scan ${item.id}, page ${page.page} of ${page.pages} (proofread ${page.level} time${page.level === 1 ? '' : 's'}):\n${lines.join('\n')}${page.lines.some((l: any) => !l.checked) ? `\n\n${MACHINE_NOTE}` : ''}`, structured: page };
+        }
+        if (item.type === 'recording') {
+          const transcript = await need(call, 'GET', `/v1/recordings/${item.id}/transcript`);
+          const paragraphs = transcript.paragraphs as any[];
+          const at = (ms: number | null | undefined) => (ms == null ? '' : `[${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}] `);
+          // A transcript's paragraph is the machine's hearing until a person checks its words.
+          const machine = paragraphs.some((p) => !p.checked);
+          return { text: `${paragraphs.map((p) => `${at(p.startMs)}${p.checked ? '' : '[machine] '}${p.content}`).join('\n\n')}${machine ? `\n\n${MACHINE_NOTE}` : ''}`, structured: transcript };
+        }
+        let textId: string | undefined;
+        if (item.type === 'text') textId = item.id;
+        else if (item.type === 'unit') {
+          const { backlinks } = await need(call, 'GET', `/v1/entities/${item.id}/backlinks?field=unit&type=text`);
+          const texts = (await Promise.all((backlinks as any[]).slice(0, 20).map((b) => need(call, 'GET', `/v1/entities/${b.from}`).catch(() => null)))).filter((t) => t && !t.withheld);
+          const language = typeof args.language === 'string' ? args.language : undefined;
+          const chosen = texts.find((t) => !language || t.data?.language === language) ?? null;
+          if (!chosen) throw new ToolError(texts.length ? `no text of ${item.id} in ${language}; it has ${[...new Set(texts.map((t) => t.data?.language))].join(', ')}` : `the catalog has no text of ${item.id} that may be shown`);
+          textId = chosen.id;
+        } else throw new ToolError(`get_text reads units, texts, scans and recordings; ${item.id} is a ${item.type}. Try list_children to find them.`);
+        const paragraphs: any[] = [];
+        let next: string | null = null;
+        do {
+          const page = await need(call, 'GET', `/v1/entities/${textId}/children?field=text&type=segment&limit=200${next ? `&cursor=${encodeURIComponent(next)}` : ''}`);
+          paragraphs.push(...page.items);
+          next = page.next;
+        } while (next && paragraphs.length < 2000);
+        if (paragraphs.some((p) => p.withheld)) throw new ToolError('this text is withheld for its rights');
+        const machine = (p: any) => Boolean(p.data?.origin && !p.data.origin.checked);
+        const body = paragraphs.map((p) => `${machine(p) ? '[machine] ' : ''}${p.data?.content ?? ''}`).join('\n\n');
+        return { text: `${body}${paragraphs.some(machine) ? `\n\n${MACHINE_NOTE}` : ''}`, structured: { text: textId, paragraphs: paragraphs.map((p) => ({ id: p.id, content: p.data?.content ?? '', machine: machine(p) })) } };
+      },
+    },
+    {
+      name: 'suggest_fix',
+      title: 'Suggest a fix',
+      description:
+        "Suggest a correction to one item: the fields to change (a field set to null is removed), with a short title and why. It becomes a suggestion under your account, checked and reviewed by the item's keepers like any other; nothing changes until they approve. Needs a RebbeHub API token with the write scope (Authorization: Bearer rhp_…).",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: ID,
+          changes: { type: 'object', description: "The fields of the item's data to set, as get_item shows them", additionalProperties: true },
+          title: { type: 'string', maxLength: 200, description: 'What the fix is, in a few words' },
+          note: { type: 'string', maxLength: 2000, description: 'Why, and the source for it' },
+        },
+        required: ['id', 'changes', 'title'],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      async run(args, call) {
+        if (!args.changes || typeof args.changes !== 'object' || Array.isArray(args.changes)) throw new ToolError('give changes: an object of the fields to set');
+        const item = await need(call, 'GET', `/v1/entities/${encodeURIComponent(String(args.id ?? ''))}`);
+        if (item.withheld) throw new ToolError(`${item.id} is withheld for its rights; suggest on the site`);
+        const data: Record<string, unknown> = { ...item.data };
+        for (const [field, value] of Object.entries(args.changes as Record<string, unknown>)) {
+          if (value === null) delete data[field];
+          else data[field] = value;
+        }
+        const made = await need(call, 'POST', '/v1/suggestions/quick', { entityId: item.id, data, title: args.title, note: args.note });
+        const status = made.status === 'merged' ? 'merged at once (the set lets your fixes go live; it will still be reviewed after)' : `sent for review (${made.status})`;
+        return { text: `Suggestion ${made.id} for ${nameOf(item)}: ${status}. ${site}/review?s=${made.id}`, structured: { suggestion: made.id, status: made.status, checks: made.checks, url: `${site}/review?s=${made.id}` } };
+      },
+    },
+    {
+      name: 'list_issues',
+      title: 'List issues',
+      description:
+        "Issues people opened about the catalog (a wrong fact, a missing page, a bad scan…), newest first: open ones by default, or about one item. Suggestions that fix one say \"Fixes #12\". Private issues (rights, offensive) are left out.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          state: { enum: ['open', 'closed', 'all'], default: 'open' },
+          item: { ...ID, description: 'Only issues about this item' },
+          q: { type: 'string', maxLength: 200, description: 'Words in the title, or #number' },
+          limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
+        },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      async run(args, call) {
+        const params = new URLSearchParams({ state: String(args.state ?? 'open'), limit: String(Math.min(Math.max(Number(args.limit) || 20, 1), 50)) });
+        if (typeof args.item === 'string') params.set('entity', args.item);
+        if (typeof args.q === 'string' && args.q.trim()) params.set('q', args.q.trim());
+        const page = await need(call, 'GET', `/v1/issues?${params}`);
+        const issues = (page.items as any[]).map((i) => ({ number: i.number, title: i.title ?? i.typeTitle?.en ?? i.type, type: i.type, state: i.state, labels: (i.labels ?? []).map((l: any) => l.name), item: i.entity?.id ?? null, url: `${site}/issues/${i.number}` }));
+        const text = issues.length ? issues.map((i) => `#${i.number} [${i.state}] ${i.title}${i.labels.length ? ` (${i.labels.join(', ')})` : ''} ${i.url}`).join('\n') : 'No issues.';
+        return { text, structured: { issues, counts: page.counts } };
+      },
+    },
+    {
+      name: 'open_issue',
+      title: 'Open an issue',
+      description:
+        'Open an issue about an item or the catalog: what is wrong or missing, for people to look into. It is public (reports of rights or of something offensive go to stewards only). @handles in the words are told; #12 links to that suggestion or issue. Needs a RebbeHub API token with the write scope (Authorization: Bearer rhp_…). To change an item yourself, use suggest_fix.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', minLength: 1, maxLength: 200 },
+          body: { type: 'string', maxLength: 10000, description: 'What is wrong, and the source that shows it' },
+          type: { enum: ['wrong-fact', 'missing-page', 'bad-scan', 'audio-problem', 'wrong-text', 'duplicate', 'rights', 'offensive', 'other'], default: 'other' },
+          item: { ...ID, description: 'The item it is about, if one' },
+        },
+        required: ['title'],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      async run(args, call) {
+        const made = await need(call, 'POST', '/v1/issues', { title: args.title, body: args.body, type: args.type ?? 'other', entityId: typeof args.item === 'string' ? args.item : undefined });
+        const number = made.issue?.number ?? made.number;
+        return { text: `Issue #${number} opened. ${site}/issues/${number}`, structured: { number, url: `${site}/issues/${number}` } };
+      },
+    },
+  ];
+}
+
+const rpcError = (id: JsonRpcRequest['id'], code: number, message: string) => ({ jsonrpc: '2.0' as const, id: id ?? null, error: { code, message } });
+
+export function mcpRoutes(app: Hono, options: { siteUrl: string; version: string }): void {
+  const list = tools(options.siteUrl);
+  const byName = new Map(list.map((t) => [t.name, t]));
+
+  const handle = async (message: JsonRpcRequest, call: ApiCall) => {
+    const { id, method, params = {} } = message;
+    switch (method) {
+      case 'initialize': {
+        const asked = String(params.protocolVersion ?? '');
+        return {
+          protocolVersion: (MCP_PROTOCOL_VERSIONS as readonly string[]).includes(asked) ? asked : MCP_PROTOCOL_VERSIONS[0],
+          capabilities: { tools: { listChanged: false } },
+          serverInfo: { name: MCP_SERVER_NAME, title: 'RebbeHub', version: options.version, websiteUrl: `${options.siteUrl.replace(/\/+$/, '')}/developers` },
+          instructions:
+            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix needs an API token with the write scope and makes a suggestion that people review; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into.',
+        };
+      }
+      case 'ping':
+        return {};
+      case 'tools/list':
+        return { tools: list.map(({ run: _run, ...tool }) => tool) };
+      case 'tools/call': {
+        const tool = byName.get(String(params.name ?? ''));
+        if (!tool) return rpcError(id, -32602, `no tool named "${String(params.name)}"; see tools/list`);
+        const args = (params.arguments ?? {}) as Record<string, unknown>;
+        if (typeof args !== 'object' || Array.isArray(args)) return rpcError(id, -32602, 'arguments must be an object');
+        try {
+          const result = await tool.run(args, call);
+          return { content: [{ type: 'text', text: result.text }], ...(result.structured ? { structuredContent: result.structured as Json } : {}), isError: false };
+        } catch (error) {
+          if (error instanceof ToolError) return { content: [{ type: 'text', text: error.message }], isError: true };
+          throw error;
+        }
+      }
+      case 'resources/list':
+        return { resources: [] };
+      case 'prompts/list':
+        return { prompts: [] };
+      default:
+        return rpcError(id, -32601, `method not found: ${method}`);
+    }
+  };
+
+  app.get('/mcp', (c) => c.json({ error: 'bad-request', message: 'this MCP server answers POST only (Streamable HTTP, no event stream); see /llms.txt' }, 405, { Allow: 'POST' }));
+  app.delete('/mcp', (c) => c.json({ error: 'bad-request', message: 'there are no sessions to end' }, 405, { Allow: 'POST' }));
+
+  app.post('/mcp', async (c: Context) => {
+    const version = c.req.header('MCP-Protocol-Version');
+    if (version && !(MCP_PROTOCOL_VERSIONS as readonly string[]).includes(version)) return c.json(rpcError(null, -32600, `unsupported MCP-Protocol-Version ${version}`), 400);
+    let payload: unknown;
+    try {
+      payload = await c.req.json();
+    } catch {
+      return c.json(rpcError(null, -32700, 'parse error: the body must be JSON-RPC 2.0'), 400);
+    }
+    const authorization = c.req.header('Authorization');
+    const origin = new URL(c.req.url).origin;
+    const call: ApiCall = async (method, path, body) => {
+      const headers: Record<string, string> = { accept: 'application/json' };
+      if (authorization) headers.authorization = authorization;
+      if (body !== undefined) headers['content-type'] = 'application/json';
+      const response = await app.request(`${origin}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+      return { status: response.status, body: await response.json().catch(() => null) };
+    };
+
+    const messages = Array.isArray(payload) ? payload : [payload];
+    const answers = [];
+    for (const raw of messages) {
+      const message = raw as JsonRpcRequest;
+      if (!message || typeof message !== 'object' || message.jsonrpc !== '2.0' || typeof message.method !== 'string') {
+        // A response or something else from the client needs no answer; a malformed request does.
+        if (message && typeof message === 'object' && 'id' in message && !('result' in message) && !('error' in message)) answers.push(rpcError(message.id, -32600, 'invalid request'));
+        continue;
+      }
+      if (message.id === undefined) continue; // a notification (notifications/initialized…): nothing to say back
+      const result = await handle(message, call);
+      answers.push(result && typeof result === 'object' && 'error' in result && 'jsonrpc' in result ? result : { jsonrpc: '2.0', id: message.id, result });
+    }
+    if (answers.length === 0) return c.body(null, 202);
+    return c.json(Array.isArray(payload) ? answers : answers[0], 200, { 'Cache-Control': 'no-store' });
+  });
+}

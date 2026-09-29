@@ -2,6 +2,15 @@
   "name": "@rebbehub/mirror",
   "version": "0.1.0",
   "description": "RebbeHub's open exports: the git mirror (one JSON file per item, texts as Markdown with segment anchors, sync as WebVTT), signed catalog-edition dumps (SQLite, JSON Lines and Parquet), and the Sichos-Kodesh works release built from them.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shmuky/RebbeHub.git",
+    "directory": "packages/mirror"
+  },
+  "homepage": "https://github.com/shmuky/RebbeHub/tree/main/packages/mirror",
+  "bugs": {
+    "url": "https://github.com/shmuky/RebbeHub/issues"
+  },
   "license": "AGPL-3.0-only",
   "type": "module",
   "main": "./dist/index.js",

@@ -26,6 +26,30 @@ export const EXAMPLES: { [T in EntityType]: EntityDataByType[T] } = {
     date: '5736-07',
     events: ['rh-00000003'],
     editions: [{ source: 'mafteiach', sourceId: 'ls-12-3', kind: 'pdf', licence: 'facts-and-links', url: 'https://example.org/ls12.pdf' }],
+    body: {
+      profile: 'sefaria',
+      versions: [
+        {
+          id: 'he',
+          language: 'he',
+          title: 'Kehot',
+          credit: 'Sefaria: Kehot',
+          licence: 'cc-by-nc',
+          segments: [
+            {
+              id: '1',
+              kind: 'section',
+              n: 1,
+              text: [{ text: 'פרק א' }],
+              children: [
+                { id: '1.1', kind: 'verse', n: 1, text: [{ text: 'בראשית', marks: ['b'] }, { text: ' ברא' }, { note: 'n1' }, { marker: '[ב.]' }, { br: true }, { text: 'עיין', href: 'rh-00000005' }] },
+              ],
+            },
+          ],
+          notes: [{ id: 'n1', kind: 'note', n: 1, text: [{ text: 'הערה' }] }],
+        },
+      ],
+    },
   },
   event: { kind: 'farbrengen', title: { he: 'יו״ד שבט תשמ״ב', en: 'Yud Shvat 5742' }, date: '5742-05-10', occasion: 'yud-shvat', externalIds: { 'mafteiach-occasion': '4567' } },
   publication: {

@@ -51,6 +51,18 @@ reads (`services/api/src/uploads.ts`). A file already known is not taken
 twice: the uploader is shown where it is. The file joins the catalog
 through a suggestion, reviewed like any other.
 
+`/add` (and "Add a hanacha" on farbrengen and sicha pages) takes a new
+hanacha, recording, or sefer, letter or document the same way. A
+hanacha's PDF whose uploader is not sure, or that was printed for free
+distribution, is kept privately (`link`) until a steward decides; one
+given freely or in the public domain is served and linked from its
+farbrengen's page. A hanacha's words follow the same statement: given
+freely or public domain, shown; otherwise kept and withheld.
+
+A sefer's **cover** is drawn from the title page of a PDF the site
+serves, as a derivation of it: it is shown only while the PDF may be,
+and a takedown of the PDF takes it down. Linked-only PDFs give no cover.
+
 A new teshura ("Add a teshura" on the Teshuros set, or a scan the upload
 check takes for one) is always a teshura scan: `credit`, credited to the
 families ("משפחות כהן – לוי"), whatever rights statement comes with it.

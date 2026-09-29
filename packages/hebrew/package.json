@@ -2,6 +2,15 @@
   "name": "@rebbehub/hebrew",
   "version": "0.1.0",
   "description": "Hebrew dates and text for RebbeHub: the date key every event and letter is filed under, Hebrew numerals, date parsing in Hebrew and English, and the search normalisation shared with Sichos-Kodesh.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shmuky/RebbeHub.git",
+    "directory": "packages/hebrew"
+  },
+  "homepage": "https://github.com/shmuky/RebbeHub/tree/main/packages/hebrew",
+  "bugs": {
+    "url": "https://github.com/shmuky/RebbeHub/issues"
+  },
   "license": "AGPL-3.0-only",
   "type": "module",
   "main": "./dist/index.js",
@@ -12,7 +21,9 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b"
   },

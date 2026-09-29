@@ -2,6 +2,15 @@
   "name": "@rebbehub/importers",
   "version": "0.1.0",
   "description": "RebbeHub's bot contributors: importers that seed the catalog and keep it in sync through suggestions like anyone else, without overwriting what people have fixed. First: the works Sichos-Kodesh already knows.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shmuky/RebbeHub.git",
+    "directory": "packages/importers"
+  },
+  "homepage": "https://github.com/shmuky/RebbeHub/tree/main/packages/importers",
+  "bugs": {
+    "url": "https://github.com/shmuky/RebbeHub/issues"
+  },
   "license": "AGPL-3.0-only",
   "type": "module",
   "main": "./dist/index.js",
@@ -12,7 +21,9 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b"
   },

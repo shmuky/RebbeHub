@@ -12,7 +12,7 @@ every suggestion against them. A test keeps the two in step.
 | Type | Is | Key fields |
 | --- | --- | --- |
 | `author` | a Rebbe, a chossid, an editor, a family, an institution | `name`, `kind`, `rebbe` (1-7), `slug` |
-| `work` | a sefer or a series | `title`, `slug`, `authors`, `genre`, `levels` (`['volume','sicha']`) |
+| `work` | a sefer or a series | `title`, `slug`, `authors`, `genre`, `levels` (`['volume','sicha']`), `cover` (`{ file, page }`: the title page a person chose) |
 | `unit` | a sicha, maamar, letter, chapter, story, diary entry | `work`, `position` (one step per level), `order`, `label`, `date`, `events` |
 | `event` | a farbrengen, yechidus, simcha, the writing of a letter | `kind`, `title`, `date`, `place`, `occasion` |
 
@@ -49,6 +49,71 @@ browse; keepers and policy), and `schema` (the kinds of item themselves).
 Every catalog item may also carry `sets`, `externalIds` (the ids other
 systems know it by), `sources` (provenance), `topics` and a `note`.
 Anything a machine made carries `origin: { by, checked }`.
+
+## A page's words
+
+Every item is a page people read, and many carry their own words in
+`body`: a letter, a chapter of a sefer, a farbrengen's outline. The words
+are structure, never markup (`packages/model/src/pageText.ts`, checked by
+the `pageText` schema):
+
+```json
+{
+  "profile": "sefaria",
+  "versions": [
+    {
+      "id": "he", "language": "he", "title": "Torat Emet", "credit": "Sefaria: Torat Emet",
+      "licence": "cc-by-nc", "url": "https://www.sefaria.org/…",
+      "segments": [
+        { "id": "14", "kind": "section", "n": 14, "text": [{ "text": "פרק יד" }], "children": [
+          { "id": "14.3", "kind": "verse", "n": 3,
+            "text": [{ "text": "והנה", "marks": ["b"] }, { "text": " …" }, { "note": "n1" }, { "marker": "[כ:]" }] }
+        ] }
+      ],
+      "notes": [{ "id": "n1", "kind": "note", "n": 1, "text": [{ "text": "…" }] }]
+    },
+    { "id": "en", "language": "en", "segments": [ … the same ids … ] }
+  ]
+}
+```
+
+- **Versions**: a page's languages and editions (a chapter's Hebrew and
+  its English). The same place has the same segment id in every version,
+  so versions stand side by side.
+- **Segments** form a tree: `section` (a title, and the segments in it),
+  `heading`, `paragraph`, `verse` (a numbered segment), `item` (an
+  outline's line), `note` (a footnote, in the version's `notes`). Each has
+  an `id` that stays put, `n` when the source numbers it, `end` for a line
+  set to the end side (a letter's date and signature), and `origin` when a
+  machine made it.
+- **Words** are runs: `{ text, marks?, href? }` with only the marks `b`,
+  `i`, `u`, `small`, `sup`, `sub`, and a link only to the web, a site path
+  or an item id (`rh-…`, counted as a reference like any other);
+  `{ note }` a footnote's marker; `{ marker }` a source's own marker (a
+  page of the printed edition, a day of the study cycle); `{ br: true }`.
+  Nothing in them is ever drawn as HTML.
+- **Profile**: the display rules of where the words came from. `sefaria`:
+  sections under their titles, numbered segments (in Hebrew letters in
+  the Hebrew), footnotes, the Hebrew and English side by side or one at a
+  time, each version's credit and licence. `sichos-kodesh`: the texts
+  Sichos-Kodesh publishes, paragraphs and headings, versions one at a
+  time. `outline`: a farbrengen's contents from the Mafteiach, numbered
+  items under titles. `plain`: what people write here.
+- `bodySource` records where the words were imported from, with the copy
+  RebbeHub keeps and the rights that decide whether they are shown.
+
+Because segments are keyed lists, a change is diffed and merged segment
+by segment: the reviewer sees `Words › he › 14.3` before and after, and
+two people fixing different segments never clash. On a page's Edit tab a
+person clicks a segment, fixes it in place and sends it for review
+(`POST /v1/suggestions/words`); every segment has an anchor, so
+`/sefaria/…/14#s-14.3` links to one verse.
+
+Bodies were a string of wiki markup until built-in schemas version 5.
+`rebbehub convert-bodies` turns the catalog's over as reviewed system
+changes (docs/operations.md); until it has run, the API reads any it
+meets into structure on the way out, and a suggestion sent with one has
+it read on the way in.
 
 ## Ids and paths
 

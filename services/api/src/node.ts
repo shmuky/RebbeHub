@@ -5,6 +5,7 @@ import { openPGlite } from '@rebbehub/db/pglite';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { createApp, type FileStore } from './app.js';
+import { DEFAULT_IP_PER_MINUTE, DEFAULT_KEY_PER_MINUTE, memoryRateLimiter } from './platform.js';
 import { authFor } from './auth.js';
 import { resendMailer } from './mail.js';
 import { sendNotifications, type Mailer } from '@rebbehub/core';
@@ -22,6 +23,8 @@ import { sendNotifications, type Mailer } from '@rebbehub/core';
  *                  for every minute); DEV_EMAIL=1 prints email here instead
  *   CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_AI_TOKEN   search by meaning (Workers AI)
  *   OAI_ADMIN_EMAIL                              OAI-PMH at /oai
+ *   RATE_LIMIT=1   count requests per address and per token, as the
+ *                  Worker does (in this process's memory)
  */
 const url = process.env.DATABASE_URL;
 const db = url ? connectPostgres(url) : await openPGlite(process.env.PGLITE_DIR ?? '.data/pglite');
@@ -71,6 +74,9 @@ const app = createApp({
   files: publicFolder,
   uploads: filesDir ? { public: folder('public'), preservation: folder('preservation') } : undefined,
   embedder: embedderFromEnv(process.env),
+  rateLimits: process.env.RATE_LIMIT
+    ? { ip: memoryRateLimiter(DEFAULT_IP_PER_MINUTE), key: memoryRateLimiter(DEFAULT_KEY_PER_MINUTE), ipPerMinute: DEFAULT_IP_PER_MINUTE, keyPerMinute: DEFAULT_KEY_PER_MINUTE }
+    : undefined,
   oai: process.env.OAI_ADMIN_EMAIL ? { adminEmail: process.env.OAI_ADMIN_EMAIL, siteUrl: process.env.SITE_URL } : undefined,
   mirrors: {
     gitUrls: (process.env.CATALOG_GIT_URL ?? '').split(',').filter(Boolean),

@@ -11,6 +11,12 @@ import {
 import { isoBase64URL } from '@simplewebauthn/server/helpers';
 import {
   SESSION_DAYS,
+  CatalogError,
+  checkUsername,
+  setUsername,
+  suggestUsername,
+  unreadCount,
+  usernameMessage,
   addEmail,
   addPasskey,
   cleanDisplayName,
@@ -209,7 +215,7 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
   const verify = auth.verify ?? defaultVerify(auth);
   const db = catalog.db;
 
-  const refuse = (c: Context, status: 400 | 401 | 403, message: string) => c.json({ error: status === 403 ? 'forbidden' : 'bad-request', message }, status);
+  const refuse = (c: Context, status: 400 | 401 | 403, message: string) => c.json({ error: status === 403 ? 'forbidden' : status === 401 ? 'unauthorized' : 'bad-request', message }, status);
 
   const signIn = async (c: Context, personId: string) => {
     const token = await startSession(db, personId, c.req.header('User-Agent'));
@@ -234,6 +240,8 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
     return c.json({
       person,
       trust: account?.trust ?? 'contributor',
+      // Lines waiting in their inbox, for the count beside their name.
+      unread: await unreadCount(db, person.id),
       passkeys: await passkeysOf(db, person.id),
       googleAccounts: await googleAccountsOf(db, person.id),
       emails: await emailsOf(db, person.id),
@@ -243,14 +251,54 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
     });
   });
 
+  /**
+   * Whether a handle can be had, and a free one suggested from a name: what
+   * the sign-up form and the account page ask while the person types.
+   * Signed in, their own handle (and old ones) count as free for them.
+   */
+  app.get('/v1/auth/username', async (c) => {
+    const current = await signedIn(c);
+    const name = (c.req.query('name') ?? '').trim().replace(/^@/, '');
+    const suggestion = await suggestUsername(db, cleanDisplayName(c.req.query('from')) ?? current?.displayName ?? name ?? '', current?.id);
+    if (!name) return c.json({ name: null, available: false, message: null, suggestion });
+    const refusal = await checkUsername(db, name, current?.id);
+    return c.json({ name, available: refusal === null, reason: refusal, message: refusal ? usernameMessage(refusal) : null, suggestion });
+  });
+
+  // A signed-in person's new handle; the old one keeps leading to them.
+  app.post('/v1/auth/username', async (c) => {
+    const person = await signedIn(c);
+    if (!person) return refuse(c, 401, 'sign in first');
+    const { username } = (await c.req.json().catch(() => ({}))) as { username?: unknown };
+    if (typeof username !== 'string') return refuse(c, 400, 'give the username');
+    try {
+      const kept = await setUsername(db, person.id, username.replace(/^@/, ''));
+      return c.json({ person: { ...person, username: kept } });
+    } catch (error) {
+      if (error instanceof CatalogError) return refuse(c, 400, error.message);
+      throw error;
+    }
+  });
+
+  /** A handle given at sign-up: checked now, so the device's prompt is not wasted on one that cannot be had. */
+  const chosenUsername = async (value: unknown): Promise<{ ok: true; username?: string } | { ok: false; message: string }> => {
+    if (value === undefined || value === null || value === '') return { ok: true };
+    if (typeof value !== 'string') return { ok: false, message: 'a username is text' };
+    const name = value.trim().replace(/^@/, '');
+    const refusal = await checkUsername(db, name);
+    return refusal ? { ok: false, message: usernameMessage(refusal) } : { ok: true, username: name };
+  };
+
   // A new account: the name they go by, and a passkey made on their device for this site.
   app.post('/v1/auth/passkey/register/options', async (c) => {
     // Signed in already, a new passkey goes on this account (passkey/add), never on a second one.
     const token = readSession(c);
     if (token && (await sessionPerson(db, token))) return refuse(c, 400, 'you are signed in; add a passkey from your account page');
-    const { name } = (await c.req.json().catch(() => ({}))) as { name?: unknown };
+    const { name, username } = (await c.req.json().catch(() => ({}))) as { name?: unknown; username?: unknown };
     const displayName = cleanDisplayName(name);
     if (!displayName) return refuse(c, 400, 'a name of 1 to 60 characters');
+    const handle = await chosenUsername(username);
+    if (!handle.ok) return refuse(c, 400, handle.message);
     const options = await generateRegistrationOptions({
       rpName: auth.rpName,
       rpID: auth.rpId,
@@ -264,15 +312,17 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
   });
 
   app.post('/v1/auth/passkey/register/verify', async (c) => {
-    const input = (await c.req.json().catch(() => ({}))) as { challengeId?: string; name?: unknown; response?: RegistrationResponseJSON };
+    const input = (await c.req.json().catch(() => ({}))) as { challengeId?: string; name?: unknown; username?: unknown; response?: RegistrationResponseJSON };
     const displayName = cleanDisplayName(input.name);
     if (!displayName || !input.challengeId || !input.response) return refuse(c, 400, 'give challengeId, name and response');
+    const handle = await chosenUsername(input.username);
+    if (!handle.ok) return refuse(c, 400, handle.message);
     const challenge = await takeChallenge(db, input.challengeId, 'register');
     if (!challenge) return refuse(c, 400, 'that request has expired; try again');
     const credential = await verify.registration({ response: input.response, challenge }).catch(() => null);
     if (!credential) return refuse(c, 400, 'the passkey could not be verified');
     if (await findPasskey(db, credential.credentialId)) return refuse(c, 400, 'this passkey already belongs to an account; sign in with it');
-    const person = await createPerson(db, displayName);
+    const person = await createPerson(db, displayName, handle.username);
     await addPasskey(db, { ...credential, personId: person.id });
     await signIn(c, person.id);
     return c.json({ person }, 201);
@@ -421,7 +471,7 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
     const started = await startEmailLink(db, { email, personId: current?.id });
     if ('refused' in started) {
       if (started.refused === 'taken') return refuse(c, 400, 'that address already signs into another account');
-      return c.json({ error: 'too-many', message: 'too many links for this address in the last hour; please try again later' }, 429);
+      return c.json({ error: 'rate-limited', message: 'too many links for this address in the last hour; please try again later' }, 429);
     }
     await mailer.send(signInMessage({ to: email, siteUrl: auth.origins[0]!, token: started.token, lang: langOf(input.lang), adding: Boolean(current), returnTo: safeReturn(input.return) }));
     // The same answer whether or not the address has an account here: nobody learns who does.
@@ -440,8 +490,10 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
 
   app.post('/v1/auth/email/verify', async (c) => {
     if (!mailer) return emailOff(c);
-    const input = (await c.req.json().catch(() => ({}))) as { token?: unknown; name?: unknown };
+    const input = (await c.req.json().catch(() => ({}))) as { token?: unknown; name?: unknown; username?: unknown };
     if (typeof input.token !== 'string') return refuse(c, 400, 'give the token from the link');
+    const handle = await chosenUsername(input.username);
+    if (!handle.ok) return refuse(c, 400, handle.message);
     const peeked = await peekEmailLink(db, input.token);
     if (!peeked) return refuse(c, 400, 'this link has been used or has expired; ask for a new one');
     const current = await signedIn(c);
@@ -460,7 +512,7 @@ export function authRoutes(app: Hono, catalog: Catalog, auth: AuthOptions): void
     }
     // Signing in: the address's own account; signed in already, the address joins that account; else a new one.
     if (link.known && current && link.known.id !== current.id) return refuse(c, 400, 'that address signs into another account; sign out first');
-    const person = link.known ?? current ?? (await createPerson(db, name!));
+    const person = link.known ?? current ?? (await createPerson(db, name!, handle.username));
     await addEmail(db, person.id, link.email);
     await signIn(c, person.id);
     return c.json({ person: await getPerson(db, person.id), created: !link.known && !current }, !link.known && !current ? 201 : 200);

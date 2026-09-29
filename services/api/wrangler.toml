@@ -37,6 +37,21 @@ bucket_name = "sichos-kodesh-archive"
 [triggers]
 crons = ["*/5 * * * *"]
 
+# Rate limits (docs/developers/rate-limits.md): per caller's address, and per API token. The namespace ids
+# only tell the two counters apart within this account; they are not secrets. Keep the per-minute vars below
+# equal to the limits, for the RateLimit-Policy header.
+[[ratelimits]]
+name = "RATE_LIMIT_ADDRESS"
+namespace_id = "1001"
+simple = { limit = 300, period = 60 }
+
+[[ratelimits]]
+name = "RATE_LIMIT_TOKEN"
+namespace_id = "1002"
+simple = { limit = 1200, period = 60 }
+
 [vars]
 # The site people sign in on: passkeys are bound to its domain, and changes are taken only from its pages.
 SITE_URL = "https://rebbehub.org"
+RATE_LIMIT_ADDRESS_PER_MINUTE = "300"
+RATE_LIMIT_TOKEN_PER_MINUTE = "1200"

@@ -3286,27 +3286,216 @@ body.embedded {
   margin: 20px 0;
 }
 
-.wikitext {
+/*
+ * A page's words (components/PageWords.tsx), by the display rules of their
+ * source: Sefaria's numbered segments and its Hebrew and English side by
+ * side, Sichos-Kodesh's paragraphs, the Mafteiach's outline. Hebrew in
+ * Frank Ruhl, right to left, whatever the page's language.
+ */
+.words {
   font-family: var(--font-display);
   font-size: 1.125rem;
   line-height: 1.9;
 }
 
-.wikitext h2,
-.wikitext h3,
-.wikitext h4 {
+.words[dir='ltr'],
+.words-cell[dir='ltr'] {
+  font-family: Georgia, 'Times New Roman', serif;
+  line-height: 1.7;
+}
+
+.words-heading {
   font-family: var(--font-display);
   margin: 1.2em 0 0.4em;
+  scroll-margin-top: 16px;
 }
 
-.wikitext .ref {
+.words-p,
+.words-verse {
+  position: relative;
+  margin: 0 0 0.9em;
+  scroll-margin-top: 16px;
+}
+
+.words-p.end {
+  text-align: end;
+}
+
+.words-verse .words-n {
+  display: inline-block;
+  min-width: 1.8em;
+  margin-inline-end: 0.35em;
+  font-family: var(--font-ui);
   font-size: 0.75em;
+  color: var(--muted);
+  text-decoration: none;
 }
 
-.wikitext-notes {
-  font-size: 0.875rem;
+.words-anchor {
+  position: absolute;
+  inset-inline-start: -1.4em;
+  font-family: var(--font-ui);
+  font-size: 0.75em;
+  color: var(--muted);
+  text-decoration: none;
+  opacity: 0;
+}
+
+.words-p:hover .words-anchor,
+.words-anchor:focus {
+  opacity: 0.7;
+}
+
+.words-p:target,
+.words-verse:target,
+.words-row:target,
+.words-heading:target,
+.words li:target {
+  background: var(--mark);
+}
+
+.words .machine {
+  border-inline-start: 3px dotted var(--machine);
+  padding-inline-start: 12px;
+}
+
+.words-marker {
+  font-family: var(--font-ui);
+  font-size: 0.7em;
+  color: var(--muted);
+  margin-inline: 0.25em;
+}
+
+.words-note-ref {
+  font-family: var(--font-ui);
+  font-size: 0.7em;
+}
+
+.words-note-ref a,
+.words-note-back {
+  text-decoration: none;
+}
+
+.words-notes {
+  font-size: 0.9rem;
   border-top: 1px solid var(--border);
+  margin-top: 1em;
   padding-top: 8px;
+}
+
+.words-notes ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.words-outline li,
+.words-list li {
+  margin-bottom: 0.3em;
+}
+
+.words-credit {
+  margin-top: 1em;
+}
+
+.words-versions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Side by side: the Hebrew and the English of each segment in one row; one above the other on a narrow screen. */
+.words-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  scroll-margin-top: 16px;
+}
+
+.words-cell[lang='he'] {
+  direction: rtl;
+}
+
+@media (max-width: 720px) {
+  .words-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
+/* Fixing a segment in place (the Edit tab). */
+.words-editable {
+  cursor: text;
+  border-radius: 4px;
+}
+
+.words-editable:hover,
+.words-editable:focus {
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.words-editor {
+  display: block;
+  margin: 4px 0 8px;
+}
+
+.words-toolbar,
+.words-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.words-toolbar button {
+  min-width: 2.2em;
+  padding: 2px 8px;
+}
+
+.words-input {
+  display: block;
+  min-height: 2.5em;
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  white-space: pre-wrap;
+}
+
+.words-atom {
+  font-family: var(--font-ui);
+  font-size: 0.75em;
+  color: var(--muted);
+  background: var(--card);
+  border-radius: 3px;
+  padding: 0 3px;
+  user-select: none;
+}
+
+.words-note {
+  display: block;
+  width: 100%;
+  margin: 4px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+}
+
+.words-sent,
+.words-error {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+}
+
+.words-error {
+  color: var(--danger);
 }
 
 .body-source {
@@ -3330,9 +3519,8 @@ body.embedded {
   padding: 8px 0;
 }
 
-.talk-comment .wikitext {
-  font-family: inherit;
-  font-size: 1rem;
+.talk-comment .plain-words p {
+  margin: 0 0 0.5em;
   line-height: 1.6;
 }
 
@@ -3342,15 +3530,12 @@ body.embedded {
   margin: 0;
 }
 
-.talk-composer,
-.wiki-editor {
+.talk-composer {
   display: grid;
   gap: 10px;
 }
 
-.talk-composer textarea,
-.wiki-source,
-.wiki-editor input {
+.talk-composer textarea {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border);
@@ -3358,23 +3543,6 @@ body.embedded {
   background: var(--bg);
   color: inherit;
   font: inherit;
-}
-
-.wiki-source {
-  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
-  font-size: 0.95rem;
-  line-height: 1.6;
-}
-
-.wiki-preview {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
-  min-height: 200px;
-}
-
-.editor-tabs {
-  margin: 0;
 }
 
 /* A farbrengen's videos and the links that lead elsewhere (EventPage). */
@@ -3500,4 +3668,144 @@ body.embedded {
 .dead-links .row-title {
   overflow-wrap: anywhere;
   font-size: 0.9375rem;
+}
+
+/* The developer docs (routes/developers.tsx, developers-reference.tsx): the repository's docs as printed pages. */
+.dev-docs-nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 0;
+  margin: 0 0 16px;
+  list-style: none;
+  font-size: 0.9375rem;
+}
+.dev-docs-nav a[aria-current='page'] {
+  color: var(--fg);
+  font-weight: 600;
+  text-decoration: none;
+}
+.dev-docs-page {
+  line-height: 1.6;
+  text-align: start;
+}
+.dev-docs-page h1,
+.dev-docs-page h2,
+.dev-docs-page h3 {
+  font-family: var(--font-display);
+  font-weight: 500;
+}
+.dev-docs-page h2 {
+  margin-block-start: 1.8em;
+  border-block-end: 1px solid var(--border);
+}
+.dev-docs-page pre {
+  overflow-x: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+.dev-docs-page code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875em;
+  overflow-wrap: anywhere;
+}
+.dev-docs-page table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9375rem;
+}
+.dev-docs-page th,
+.dev-docs-page td {
+  padding: 5px 8px;
+  border-block-end: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+.dev-docs-page th {
+  border-block-end-color: var(--fg);
+}
+.dev-docs-edit {
+  margin-block-start: 2em;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+.dev-op {
+  border-block-end: 1px solid var(--border);
+  padding: 6px 0;
+}
+.dev-op > summary {
+  cursor: pointer;
+}
+.dev-try label,
+.dev-token {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-block-end: 8px;
+}
+.dev-try input,
+.dev-try textarea,
+.dev-token input {
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--fg);
+}
+.dev-try textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+}
+.dev-answer {
+  max-height: 420px;
+}
+
+/* A sefer's cover drawn from its title page: the page itself, on paper, no cloth or gold rule. */
+.cover.shaar {
+  padding: 0;
+  background: #fbf8f1;
+}
+.cover.shaar::after {
+  display: none;
+}
+.cover.shaar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+.cover-choice {
+  margin: 0 0 12px;
+}
+
+/* All that belongs to an item: the line under a list that shows only its start, and "Add a hanacha". */
+.see-all,
+.add-links {
+  margin: 8px 0 16px;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+/* Adding something new: one question under another. */
+.add-new form > label,
+.add-new fieldset label {
+  display: block;
+  margin: 6px 0;
+}
+.add-new fieldset {
+  border: 0;
+  border-top: 1px solid var(--border);
+  padding: 8px 0;
+  margin: 12px 0;
+}
+.add-new input:not([type='radio']),
+.add-new select,
+.add-new textarea {
+  display: block;
+  width: 100%;
+  max-width: 36rem;
 }

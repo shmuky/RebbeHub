@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Catalog } from '@rebbehub/core';
+import { Catalog, createApiToken, createPerson } from '@rebbehub/core';
 import { catalogIsRebuildable } from '../src/commands.js';
 import { freshCatalog } from '../../../packages/core/tests/helpers.js';
 
@@ -24,6 +24,19 @@ describe('a rebuildable catalog', () => {
     // A person's suggestion, even one not yet sent, is theirs to keep.
     await catalog.createAccount({ id: 'mendy', displayName: 'Mendy' });
     await catalog.createChangeset('mendy', { title: 'A fix' });
+    expect(await catalogIsRebuildable(db)).toBe(false);
+  });
+
+  it('is not rebuildable once a person made a token or chose a handle', async () => {
+    const { db } = await freshCatalog();
+    await db.exec('DROP SCHEMA IF EXISTS auth CASCADE; DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
+    await new Catalog(db).init();
+    const person = await createPerson(db, 'Mendy');
+    expect(await catalogIsRebuildable(db)).toBe(true);
+    await db.query('UPDATE auth.person SET username_changed_at = now() WHERE id = $1', [person.id]);
+    expect(await catalogIsRebuildable(db)).toBe(false);
+    await db.query('UPDATE auth.person SET username_changed_at = NULL WHERE id = $1', [person.id]);
+    await createApiToken(db, person.id, { name: 'script', scopes: ['read'] });
     expect(await catalogIsRebuildable(db)).toBe(false);
   });
 

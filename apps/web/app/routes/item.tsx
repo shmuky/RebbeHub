@@ -117,8 +117,11 @@ export function meta({ loaderData }: Route.MetaArgs) {
   });
 }
 
-/** What people follow: sets, sefarim and their sichos, farbrengens, the Rebbeim and other people, printings. */
+/** What other sites may embed: sets, sefarim and their sichos, farbrengens, the Rebbeim and other people, printings. */
 const FOLLOWABLE = new Set(['set', 'work', 'unit', 'event', 'person', 'publication']);
+
+/** Every item has a page, and anyone may follow it, except the parts of one (a paragraph, a page of OCR, a sync span) and the catalog's own schemas. */
+const NOT_FOLLOWED = new Set(['segment', 'text-page', 'alignment-span', 'schema']);
 
 export default function Item({ loaderData }: Route.ComponentProps) {
   const d = loaderData.entity.data as { kind?: string; slug?: string };
@@ -127,7 +130,7 @@ export default function Item({ loaderData }: Route.ComponentProps) {
   const teshura = loaderData.entity.type === 'publication' && d.kind === 'teshura';
   return (
     <>
-      {FOLLOWABLE.has(loaderData.entity.type) ? (
+      {!NOT_FOLLOWED.has(loaderData.entity.type) ? (
         <div className="item-actions">
           <FollowButton entity={loaderData.entity} lang={loaderData.lang} />
         </div>
