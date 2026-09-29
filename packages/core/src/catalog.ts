@@ -617,11 +617,12 @@ export class Catalog {
     const tsQuery = toTsQuery(query);
     if (!tsQuery) return [];
     const params: unknown[] = [tsQuery];
-    const where = ["to_tsvector('simple', coalesce(e.search_text, '')) @@ to_tsquery('simple', $1)", 'NOT e.deleted', 'e.main_rev IS NOT NULL'];
+    // The words as kept (search_tsv, migration 0024): matched and ranked from the column, never read again from the text.
+    const where = ["e.search_tsv @@ to_tsquery('simple', $1)", 'NOT e.deleted', 'e.main_rev IS NOT NULL'];
     if (options.type) where.push(`e.type = $${params.push(options.type)}`);
     const { rows } = await this.db.query<RevisionRow>(
       `SELECT ${FACTS} FROM entity e JOIN revision r ON r.id = e.main_rev WHERE ${where.join(' AND ')}
-       ORDER BY ts_rank(to_tsvector('simple', coalesce(e.search_text, '')), to_tsquery('simple', $1)) DESC, e.path
+       ORDER BY ts_rank(e.search_tsv, to_tsquery('simple', $1)) DESC, e.path
        LIMIT ${Math.min(options.limit ?? 20, 100)}`,
       params,
     );
@@ -1140,14 +1141,17 @@ export class Catalog {
   /** Points main at a new revision and refreshes what is derived from it: path, redirects, links, search text. */
   private async updateMain(tx: Db, id: EntityId, type: EntityType, revId: number, data: Json | null, path: string | null, oldPath: string | null, seq: number): Promise<void> {
     const deleted = data === null;
-    await tx.query('UPDATE entity SET main_rev = $2, path = $3, deleted = $4, search_text = $5, updated_seq = $6 WHERE id = $1', [
-      id,
-      revId,
-      deleted ? null : path,
-      deleted,
-      deleted ? null : searchTextOf(data),
-      seq,
-    ]);
+    await tx.query(
+      "UPDATE entity SET main_rev = $2, path = $3, deleted = $4, search_text = $5, search_tsv = to_tsvector('simple', coalesce($5, '')), updated_seq = $6 WHERE id = $1",
+      [
+        id,
+        revId,
+        deleted ? null : path,
+        deleted,
+        deleted ? null : searchTextOf(data),
+        seq,
+      ],
+    );
     if (oldPath !== null && oldPath !== path) {
       await tx.query('INSERT INTO path_redirect (path, entity_id) VALUES ($1, $2) ON CONFLICT (path) DO UPDATE SET entity_id = EXCLUDED.entity_id, created_at = now()', [oldPath, id]);
     }
