@@ -100,6 +100,15 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Fixed
 
+- **A calendar year is a quarter lighter, and the home page's feed a
+  third cheaper to make.** The calendar's year, the home page's week and
+  a farbrengen's other years keep each farbrengen as its row (name, date,
+  what it is printed in, recordings), not with every link's label and
+  page: a year's calendar carries 43 kB of them hidden for hydration, not
+  108. And a suggestion's page tells what changed in each item by walking
+  its two versions, not by writing both out as canonical JSON at every
+  level, which was a quarter of the home page's CPU.
+
 - **A volume's page is a sixth of its size, and a set's a seventh.** A
   volume of Igros Kodesh was 1.1 MB, 1 MB of it the words of its 150
   letters, listed with each for the page to carry hidden and read by no

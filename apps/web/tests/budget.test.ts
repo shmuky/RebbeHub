@@ -91,6 +91,15 @@ beforeAll(async () => {
   }
   ids.recording = recordings[0]!;
   for (const u of units.slice(0, 2)) await add(catalog, 'mendy', 'keeper', 'unit', { ...((await catalog.get(u))!.data as object), events: [ids.event] } as Json);
+  // The rest of the year's farbrengens, and this date in other years, each with where it is printed as the mafteiach
+  // gives it (four links with their labels, a kilobyte): a calendar year and a farbrengen's other years show a row of
+  // each, so a page that carried the links would be a kilobyte an event.
+  const printed = (n: number) => ['bilti-mugah', 'bilti-mugah', 'mugah', 'maamar'].map((kind, i) => ({ url: `https://drive.google.com/file/d/${sha(String(i)).slice(0, 30)}${n}/view`, kind, label: { he: 'תו"מ התוועדויות חכ"ט ע\' 189 (וילך)' }, origin: `https://drive.google.com/file/d/${sha(String(i)).slice(0, 30)}${n}/view`, source: 'mafteiach' }));
+  const year = await catalog.createChangeset('shmuly', { title: 'The year' });
+  for (let n = 1; n <= 40; n++) await catalog.putRevision(year.id, 'shmuly', { type: 'event', data: { kind: 'farbrengen', title: { he: `התוועדות ${n}`, en: `Farbrengen ${n}` }, date: `5742-${String(1 + (n % 12)).padStart(2, '0')}-${String(1 + (n % 28)).padStart(2, '0')}`, links: printed(n) } });
+  for (let y = 5720; y < 5730; y++) await catalog.putRevision(year.id, 'shmuly', { type: 'event', data: { kind: 'farbrengen', title: { he: `יו״ד שבט ${y}` }, date: `${y}-05-10`, links: printed(y) } });
+  await catalog.submit(year.id, 'shmuly');
+  await catalog.merge(year.id, 'shmuly');
   const text = await add(catalog, 'mendy', 'keeper', 'text', { kind: 'hanacha', recording: ids.recording, language: 'he' });
   const alignment = await add(catalog, 'mendy', 'keeper', 'alignment', { recording: ids.recording, text, granularity: 'paragraph' });
   for (let i = 0; i < 5; i++) {
@@ -175,7 +184,11 @@ describe("each page's statements and API calls stay within its ceiling", () => {
     // A set lists its sefarim and the first sixty of each other kind in it, one request a kind: this one holds four kinds.
     within(await page('/farbrengens'), 'a set', { statements: 28, calls: 18, kB: 50 });
   });
-  it('the calendar', async () => within(await page('/calendar'), '/calendar', { statements: 3, calls: 2, kB: 75 }));
+  it('the calendar, and a year of it', async () => {
+    within(await page('/calendar'), '/calendar', { statements: 3, calls: 2, kB: 75 });
+    // Forty-one farbrengens as rows, with a square a day and the filter: each row is its facts, not its links (a kilobyte each).
+    within(await page('/calendar/5742'), 'a calendar year', { statements: 3, calls: 2, kB: 110 });
+  });
   it('a sefer, one volume of it however many sichos, and a sicha in it', async () => {
     within(await page('/igros-sample'), 'a sefer', { statements: 40, calls: 22, kB: 60 });
     // A volume's page is the site's fullest: a request may pass through 32 Workers in all, so this stays well under;

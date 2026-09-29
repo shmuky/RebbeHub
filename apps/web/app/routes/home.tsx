@@ -5,7 +5,7 @@ import { Link, useSearchParams } from 'react-router';
 import type { Route } from './+types/home';
 import type { Via } from '../lib/threads.js';
 import { ContinueRow } from '../components/ContinueRow.js';
-import { eventData, type EventItem } from '../components/EventRow.js';
+import { eventData, eventRow, type EventItem } from '../components/EventRow.js';
 import type { Entity, SuggestionDetail } from '../lib/api.js';
 import { siteOf } from '../lib/context.server.js';
 import { dateLabel, yearLabel } from '../lib/dates.js';
@@ -53,7 +53,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   ]);
 
   // The week, in a year whose calendar falls like this one (as Sichos-Kodesh's app does).
-  const byYear = new Map<number, EventItem[]>();
+  const byYear = new Map<number, Array<Entity & { recordings: number }>>();
   for (const e of weekEvents) {
     const year = Number(String(eventData(e).date).slice(0, 4));
     byYear.set(year, [...(byYear.get(year) ?? []), e]);
@@ -166,9 +166,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     civil: dateKeyToGregorian(week.today),
     weekday: dateKeyToHDate(week.today)?.getDay() ?? 0,
     year,
-    yearEvents: year ? (byYear.get(year) ?? []) : [],
+    yearEvents: year ? (byYear.get(year) ?? []).map(eventRow) : [],
     years: [...byYear.entries()].map(([y, list]) => ({ year: y, count: list.length })).sort((a, b) => b.year - a.year),
-    today: today.slice(0, 5),
+    today: today.slice(0, 5).map(eventRow),
     todayTotal: today.length,
     community,
     counts: stats.counts,
