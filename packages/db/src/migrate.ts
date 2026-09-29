@@ -24,6 +24,7 @@ import * as entityForward from './migrations/0022_entity_forward.js';
 import * as machineRequests from './migrations/0023_machine_requests.js';
 import * as searchVector from './migrations/0024_search_vector.js';
 import * as dropSearchExpressionIndex from './migrations/0025_drop_search_expression_index.js';
+import * as revisionAbout from './migrations/0026_revision_about.js';
 
 export interface Migration {
   version: number;
@@ -58,6 +59,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 23, name: 'machine-requests', up: machineRequests.up },
   { version: 24, name: 'search-vector', up: searchVector.up },
   { version: 25, name: 'drop-search-expression-index', up: dropSearchExpressionIndex.up },
+  { version: 26, name: 'revision-about', up: revisionAbout.up },
 ];
 
 /** Applies the migrations `db` has not had yet, each in its own transaction. Returns the versions applied. */

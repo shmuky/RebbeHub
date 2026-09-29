@@ -462,7 +462,10 @@ own).
 
 - A page's first view after it expired at the edge: its API reads that
   are not at the API's edge either. An item page makes one to two dozen
-  reads, each a lookup by id or an index (`entity_ref`, `entity_path`).
+  reads, each a lookup by id or an index (`entity_ref`, `entity_path`;
+  the suggestions about an item through the indexes over what a version
+  points at, `revision_about_*`, migration 0026: as one test of every
+  version it was ten seconds a page).
 - Everything a signed-in person reads and does.
 - Searches (full text over `entity.search_tsv`, the words of each item
   as Postgres searches them, kept with the item and indexed
