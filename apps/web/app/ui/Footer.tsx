@@ -19,6 +19,7 @@ export function Footer({ lang }: { lang: Lang }) {
           <Link to={href('/help', lang)}>{tu(lang, 'contribute')}</Link>
           <Link to={href('/missing', lang)}>{tu(lang, 'missing')}</Link>
           <Link to={href('/health', lang)}>{tu(lang, 'health')}</Link>
+          <Link to={href('/status', lang)}>{lang === 'he' ? 'מצב האתר' : 'Status'}</Link>
           <Link to={href('/suggestions', lang)}>{tu(lang, 'navSuggestions')}</Link>
           <Link to={href('/issues', lang)}>{tu(lang, 'navReports')}</Link>
           <Link to={href('/mirrors', lang)}>{tu(lang, 'mirrors')}</Link>

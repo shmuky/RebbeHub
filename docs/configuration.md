@@ -39,6 +39,9 @@ On Workers, from `wrangler.toml` and the Worker's settings; with
 | `RESEND_API_KEY`, `EMAIL_FROM` | key yes | email sign-in links, email updates, takedown receipts |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_TOKEN` | yes | Workers AI: the reviewer's advice and search by meaning |
 | `OAI_ADMIN_EMAIL` | no | switches on OAI-PMH at `/oai` ([developers/oai-pmh](developers/oai-pmh.md)) |
+| `SITE` (binding) | - | the site's Worker, for the status checks ([operations](operations.md#status)); without it they ask `SITE_URL` over the internet |
+| `CLOUDFLARE_ANALYTICS_TOKEN` | yes | a token allowed Account Analytics: Read, with `CLOUDFLARE_ACCOUNT_ID`: the status page counts today's database queries; without it, not counted |
+| `HYPERDRIVE_ID`, `HYPERDRIVE_DAILY_QUERIES` | no | which Hyperdrive config's queries are counted, and its daily allowance (100000 on the free plan, `0` for none) |
 | `CATALOG_GIT_URL`, `RELEASE_PUBLIC_KEYS`, `DUMPS_BASE_URL` | no | what `/v1/mirrors` names ([mirrors](mirrors.md)) |
 | `FILES_BASE_URL` | no | where file bytes are served, when not the API itself |
 | `RATE_LIMIT_ADDRESS`, `RATE_LIMIT_TOKEN`, `RATE_LIMIT_SEARCH` (bindings) | - | rate limits per address, per API token, and for searching per address ([developers/rate-limits](developers/rate-limits.md)); without them nothing is counted |

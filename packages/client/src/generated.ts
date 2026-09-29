@@ -28,6 +28,49 @@ export type ApiError = {
   conflicts?: Array<Record<string, unknown>>;
 };
 
+export type StatusReport = {
+  /** When the checks last ran */
+  checkedAt: string;
+  state: CheckState;
+  checks: Array<{
+    id: CheckId;
+    state: CheckState;
+    ms: number | null;
+    detail: string | null;
+  }>;
+  quota: {
+    /** Queries through Hyperdrive since 00:00 UTC */
+    used: number;
+    limit: number | null;
+    resetsAt: string;
+    runsOutAt: string | null;
+  } | null;
+  /** Oldest first, at most 90 */
+  days: Array<{
+    /** YYYY-MM-DD, UTC */
+    date: string;
+    checks: Record<string, {
+      runs: number;
+      up: number;
+      degraded: number;
+      down: number;
+    }>;
+  }>;
+  /** Newest first, at most 30 */
+  incidents: Array<{
+    check: CheckId;
+    state: "degraded" | "down";
+    from: string;
+    to: string | null;
+    detail: string | null;
+  }>;
+};
+
+export type CheckId = "site" | "api" | "mcp" | "database" | "quota" | "jobs";
+
+/** unknown: not checked this time; it counts for nothing */
+export type CheckState = "up" | "degraded" | "down" | "unknown";
+
 export type About = {
   name: string;
   version: string;
@@ -2025,6 +2068,14 @@ export interface Operations {
       counts: Record<string, number>;
     };
   };
+  /** Whether RebbeHub is up: the last checks of the site, the API, the MCP server, the database, its daily query allowance and the scheduled jobs, with 90 days of them and the latest incidents */
+  status: {
+    input: Record<string, never>;
+    output: {
+      now: string;
+      report: StatusReport | null;
+    };
+  };
   /** Send for review (runs the automatic checks) */
   submitSuggestion: {
     input: {
@@ -2380,6 +2431,7 @@ export const OPERATIONS = {
   sitemapPage: {"method":"GET","path":"/v1/sitemap/{type}/{page}","pathParams":["type","page"],"query":[],"body":null,"answer":"json"},
   sitemaps: {"method":"GET","path":"/v1/sitemap","pathParams":[],"query":[],"body":null,"answer":"json"},
   stats: {"method":"GET","path":"/v1/stats","pathParams":[],"query":[],"body":null,"answer":"json"},
+  status: {"method":"GET","path":"/v1/status","pathParams":[],"query":[],"body":null,"answer":"json"},
   submitSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/submit","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   suggestFix: {"method":"POST","path":"/v1/suggestions/quick","pathParams":[],"query":[],"body":"json","answer":"json"},
   suggestionConversation: {"method":"GET","path":"/v1/suggestions/{id}/conversation","pathParams":["id"],"query":[],"body":null,"answer":"json"},
@@ -3087,6 +3139,11 @@ export abstract class GeneratedMethods {
   /** How many items of each type, and the latest commit (GET /v1/stats) */
   stats(): Promise<Operations['stats']['output']> {
     return this.call('stats', {} as Operations['stats']['input']);
+  }
+
+  /** Whether RebbeHub is up: the last checks of the site, the API, the MCP server, the database, its daily query allowance and the scheduled jobs, with 90 days of them and the latest incidents (GET /v1/status) */
+  status(): Promise<Operations['status']['output']> {
+    return this.call('status', {} as Operations['status']['input']);
   }
 
   /** Send for review (runs the automatic checks) (POST /v1/suggestions/{id}/submit) */

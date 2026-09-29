@@ -44,6 +44,8 @@ export default [
   route('review', 'routes/review.tsx'),
   route('missing', 'routes/missing.tsx'),
   route('health', 'routes/health.tsx'),
+  // Whether the site, the API, the MCP server and the database are up, from the API's checks every five minutes.
+  route('status', 'routes/status.tsx'),
   // Reading a PDF in the site, the player still playing.
   route('read', 'routes/read.tsx'),
   // What other sites embed: the only page they may frame.

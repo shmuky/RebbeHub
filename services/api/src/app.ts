@@ -15,6 +15,7 @@ import { readingRoutes } from './reading.js';
 import { tokenGate, tokenGrantOf, tokenRoutes } from './tokens.js';
 import { ERROR_CODES, PUBLIC_SUMMARY, caching, cors, cursor, nextLink, type RateLimits } from './platform.js';
 import { mcpRoutes } from './mcp.js';
+import { statusRoutes, type StatusStore } from './status.js';
 import { oauthRoutes } from './oauth.js';
 import { pageRoutes } from './pages.js';
 import { driveRoutes, type DriveOptions } from './drive.js';
@@ -70,6 +71,8 @@ export interface ApiOptions {
   drive?: DriveOptions;
   /** Reads an app's own description (a Client ID Metadata Document) when it connects with OAuth; unset, fetch. Replaced in tests. */
   fetchClientMetadata?: MetadataFetch;
+  /** Where the scheduled checks keep their last report (status.ts), for GET /v1/status; unset, it answers that there is none yet. */
+  status?: StatusStore;
 }
 
 /** A byte range asked for with `Range: bytes=…`. */
@@ -179,6 +182,7 @@ export function createApp(options: ApiOptions): Hono {
   pageRoutes(app, catalog, { filesBase });
   driveRoutes(app, catalog, options.drive);
   networkRoutes(app, catalog, { embedder: options.embedder });
+  statusRoutes(app, options.status);
   if (options.oai) oaiRoutes(app, catalog, options.oai);
   readingRoutes(app, catalog, signedIn, (status, message) => {
     throw new HttpError(status, message);

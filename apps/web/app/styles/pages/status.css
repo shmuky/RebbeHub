@@ -1,0 +1,191 @@
+/*
+ * The status page (/status): one banner for the whole, then each part with
+ * its state now and a strip of its last ninety days, then the incidents.
+ * Green, amber and red are the tokens' open, attention and closed.
+ */
+
+.st-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-block: 20px 40px;
+}
+
+.st-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 8px);
+  background: var(--bg);
+}
+
+.st-banner > svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.st-banner.up {
+  border-color: var(--open);
+  background: var(--open-soft);
+}
+.st-banner.up > svg {
+  color: var(--open);
+}
+.st-banner.degraded {
+  border-color: var(--attention);
+  background: var(--attention-soft);
+}
+.st-banner.degraded > svg {
+  color: var(--attention);
+}
+.st-banner.down {
+  border-color: var(--closed);
+  background: var(--closed-soft);
+}
+.st-banner.down > svg {
+  color: var(--closed);
+}
+.st-banner.unknown > svg {
+  color: var(--subtle);
+}
+
+.st-banner-title {
+  margin: 0;
+  font-weight: 700;
+  font-size: var(--fs-lg, 1.125rem);
+}
+
+.st-banner-line {
+  margin: 2px 0 0;
+  color: var(--muted);
+}
+
+.st-checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.st-check {
+  padding: 14px 16px;
+  border-top: 1px solid var(--border-muted);
+}
+
+.st-check:first-child {
+  border-top: 0;
+}
+
+.st-check-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.st-check-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.st-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.st-state.up,
+.st-state.resolved {
+  color: var(--open);
+}
+.st-state.degraded {
+  color: var(--attention);
+}
+.st-state.down {
+  color: var(--closed);
+}
+.st-state.unknown {
+  color: var(--subtle);
+}
+
+.st-detail {
+  margin: 6px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  text-align: start;
+}
+
+.st-quota p {
+  margin: 4px 0 0;
+  font-size: var(--fs-sm);
+}
+
+.st-history {
+  margin-top: 10px;
+}
+
+/* Ninety slim days, oldest first, in reading order: in Hebrew the newest is on the left, as a Hebrew timeline reads. */
+.st-days {
+  display: grid;
+  grid-template-columns: repeat(90, minmax(0, 1fr));
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  height: 28px;
+}
+
+.st-days > li {
+  border-radius: 2px;
+  background: var(--sunken);
+}
+
+.st-days > li.up {
+  background: var(--open);
+}
+.st-days > li.degraded {
+  background: var(--attention);
+}
+.st-days > li.down {
+  background: var(--closed);
+}
+
+.st-history-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 0 0;
+  font-size: var(--fs-xs, 0.75rem);
+}
+
+.st-incidents {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.st-incidents > li {
+  align-items: flex-start;
+}
+
+.st-json {
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .st-days {
+    height: 22px;
+    gap: 1px;
+  }
+  .st-check {
+    padding: 12px;
+  }
+}

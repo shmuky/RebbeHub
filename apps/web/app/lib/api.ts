@@ -256,6 +256,18 @@ export interface CatalogHealth {
   embeddings: { embedded: number; waiting: number };
 }
 
+/** Whether RebbeHub is up, as GET /v1/status gives it (services/api/src/status.ts). */
+export type CheckId = 'site' | 'api' | 'mcp' | 'database' | 'quota' | 'jobs';
+export type CheckState = 'up' | 'degraded' | 'down' | 'unknown';
+export interface StatusReport {
+  checkedAt: string;
+  state: CheckState;
+  checks: Array<{ id: CheckId; state: CheckState; ms: number | null; detail: string | null }>;
+  quota: { used: number; limit: number | null; resetsAt: string; runsOutAt: string | null } | null;
+  days: Array<{ date: string; checks: Partial<Record<CheckId, { runs: number; up: number; degraded: number; down: number }>> }>;
+  incidents: Array<{ check: CheckId; state: 'degraded' | 'down'; from: string; to: string | null; detail: string | null }>;
+}
+
 /** A suggestion as GET /v1/suggestions lists it. */
 export interface SuggestionRow {
   id: number;
@@ -561,6 +573,11 @@ export class RebbeHubApi {
 
   health() {
     return this.get<CatalogHealth>('/v1/health');
+  }
+
+  /** The status checks' last report; it never asks the database. */
+  status() {
+    return this.get<{ now: string; report: StatusReport | null }>('/v1/status');
   }
 
   /** Events by date, each with how many recordings it has: within a year or month, on days of any year (`05-10`), or on exact dates. */
