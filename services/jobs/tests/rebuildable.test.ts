@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Catalog } from '@rebbehub/core';
-import { catalogIsRebuildable } from '../src/commands.js';
+import { catalogIsRebuildable, catalogMarkSql, markGuardSql } from '../src/commands.js';
 import { freshCatalog } from '../../../packages/core/tests/helpers.js';
 
 describe('a rebuildable catalog', () => {
@@ -30,5 +30,27 @@ describe('a rebuildable catalog', () => {
   it('is not rebuildable once people have added to it', async () => {
     const { db } = await freshCatalog();
     expect(await catalogIsRebuildable(db)).toBe(false);
+  });
+});
+
+describe("a catalog's mark", () => {
+  it('stays the same while nothing changes, and moves with anything people do', async () => {
+    const { db, catalog } = await freshCatalog();
+    const mark = async () => (await db.query<{ mark: string }>(await catalogMarkSql(db))).rows[0]!.mark;
+    const before = await mark();
+    expect(before).toMatch(/^[0-9a-f]{32}$/);
+    expect(await mark()).toBe(before);
+    await catalog.createAccount({ id: 'yossi', displayName: 'Yossi' });
+    expect(await mark()).not.toBe(before);
+  });
+
+  it('guards a copy: the SQL stops unless the catalog still has the mark', async () => {
+    const { db, catalog } = await freshCatalog();
+    const mark = (await db.query<{ mark: string }>(await catalogMarkSql(db))).rows[0]!.mark;
+    const guard = await markGuardSql(db, mark);
+    await db.transaction(async (tx) => void (await tx.exec(guard)));
+    await catalog.createAccount({ id: 'yossi', displayName: 'Yossi' });
+    await expect(db.transaction(async (tx) => void (await tx.exec(guard)))).rejects.toThrow(/changed while the import ran/);
+    await expect(markGuardSql(db, 'not a mark')).rejects.toThrow();
   });
 });

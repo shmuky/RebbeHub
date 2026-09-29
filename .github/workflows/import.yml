@@ -42,7 +42,8 @@ jobs:
     # (scripts/import-catalog.sh): item by item across the internet it takes hours.
     services:
       postgres:
-        image: postgres:16
+        # As new as the live server (Neon), so its catalog can be copied here and back.
+        image: postgres:18
         env:
           POSTGRES_USER: rebbehub
           POSTGRES_PASSWORD: rebbehub
@@ -177,6 +178,8 @@ jobs:
           STEWARD_NAME: ${{ inputs.steward_name }}
           DRY_RUN: ${{ inputs.dry_run }}
           BUILD_DATABASE_URL: postgres://rebbehub:rebbehub@localhost:5432/build
+          # pg_dump and psql as new as the live server (scripts/import-catalog.sh).
+          PG_TOOLS_IMAGE: postgres:18
           MAFTEIACH_DATA: .mafteiach/data
           CHABADLIBRARY_TREE: .chabadlibrary/tree.json
           JEM_DB: .jem/jem.db
