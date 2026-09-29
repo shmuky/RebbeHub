@@ -12,6 +12,25 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Organizing from an item's own page.** A set's and a sefer's page have
+  "Edit" (for signed-in people) and "…" in their head, and a "…" on each
+  row of their lists (each sefer on a set's shelf, each sicha in a sefer's
+  contents). They open a small sheet, a bottom sheet on a phone: rename
+  (Hebrew and English name, address), move to another set (or a sicha to
+  another sefer) found by name, move up to the set above, put what is in
+  it in a new order (drag, or arrows for a finger), make a set inside it,
+  merge into another item, or remove an empty set. Each shows its preview
+  (what moves, which addresses will redirect) and is sent as one
+  suggestion, with a link to it; a keeper who may approve it can apply it
+  at once. Signed-out people see the actions and are asked to sign in.
+
+### Fixed
+
+- **Long links no longer push an item's page sideways on a phone.** A
+  source's long address (a Drive folder) or id is shown short, as its
+  host and "…", with the whole of it kept in the link and its title; the
+  side column's lists, facts and ids break or end in "…".
+
 - **The Sichos Kodesh apps' catalog, from RebbeHub.** `/v1/app/v1`,
   `/v1/app/v2` and `/v1/app/v3` answer at the paths and in the shapes of
   Sichos-Kodesh's own catalog API (`catalog/manifest.json`,

@@ -839,3 +839,62 @@ ul.list .meta {
 .lede a:hover {
   color: var(--accent);
 }
+
+/*
+ * Long unbroken words on an item's page (a Drive folder's address, an id,
+ * a path) never push the page sideways on a phone: the columns may shrink
+ * below their content, and such words break or end in "…". The links keep
+ * the whole address; components show a short label (lib/links shortLabel).
+ */
+.item-page {
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+.side {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.side .linked ul.list > li > a,
+.side .sources ul.list > li > a,
+.side .sources ul.list > li > .row,
+.side-list > a,
+.side-list > .side-row {
+  min-width: 0;
+}
+
+.side .linked ul.list > li > a > *,
+.side .sources ul.list > li > a > *,
+.side .sources ul.list > li > .row > *,
+.side-list > a > *,
+.side-list > .side-row > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.side .linked .meta,
+.side .sources .meta,
+.side-list .src-id {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
+}
+
+.facts-row > span,
+.facts-row > span > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+dl.facts code,
+.side code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.permalink a {
+  overflow-wrap: anywhere;
+}

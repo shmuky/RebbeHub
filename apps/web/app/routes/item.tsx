@@ -244,9 +244,12 @@ export default function Item({ loaderData }: Route.ComponentProps) {
     actions: (
       <>
         {!NOT_FOLLOWED.has(entity.type) ? <FollowButton entity={entity} lang={lang} /> : null}
-        <Link className="btn icon" to={href(`/edit/${entity.id}`, lang)} aria-label={lang === 'he' ? 'עריכה' : 'Edit'} title={lang === 'he' ? 'עריכה' : 'Edit'}>
-          <Icon name="pencil" />
-        </Link>
+        {/* A set's and a sefer's page have their own Edit, with organizing in it (components/EditSheet). */}
+        {entity.type === 'set' || entity.type === 'work' ? null : (
+          <Link className="btn icon" to={href(`/edit/${entity.id}`, lang)} aria-label={lang === 'he' ? 'עריכה' : 'Edit'} title={lang === 'he' ? 'עריכה' : 'Edit'}>
+            <Icon name="pencil" />
+          </Link>
+        )}
       </>
     ),
     below: (

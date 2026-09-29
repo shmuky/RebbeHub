@@ -207,6 +207,31 @@ export const OW = {
   reviewNote: { he: 'שינויים בסטים עצמם נבדקים בידי אחראי הקטלוג; שינויים בספרים ובשיחות בידי שומרי הסט.', en: 'Changes to sets themselves are reviewed by stewards; changes to sefarim and sichos by the set’s keepers.' },
   whyTitle: { he: 'כותרת ההצעה (לא חובה)', en: 'Title of the suggestion (optional)' },
   why: { he: 'למה? (לבודקים)', en: 'Why? (for the reviewers)' },
+  edit: { he: 'ערוך', en: 'Edit' },
+  moreActions: { he: 'עוד פעולות', en: 'More actions' },
+  actionsFor: { he: 'פעולות על', en: 'Actions for' },
+  editHeading: { he: 'שינוי', en: 'Change' },
+  moveToSet: { he: 'העברה לסט אחר', en: 'Move to another set' },
+  moveToWork: { he: 'העברה לספר אחר', en: 'Move to another sefer' },
+  moveUpOut: { he: 'העלאה החוצה, אל הסט שמעל', en: 'Move up, out to the set above' },
+  reorderChildren: { he: 'סידור מחדש של מה שבתוכו', en: 'Reorder what is in it' },
+  createHere: { he: 'סט חדש כאן', en: 'Create a set here' },
+  mergeOther: { he: 'מיזוג אל פריט אחר', en: 'Merge into another item' },
+  editFields: { he: 'עריכת כל הפרטים', en: 'Edit all the details' },
+  openOrganizer: { he: 'לתצוגת הסידור המלאה', en: 'Open the full organizer' },
+  signInToEdit: { he: 'כדי להציע שינוי צריך להתחבר. השינוי נשלח כהצעה ונבדק לפני שהוא נכנס.', en: 'Sign in to suggest a change. It is sent as a suggestion and reviewed before it lands.' },
+  previewChange: { he: 'תצוגה מקדימה', en: 'Preview the change' },
+  back: { he: 'חזרה', en: 'Back' },
+  close: { he: 'סגירה', en: 'Close' },
+  loading: { he: 'טוען…', en: 'Loading…' },
+  notEmpty: { he: 'אפשר להסיר רק סט ריק. העבירו קודם את מה שבתוכו.', en: 'Only an empty set can be removed. Move what is in it first.' },
+  deleteAsk: { he: 'הסט ריק. הכתובת שלו תוביל לסט שמעליו.', en: 'The set is empty. Its address will lead to the set above it.' },
+  moveUpAsk: { he: 'הפריט יעבור מהסט שלו אל הסט שמעליו.', en: 'It moves out of its set into the set above that.' },
+  reorderHint: { he: 'גררו בידית, או הזיזו בחיצים.', en: 'Drag by the handle, or move with the arrows.' },
+  nothingToOrder: { he: 'אין כאן מה לסדר.', en: 'Nothing here to put in order.' },
+  unchanged: { he: 'עוד לא שונה דבר.', en: 'Nothing changed yet.' },
+  whereNow: { he: 'עכשיו ב', en: 'Now in' },
+  goesLive: { he: 'השינוי נכנס לקטלוג.', en: 'The change is live.' },
 } as const;
 
 export const ow = (lang: Lang, key: keyof typeof OW) => OW[key][lang];
@@ -233,5 +258,106 @@ export function describeOperation(op: Operation, name: (id: string) => string, l
       return he ? `מחיקת הסט הריק ${name(op.item)}` : `Remove the empty set ${name(op.item)}`;
     case 'merge':
       return he ? `מיזוג ${name(op.from)} אל ${name(op.into)}` : `Merge ${name(op.from)} into ${name(op.into)}`;
+  }
+}
+
+/** What POST /v1/organize/preview answers: the change, saved nowhere. */
+export interface Preview {
+  title: string;
+  summary: string[];
+  items: Array<{ id: string; type: string; name: string; isNew: boolean; deleted: boolean; pathBefore: string | null; path: string | null; changes: Array<{ path: string; before?: unknown; after?: unknown }> }>;
+  redirects: Array<{ id: string; from: string; to: string | null }>;
+  warnings: string[];
+}
+
+/** What POST /v1/organize answers: the one suggestion made, and whether it is live already. */
+export interface Sent {
+  suggestion: { id: number; number: number | null; status: string; title: string };
+  merged: boolean;
+  mayApprove: boolean;
+}
+
+type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
+
+/** A JSON call to the site's own pass-through addresses (/_/…), with the person's session. */
+export async function call<T>(path: string, method: 'GET' | 'POST', body?: unknown, fetcher: Fetch = (input, init) => fetch(input, init)): Promise<T> {
+  const response = await fetcher(path, {
+    method,
+    credentials: 'same-origin',
+    headers: { accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const json = (await response.json().catch(() => ({}))) as T & { message?: string };
+  if (!response.ok) throw new Error(json.message ?? response.statusText);
+  return json;
+}
+
+/**
+ * The three calls every organizing flow makes, the organizing page's and
+ * an item page's sheet alike: see the change, send it as one Suggestion,
+ * and (for a keeper or steward who may) approve it at once.
+ */
+export const organizeCalls = (fetcher?: Fetch) => ({
+  preview: (operations: readonly Operation[]) => call<Preview>('/_/organize/preview', 'POST', { operations }, fetcher),
+  send: (operations: readonly Operation[], title?: string, description?: string) =>
+    call<Sent>('/_/organize', 'POST', { operations, title: title?.trim() || undefined, description: description?.trim() || undefined }, fetcher),
+  approve: (id: number) => call<unknown>(`/_/suggestions/${id}/approve`, 'POST', {}, fetcher),
+});
+
+/** Where a sent suggestion is read: its number's page, or the review page before it has one. */
+export function suggestionPath(sent: Sent): { path: string; query?: Record<string, string> } {
+  return sent.suggestion.number != null ? { path: `/suggestions/${sent.suggestion.number}` } : { path: '/review', query: { s: String(sent.suggestion.id) } };
+}
+
+/** An item as an item page's organizing sheet sees it: itself, and the set or sefer it is listed in there. */
+export interface EditTarget {
+  id: string;
+  type: string;
+  /** Its name as the page shows it; the sheet reads its full names when it opens. */
+  label: string;
+  /** The set (or, for a sicha, the sefer) it is in as seen from here; null at the top. */
+  parent: string | null;
+}
+
+export type EditAction = 'rename' | 'move' | 'move-up' | 'reorder' | 'create-set' | 'merge' | 'delete-set';
+
+/** Which actions an item offers: sets and sefarim all of them that fit their kind; a sicha, its name, its sefer and a merge. */
+export function actionsFor(target: EditTarget): EditAction[] {
+  if (target.type === 'set') return ['rename', 'move', ...(target.parent ? (['move-up'] as const) : []), 'reorder', 'create-set', 'merge', 'delete-set'];
+  if (target.type === 'work') return ['rename', 'move', ...(target.parent ? (['move-up'] as const) : []), 'reorder', 'merge'];
+  return ['rename', 'move', 'merge'];
+}
+
+/** The set or sefer a moved item goes into: a set for a set or a sefer, a sefer for a sicha. */
+export const moveTargetType = (type: string) => (type === 'unit' ? 'work' : 'set');
+
+/**
+ * One action on one item as the plan's operations. `keep`: a sefer moved to
+ * another set stays in this one as well.
+ */
+export function operationsFor(
+  target: EditTarget,
+  action:
+    | { kind: 'rename'; name: { he?: string; en?: string } | null; slug: string | null }
+    | { kind: 'move'; to: string | null; keep?: boolean }
+    | { kind: 'move-up' }
+    | { kind: 'create-set'; name: { he: string; en?: string }; slug: string }
+    | { kind: 'merge'; into: string }
+    | { kind: 'delete-set' },
+): Operation[] {
+  switch (action.kind) {
+    case 'rename':
+      return [{ op: 'rename', item: target.id, ...(action.name ? { name: action.name } : {}), ...(action.slug ? { slug: action.slug } : {}) }];
+    case 'move':
+      if (target.type === 'set' || target.type === 'unit' || !target.parent) return [{ op: 'move', items: [target.id], to: action.to }];
+      return [{ op: 'move', items: [target.id], to: action.to, ...(action.keep ? {} : { from: target.parent }) }];
+    case 'move-up':
+      return [{ op: 'move-up', items: [target.id], ...(target.type !== 'set' && target.parent ? { from: target.parent } : {}) }];
+    case 'create-set':
+      return [{ op: 'create-set', key: 's1', name: action.name, slug: action.slug, parent: target.type === 'set' ? target.id : null }];
+    case 'merge':
+      return [{ op: 'merge', from: target.id, into: action.into }];
+    case 'delete-set':
+      return [{ op: 'delete-set', item: target.id }];
   }
 }

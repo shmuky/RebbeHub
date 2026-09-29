@@ -10,16 +10,17 @@ export function ItemLink({ item, children }: { item: Pick<Entity, 'id' | 'path' 
 }
 
 /** Items as a list of rows, each with an optional note at its end (a date, a count). */
-export function ItemList({ items, meta }: { items: Array<Pick<Entity, 'id' | 'path' | 'type' | 'data'>>; meta?: (item: Pick<Entity, 'id' | 'path' | 'type' | 'data'>) => React.ReactNode }) {
+export function ItemList({ items, meta, after }: { items: Array<Pick<Entity, 'id' | 'path' | 'type' | 'data'>>; meta?: (item: Pick<Entity, 'id' | 'path' | 'type' | 'data'>) => React.ReactNode; after?: (item: Pick<Entity, 'id' | 'path' | 'type' | 'data'>) => React.ReactNode }) {
   const lang = useLang();
   return (
     <ul className="list">
       {items.map((item) => (
-        <li key={item.id}>
+        <li key={item.id} className={after ? 'has-edit' : undefined}>
           <Link to={href(itemPath(item), lang)}>
             <span>{labelOf(item, lang)}</span>
             {meta ? <span className="meta">{meta(item)}</span> : null}
           </Link>
+          {after?.(item)}
         </li>
       ))}
     </ul>
