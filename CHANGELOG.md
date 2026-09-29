@@ -12,6 +12,15 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **The status page shows the servers' load.** For each Worker, today's
+  requests, how many the runtime stopped for going over the CPU allowance
+  (error 1102, a page nobody got), and the CPU a request takes at the
+  median and at the slowest hundredth, from Cloudflare's analytics; any
+  request stopped today is "partly", one in twenty is "not working", and
+  a slowest hundredth over the plan's allowance is "partly" before anyone
+  is refused. `report.workers` in `GET /v1/status`, and the check
+  `workers`.
+
 - **Every answer says what it cost.** The API's and the site's answers
   carry a `Server-Timing` header: the API's says how many statements its
   request sent the database and how long they took (`db`) and the whole

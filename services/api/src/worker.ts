@@ -8,6 +8,7 @@ import { authFor } from './auth.js';
 import { githubDispatch } from './machine.js';
 import { resendMailer, workersAiAdvisor } from './mail.js';
 import {
+  FREE_CPU_MS,
   FREE_DAILY_QUERIES,
   STATUS_KEY,
   allowanceCheck,
@@ -19,6 +20,8 @@ import {
   mcpRequest,
   probe,
   record,
+  workersCheck,
+  workersLoadToday,
   type CheckResult,
   type StatusReport,
   type StatusStore,
@@ -54,8 +57,12 @@ interface Env {
   HYPERDRIVE_ID?: string;
   /** Its daily allowance of queries (default 100000, the free plan's); 0 on a plan without one. */
   HYPERDRIVE_DAILY_QUERIES?: string;
-  /** A token allowed Account Analytics: Read (a secret), for the status page's count of today's queries; without it, not counted. */
+  /** A token allowed Account Analytics: Read (a secret), for the status page's count of today's queries and the Workers' load; without it, not counted. */
   CLOUDFLARE_ANALYTICS_TOKEN?: string;
+  /** The Workers whose load the status page shows, by name, comma-separated (default the site's and this one). */
+  STATUS_WORKERS?: string;
+  /** The plan's CPU allowance for one request, in milliseconds (default 10, the free plan's); 0 on a plan whose allowance does not matter. */
+  WORKERS_CPU_MS?: string;
   FILES_PUBLIC?: R2Bucket;
   /** Uploaded bytes whose rights do not let them be served. Written, never read: nothing here is served. */
   FILES_PRESERVATION?: R2Bucket;
@@ -249,17 +256,19 @@ async function keepStatus(env: Env, ctx: { waitUntil(promise: Promise<unknown>):
   const self = (request: Request) => answer(request, env, ctx);
   const apiOrigin = 'https://api.rebbehub.org';
   const limit = env.HYPERDRIVE_DAILY_QUERIES === undefined || env.HYPERDRIVE_DAILY_QUERIES === '' ? FREE_DAILY_QUERIES : Number(env.HYPERDRIVE_DAILY_QUERIES) || null;
-  const [siteCheck, apiCheck, mcpCheck, used] = await Promise.all([
+  const cpuLimit = env.WORKERS_CPU_MS === undefined || env.WORKERS_CPU_MS === '' ? FREE_CPU_MS : Number(env.WORKERS_CPU_MS) || null;
+  const scripts = (env.STATUS_WORKERS ?? 'rebbehub-web,rebbehub-api').split(',').map((s) => s.trim()).filter(Boolean);
+  const analytics = env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_ANALYTICS_TOKEN ? { accountId: env.CLOUDFLARE_ACCOUNT_ID, token: env.CLOUDFLARE_ANALYTICS_TOKEN } : null;
+  const [siteCheck, apiCheck, mcpCheck, used, load] = await Promise.all([
     // A fresh page each time, not the edge's copy: the Worker itself must answer.
     probe('site', site, new Request(`${siteOrigin}/about?status=${now.getTime()}`, { headers: { 'Cache-Control': 'no-cache' } })),
     probe('api', self, new Request(`${apiOrigin}/openapi.json`)),
     probe('mcp', self, mcpRequest(apiOrigin), mcpAnswers),
-    env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_ANALYTICS_TOKEN && env.HYPERDRIVE_ID
-      ? hyperdriveQueriesToday({ accountId: env.CLOUDFLARE_ACCOUNT_ID, token: env.CLOUDFLARE_ANALYTICS_TOKEN, configId: env.HYPERDRIVE_ID, now })
-      : Promise.resolve(null),
+    analytics && env.HYPERDRIVE_ID ? hyperdriveQueriesToday({ ...analytics, configId: env.HYPERDRIVE_ID, now }) : Promise.resolve(null),
+    analytics ? workersLoadToday({ ...analytics, scripts, now }) : Promise.resolve(null),
   ]);
   const { check: quotaCheck, quota } = allowanceCheck(used, limit, now);
   const previous = await statusStore(bucket).read().catch(() => null);
-  const report = record(previous, [siteCheck, apiCheck, mcpCheck, explainDatabase(database, quotaCheck), quotaCheck, jobsCheck(failedJobs)], now, quota);
+  const report = record(previous, [siteCheck, apiCheck, mcpCheck, explainDatabase(database, quotaCheck), quotaCheck, workersCheck(load, cpuLimit), jobsCheck(failedJobs)], now, quota, load);
   await bucket.put(STATUS_KEY, JSON.stringify(report), { httpMetadata: { contentType: 'application/json', cacheControl: 'no-store' } });
 }

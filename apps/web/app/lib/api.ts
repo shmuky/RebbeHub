@@ -264,13 +264,24 @@ export interface CatalogHealth {
 }
 
 /** Whether RebbeHub is up, as GET /v1/status gives it (services/api/src/status.ts). */
-export type CheckId = 'site' | 'api' | 'mcp' | 'database' | 'quota' | 'jobs';
+export type CheckId = 'site' | 'api' | 'mcp' | 'database' | 'quota' | 'workers' | 'jobs';
 export type CheckState = 'up' | 'degraded' | 'down' | 'unknown';
+/** One Worker's load today: its requests, how many were stopped for CPU (error 1102), and the CPU a request takes. */
+export interface WorkerLoad {
+  script: string;
+  requests: number;
+  errors: number;
+  exceeded: number;
+  cpuP50Ms: number | null;
+  cpuP99Ms: number | null;
+}
 export interface StatusReport {
   checkedAt: string;
   state: CheckState;
   checks: Array<{ id: CheckId; state: CheckState; ms: number | null; detail: string | null }>;
   quota: { used: number; limit: number | null; resetsAt: string; runsOutAt: string | null } | null;
+  /** Missing in reports made before it was measured. */
+  workers?: WorkerLoad[] | null;
   days: Array<{ date: string; checks: Partial<Record<CheckId, { runs: number; up: number; degraded: number; down: number }>> }>;
   incidents: Array<{ check: CheckId; state: 'degraded' | 'down'; from: string; to: string | null; detail: string | null }>;
 }

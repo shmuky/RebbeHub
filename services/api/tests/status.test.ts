@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Catalog } from '@rebbehub/core';
 import { createApp } from '../src/app.js';
-import { allowanceCheck, checkDatabase, explainDatabase, hyperdriveQueriesToday, isAllowanceError, jobsCheck, mcpAnswers, mcpRequest, probe, record, type CheckResult, type StatusReport } from '../src/status.js';
+import { allowanceCheck, checkDatabase, explainDatabase, hyperdriveQueriesToday, isAllowanceError, jobsCheck, mcpAnswers, mcpRequest, probe, record, workersCheck, workersLoadToday, type CheckResult, type StatusReport, type WorkerLoad } from '../src/status.js';
 
 /**
  * The status checks (src/status.ts): each check's verdict, the kept record
@@ -80,6 +80,56 @@ describe('the checks', () => {
     // A token that may not read the account gets no account back: not measured, never zero.
     const noAccount = (async () => Response.json({ data: { viewer: { accounts: [] } } })) as unknown as typeof fetch;
     expect(await hyperdriveQueriesToday({ accountId: 'acc', token: 't', configId: 'cfg', now: at('2026-09-29T13:00:00Z'), fetch: noAccount })).toBeNull();
+  });
+
+  it("reads each Worker's load today from the same analytics: requests, the ones stopped for CPU, and the CPU a request takes", async () => {
+    let asked: { query: string; variables: Record<string, string> } | undefined;
+    const fake = (async (_url: string, init: RequestInit) => {
+      asked = JSON.parse(String(init.body)) as typeof asked;
+      return Response.json({
+        data: {
+          viewer: {
+            accounts: [
+              {
+                w0: [{ sum: { requests: 4300, errors: 15 }, quantiles: { cpuTimeP50: 3120, cpuTimeP99: 14250 } }],
+                x0: [{ sum: { requests: 4285 }, dimensions: { status: 'success' } }, { sum: { requests: 12 }, dimensions: { status: 'exceededResources' } }, { sum: { requests: 3 }, dimensions: { status: 'scriptThrewException' } }],
+                w1: [{ sum: { requests: 0, errors: 0 }, quantiles: { cpuTimeP50: 0, cpuTimeP99: 0 } }],
+                x1: [],
+              },
+            ],
+          },
+        },
+      });
+    }) as unknown as typeof fetch;
+    const load = await workersLoadToday({ accountId: 'acc', token: 't', scripts: ['rebbehub-web', 'rebbehub-api'], now: at('2026-09-29T13:00:00Z'), fetch: fake });
+    expect(load).toEqual([
+      { script: 'rebbehub-web', requests: 4300, errors: 15, exceeded: 12, cpuP50Ms: 3.1, cpuP99Ms: 14.3 },
+      { script: 'rebbehub-api', requests: 0, errors: 0, exceeded: 0, cpuP50Ms: null, cpuP99Ms: null },
+    ]);
+    // One request for both Workers, each asked whole and by invocation status, since 00:00 UTC.
+    expect(asked!.variables).toMatchObject({ account: 'acc', s0: 'rebbehub-web', s1: 'rebbehub-api', from: '2026-09-29T00:00:00.000Z' });
+    expect(asked!.query).toContain('w0: workersInvocationsAdaptive(limit: 1, filter: { scriptName: $s0');
+    expect(asked!.query).toContain('x1: workersInvocationsAdaptive(limit: 20, filter: { scriptName: $s1');
+    expect(asked!.query).toContain('dimensions { status }');
+    // Not measured when the token is refused, when it may not read the account, or with no Worker named.
+    const refused = (async () => Response.json({ errors: [{ message: 'not authorized' }] }, { status: 403 })) as unknown as typeof fetch;
+    expect(await workersLoadToday({ accountId: 'acc', token: 't', scripts: ['rebbehub-web'], now: at('2026-09-29T13:00:00Z'), fetch: refused })).toBeNull();
+    const noAccount = (async () => Response.json({ data: { viewer: { accounts: [] } } })) as unknown as typeof fetch;
+    expect(await workersLoadToday({ accountId: 'acc', token: 't', scripts: ['rebbehub-web'], now: at('2026-09-29T13:00:00Z'), fetch: noAccount })).toBeNull();
+    expect(await workersLoadToday({ accountId: 'acc', token: 't', scripts: ['not a name'], now: at('2026-09-29T13:00:00Z'), fetch: fake })).toBeNull();
+  });
+
+  it("the Workers' load: fine, a slow hundredth, some stopped, many stopped, not measured", () => {
+    const web = (over: Partial<WorkerLoad>): WorkerLoad => ({ script: 'rebbehub-web', requests: 4300, errors: 0, exceeded: 0, cpuP50Ms: 3.1, cpuP99Ms: 8.9, ...over });
+    expect(workersCheck([web({})], 10)).toEqual({ id: 'workers', state: 'up', ms: null, detail: null });
+    expect(workersCheck([web({ cpuP99Ms: 14.3 })], 10)).toMatchObject({ state: 'degraded', detail: 'rebbehub-web: the slowest 1% of requests take 14.3 ms of CPU, over the 10 the plan allows; the next may be stopped (error 1102).' });
+    // A plan whose allowance does not matter judges only what was stopped.
+    expect(workersCheck([web({ cpuP99Ms: 14.3 })], null).state).toBe('up');
+    expect(workersCheck([web({ exceeded: 12, errors: 15, cpuP99Ms: 14.3 })], 10)).toMatchObject({ state: 'degraded', detail: 'rebbehub-web: 12 of 4,300 requests today went over the CPU allowance and were stopped (error 1102); the slowest 1% take 14.3 ms of the 10 allowed.' });
+    expect(workersCheck([web({ exceeded: 300 })], 10).state).toBe('down');
+    // The worst Worker decides; one with no requests yet says nothing.
+    expect(workersCheck([web({ exceeded: 300 }), { script: 'rebbehub-api', requests: 0, errors: 0, exceeded: 0, cpuP50Ms: null, cpuP99Ms: null }], 10).state).toBe('down');
+    expect(workersCheck(null, 10)).toMatchObject({ state: 'unknown', detail: 'Not measured: the analytics token is not set, or did not answer.' });
   });
 
   it('jobs: failed ones named; none run while the database is down', () => {

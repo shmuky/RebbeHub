@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 import type { Route } from './+types/status';
-import type { CheckId, CheckState, StatusReport } from '../lib/api.js';
+import type { CheckId, CheckState, StatusReport, WorkerLoad } from '../lib/api.js';
 import { siteOf } from '../lib/context.server.js';
 import { langFrom, type Lang } from '../lib/i18n.js';
 import { num } from '../lib/i18nUi.js';
@@ -12,7 +12,8 @@ import '../styles/pages/status.css';
 
 /**
  * Whether RebbeHub is up: the site, the API, the MCP server, the database,
- * its daily allowance of queries and the scheduled jobs. The API checks
+ * its daily allowance of queries, the Workers' load and the scheduled
+ * jobs. The API checks
  * them every five minutes and keeps the last report with ninety days of
  * it (services/api/src/status.ts); this page reads that report, which
  * never asks the database, so it answers when the database does not. When
@@ -62,6 +63,8 @@ const W = {
   quotaLine: { he: '{used} מתוך {limit} שאילתות למסד הנתונים היום. המונה מתאפס ב-00:00 UTC.', en: '{used} of {limit} database queries today. The count starts again at 00:00 UTC.' },
   quotaNoLimit: { he: '{used} שאילתות למסד הנתונים היום.', en: '{used} database queries today.' },
   runsOut: { he: 'בקצב של היום הן ייגמרו בערך ב-{at} UTC.', en: "At today's pace they run out at about {at} UTC." },
+  workerLine: { he: '{n} בקשות היום · חצי מהן {p50} ms מעבד, האיטיות ביותר (1%) {p99} ms · {stopped} נעצרו על חריגה', en: '{n} requests today · half take {p50} ms of CPU, the slowest 1% {p99} ms · {stopped} stopped for taking too much' },
+  workerNone: { he: 'עוד לא היו בקשות היום.', en: 'No requests yet today.' },
   incidents: { he: 'תקלות אחרונות', en: 'Recent incidents' },
   noIncidents: { he: 'לא היו תקלות ב-90 הימים האחרונים.', en: 'No incidents in the last 90 days.' },
   ongoing: { he: 'עדיין נמשכת', en: 'Ongoing' },
@@ -79,9 +82,10 @@ const PARTS: Record<CheckId, { icon: IconName; name: Record<Lang, string>; about
   mcp: { icon: 'bot', name: { he: 'שרת ה-MCP', en: 'The MCP server' }, about: { he: 'לסוכני בינה מלאכותית (Claude ואחרים)', en: 'For AI agents (Claude and others)' } },
   database: { icon: 'database', name: { he: 'מסד הנתונים', en: 'The database' }, about: { he: 'הקטלוג עצמו', en: 'The catalog itself' } },
   quota: { icon: 'pulse', name: { he: 'מכסת השאילתות היומית', en: 'Daily query allowance' }, about: { he: 'כמה שאילתות למסד הנתונים מותרות ביום', en: 'How many database queries a day allows' } },
+  workers: { icon: 'monitor', name: { he: 'העומס על השרתים', en: "The servers' load" }, about: { he: 'כמה מעבד לוקחת בקשה, וכמה נעצרו על חריגה', en: 'The CPU a request takes, and how many were stopped for taking too much' } },
   jobs: { icon: 'clock', name: { he: 'משימות מתוזמנות', en: 'Scheduled jobs' }, about: { he: 'Webhooks, עדכונים במייל, עצות לבודקים', en: "Webhooks, email updates, the reviewer's advice" } },
 };
-const ORDER: CheckId[] = ['site', 'api', 'mcp', 'database', 'quota', 'jobs'];
+const ORDER: CheckId[] = ['site', 'api', 'mcp', 'database', 'quota', 'workers', 'jobs'];
 
 const STATE_WORD: Record<CheckState, Record<Lang, string>> = {
   up: { he: 'עובד', en: 'Working' },
@@ -195,6 +199,7 @@ export default function Status({ loaderData }: Route.ComponentProps) {
   }
 
   const quota = report?.quota ?? null;
+  const workers: WorkerLoad[] | null = report?.workers ?? null;
 
   return (
     <>
@@ -254,6 +259,22 @@ export default function Status({ loaderData }: Route.ComponentProps) {
                       {quota.runsOutAt ? ` ${fill(w(lang, 'runsOut'), { at: quota.runsOutAt.slice(11, 16) })}` : null}
                     </p>
                   </div>
+                ) : null}
+                {id === 'workers' && workers ? (
+                  <ul className="st-workers">
+                    {workers.map((load) => (
+                      <li key={load.script}>
+                        <bdi dir="ltr" className="st-worker-name">
+                          {load.script}
+                        </bdi>
+                        <span className="subtle">
+                          {load.requests
+                            ? fill(w(lang, 'workerLine'), { n: num(load.requests, lang), p50: load.cpuP50Ms === null ? '–' : String(load.cpuP50Ms), p99: load.cpuP99Ms === null ? '–' : String(load.cpuP99Ms), stopped: num(load.exceeded, lang) })
+                            : w(lang, 'workerNone')}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 ) : null}
                 {report ? (
                   <div className="st-history">
