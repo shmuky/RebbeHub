@@ -10,7 +10,7 @@ Whisper hears the recording is the `--engine`:
   Apache-2.0) on the machine's own CPU, through faster-whisper
   (`pip install faster-whisper`; services/jobs/whisper/transcribe.py).
   Free. `WHISPER_MODEL` names another model: a Hugging Face id, or the
-  folder of one on disk, such as rebbe-whisper (below), which the
+  folder of one on disk, such as rebbehub-whisper (below), which the
   transcribe workflow fetches from R2 when it can.
 - `workers-ai`: Whisper large-v3-turbo on Cloudflare Workers AI, paid by
   the minute (docs/deploy.md, step 7).
@@ -44,30 +44,38 @@ then stays in English for its first half-minute and skips the Rebbe's
 first words; the local engine hears that stretch again and drops the
 English line.
 
-## rebbe-whisper: fine-tuned on the Rebbe's voice
+## rebbehub-whisper: fine-tuned on the Rebbe's voice
 
-rebbe-whisper-5742 is the ivrit.ai Yiddish model trained further on 22.8
-hours of the Rebbe's own speech: 17 farbrengens of 5742 whose word-for-word
-Yiddish (הנחה מילולית, published by torasmoshiach.com) was cut into clips
-by forced alignment. It trained for 4 epochs on one rented GPU for about
-$2. Four more farbrengens of that year were held out to score it.
+Each version is ivrit.ai's Yiddish model trained further on the Rebbe's own
+speech, clip by clip against a word-for-word Yiddish text, on one rented
+GPU. None are published; they are kept in `rebbehub-preservation` under
+`models/rebbehub-whisper-v<N>/` (the faster-whisper copy, and under `hf/`
+the full weights the next version trains from), and the workflow picks the
+highest version there.
 
-| Held out, against the word-for-word text | ivrit.ai Yiddish | rebbe-whisper-5742 |
-| --- | --- | --- |
-| 17 Tammuz 5742, the whole 29 minutes, as the job runs it | 58% words wrong, 28% letters | 10.8% words, 5.1% letters |
-| 504 clips of the four farbrengens, 2.1 hours | 62%, 32% | 11.6%, 5.6% |
+- **v1**: 22.8 hours from 17 farbrengens of 5742, whose word-for-word text
+  (הנחה מילולית) torasmoshiach.com publishes, lined up by forced alignment.
+  3 epochs.
+- **v2**: v1 trained further on those clips plus 43 hours from 23
+  farbrengens of 5732 to 5747, from typed Yiddish booklets. The booklets
+  don't say which recording a page belongs to and leave parts out, so v1
+  heard each recording, the booklet's matching stretch was found by the
+  words both share, and clips were cut between words they agree on. A clip
+  was kept only where the booklet and what was heard are close, and its
+  text is the booklet's.
 
-It spells the Loshon Kodesh right now (`דברי תורה שבכתב`, `שולחן ערוך`,
-also on 5745 audio it never heard). What it still misses are rarer words
-(`תנות` for `תענית`). It runs at the same speed, 3.5x speech on 4 CPUs.
-Every test is from 5742; other years and poorer recordings are untested.
+| Held out, words wrong / letters wrong | ivrit.ai Yiddish | v1 | v2 |
+| --- | --- | --- | --- |
+| Four farbrengens of 5742, 504 clips | 62% / 32% | 12% / 6% | 9.5% / 4.8% |
+| 11 Nissan 5733 (an older era), 344 clips | | 22.5% / 9.0% | 13.8% / 5.2% |
+| 17 Tammuz 5742, the whole 29 minutes, as the job runs it | 58% / 28% | 10.8% / 5.1% (the first model) | |
 
-The model (1.6 GB) is not published. It is kept in
-`rebbehub-preservation` at `models/rebbe-whisper-5742/`, and the workflow
-fetches it with the R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY
-secrets.
-Its transcripts, like any machine output, stay labelled until people
-check them.
+They spell the Loshon Kodesh right (`דברי תורה שבכתב`, `שולחן ערוך`).
+What they still miss are rarer words (`תנות` for `תענית`). They run at the
+same speed as ivrit.ai's model, 3.5x speech on 4 CPUs. Their transcripts,
+like any machine output, stay labelled until people check them. The
+training scripts and the list of booklets are kept with the project's
+files, not here, since the texts can't be.
 
 ## How a recording gets transcribed
 
@@ -83,6 +91,7 @@ A rented GPU is never started this way: each GPU run waits for a person.
 
 1. Run the local engine over a year of farbrengens and sync their
    hanachos; everything stays labelled as machine output.
-2. Train the next round on more: other years' word-for-word texts, and the
+2. Train the next version the way v2 was: the newest model hears the
+   recordings, and the text comes from word-for-word booklets and the
    paragraphs people correct on the site. Keep the same held-out
-   farbrengens and switch models only when the new one scores better.
+   farbrengens and publish a version to R2 only when it scores better.
