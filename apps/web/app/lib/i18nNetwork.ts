@@ -6,6 +6,8 @@ import type { Lang } from './i18n.js';
  * full, as in i18n.ts; kept in their own table beside it.
  */
 const STRINGS = {
+  noTranscriptYet: { he: 'עוד אין תמלול', en: 'no transcript yet' },
+  partsWithoutTranscript: { he: 'חלקים בלי תמלול', en: 'parts without a transcript' },
   inTheTexts: { he: 'בתוך הטקסטים', en: 'In the texts' },
   inTheTextsHint: { he: 'שורות בסריקות ופסקאות בתמלולים: הקישור פותח את המקום עצמו.', en: 'Lines on scans and paragraphs of transcripts: each link opens the very place.' },
   onScanPage: { he: 'עמוד', en: 'page' },

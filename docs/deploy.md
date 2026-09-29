@@ -140,10 +140,15 @@ npm run rebbehub -- import sichos-kodesh-occasions --from ../Sichos-Kodesh --app
 
 ### 7. Machine OCR and transcription
 
-- **Machine OCR** runs every night by itself (the *Machine OCR* workflow),
-  reading a few served scans that have no text yet with Tesseract; it
-  needs only `DATABASE_URL`. **Run workflow** reads more at once.
-- **Machine transcription (manual)** transcribes recordings with Whisper.
+- **Machine OCR** runs every night by itself (the *Machine OCR* workflow):
+  first the scans people asked for, then the newest served scans that
+  have no text yet, with Tesseract; it needs only `DATABASE_URL`. **Run
+  workflow** reads more at once.
+- **Machine transcription** transcribes recordings with Whisper. Every
+  night it takes the recordings people asked for, then the newest with no
+  transcript, `TRANSCRIBE_NIGHTLY` in all (a repository *variable*, 1
+  when unset, 0 to turn the nightly run off), always with the free local
+  engine. Started by hand, it takes any engine and limit.
   Its **engine** box picks who hears them: `local` (the default), ivrit.ai's
   Yiddish Whisper on the runner's CPU, free, about a quarter of the
   recording's length ([transcription](transcription.md)); or `workers-ai`,
@@ -155,9 +160,10 @@ npm run rebbehub -- import sichos-kodesh-occasions --from ../Sichos-Kodesh --app
   - `CLOUDFLARE_AI_TOKEN`: a Cloudflare API token with **Workers AI:
     Read** and **Workers AI: Edit** only.
 
-  The local engine hears best with rebbe-whisper, the model fine-tuned on
-  the Rebbe's voice, kept private in `rebbehub-preservation` under
-  `models/rebbe-whisper-5742/`. To let the workflow fetch it, add the
+  The local engine hears best with the models fine-tuned on the Rebbe's
+  voice, kept private in `rebbehub-preservation` under
+  `models/rebbehub-whisper-v1/`, `-v2/` and on; the workflow picks the
+  highest version there (else the first, `models/rebbe-whisper-5742/`). To let the workflow fetch it, add the
   bucket's S3 endpoint as `R2_ENDPOINT` (`https://<account>.r2.cloudflarestorage.com`)
   and an R2 API token that can only read that bucket, as `R2_ACCESS_KEY_ID`
   and `R2_SECRET_ACCESS_KEY`. Without them it uses ivrit.ai's model.
@@ -170,6 +176,19 @@ npm run rebbehub -- import sichos-kodesh-occasions --from ../Sichos-Kodesh --app
 
 Both mark what the machine made as machine output on the site until
 people check it.
+
+- **Asking the machines.** Anyone signed in can ask for a scan to be read
+  or a recording transcribed: the button on a scan's text page and under
+  a farbrengen's parts, `POST /v1/machine/requests`, the `ask_machine` MCP
+  tool, or `rebbehub machine ask`. The nightly runs take requests first.
+  To start the free job at once instead, give the API a GitHub token as
+  the secret `GITHUB_DISPATCH_TOKEN`: a fine-grained token for this
+  repository with **Actions: Read and write** only (and `GITHUB_REPO` in
+  `[vars]` if the repository is not `shmuky/RebbeHub`). A request then
+  starts the workflow with `requested: true`, which reads or transcribes
+  only what was asked, on the runner's CPU. Nothing a request starts
+  costs money beyond the repository's Actions minutes (free once it is
+  public); Workers AI and rented GPUs are only ever started by hand.
 
 - **Links, embeddings and citations** runs every night: it checks the
   catalog's links for the health page (`/health`), and, once the two

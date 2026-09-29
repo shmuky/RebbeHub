@@ -401,7 +401,49 @@ function tools(siteUrl: string): Tool[] {
         return { text: `Suggestion ${args.suggestion} approved and merged${merged.commit != null ? ` (commit ${merged.commit})` : ''}.`, structured: { suggestion: args.suggestion, commit: merged.commit ?? null } };
       },
     },
+    ...machineTools(site),
     ...organizeTools(site),
+  ];
+}
+
+/**
+ * The machines' tools (core/machineWork.ts): asking for a scan to be read
+ * or a recording transcribed, and seeing where the requests stand. The
+ * machines are free CPU engines; what they make is labelled until checked.
+ */
+function machineTools(site: string): Tool[] {
+  const line = (r: any) => `#${r.id} ${r.kind === 'ocr' ? 'read' : 'transcribe'} ${r.item}: ${r.status}${r.position ? `, ${r.position} in line` : ''}${r.note ? ` (${r.note})` : ''} ${site}/${r.item}`;
+  return [
+    {
+      name: 'ask_machine',
+      title: 'Ask the machine to read or transcribe',
+      description:
+        "Ask RebbeHub's machines to read a scan (kind ocr: Hebrew OCR, line by line, so its words can be searched and proofread) or to transcribe a recording (kind transcript: the Rebbe's Yiddish heard by a model trained on his voice, synced paragraph by paragraph). The work is queued and done on free machines, usually within a day (at once where the site is set up for it); its words are marked [machine] until people check them. Asking for what already waits joins that request. Needs the write scope.",
+      inputSchema: { type: 'object', properties: { kind: { enum: ['ocr', 'transcript'] }, item: { ...ID, description: 'The scan (ocr) or recording (transcript)' } }, required: ['kind', 'item'], additionalProperties: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      async run(args, call) {
+        const made = await need(call, 'POST', '/v1/machine/requests', { kind: args.kind, item: args.item });
+        const r = made.request;
+        const when = made.startsAtOnce ? 'The machine is starting now.' : 'The machine takes it on its next run.';
+        return { text: `${made.created ? 'Asked' : 'Already asked'}: ${line(r)}. ${when}`, structured: { request: r, created: made.created, startsAtOnce: made.startsAtOnce } };
+      },
+    },
+    {
+      name: 'machine_queue',
+      title: "See the machines' queue",
+      description: 'What waits for the machines (OCR of scans, transcripts of recordings), in the order they will be taken, and what they did lately; or the requests for one item. With no arguments, also how much is left for them.',
+      inputSchema: { type: 'object', properties: { kind: { enum: ['ocr', 'transcript'] }, item: ID, status: { enum: ['waiting', 'running', 'done', 'failed'] }, limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 } }, additionalProperties: false },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      async run(args, call) {
+        const params = new URLSearchParams({ limit: String(Math.min(Math.max(Number(args.limit) || 20, 1), 100)) });
+        for (const key of ['kind', 'item', 'status']) if (typeof args[key] === 'string') params.set(key, args[key] as string);
+        const [{ requests }, summary] = await Promise.all([need(call, 'GET', `/v1/machine/requests?${params}`), args.item ? null : need(call, 'GET', '/v1/machine')]);
+        const head = summary
+          ? [`OCR: ${summary.ocr.waiting} waiting, ${summary.ocr.backlog} served scans not read yet.`, `Transcripts: ${summary.transcript.waiting} waiting, ${summary.transcript.backlog} served recordings not transcribed yet.`]
+          : [];
+        return { text: [...head, ...(requests as any[]).map(line)].join('\n') || 'No requests.', structured: { requests, ...(summary ? { summary } : {}) } };
+      },
+    },
   ];
 }
 
@@ -616,7 +658,7 @@ export function mcpRoutes(app: Hono, options: { siteUrl: string; version: string
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: MCP_SERVER_NAME, title: 'RebbeHub', version: options.version, websiteUrl: `${options.siteUrl.replace(/\/+$/, '')}/developers` },
           instructions:
-            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix (write scope; you will be asked to connect your RebbeHub account) makes a suggestion under the connected person\'s account that people review before anything changes; suggest_items (write scope) adds, changes or deletes many items in one suggestion, and approve_suggestion approves one when you may; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into. To organize the catalog, get_tree shows it; move_items, move_up, rename_item, reorder_children, create_set, delete_set, merge_items and organize (write scope) each make one suggestion that people review; preview_organize shows the change first.',
+            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix (write scope; you will be asked to connect your RebbeHub account) makes a suggestion under the connected person\'s account that people review before anything changes; suggest_items (write scope) adds, changes or deletes many items in one suggestion, and approve_suggestion approves one when you may; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into. ask_machine (write scope) asks for a scan to be read by OCR or a recording transcribed; machine_queue shows where those requests stand. To organize the catalog, get_tree shows it; move_items, move_up, rename_item, reorder_children, create_set, delete_set, merge_items and organize (write scope) each make one suggestion that people review; preview_organize shows the change first.',
         };
       }
       case 'ping':

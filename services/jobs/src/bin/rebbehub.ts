@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { checkLinksCommand, citationsCommand, embedCommand } from '../networkCommands.js';
+import { machineCommand } from '../machineCommand.js';
 import { ocrCommand } from '../ocrCommand.js';
 import { alignCommand, transcribeCommand } from '../transcribeCommand.js';
 import { coversCommand, fingerprintsCommand, pageImagesCommand } from '../scanPagesCommand.js';
@@ -68,18 +69,23 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 a mirror's copy of every edition's dumps, each signature
                                                 and sha256 checked (docs/mirrors.md)
   rebbehub keygen --out <key.json>
-  rebbehub ocr --approve-as <steward> [--scan <id>] [--limit <n>] [--files <url>] [--reread]
-                                                machine OCR of served scans that have none yet;
+  rebbehub ocr --approve-as <steward> [--scan <id>] [--limit <n>] [--files <url>] [--reread] [--requested-only]
+                                                machine OCR: the scans people asked for first, then the
+                                                newest served scans that have none yet (--requested-only:
+                                                only those asked for);
                                                 files from <url>/objects/<sha256> (default the live API);
                                                 --reread: scans read by an older engine, read again
                                                 (lines people checked are kept)
   rebbehub transcribe --approve-as <steward> [--recording <id>] [--limit <n>] [--linked] [--files <url>]
-                  [--engine workers-ai|local]
-                                                machine transcripts, with sync, of recordings that have
-                                                none (Whisper on Workers AI: CLOUDFLARE_ACCOUNT_ID and
+                  [--engine workers-ai|local] [--requested-only]
+                                                machine transcripts, with sync: the recordings people asked
+                                                for first, then the newest that have none (Whisper on Workers AI: CLOUDFLARE_ACCOUNT_ID and
                                                 CLOUDFLARE_AI_TOKEN; local: ivrit.ai's Yiddish Whisper
                                                 here, pip install faster-whisper); --linked also those
                                                 heard elsewhere
+  rebbehub machine [list [--kind ocr|transcript] [--status <status>] | ask --kind <kind> --item <id> --as <account>]
+                                                the machines' queue: what waits, what is left, and asking
+                                                for a scan to be read or a recording transcribed
   rebbehub embed [--limit <n>]                  vectors for search by meaning, of items not embedded yet
                                                 (BGE-M3 on Workers AI: CLOUDFLARE_ACCOUNT_ID and
                                                 CLOUDFLARE_AI_TOKEN)
@@ -159,6 +165,11 @@ const { values, positionals } = parseArgs({
     recording: { type: 'string' },
     linked: { type: 'boolean' },
     reread: { type: 'boolean' },
+    'requested-only': { type: 'boolean' },
+    kind: { type: 'string' },
+    item: { type: 'string' },
+    as: { type: 'string' },
+    status: { type: 'string' },
     again: { type: 'boolean' },
     files: { type: 'string' },
     minutes: { type: 'string' },
@@ -216,13 +227,16 @@ try {
       await archiveGapsCommand(ctx, { db: need(values.db, 'db') });
       break;
     case 'ocr':
-      await ocrCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), scan: values.scan, limit: number(values.limit), files: values.files, reread: values.reread });
+      await ocrCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), scan: values.scan, limit: number(values.limit), files: values.files, reread: values.reread, requestedOnly: values['requested-only'] });
       break;
     case 'align':
       await alignCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files, engine: values.engine });
       break;
     case 'transcribe':
-      await transcribeCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files, engine: values.engine });
+      await transcribeCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files, engine: values.engine, requestedOnly: values['requested-only'] });
+      break;
+    case 'machine':
+      await machineCommand(ctx, { action: rest[0], kind: values.kind, item: values.item, as: values.as, status: values.status, limit: number(values.limit) });
       break;
     case 'embed':
       await embedCommand(ctx, { limit: number(values.limit) });

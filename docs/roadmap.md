@@ -105,11 +105,19 @@ inside talk pages' wiki text, and a steward's page to edit labels.
   reading, and a signed-in reader fixes a line into the community layer,
   reviewed like any suggestion.
 - **Transcription and sync** ✅: `rebbehub transcribe` and the *Machine
-  transcription (manual)* workflow (ivrit.ai's Yiddish Whisper on the
+  transcription* workflow (ivrit.ai's Yiddish Whisper on the
   runner's CPU, or Whisper on Workers AI; [transcription](transcription.md)) turn a
   recording into a transcript of paragraphs, each synced to where it is
   heard; farbrengen pages follow the player, play from a tapped
   paragraph, and take fixes.
+- **Asking the machines** ✅: anyone signed in asks for a scan to be read
+  or a recording transcribed (the button on `/text/<scan>` and under a
+  farbrengen's parts, `POST /v1/machine/requests`, the `ask_machine` MCP
+  tool, `rebbehub machine ask`); `/v1/machine` and `machine_queue` show
+  the queue and what is left. The nightly OCR and transcription runs take
+  requests first, then the newest items not done yet, on free CPU only;
+  with `GITHUB_DISPATCH_TOKEN` a request starts its job at once
+  (migration 0023, `core/machineWork.ts`, [deploy](deploy.md#7-machine-ocr-and-transcription)).
 - **Webhooks and embeds** ✅: every merge posted, signed, to registered
   addresses; `/embed/<id>` for other sites ([api](api.md)).
 - **Search by meaning** ✅: "By idea" on `/search` finds sichos and

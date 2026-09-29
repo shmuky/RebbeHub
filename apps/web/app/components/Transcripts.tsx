@@ -6,6 +6,7 @@ import { href } from '../lib/links.js';
 import { postJson } from '../lib/post.js';
 import { useAccount } from '../lib/useAccount.js';
 import { usePlayer, type Track } from '../player/PlayerProvider.js';
+import { AskMachine } from './AskMachine.js';
 
 /**
  * A farbrengen's transcripts, part by part, synced to its recordings (the
@@ -237,6 +238,7 @@ export function Transcripts({ tracks, lang }: { tracks: Track[]; lang: Lang }) {
   const [params] = useSearchParams();
   const found = params.get('at');
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const ids = tracks.map((tr) => tr.id).join(',');
   const playingHere = tracks.some((tr) => tr.id === player.current?.id);
   const nowMs = useNowMs(playingHere);
@@ -245,7 +247,9 @@ export function Transcripts({ tracks, lang }: { tracks: Track[]; lang: Lang }) {
     let live = true;
     // Most recordings have no transcript yet; those answer "not found" and are left out.
     void Promise.all(tracks.map((tr) => get<Transcript>(`recordings/${tr.id}/transcript`).catch(() => null))).then((all) => {
-      if (live) setTranscripts(all.filter((x): x is Transcript => x !== null));
+      if (!live) return;
+      setTranscripts(all.filter((x): x is Transcript => x !== null));
+      setLoaded(true);
     });
     return () => {
       live = false;
@@ -265,7 +269,24 @@ export function Transcripts({ tracks, lang }: { tracks: Track[]; lang: Lang }) {
     );
   }
 
-  if (!transcripts.length) return null;
+  // Parts with no transcript yet: anyone signed in may ask the machine for one.
+  const missing = loaded ? tracks.filter((tr) => !transcripts.some((x) => x.recording === tr.id)) : [];
+  const ask = missing.length ? (
+    <details className="ask-transcripts">
+      <summary>
+        {t(lang, 'transcript')} · {missing.length === tracks.length ? tn(lang, 'noTranscriptYet') : `${missing.length} ${tn(lang, 'partsWithoutTranscript')}`}
+      </summary>
+      <ul className="stack">
+        {missing.map((tr) => (
+          <li key={tr.id}>
+            {tracks.length > 1 ? <b>{tr.title}</b> : null}
+            <AskMachine kind="transcript" item={tr.id} lang={lang} />
+          </li>
+        ))}
+      </ul>
+    </details>
+  ) : null;
+  if (!transcripts.length) return ask ? <section id="transcript" className="transcripts">{ask}</section> : null;
   const unchecked = transcripts.some((tr) => tr.paragraphs.some((p) => !p.checked));
   const syncUnchecked = transcripts.some((tr) => tr.paragraphs.some((p) => p.syncChecked === false));
   return (
@@ -305,6 +326,7 @@ export function Transcripts({ tracks, lang }: { tracks: Track[]; lang: Lang }) {
           {t(lang, 'fixTranscriptSignIn')} <Link to={href('/signin', lang)}>{t(lang, 'signIn')}</Link>
         </p>
       ) : null}
+      {ask}
     </section>
   );
 }
