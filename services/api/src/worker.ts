@@ -12,6 +12,7 @@ import {
   STATUS_KEY,
   allowanceCheck,
   checkDatabase,
+  explainDatabase,
   hyperdriveQueriesToday,
   jobsCheck,
   mcpAnswers,
@@ -257,6 +258,6 @@ async function keepStatus(env: Env, ctx: { waitUntil(promise: Promise<unknown>):
   ]);
   const { check: quotaCheck, quota } = allowanceCheck(used, limit, now);
   const previous = await statusStore(bucket).read().catch(() => null);
-  const report = record(previous, [siteCheck, apiCheck, mcpCheck, database, quotaCheck, jobsCheck(failedJobs)], now, quota);
+  const report = record(previous, [siteCheck, apiCheck, mcpCheck, explainDatabase(database, quotaCheck), quotaCheck, jobsCheck(failedJobs)], now, quota);
   await bucket.put(STATUS_KEY, JSON.stringify(report), { httpMetadata: { contentType: 'application/json', cacheControl: 'no-store' } });
 }

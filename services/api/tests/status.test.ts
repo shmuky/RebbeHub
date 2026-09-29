@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Catalog } from '@rebbehub/core';
 import { createApp } from '../src/app.js';
-import { allowanceCheck, checkDatabase, hyperdriveQueriesToday, isAllowanceError, jobsCheck, mcpAnswers, mcpRequest, probe, record, type CheckResult, type StatusReport } from '../src/status.js';
+import { allowanceCheck, checkDatabase, explainDatabase, hyperdriveQueriesToday, isAllowanceError, jobsCheck, mcpAnswers, mcpRequest, probe, record, type CheckResult, type StatusReport } from '../src/status.js';
 
 /**
  * The status checks (src/status.ts): each check's verdict, the kept record
@@ -42,6 +42,14 @@ describe('the checks', () => {
     expect(refused.detail).toBe('The database did not answer (connect ECONNREFUSED …).');
     const leaky = Object.assign(new Error('bad postgres://user:pw@db.example.neon.tech/x at ep-cool-1.aws.neon.tech'), { code: '08006' });
     expect((await checkDatabase(async () => Promise.reject(leaky))).detail).toBe('The database did not answer (08006: bad … at …).');
+  });
+
+  it('a database that fails while the allowance is used up is said to be the allowance', () => {
+    const failed = down('database', 'The database did not answer (Connection terminated unexpectedly).');
+    const usedUp: CheckResult = { id: 'quota', state: 'down', ms: null, detail: 'All used.' };
+    expect(explainDatabase(failed, usedUp).detail).toContain('00:00 UTC');
+    expect(explainDatabase(failed, up('quota'))).toBe(failed);
+    expect(explainDatabase(up('database'), usedUp).state).toBe('up');
   });
 
   it('the allowance: fine, nearly used, on pace to run out, used up, not measured', () => {
