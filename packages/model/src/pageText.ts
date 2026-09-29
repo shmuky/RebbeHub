@@ -226,8 +226,8 @@ export function plainPage(text: string, language: Language = 'he', profile: Text
   return { profile, versions: [{ id: language, language, segments }] };
 }
 
-/** A page's words with one segment's replaced, or removed (`null`), or a new segment put after it; the rest untouched. */
-export function changeSegment(page: PageText, versionId: string, segmentId: string, change: { text?: PageInline[]; remove?: true; after?: PageSegment }): PageText {
+/** A page's words with one segment's replaced, or removed (`null`), or a new segment put after it, or a machine's segment marked checked as it is; the rest untouched. */
+export function changeSegment(page: PageText, versionId: string, segmentId: string, change: { text?: PageInline[]; remove?: true; after?: PageSegment; check?: true }): PageText {
   const next = structuredClone(page);
   const version = next.versions.find((v) => v.id === versionId);
   if (!version) throw new RangeError(`no version "${versionId}"`);
@@ -239,6 +239,10 @@ export function changeSegment(page: PageText, versionId: string, segmentId: stri
     found.segment.text = change.text;
     // A person has now read it: a machine's segment is checked.
     if (found.segment.origin) found.segment.origin = { ...found.segment.origin, checked: true };
+  } else if (change.check) {
+    // A person read it against its source and found it right: the machine's words stay, now checked.
+    if (!found.segment.origin) throw new RangeError(`segment "${segmentId}" was not made by a machine`);
+    found.segment.origin = { ...found.segment.origin, checked: true };
   }
   return next;
 }

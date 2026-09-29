@@ -429,6 +429,37 @@ describe('the wiki model', () => {
     expect((await words({ change: 'start', text: [{ text: 'x' }] })).status).toBe(409);
   });
 
+  it("checks a machine's segment as right, read against its scan, without changing its words", async () => {
+    const ocr = { by: 'ocr:kraken-maftechos-r4' };
+    const index = {
+      profile: 'plain',
+      versions: [
+        {
+          id: 'he',
+          language: 'he',
+          url: 'https://drive.google.com/file/d/1mndi0ZWHOx10XXiLT2sS8rYgeFGrg1kU/view',
+          segments: [
+            { id: 't1', kind: 'heading', level: 2, text: [{ marker: 'סריקה 3' }, { text: 'אב ובן' }], origin: ocr },
+            { id: 't1.1', kind: 'paragraph', text: [{ text: '27', href: '/read?page=2&src=https://drive.google.com/open?id=x' }, { text: ' (בן ממשיך את אביו).' }], origin: ocr },
+          ],
+        },
+      ],
+    };
+    const sent = await call('POST', '/v1/suggestions/quick', { as: 'chaim', body: { entityId: event, data: { ...yudShvat(set), body: index }, title: 'An index page' } });
+    await call('POST', `/v1/suggestions/${sent.body.id}/approve`, { as: 'keeper' });
+    const words = (input: Record<string, unknown>) => call('POST', '/v1/suggestions/words', { as: 'mendy', body: { entityId: event, version: 'he', ...input } });
+    const checked = await words({ change: 'check', segment: 't1.1', before: index.versions[0]!.segments[1]!.text });
+    expect(checked.status).toBe(201);
+    const review = (await call('GET', `/v1/suggestions/${checked.body.id}`, { as: 'keeper' })).body;
+    expect(review.entries[0].changes.map((ch: { path: string }) => ch.path)).toEqual(['/body/versions/he/segments/t1.1/origin/checked']);
+    await call('POST', `/v1/suggestions/${checked.body.id}/approve`, { as: 'keeper' });
+    const segments = (await call('GET', `/v1/entities/${event}`)).body.data.body.versions[0].segments;
+    expect(segments[1]).toEqual({ ...index.versions[0]!.segments[1], origin: { ...ocr, checked: true } });
+    expect(segments[0].origin.checked).toBeUndefined();
+    // Checked once is checked: and a person's own words have nothing to check.
+    expect((await words({ change: 'check', segment: 't1.1' })).status).toBe(409);
+  });
+
   it('shows a page body kept as wiki markup before words had structure as structured words, and turns the catalog over', async () => {
     const { convertLegacyBodies } = await import('@rebbehub/core');
     const other = await add(catalog, 'mendy', 'keeper', 'event', { ...yudShvat(set), date: '5742-05-11' });

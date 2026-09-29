@@ -986,7 +986,7 @@ export function createApp(options: ApiOptions): Hono {
     const by = await signedIn(c);
     const input = await body<{ entityId?: string; change?: string; version?: string; segment?: string; text?: unknown; before?: unknown; kind?: string; language?: string; title?: string; note?: string }>(c);
     if (!input.entityId || !isEntityId(input.entityId)) throw new HttpError(400, 'say which item these words are on (entityId)');
-    if (!['edit', 'add', 'remove', 'start'].includes(input.change ?? '')) throw new HttpError(400, 'the change is edit, add, remove or start');
+    if (!['edit', 'add', 'remove', 'start', 'check'].includes(input.change ?? '')) throw new HttpError(400, 'the change is edit, add, remove, start or check');
     const runs = (value: unknown) => (value === undefined ? undefined : Array.isArray(value) ? (value as PageInline[]) : (() => { throw new HttpError(400, 'words are a list of runs'); })());
     return c.json(
       await suggestWords(catalog, by, {

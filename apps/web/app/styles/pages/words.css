@@ -543,3 +543,74 @@ input.words-note:focus {
   color: var(--muted);
   font-weight: 600;
 }
+
+/* Checking a machine's reading against its scan (routes/edit.tsx): the scan beside the words,
+   above them on a phone, where it stays in view while the words scroll. */
+.check-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 12px 0;
+}
+.check-beside {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.check-scan {
+  position: sticky;
+  top: 72px;
+  max-height: calc(100vh - 88px);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--sunken);
+}
+.scan-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.scan-at {
+  min-width: 7em;
+  text-align: center;
+}
+.scan-zoom {
+  display: inline-flex;
+  gap: 4px;
+  margin-inline-start: auto;
+}
+.scan-page {
+  overflow: auto;
+}
+.scan-canvas canvas {
+  display: block;
+  max-width: none;
+}
+.scan-note {
+  padding: 16px;
+}
+.words-right {
+  margin-inline-start: 8px;
+  vertical-align: middle;
+}
+@media (max-width: 900px) {
+  .check-beside {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .check-scan {
+    top: 56px;
+    max-height: 45vh;
+    z-index: 2;
+  }
+}

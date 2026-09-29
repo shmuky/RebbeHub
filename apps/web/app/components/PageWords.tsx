@@ -4,6 +4,7 @@ import { toHebrewNumeral } from '@rebbehub/hebrew';
 import { allSegments, type PageInline, type PageSegment, type PageText, type PageVersion, type TextProfile } from '@rebbehub/model';
 import type { Lang } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
+import { Icon } from '../ui/Icon.js';
 import { MachineNote } from '../ui/primitives.js';
 import '../styles/pages/words.css';
 import { SegmentEditor, SentNote, type SentSuggestion } from './SegmentEditor.js';
@@ -19,6 +20,8 @@ const WORDS = {
   machine: { he: 'נכתב בידי מכונה ועדיין לא נבדק בידי אדם - הקטעים שלא נבדקו מסומנים.', en: 'Made by a machine and not yet checked by a person - the segments nobody has checked are marked.' },
   segmentLink: { he: 'קישור לקטע', en: 'Link to this segment' },
   fixHint: { he: 'לחיצה לתיקון', en: 'Click to fix' },
+  right: { he: 'נכון', en: 'Right' },
+  rightHint: { he: 'בדקתי מול הסריקה, והקטע נכון כמו שהוא', en: 'Checked against the scan: right as it is' },
   library: { he: 'ספריית ליובאוויטש', en: 'The Lubavitch Library' },
 } as const;
 
@@ -92,6 +95,10 @@ function Runs({ runs, ctx }: { runs: readonly PageInline[] | undefined; ctx: Con
 
 interface EditState {
   entityId: string;
+  /** Checking a machine's words against their scan: each unchecked segment can be marked right as it is. */
+  check?: boolean;
+  /** A segment was opened or marked: the scan beside turns to its page. */
+  onFocus?: (segmentId: string) => void;
   open: string | null;
   adding: string | null;
   sent: Record<string, SentSuggestion>;
@@ -129,23 +136,30 @@ function Words({ segment, ctx }: { segment: PageSegment; ctx: Context }) {
         tabIndex={0}
         title={WORDS.fixHint[ctx.lang]}
         onClick={(e) => {
-          // A link in the words still goes where it points.
-          if ((e.target as HTMLElement).closest('a')) return;
+          // A link in the words still goes where it points; while checking, it stays on this page.
+          if ((e.target as HTMLElement).closest('a')) {
+            if (!edit.check) return;
+            e.preventDefault();
+          }
           edit.setOpen(key);
+          edit.onFocus?.(segment.id);
         }}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             edit.setOpen(key);
+            edit.onFocus?.(segment.id);
           }
         }}
       >
         <Runs runs={segment.text} ctx={ctx} />
       </span>
     );
+  const right = edit.check && !sent && edit.open !== key && unchecked(segment) ? <RightButton segment={segment} ctx={ctx} onSent={(s) => edit.markSent(key, s)} /> : null;
   return (
     <>
       {editor}
+      {right}
       {sent ? <SentNote sent={sent} lang={ctx.lang} /> : null}
       {edit.adding === key ? (
         <SegmentEditor
@@ -160,6 +174,46 @@ function Words({ segment, ctx }: { segment: PageSegment; ctx: Context }) {
             edit.markSent(key, s);
           }}
         />
+      ) : null}
+    </>
+  );
+}
+
+/** "Right": a machine's segment read against its scan and found right, sent as a check that keeps its words. */
+function RightButton({ segment, ctx, onSent }: { segment: PageSegment; ctx: Context; onSent: (sent: SentSuggestion) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const edit = ctx.edit!;
+  const send = async () => {
+    setBusy(true);
+    setError(null);
+    edit.onFocus?.(segment.id);
+    try {
+      const response = await fetch('/_/suggestions/words', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({ entityId: edit.entityId, change: 'check', version: ctx.version.id, segment: segment.id, before: segment.text ?? [], title: WORDS.rightHint[ctx.lang] }),
+      });
+      const json = (await response.json().catch(() => ({}))) as { id?: number; status?: string; message?: string };
+      if (!response.ok) throw new Error(json.message ?? response.statusText);
+      onSent({ id: json.id!, status: json.status ?? 'open' });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <button type="button" className="btn sm words-right" onClick={() => void send()} disabled={busy} aria-busy={busy || undefined} title={WORDS.rightHint[ctx.lang]}>
+        <Icon name="check" size={14} />
+        {WORDS.right[ctx.lang]}
+      </button>
+      {error ? (
+        <span className="words-error" role="alert">
+          {error}
+        </span>
       ) : null}
     </>
   );
@@ -417,7 +471,7 @@ const versionName = (v: PageVersion, lang: Lang) => (v.language === 'he' || v.la
  * Every segment has an anchor (`#s-3.14`) a link can point at. With
  * `edit`, each segment can be clicked and fixed in place (the Edit tab).
  */
-export function PageWords({ page, lang, edit }: { page: PageText; lang: Lang; edit?: { entityId: string } }) {
+export function PageWords({ page, lang, edit }: { page: PageText; lang: Lang; edit?: { entityId: string; check?: boolean; onFocus?: (segmentId: string) => void } }) {
   const versions = page.versions.filter((v) => v.segments.length);
   const pairable = page.profile === 'sefaria' && versions.length > 1;
   const [shown, setShown] = useState<string>(pairable ? 'both' : (versions[0]?.id ?? ''));
@@ -428,6 +482,8 @@ export function PageWords({ page, lang, edit }: { page: PageText; lang: Lang; ed
   const editState: EditState | undefined = edit
     ? {
         entityId: edit.entityId,
+        check: edit.check,
+        onFocus: edit.onFocus,
         open,
         adding,
         sent,

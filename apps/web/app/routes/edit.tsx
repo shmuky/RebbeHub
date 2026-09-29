@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { data, Link } from 'react-router';
-import { isPageText } from '@rebbehub/model';
+import { isPageText, type PageSegment, type PageText } from '@rebbehub/model';
 import type { Route } from './+types/edit';
-import { PageWords } from '../components/PageWords.js';
+import { PageWords, segmentAnchor } from '../components/PageWords.js';
+import { ScanBeside } from '../components/ScanBeside.js';
 import { SegmentEditor, SentNote, type SentSuggestion } from '../components/SegmentEditor.js';
 import { SuggestFix, canSuggestFix } from '../components/SuggestFix.js';
 import { siteOf } from '../lib/context.server.js';
-import { langFrom, t } from '../lib/i18n.js';
+import { driveReadUrl } from '../lib/drive.js';
+import { scanPages, scannedVersion } from '../lib/scanPages.js';
+import { num } from '../lib/i18nUi.js';
+import { langFrom, t, type Lang } from '../lib/i18n.js';
 import { labelOf } from '../lib/labels.js';
 import { href } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
@@ -45,7 +49,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { api, siteUrl } = siteOf(context);
   const entity = await api.entity(params.id);
   if (!entity) throw data('not found', { status: 404 });
-  return { lang: langFrom(request), siteUrl, entity };
+  // Words a machine read from a scan open beside the scan, read through RebbeHub's API.
+  const body = (entity.data as { body?: unknown }).body;
+  const scanned = isPageText(body) ? scannedVersion(body) : null;
+  const scanFile = scanned ? driveReadUrl(scanned.url, api.baseUrl) : null;
+  return { lang: langFrom(request), siteUrl, entity, scan: scanned && scanFile ? { ...scanned, file: scanFile } : null };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -55,12 +63,13 @@ export function meta({ loaderData }: Route.MetaArgs) {
 }
 
 export default function Edit({ loaderData }: Route.ComponentProps) {
-  const { lang, entity } = loaderData;
+  const { lang, entity, scan } = loaderData;
   const account = useAccount();
   const [started, setStarted] = useState<SentSuggestion | null>(null);
   const body = (entity.data as { body?: unknown }).body;
   const page = isPageText(body) && body.versions.some((v) => v.segments.length) ? body : null;
   const withheld = Boolean((entity as { withheld?: string }).withheld);
+  if (scan && page && account && !withheld) return <CheckBesideScan entity={entity} page={page} scan={scan} lang={lang} />;
 
   return (
     <ItemSubpage
@@ -136,4 +145,80 @@ export default function Edit({ loaderData }: Route.ComponentProps) {
       ) : null}
     </ItemSubpage>
   );
+}
+
+const CHECK = {
+  help: {
+    he: 'המילים נקראו במכונה מהסריקה שלצידן. בודקים כל קטע מול הסריקה: "נכון" אם הוא נכון, או לוחצים עליו ומתקנים. כל בדיקה ותיקון נשלחים לאישור.',
+    en: 'A machine read these words from the scan beside them. Check each segment against the scan: "Right" when it is, or click it and fix it. Each check and fix goes for review.',
+  },
+  progress: { he: 'נבדקו', en: 'checked' },
+  of: { he: 'מתוך', en: 'of' },
+  next: { he: 'לקטע הבא שלא נבדק', en: 'Next unchecked segment' },
+  done: { he: 'כל הקטעים נבדקו.', en: 'Every segment is checked.' },
+} as const;
+
+/**
+ * Checking a machine's reading against its scan: the scan's page on one
+ * side, turned to the page of the segment in hand (the words' source
+ * markers say which), and the words on the other, each segment marked
+ * "Right" as it is or fixed in place. On a phone the scan stays at the top
+ * while the words scroll beneath it.
+ */
+function CheckBesideScan({ entity, page, scan, lang }: { entity: { id: string; path: string | null; type: string; data: unknown }; page: PageText; scan: { id: string; url: string; file: string }; lang: Lang }) {
+  const pages = scanPages(page, scan.id);
+  const version = page.versions.find((v) => v.id === scan.id)!;
+  const all = [...segmentsOf(version.segments)];
+  const machine = all.filter((s) => s.origin);
+  const open = machine.filter((s) => !s.origin!.checked);
+  const [at, setAt] = useState<number>(pages.get(open[0]?.id ?? '') ?? pages.values().next().value ?? 1);
+  const [cursor, setCursor] = useState(0);
+  const focus = (id: string) => {
+    const p = pages.get(id);
+    if (p) setAt(p);
+  };
+  const next = () => {
+    const target = open[cursor % Math.max(open.length, 1)];
+    if (!target) return;
+    setCursor((c) => c + 1);
+    focus(target.id);
+    document.getElementById(segmentAnchor(target.id))?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  };
+  return (
+    <ItemSubpage entity={entity as Parameters<typeof ItemSubpage>[0]['entity']} lang={lang} current="edit" here={t(lang, 'tabEdit')}>
+      <p className="alert info">
+        <Icon name="scan" />
+        <span>{CHECK.help[lang]}</span>
+      </p>
+      <div className="check-bar">
+        <span className="num">
+          {num(machine.length - open.length, lang)} {CHECK.of[lang]} {num(machine.length, lang)} {CHECK.progress[lang]}
+        </span>
+        {open.length ? (
+          <button type="button" className="btn sm" onClick={next}>
+            <Icon name="target" />
+            {CHECK.next[lang]}
+          </button>
+        ) : (
+          <span className="subtle">{CHECK.done[lang]}</span>
+        )}
+      </div>
+      <div className="check-beside">
+        <div className="check-scan">
+          <ScanBeside file={scan.file} src={scan.url} title={labelOf(entity as Parameters<typeof labelOf>[0], lang)} page={at} lang={lang} onPage={setAt} />
+        </div>
+        <section className="page-body edit-words check-words">
+          <PageWords page={page} lang={lang} edit={{ entityId: entity.id, check: true, onFocus: focus }} />
+        </section>
+      </div>
+    </ItemSubpage>
+  );
+}
+
+
+function* segmentsOf(list: readonly PageSegment[]): Generator<PageSegment> {
+  for (const s of list) {
+    yield s;
+    if (s.children) yield* segmentsOf(s.children);
+  }
 }

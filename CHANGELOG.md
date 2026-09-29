@@ -12,6 +12,13 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **A machine's words checked against their scan.** On the edit page, a
+  page whose words a machine read from a scan (a version with the scan's
+  `url` and segments carrying `origin`) opens beside the scan, turned to
+  the page of the segment in hand (the words' source markers, `סריקה 12`,
+  say which). Each segment is marked **Right** as it is or fixed in place.
+  `POST /v1/suggestions/words` takes `change: "check"`: the segment's
+  words stay and its `origin` becomes `checked`.
 - **Clashes are decided before Approve, all at once.** With `summary=1`,
   `GET /v1/suggestions/{id}` also gives `clashes` (items changed on the
   site since the suggestion was made, each needing a decision) and
