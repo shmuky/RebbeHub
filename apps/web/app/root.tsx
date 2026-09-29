@@ -13,6 +13,7 @@ import { Footer } from './ui/Footer.js';
 import { ToastProvider } from './ui/Toast.js';
 import { EmptyState } from './ui/primitives.js';
 import { THEME_SCRIPT } from './ui/theme.js';
+import { PUBLIC_PAGE } from '../server/cachePolicy.js';
 import './styles/fonts.css';
 import './styles/tokens.css';
 import './styles/base.css';
@@ -40,9 +41,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export function headers() {
-  // Pages change when the catalog does; let caches keep them briefly and serve stale while refreshing.
-  // No other site may frame them (sign-in and review among them); /embed says otherwise for itself.
-  return { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=600', 'Content-Security-Policy': "frame-ancestors 'self'", 'X-Frame-Options': 'SAMEORIGIN' };
+  // Pages change when the catalog does: kept a minute in the browser and five at Cloudflare's edge, then served stale
+  // while made again (server/cachePolicy.ts; a signed-in person's are private). No other site may frame them (sign-in and
+  // review among them); /embed says otherwise for itself.
+  return { 'Cache-Control': PUBLIC_PAGE, 'Content-Security-Policy': "frame-ancestors 'self'", 'X-Frame-Options': 'SAMEORIGIN' };
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {

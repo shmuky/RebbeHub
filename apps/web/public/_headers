@@ -1,0 +1,29 @@
+# How long browsers and Cloudflare keep the site's own files. Workers static
+# assets read this file (it is not served itself); docs/operations.md,
+# "Traffic and crawlers".
+
+# Built by Vite and named by their content: a new build makes new names.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Fonts and the reader's pdf.js files keep their names across builds: a week, then checked.
+/fonts/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/pdf-cmaps/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/pdf-standard-fonts/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/pdf-wasm/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+
+# Icons: a day.
+/*.png
+  Cache-Control: public, max-age=86400
+/favicon.svg
+  Cache-Control: public, max-age=86400
+
+# The service worker and the app's manifest are checked every time, so a new release reaches everyone at once.
+/sw.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache

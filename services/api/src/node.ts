@@ -5,7 +5,7 @@ import { openPGlite } from '@rebbehub/db/pglite';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { createApp, type FileStore } from './app.js';
-import { DEFAULT_IP_PER_MINUTE, DEFAULT_KEY_PER_MINUTE, memoryRateLimiter } from './platform.js';
+import { DEFAULT_IP_PER_MINUTE, DEFAULT_KEY_PER_MINUTE, DEFAULT_SEARCH_PER_MINUTE, memoryRateLimiter } from './platform.js';
 import { authFor } from './auth.js';
 import { resendMailer } from './mail.js';
 import { sendNotifications, type Mailer } from '@rebbehub/core';
@@ -75,7 +75,7 @@ const app = createApp({
   uploads: filesDir ? { public: folder('public'), preservation: folder('preservation') } : undefined,
   embedder: embedderFromEnv(process.env),
   rateLimits: process.env.RATE_LIMIT
-    ? { ip: memoryRateLimiter(DEFAULT_IP_PER_MINUTE), key: memoryRateLimiter(DEFAULT_KEY_PER_MINUTE), ipPerMinute: DEFAULT_IP_PER_MINUTE, keyPerMinute: DEFAULT_KEY_PER_MINUTE }
+    ? { ip: memoryRateLimiter(DEFAULT_IP_PER_MINUTE), key: memoryRateLimiter(DEFAULT_KEY_PER_MINUTE), search: memoryRateLimiter(DEFAULT_SEARCH_PER_MINUTE), ipPerMinute: DEFAULT_IP_PER_MINUTE, keyPerMinute: DEFAULT_KEY_PER_MINUTE, searchPerMinute: DEFAULT_SEARCH_PER_MINUTE }
     : undefined,
   oai: process.env.OAI_ADMIN_EMAIL ? { adminEmail: process.env.OAI_ADMIN_EMAIL, siteUrl: process.env.SITE_URL } : undefined,
   mirrors: {

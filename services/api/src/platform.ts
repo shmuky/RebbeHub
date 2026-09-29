@@ -112,6 +112,37 @@ export function etagMatches(header: string | undefined, etag: string): boolean {
 }
 
 /**
+ * Whether a request may be answered from Cloudflare's edge cache (the
+ * Worker's `CachedApi` entrypoint, worker.ts): a GET or HEAD from nobody in
+ * particular - no token, no session cookie - not asked for fresh
+ * (`Cache-Control: no-cache`), that is not sign-in, the MCP
+ * server, or a part of a file (a player asks for a file's bytes in ranges;
+ * each range is read from R2 as it is asked for). The answers are the same for everyone who asks
+ * so, so one kept answer serves them all.
+ */
+export function mayUseEdgeCache(request: Request): boolean {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return false;
+  if (request.headers.has('authorization') || request.headers.has('cookie')) return false;
+  // Asked for fresh (the site does so for someone signed in, who may have just changed it; a browser's hard reload does too).
+  if (/no-cache|no-store/.test(request.headers.get('cache-control') ?? '') || request.headers.get('pragma') === 'no-cache') return false;
+  const path = new URL(request.url).pathname;
+  if (path === '/mcp' || path.startsWith('/v1/auth/')) return false;
+  if (path.startsWith('/objects/') && request.headers.has('range')) return false;
+  return true;
+}
+
+/**
+ * How long an answer anyone may have is kept: a minute in browsers, two at
+ * Cloudflare's edge (the Worker's cache, worker.ts), and served stale for
+ * ten more while it is fetched again. A burst of readers asking the same
+ * thing reaches the database about once in two minutes.
+ */
+export const PUBLIC_READ = 'public, max-age=60, s-maxage=120, stale-while-revalidate=600';
+
+/** For answers that sum the whole catalog (counts, health, the community page): slow to change, dear to make. */
+export const PUBLIC_SUMMARY = 'public, max-age=300, s-maxage=600, stale-while-revalidate=3600';
+
+/**
  * ETags on every JSON answer to a GET, and 304 when the client has it
  * already; a Cache-Control where the route set none: public for a minute
  * when nobody is signed in, else private and checked each time. The
@@ -125,7 +156,7 @@ export function caching(): MiddlewareHandler {
     const personal = Boolean(c.req.header('Authorization') || c.req.header('Cookie'));
     c.header('Vary', 'Authorization, Cookie, Accept-Encoding');
     if (c.res.status !== 200) return;
-    if (!c.res.headers.has('Cache-Control')) c.header('Cache-Control', personal ? 'private, no-cache' : 'public, max-age=60, stale-while-revalidate=300');
+    if (!c.res.headers.has('Cache-Control')) c.header('Cache-Control', personal ? 'private, no-cache' : PUBLIC_READ);
     const type = c.res.headers.get('Content-Type') ?? '';
     if (c.res.headers.has('ETag') || !/json/.test(type) || !c.res.body) return;
     const etag = `W/"${await sha256Base64(await c.res.clone().arrayBuffer())}"`;
@@ -154,13 +185,24 @@ export interface RateLimiter {
 export interface RateLimits {
   ip?: RateLimiter;
   key?: RateLimiter;
+  /**
+   * Searching, by words and by meaning, per address: dearer than reading an
+   * item (a full-text query, or a model turning the question into numbers),
+   * so it has its own, smaller allowance on top of the address's.
+   */
+  search?: RateLimiter;
   /** What the limiters allow, as the RateLimit-Policy header says it. */
   ipPerMinute?: number;
+  searchPerMinute?: number;
   keyPerMinute?: number;
 }
 
 export const DEFAULT_IP_PER_MINUTE = 300;
 export const DEFAULT_KEY_PER_MINUTE = 1200;
+export const DEFAULT_SEARCH_PER_MINUTE = 60;
+
+/** The routes counted against the search allowance. */
+export const SEARCH_PATHS = /^\/v1\/search(\/|$)/;
 
 /**
  * A limiter in this process's memory: a fixed window per key. For Node and

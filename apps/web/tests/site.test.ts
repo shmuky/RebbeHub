@@ -7,6 +7,7 @@ import { createPerson, registerFile, setUsername } from '@rebbehub/core';
 import type { EntityId } from '@rebbehub/model';
 import { createApp } from '../../../services/api/src/app.js';
 import { add, freshCatalog } from '../../../packages/core/tests/helpers.js';
+import { PUBLIC_PAGE, edgeCacheable, forEdge } from '../server/cachePolicy.js';
 import { createSiteHandler } from '../server/handler.js';
 
 /**
@@ -66,9 +67,9 @@ beforeAll(async () => {
   handle = createSiteHandler(build, { apiUrl: 'http://api.test', siteUrl: SITE, fetch: (input, init) => Promise.resolve(api.request(input, init)) });
 }, 120_000);
 
-const get = async (path: string) => {
-  const response = await handle(new Request(`${SITE}${path}`));
-  return { status: response.status, location: response.headers.get('location'), html: await response.text(), type: response.headers.get('content-type') };
+const get = async (path: string, headers: Record<string, string> = {}) => {
+  const response = await handle(new Request(`${SITE}${path}`, { headers }));
+  return { status: response.status, location: response.headers.get('location'), html: await response.text(), type: response.headers.get('content-type'), cache: response.headers.get('cache-control') };
 };
 
 describe('the public site', () => {
@@ -188,16 +189,112 @@ describe('the public site', () => {
     expect(await response.text()).toContain('Your request arrived');
   });
 
-  it('tells search engines what there is', async () => {
+  it('tells search engines what there is: robots.txt, and sitemaps a page of items at a time in both languages', async () => {
     const robots = await get('/robots.txt');
+    expect(robots.html).toContain('User-agent: *\nAllow: /\n');
+    for (const path of ['/_/', '/account', '/inbox', '/admin', '/review', '/search', '/edit/', '/history/']) expect(robots.html).toContain(`Disallow: ${path}\n`);
+    // Items, lists and the developer docs stay open to every crawler.
+    expect(robots.html).not.toMatch(/Disallow: \/(developers|sets|calendar|events|sample)\b/);
     expect(robots.html).toContain(`Sitemap: ${SITE}/sitemap.xml`);
+
     const index = await get('/sitemap.xml');
     expect(index.type).toContain('application/xml');
-    expect(index.html).toContain(`${SITE}/sitemaps/work.xml`);
-    const works = await get('/sitemaps/work.xml');
-    expect(works.html).toContain(`<loc>${SITE}/sample</loc>`);
-    expect(works.html).toContain(`hreflang="en" href="${SITE}/sample?lang=en"`);
+    expect(index.cache).toMatch(/^public, .*s-maxage=3600/);
+    expect(index.html).toContain(`<loc>${SITE}/sitemaps/pages.xml</loc>`);
+    expect(index.html).toMatch(new RegExp(`<loc>${SITE}/sitemaps/work-1\\.xml</loc><lastmod>\\d{4}-\\d\\d-\\d\\dT`));
+    expect(index.html).toContain(`${SITE}/sitemaps/event-1.xml`);
+    expect(index.html).not.toContain('schema-1.xml');
+
+    const works = await get('/sitemaps/work-1.xml');
+    expect(works.html).toMatch(new RegExp(`<url><loc>${SITE}/sample</loc><lastmod>[^<]+</lastmod><xhtml:link rel="alternate" hreflang="he" href="${SITE}/sample"/><xhtml:link rel="alternate" hreflang="en" href="${SITE}/sample\\?lang=en"/><xhtml:link rel="alternate" hreflang="x-default" href="${SITE}/sample"/></url>`));
+    expect(works.html).toContain(`<url><loc>${SITE}/sample?lang=en</loc>`);
+    const pages = await get('/sitemaps/pages.xml');
+    for (const path of ['/', '/sets', '/calendar', '/developers', '/developers/reference']) expect(pages.html).toContain(`<loc>${SITE}${path}</loc>`);
+    // The first sitemaps' addresses still lead to their first page; what is not there is not found.
+    expect(await get('/sitemaps/work.xml')).toMatchObject({ status: 301, location: '/sitemaps/work-1.xml' });
+    expect((await get('/sitemaps/work-2.xml')).status).toBe(404);
     expect((await get('/sitemaps/schema.xml')).status).toBe(404);
+    expect((await get('/sitemaps/segment-1.xml')).status).toBe(404);
+  });
+
+  it("gives every item's page its title, description, canonical address, languages, preview and structured data", async () => {
+    const page = await get('/sample');
+    expect(page.html).toContain('<title>ספר לדוגמה · RebbeHub</title>');
+    expect(page.html).toMatch(/<meta name="description" content="[^"]*ספר לדוגמה/);
+    expect(page.html).toContain(`<link rel="canonical" href="${SITE}/sample"/>`);
+    expect(page.html).toContain(`hrefLang="he" href="${SITE}/sample"`);
+    expect(page.html).toContain(`hrefLang="en" href="${SITE}/sample?lang=en"`);
+    expect(page.html).toContain(`hrefLang="x-default" href="${SITE}/sample"`);
+    expect(page.html).toContain('<meta property="og:type" content="book"/>');
+    expect(page.html).toContain(`<meta property="og:url" content="${SITE}/sample"/>`);
+    // Without a shaar drawn yet, the site's own picture.
+    expect(page.html).toContain(`<meta property="og:image" content="${SITE}/icon-512.png"/>`);
+    expect(page.html).toContain('<meta name="twitter:card" content="summary"/>');
+    expect(page.html).not.toContain('name="robots"');
+    const data = JSON.parse(/<script type="application\/ld\+json">(.*?)<\/script>/s.exec(page.html)![1]!);
+    const graph = data['@graph'] as Array<Record<string, any>>;
+    expect(graph.find((x) => x['@type'] === 'Book')).toMatchObject({ name: 'ספר לדוגמה', url: `${SITE}/sample`, author: [{ '@type': 'Person', name: 'הרבי', url: `${SITE}/authors/the-rebbe` }] });
+    const crumbs = graph.find((x) => x['@type'] === 'BreadcrumbList')!;
+    expect(crumbs.itemListElement.map((c: { item: string }) => c.item)).toEqual([`${SITE}/sets`, `${SITE}/farbrengens`, `${SITE}/sample`]);
+
+    // A farbrengen is an Event, its recordings the AudioObjects heard there, each with its file and length.
+    const event = await get('/events/5742-05-10?lang=en');
+    const eventData = JSON.parse(/<script type="application\/ld\+json">(.*?)<\/script>/s.exec(event.html)![1]!)['@graph'] as Array<Record<string, any>>;
+    expect(eventData[0]).toMatchObject({
+      '@type': 'Event',
+      name: 'Sample farbrengen',
+      recordedIn: [{ '@type': 'AudioObject', name: 'Recording 1', contentUrl: `https://files.rebbehub.test/objects/${'a'.repeat(64)}`, encodingFormat: 'audio/mpeg', duration: 'PT1H2M3S' }],
+    });
+    expect(eventData[0]!.startDate).toMatch(/^19\d\d-\d\d-\d\d$/);
+    expect(eventData[1]!.itemListElement[0]).toMatchObject({ name: 'Farbrengens', item: `${SITE}/calendar` });
+    expect(event.html).toContain(`<link rel="canonical" href="${SITE}/events/5742-05-10?lang=en"/>`);
+    expect(event.html).toContain('<meta property="og:locale" content="en_US"/>');
+
+    // The home page says what the site is, and how to search it.
+    const home = await get('/');
+    expect(home.html).toContain('"@type":"WebSite"');
+    expect(home.html).toContain('"@type":"SearchAction"');
+  });
+
+  it('keeps search results, empty talk pages, histories and permanent-id copies out of search, and answers what is not there with 404', async () => {
+    for (const path of ['/search?q=שבט', `/talk/${ids.work}`, `/history/${ids.work}`, '/account', '/inbox', `/embed/${ids.event}`]) {
+      const page = await get(path);
+      expect(page.status, path).toBe(200);
+      expect(page.html, path).toMatch(/<meta name="robots" content="noindex/);
+    }
+    // One address per page: a permanent id and a trailing slash lead to it in one permanent redirect.
+    expect(await get(`/${ids.work}`)).toMatchObject({ status: 301, location: '/sample' });
+    expect(await get('/sample/?lang=en')).toMatchObject({ status: 301, location: '/sample?lang=en' });
+    const missing = await get('/no/such/sefer');
+    expect(missing.status).toBe(404);
+    expect(missing.html).toContain('<html lang="he" dir="rtl">');
+  });
+
+  it("lets Cloudflare's edge keep pages for anyone, never for someone signed in, and never what failed or is personal", async () => {
+    const anyone = await get('/sample');
+    expect(anyone.cache).toBe(PUBLIC_PAGE);
+    expect(anyone.cache).toMatch(/s-maxage=\d+/);
+    // The data React Router fetches for the next page is kept the same way.
+    expect((await get('/sample.data')).cache).toBe(PUBLIC_PAGE);
+    const signedIn = await get('/sample', { cookie: '__Host-rh_session=abc; theme=dark' });
+    expect(signedIn.status).toBe(200);
+    expect(signedIn.cache).toBe('private, no-cache');
+    // A page that is not there is kept too (crawlers ask again and again), briefly.
+    expect((await get('/no/such/sefer')).cache).toBe(PUBLIC_PAGE);
+    // What passes a person's requests on to the API never is.
+    expect((await get('/_/threads/people?q=lev')).cache).toBe('no-store');
+    expect((await get('/robots.txt')).cache).toMatch(/^public, .*s-maxage=/);
+
+    // What the Worker sends to the cached entrypoint (server/worker.ts).
+    const request = (path: string, init: RequestInit = {}) => new Request(`${SITE}${path}`, init);
+    expect(edgeCacheable(request('/sample'))).toBe(true);
+    expect(edgeCacheable(request('/sample', { headers: { cookie: 'theme=dark' } }))).toBe(true);
+    expect(edgeCacheable(request('/sample', { headers: { cookie: 'rh_session=abc' } }))).toBe(false);
+    expect(edgeCacheable(request('/sample', { method: 'POST' }))).toBe(false);
+    expect(edgeCacheable(request('/_/auth/me'))).toBe(false);
+    const cleaned = forEdge(request('/sample?utm_source=x&fbclid=y&lang=en', { headers: { cookie: 'theme=dark' } }));
+    expect(cleaned.url).toBe(`${SITE}/sample?lang=en`);
+    expect(cleaned.headers.get('cookie')).toBeNull();
   });
 
   it('shows a person by their handle, and an old handle leads to the new one', async () => {

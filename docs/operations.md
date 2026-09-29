@@ -306,6 +306,102 @@ It runs from the **Upkeep (manual)** workflow ([deploy](deploy.md)),
 - Cloudflare Workers: deployed with the API on every merge to `main`; see
   [deploy.md](deploy.md).
 
-Pages are cached for a minute and served stale for ten while they
-refresh. The language is in the address (`?lang=en`), never a cookie, so a
-cached page is always in the right language.
+The language is in the address (`?lang=en`), never a cookie, so a cached
+page is always in the right language.
+
+## Traffic and crawlers
+
+What happens when many people, or a crawler, come at once: most requests
+are answered at Cloudflare's edge and never reach the Worker's code, the
+API or Postgres.
+
+### What is cached where
+
+| What | Where it is kept | For how long | Code |
+| --- | --- | --- | --- |
+| Pages (HTML, and the `.data` React Router fetches) for anyone not signed in | Cloudflare's Workers cache in front of the site's `CachedSite` entrypoint; browsers | 5 minutes at the edge, then served stale for an hour while made again; 1 minute in browsers | `apps/web/server/worker.ts`, `server/cachePolicy.ts`, `app/root.tsx` |
+| Pages for someone signed in (the `rh_session` cookie) | nowhere (`private, no-cache`) | - | `server/cachePolicy.ts` |
+| A page that is not there (404) | as any page | as any page | - |
+| `robots.txt`, sitemaps | edge | a day / an hour | `app/routes/robots.ts`, `app/routes/sitemap*.ts` |
+| Built files (`/assets/*`, named by content) | browsers and Cloudflare | a year, `immutable` | `apps/web/public/_headers` |
+| Fonts, pdf.js files, icons | browsers and Cloudflare | a week / a day | `apps/web/public/_headers` |
+| API reads from nobody in particular (no token, no cookie) | Cloudflare's Workers cache in front of the API's `CachedApi` entrypoint; browsers | 2 minutes at the edge, then stale for 10 while fetched again | `services/api/src/worker.ts`, `platform.ts` |
+| API sums of the whole catalog (`/v1/stats`, `/v1/health`, `/v1/community`, `/v1/refcounts`) | as above | 10 minutes, then stale for an hour | `platform.ts` (`PUBLIC_SUMMARY`) |
+| `/v1/sitemap…`, `/openapi.json`, `/llms.txt` | as above | an hour / 5 minutes / an hour | - |
+| File bytes (`/objects/<sha256>`: covers, page images, audio) | edge (whole files) and browsers | a day | `services/api/src/app.ts` |
+| Reads with a token or a session, and every change | nowhere | - | - |
+
+Each Worker has two entrypoints (`[exports]` in its `wrangler.toml`): the
+default one runs on every request, is never cached, and sends what anyone
+may have on to the cached one. The cache keeps each answer as long as its
+`Cache-Control` says, and collapses a burst of the same request into one
+run of the Worker. The site reads the API through its service binding, so
+a page made fresh still finds most of its API reads already at the edge.
+
+A merged change shows at once to whoever made it (they are signed in, so
+their pages are never served from the cache, and the site asks the API
+for them with `Cache-Control: no-cache`, which the API's edge does not
+answer), and to everyone else within about five minutes. A new deploy starts with an empty cache (each version has its
+own).
+
+### What reaches Postgres
+
+- A page's first view after it expired at the edge: its API reads that
+  are not at the API's edge either. An item page makes one to two dozen
+  reads, each a lookup by id or an index (`entity_ref`, `entity_path`).
+- Everything a signed-in person reads and does.
+- Searches (full text, `entity_search`; by meaning, the `embedding` HNSW
+  index and a Workers AI call). Each address may search 60 times a minute
+  on the site (`RATE_LIMIT_SEARCH` in `apps/web/wrangler.toml`) and on the
+  API (`services/api/wrangler.toml`), on top of the API's 300 requests a
+  minute. Page views are never limited: crawlers read pages freely.
+- Sitemaps: the index is one query over the `entity_type_id` index
+  (migration 0019), and each sitemap one more; both are kept an hour.
+- Each range of a file a player asks for (they are not cached at the edge)
+  looks the file up by its sha256; Hyperdrive's query cache answers most
+  of those.
+
+Hyperdrive pools the connections (each Worker request opens one through
+it) and caches reads for a minute by default: keep its caching on.
+
+### Crawlers
+
+- `/robots.txt` lets every crawler, AI crawlers too, read items, lists and
+  the developer docs, and keeps them out of what is personal, the tools,
+  the passages to the API (`/_/`) and what has no end (search, a text's
+  every page, comparisons, files). It names `/sitemap.xml`.
+- `/sitemap.xml` lists the site's own pages and every set, author,
+  person, sefer, unit, farbrengen, printing and recording, 10,000 items to
+  a sitemap, each in Hebrew and English (`hreflang`, `x-default` Hebrew)
+  with when it last changed.
+- Every page has its title, description, canonical address (its own
+  language), `hreflang` links, Open Graph and Twitter cards (a sefer's
+  shaar as the picture where the jobs have drawn one) and schema.org data:
+  `Book` for sefarim and printings, `CreativeWork` for sichos, `Event`
+  for farbrengens with their recordings as `AudioObject`s, `Person`,
+  `Collection` for sets, `BreadcrumbList` everywhere, and `WebSite` with a
+  `SearchAction` on the home page.
+- Kept out of search (`noindex, follow`): search results, histories,
+  edit pages, empty talk pages, the account, the inbox and the tools,
+  embeds, and items with no page of their own. A permanent id
+  (`/rh-…`), an old path and a trailing slash are each one 301 to the
+  page's address; what is not there is a real 404.
+- Search engines are sent the whole page at once (`isbot`), rendered on
+  the server; nothing on an item's page needs JavaScript to be read.
+- `/llms.txt` and `/llms-full.txt` are for AI agents: what RebbeHub is,
+  the OpenAPI document, the MCP server and every developer page.
+
+### Outside the code
+
+- **Workers Paid.** With the Workers cache on, every request is billed at
+  the Workers request rate, cache hits and service-binding calls
+  included (hits use no CPU time). The free plan's 100,000 requests a day
+  is not enough for real traffic.
+- **Neon.** Autoscaling with a minimum of at least 0.5 CU, so the first
+  reader after a quiet night does not wait for the database to wake;
+  suspend-after-idle off for the production branch once traffic is steady.
+- **Search Console and Bing Webmaster Tools.** Verify `rebbehub.org`
+  (a DNS TXT record in Cloudflare) and submit `https://rebbehub.org/sitemap.xml`.
+- **Cloudflare dashboard.** Leave Bot Fight Mode off, or it may challenge
+  good crawlers; if AI crawlers should be kept out after all, say so in
+  robots.txt rather than blocking them in the dashboard.

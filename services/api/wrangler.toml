@@ -50,8 +50,31 @@ name = "RATE_LIMIT_TOKEN"
 namespace_id = "1002"
 simple = { limit = 1200, period = 60 }
 
+# Searches per address a minute (/v1/search, /v1/search/moments, /v1/search/similar), counted on top of the above:
+# a search is dearer than reading an item. Keep RATE_LIMIT_SEARCH_PER_MINUTE below equal to it.
+[[ratelimits]]
+name = "RATE_LIMIT_SEARCH"
+namespace_id = "1003"
+simple = { limit = 60, period = 60 }
+
+# Cloudflare's Workers cache (docs/operations.md, "Traffic and crawlers"). The default entrypoint runs on
+# every request and is never cached: it sends reads from nobody in particular (no token, no session) on to
+# CachedApi, which the cache sits in front of and which keeps each answer as long as its Cache-Control says.
+[exports.default]
+type = "worker"
+
+[exports.default.cache]
+enabled = false
+
+[exports.CachedApi]
+type = "worker"
+
+[exports.CachedApi.cache]
+enabled = true
+
 [vars]
 # The site people sign in on: passkeys are bound to its domain, and changes are taken only from its pages.
 SITE_URL = "https://rebbehub.org"
 RATE_LIMIT_ADDRESS_PER_MINUTE = "300"
 RATE_LIMIT_TOKEN_PER_MINUTE = "1200"
+RATE_LIMIT_SEARCH_PER_MINUTE = "60"

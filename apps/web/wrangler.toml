@@ -19,6 +19,28 @@ directory = "build/client"
 binding = "API"
 service = "rebbehub-api"
 
+# Searches per address a minute on the site's own search (/search, and what the command palette asks):
+# the API sees the site's requests as the site's, so the site counts them itself.
+[[ratelimits]]
+name = "RATE_LIMIT_SEARCH"
+namespace_id = "1004"
+simple = { limit = 60, period = 60 }
+
+# Cloudflare's Workers cache (docs/operations.md, "Traffic and crawlers"). The default entrypoint runs on
+# every request and is never cached: it sends pages for someone not signed in on to CachedSite, which the
+# cache sits in front of (pages say how long in their Cache-Control: root.tsx). server/worker.ts.
+[exports.default]
+type = "worker"
+
+[exports.default.cache]
+enabled = false
+
+[exports.CachedSite]
+type = "worker"
+
+[exports.CachedSite.cache]
+enabled = true
+
 [vars]
 API_URL = "https://api.rebbehub.org"
 # The site's public address, for canonical links and sitemaps.

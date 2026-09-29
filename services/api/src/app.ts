@@ -12,7 +12,7 @@ import { oaiRoutes, type OaiOptions } from './oai.js';
 import { mirrorRoutes, type MirrorOptions } from './mirrors.js';
 import { readingRoutes } from './reading.js';
 import { tokenGate, tokenGrantOf, tokenRoutes } from './tokens.js';
-import { ERROR_CODES, caching, cors, cursor, nextLink, type RateLimits } from './platform.js';
+import { ERROR_CODES, PUBLIC_SUMMARY, caching, cors, cursor, nextLink, type RateLimits } from './platform.js';
 import { mcpRoutes } from './mcp.js';
 import { pageRoutes } from './pages.js';
 import { threadRoutes } from './threads.js';
@@ -260,7 +260,7 @@ export function createApp(options: ApiOptions): Hono {
     const field = c.req.query('field');
     if (!field || !/^[a-zA-Z]+$/.test(field)) throw new HttpError(400, 'give field (work, authors, event...)');
     const type = c.req.query('type');
-    return c.json({ counts: await catalog.refCounts(field, type as EntityType | undefined) });
+    return c.json({ counts: await catalog.refCounts(field, type as EntityType | undefined) }, 200, { 'Cache-Control': PUBLIC_SUMMARY });
   });
 
   // A work's volumes (its top-level parts) with how many units each holds, and one volume's units.
@@ -268,7 +268,7 @@ export function createApp(options: ApiOptions): Hono {
   app.get('/v1/works/:id/parts/:part', async (c) => c.json({ items: await catalog.workPart(entityId(c.req.param('id')), c.req.param('part'), intParam(c.req.query('limit'), 'limit')) }));
 
   // The community page in numbers: the latest merges, reports waiting (a count), people, and what the catalog lacks.
-  app.get('/v1/community', async (c) => c.json(await catalog.community(intParam(c.req.query('limit'), 'limit'))));
+  app.get('/v1/community', async (c) => c.json(await catalog.community(intParam(c.req.query('limit'), 'limit')), 200, { 'Cache-Control': PUBLIC_SUMMARY }));
 
   // The Missing board (the plan, section 7): farbrengens without recordings or texts (of a year), sefarim without a scan.
   app.get('/v1/missing', async (c) => {
@@ -460,7 +460,7 @@ export function createApp(options: ApiOptions): Hono {
     return c.json(found);
   });
 
-  app.get('/v1/stats', async (c) => c.json({ head: await catalog.head(), counts: await catalog.counts() }));
+  app.get('/v1/stats', async (c) => c.json({ head: await catalog.head(), counts: await catalog.counts() }, 200, { 'Cache-Control': PUBLIC_SUMMARY }));
 
   app.get('/v1/files/:sha256', async (c) => {
     const sha256 = c.req.param('sha256');
@@ -658,7 +658,8 @@ export function createApp(options: ApiOptions): Hono {
     }
     const next = commits.length === limit ? cursor.encode([commits[commits.length - 1]!.seq]) : null;
     nextLink(c, next);
-    return c.json({ commits, next });
+    // The newest page is how programs follow the catalog: kept only seconds, so a merge is seen almost at once.
+    return c.json({ commits, next }, 200, next ? {} : { 'Cache-Control': 'public, max-age=10, s-maxage=10' });
   });
 
   // ---------------------------------------------------------------- reports (no account needed)

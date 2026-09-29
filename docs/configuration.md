@@ -41,8 +41,8 @@ On Workers, from `wrangler.toml` and the Worker's settings; with
 | `OAI_ADMIN_EMAIL` | no | switches on OAI-PMH at `/oai` ([developers/oai-pmh](developers/oai-pmh.md)) |
 | `CATALOG_GIT_URL`, `RELEASE_PUBLIC_KEYS`, `DUMPS_BASE_URL` | no | what `/v1/mirrors` names ([mirrors](mirrors.md)) |
 | `FILES_BASE_URL` | no | where file bytes are served, when not the API itself |
-| `RATE_LIMIT_ADDRESS`, `RATE_LIMIT_TOKEN` (bindings) | - | rate limits per address and per API token ([developers/rate-limits](developers/rate-limits.md)); without them nothing is counted |
-| `RATE_LIMIT_ADDRESS_PER_MINUTE`, `RATE_LIMIT_TOKEN_PER_MINUTE` | no | what those bindings allow, for the `RateLimit-Policy` header; keep them equal to the bindings' limits |
+| `RATE_LIMIT_ADDRESS`, `RATE_LIMIT_TOKEN`, `RATE_LIMIT_SEARCH` (bindings) | - | rate limits per address, per API token, and for searching per address ([developers/rate-limits](developers/rate-limits.md)); without them nothing is counted |
+| `RATE_LIMIT_ADDRESS_PER_MINUTE`, `RATE_LIMIT_TOKEN_PER_MINUTE`, `RATE_LIMIT_SEARCH_PER_MINUTE` | no | what those bindings allow, for the `RateLimit-Policy` header; keep them equal to the bindings' limits |
 
 Under Node only: `PORT`, `HOST`, `PGLITE_DIR`, `DEV_ACCOUNT` (signs every
 request in as one account, on localhost only), `DEV_EMAIL=1` (prints
