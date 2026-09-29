@@ -1,0 +1,636 @@
+/*
+ * Working through what the catalog lacks: the projects list and a
+ * project's page, the Missing board, and the health of the catalog
+ * (routes/projects.tsx, project.tsx, missing.tsx, health.tsx). Lists read
+ * as GitHub's issues do: a box, a header with the views, and rows with a
+ * state icon, a title, a quiet line under it and what stands at the end.
+ */
+
+/* ------------------------------------------------------------ shared */
+
+.pj-cols {
+  align-items: start;
+}
+
+.pj-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.pj-title-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.pj-sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  margin-top: 3px;
+  font-size: var(--fs-sm);
+  color: var(--subtle);
+}
+
+.pj-sub a {
+  color: var(--muted);
+}
+
+/* The search line and the button beside it. */
+.pj-cols .tsearch-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.pj-cols .tsearch-row > .tsearch-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.pj-cols .tsearch-row > .btn {
+  height: 38px;
+}
+
+/* ------------------------------------------------------------ the projects list */
+
+.pj-states {
+  display: flex;
+  gap: 18px;
+  font-weight: 400;
+}
+
+.pj-states a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.pj-states a:hover {
+  color: var(--text);
+}
+
+.pj-states a[aria-current='page'] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.pj-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 200px;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.pj-list ul > .pj-row:first-child {
+  border-top: 0;
+}
+
+.pj-row:hover {
+  background: var(--canvas);
+}
+
+.pj-ic {
+  padding-top: 2px;
+  color: var(--open);
+  display: grid;
+}
+
+.pj-ic.merged {
+  color: var(--approved);
+}
+
+.pj-ic.closed {
+  color: var(--closed);
+}
+
+.pj-title {
+  font-weight: 600;
+  font-size: var(--fs-lg);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.pj-title:hover {
+  color: var(--accent);
+}
+
+.pj-progress {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pj-progress .bar {
+  margin-top: 0;
+}
+
+.pj-progress .num {
+  color: var(--subtle);
+}
+
+.pj-row-progress {
+  padding-top: 6px;
+}
+
+.pj-how {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.pj-how li {
+  padding-inline-start: 14px;
+  position: relative;
+}
+
+.pj-how li::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0.62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 1px;
+  background: var(--border-strong);
+}
+
+.pj-new .choices {
+  max-width: 520px;
+}
+
+.pj-new .pj-year {
+  max-width: 140px;
+}
+
+.pj-new .alert {
+  margin-bottom: 12px;
+}
+
+/* ------------------------------------------------------------ a project */
+
+.pj-big {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.pj-big b {
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pj-overview-bar {
+  margin-top: 10px;
+}
+
+.pj-overview-bar .bar {
+  height: 6px;
+  border-radius: 3px;
+}
+
+.pj-overview-bar .num {
+  display: none;
+}
+
+.pj-goal {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-muted);
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.pj-todo .box-h .count {
+  background: var(--sunken);
+  border-radius: 9px;
+  padding: 0 7px;
+  font: 500 12px / 1.5 var(--ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.pj-todo .box-f {
+  align-items: flex-start;
+  line-height: 1.5;
+}
+
+.pj-todo .box-f .i {
+  margin-top: 2px;
+}
+
+.pj-item,
+.ms-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  min-width: 0;
+}
+
+.pj-todo ul > .pj-item:first-child,
+.ms-list ul > .ms-file:first-child {
+  border-top: 0;
+}
+
+.pj-item:hover,
+.ms-file:hover {
+  background: var(--canvas);
+}
+
+.pj-item.mine {
+  background: var(--accent-soft);
+}
+
+.pj-item-title {
+  font-weight: 500;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+a.pj-item-title:hover {
+  color: var(--accent);
+}
+
+.pj-claim {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: var(--fs-sm);
+  color: var(--subtle);
+  white-space: nowrap;
+}
+
+.pj-claim.mine {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.pj-claim form {
+  display: inline;
+}
+
+.pj-open {
+  flex: none;
+}
+
+/* ------------------------------------------------------------ the Missing board */
+
+.ms-list .box-h > span:not(.end) {
+  min-width: 0;
+}
+
+.ms-list .box-f {
+  align-items: flex-start;
+  line-height: 1.5;
+}
+
+.ms-list .box-f .i {
+  margin-top: 2px;
+}
+
+.ms-list .row .has {
+  color: var(--subtle);
+  gap: 6px;
+}
+
+.ms-where {
+  flex: none;
+}
+
+.ms-more {
+  text-align: center;
+}
+
+.ms-years {
+  display: grid;
+  gap: 1px;
+  max-height: 560px;
+  overflow-y: auto;
+  margin-inline: -8px;
+  padding-inline: 8px;
+  scrollbar-width: thin;
+}
+
+.ms-years a {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) 40px;
+  gap: 10px;
+  align-items: center;
+  padding: 4px 8px;
+  margin-inline: -8px;
+  border-radius: var(--r-sm);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.ms-years a:hover {
+  background: var(--canvas);
+}
+
+.ms-years a[aria-current='page'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ms-years .y {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: var(--fs-lg);
+}
+
+html[lang='en'] .ms-years .y {
+  font: 500 var(--fs-md) var(--ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.ms-meter {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--sunken);
+  overflow: hidden;
+}
+
+.ms-meter > i {
+  display: block;
+  height: 100%;
+  background: var(--muted);
+  opacity: 0.55;
+  border-radius: 2px;
+}
+
+.ms-years a[aria-current='page'] .ms-meter > i {
+  background: var(--accent);
+  opacity: 1;
+}
+
+.ms-years .num {
+  text-align: end;
+  color: var(--subtle);
+}
+
+.ms-years a.full .num {
+  color: var(--open);
+}
+
+.ms-links li {
+  align-items: flex-start;
+}
+
+.ms-links .i {
+  margin-top: 3px;
+}
+
+.ms-links .grow {
+  display: grid;
+  gap: 1px;
+  white-space: normal;
+}
+
+/* ------------------------------------------------------------ the health of the catalog */
+
+.hl-main > section + section {
+  margin-top: 8px;
+}
+
+.hl-main .h-block:first-child {
+  margin-top: 0;
+}
+
+.hl-main .h-block {
+  scroll-margin-top: calc(var(--header-h) + 16px);
+}
+
+.hl-line {
+  color: var(--muted);
+  margin-bottom: 10px;
+  line-height: 1.6;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg);
+}
+
+/* Plain printed tables: a rule under each line, numbers in columns. */
+.health-table {
+  font-size: var(--fs-md);
+  min-width: 520px;
+}
+
+.health-table th,
+.health-table td {
+  padding: 5px 14px;
+  border-top: 1px solid var(--border-muted);
+  text-align: start;
+  white-space: nowrap;
+}
+
+.health-table td.num {
+  font-size: var(--fs-md);
+}
+
+.health-table td .subtle {
+  font-size: var(--fs-sm);
+  margin-inline-start: 4px;
+}
+
+.health-table thead th {
+  border-top: 0;
+  background: var(--canvas);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  border-bottom: 1px solid var(--border);
+}
+
+.health-table tbody th {
+  font-weight: 500;
+}
+
+.health-table tbody tr:hover {
+  background: var(--canvas);
+}
+
+.health-table tfoot th,
+.health-table tfoot td {
+  border-top: 1px solid var(--border-strong);
+  font-weight: 600;
+  background: var(--canvas);
+}
+
+.hl-sets td:last-child {
+  white-space: normal;
+  min-width: 220px;
+}
+
+.hl-url {
+  font: 12.5px / 1.5 var(--mono);
+  unicode-bidi: isolate;
+}
+
+.dead-links > .row:first-child {
+  border-top: 0;
+}
+
+.hl-side {
+  position: sticky;
+  top: calc(var(--header-h) + 20px);
+}
+
+.hl-short {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.hl-short b {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.hl-toc nav {
+  display: grid;
+  gap: 2px;
+  margin-inline: -8px;
+}
+
+.hl-toc a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.hl-toc a:hover {
+  background: var(--canvas);
+  color: var(--text);
+}
+
+/* Long lists show ten rows until "Show all" is opened. */
+.box:not(:has(.hl-more[open])) .hl-long > li:nth-child(n + 11) {
+  display: none;
+}
+
+.box-f:has(.hl-more) {
+  padding: 0;
+}
+
+.hl-more {
+  width: 100%;
+}
+
+.hl-more > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 16px;
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.hl-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.hl-more > summary:hover {
+  text-decoration: underline;
+}
+
+.hl-more .open-label,
+.hl-more[open] .closed-label {
+  display: none;
+}
+
+.hl-more[open] .open-label {
+  display: inline;
+}
+
+.hl-more[open] .i {
+  transform: rotate(180deg);
+}
+
+/* ------------------------------------------------------------ phones */
+
+@media (max-width: 960px) {
+  .hl-side {
+    position: static;
+    order: -1;
+  }
+  .hl-toc {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .pj-row {
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: 4px 10px;
+    padding: 12px 14px;
+  }
+  .pj-row-progress {
+    grid-column: 2;
+    padding-top: 6px;
+  }
+  .pj-item,
+  .ms-file {
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    gap: 8px 10px;
+  }
+  .pj-item > .pj-main,
+  .ms-file > .pj-main {
+    flex: 1 1 calc(100% - 40px);
+  }
+  .pj-item > .pj-claim,
+  .pj-item > .pj-open,
+  .ms-file > .ms-where {
+    margin-inline-start: 26px;
+  }
+  .pj-cols .tsearch-row > .btn {
+    flex: none;
+    padding: 0 10px;
+  }
+  .ms-clear-t {
+    display: none;
+  }
+  .pj-row .pj-sub {
+    flex-direction: column;
+  }
+  .pj-row .pj-sub > [aria-hidden] {
+    display: none;
+  }
+  .phead-acts .btn {
+    flex: 1 1 auto;
+  }
+  .ms-years {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 16px;
+    max-height: none;
+  }
+  .ms-years a {
+    grid-template-columns: 50px minmax(0, 1fr) 32px;
+    gap: 6px;
+  }
+}
