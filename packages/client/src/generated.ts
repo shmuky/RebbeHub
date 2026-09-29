@@ -432,6 +432,8 @@ export type Transcript = {
     locked?: boolean;
     /** false: machine hearing nobody has checked */
     checked: boolean;
+    /** a person fixed some words but did not check the whole paragraph */
+    edited?: boolean;
     syncChecked?: boolean;
   }>;
 };
@@ -968,6 +970,8 @@ export interface Operations {
         /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
         segment: string;
         content: string;
+        /** false: only some words were fixed; the paragraph stays machine hearing (default true) */
+        complete?: boolean;
       };
     };
     output: Suggestion;
@@ -2349,6 +2353,16 @@ export interface Operations {
       goal: Record<string, unknown>;
     };
   };
+  /** Everything that happened to a recording's transcript, newest first */
+  transcriptHistory: {
+    input: {
+      id: string;
+      limit?: number;
+    };
+    output: {
+      history: Array<Record<string, unknown>>;
+    };
+  };
   /** Every kind of item and its JSON Schema */
   types: {
     input: Record<string, never>;
@@ -2655,6 +2669,7 @@ export const OPERATIONS = {
   threadByNumber: {"method":"GET","path":"/v1/threads/{number}","pathParams":["number"],"query":[],"body":null,"answer":"json"},
   trainingClips: {"method":"GET","path":"/v1/machine/training/clips","pathParams":[],"query":[],"body":null,"answer":"json"},
   trainingSummary: {"method":"GET","path":"/v1/machine/training","pathParams":[],"query":["since"],"body":null,"answer":"json"},
+  transcriptHistory: {"method":"GET","path":"/v1/recordings/{id}/transcript/history","pathParams":["id"],"query":["limit"],"body":null,"answer":"json"},
   types: {"method":"GET","path":"/v1/types","pathParams":[],"query":[],"body":null,"answer":"json"},
   unitPrintings: {"method":"GET","path":"/v1/units/{id}/printings","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   unsubscribe: {"method":"POST","path":"/v1/auth/email/unsubscribe","pathParams":[],"query":["token"],"body":"json","answer":"json"},
@@ -3447,6 +3462,11 @@ export abstract class GeneratedMethods {
   /** The next Rebbe Whisper's training data so far: every transcript paragraph a person checked, as clips (GET /v1/machine/training) */
   trainingSummary(input?: Operations['trainingSummary']['input']): Promise<Operations['trainingSummary']['output']> {
     return this.call('trainingSummary', input ?? {} as Operations['trainingSummary']['input']);
+  }
+
+  /** Everything that happened to a recording's transcript, newest first (GET /v1/recordings/{id}/transcript/history) */
+  transcriptHistory(input: Operations['transcriptHistory']['input']): Promise<Operations['transcriptHistory']['output']> {
+    return this.call('transcriptHistory', input ?? {} as Operations['transcriptHistory']['input']);
   }
 
   /** Every kind of item and its JSON Schema (GET /v1/types) */

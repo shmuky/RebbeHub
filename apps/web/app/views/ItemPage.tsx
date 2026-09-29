@@ -10,6 +10,7 @@ import { Relations } from '../components/Relations.js';
 import { Printings } from '../components/Printings.js';
 import { ScanViewer } from '../components/ScanViewer.js';
 import { TextView } from '../components/TextView.js';
+import { Transcripts } from '../components/Transcripts.js';
 import { UnitTexts } from '../components/Translations.js';
 import type { Entity } from '../lib/api.js';
 import { dateLabel } from '../lib/dates.js';
@@ -18,6 +19,7 @@ import { num } from '../lib/i18nUi.js';
 import type { ItemView } from '../lib/itemData.server.js';
 import { labelOf } from '../lib/labels.js';
 import { st } from '../lib/scanStrings.js';
+import { tracksOf } from '../lib/tracks.js';
 import { ps } from '../lib/pageStrings.js';
 import { href, itemPath, shortLabel, SOURCE_NAMES, sourceUrl } from '../lib/links.js';
 import { useLang } from '../lib/useLang.js';
@@ -441,6 +443,8 @@ function RecordingPage({ entity, view, lang }: { entity: Entity; view: ItemView;
   const texts = view.lists.texts ?? [];
   const videos = (d.videos ?? []) as Array<{ provider: string; url: string }>;
   const file = view.files[entity.id];
+  // Its own transcript, heard and checked here as on its farbrengen's page, with its own talk and history tabs.
+  const tracks = tracksOf(event ?? { id: entity.id, path: entity.path, data: { title: d.title } }, [entity], lang, { [entity.id]: file?.url ?? null }, view.apiBase);
   return (
     <ItemShell
       lang={lang}
@@ -483,6 +487,7 @@ function RecordingPage({ entity, view, lang }: { entity: Entity; view: ItemView;
     >
       <div className="stack-lg">
         <AudioPlayer recordings={[entity]} sources={{ [entity.id]: file?.url ?? null }} />
+        {tracks.length ? <Transcripts tracks={tracks} lang={lang} /> : null}
         {texts.length ? (
           <section className="stack">
             <h2 className="h-sec">{ps(lang, 'transcripts')}</h2>

@@ -67,7 +67,7 @@ const DEFS: Record<string, JsonSchema> = {
   externalIds: { type: 'object', additionalProperties: str({ minLength: 1, maxLength: 200 }), propertyNames: { pattern: '^[a-z0-9-]+$' } },
   machineOrigin: {
     type: 'object',
-    properties: { by: str({ minLength: 1, maxLength: 200 }), checked: { type: 'boolean' } },
+    properties: { by: str({ minLength: 1, maxLength: 200 }), checked: { type: 'boolean' }, edited: { type: 'boolean' } },
     required: ['by'],
     additionalProperties: false,
   },
@@ -233,8 +233,9 @@ const fractionalOrder = str({ pattern: '^[0-9A-Za-z]+$', maxLength: 64 });
  * (made as a second 5 alongside the words; 6 so a catalog on either 5 takes both).
  * 7: the `chabad-library` display profile for chabadlibrary.org's texts.
  * 8: a set's and a sefer's `order` among its siblings, for organizing the catalog by hand.
+ * 9: a machine origin's `edited`, words a person fixed in part and still the machine's.
  */
-export const BUILTIN_SCHEMA_VERSION = 8;
+export const BUILTIN_SCHEMA_VERSION = 9;
 
 export const BUILTIN_SCHEMAS: Record<EntityType, JsonSchema> = {
   set: entitySchema(

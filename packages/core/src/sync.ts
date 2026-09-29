@@ -238,6 +238,8 @@ export interface TranscriptParagraph {
   locked: boolean;
   /** Whether a person has checked its words. */
   checked: boolean;
+  /** A person fixed some of its words but did not check the whole of it: the rest is still the machine's. */
+  edited: boolean;
   /** Whether a person has checked where it is heard. */
   syncChecked: boolean;
   by: string | null;
@@ -278,7 +280,7 @@ export async function recordingTranscript(catalog: Catalog, recording: EntityId)
      JOIN revision ar ON ar.id = a.main_rev WHERE x.to_id = $1 AND x.field = 'text' AND ar.data->>'recording' = $2 ORDER BY a.id LIMIT 1`,
     [text.id, recording],
   );
-  const { rows } = await catalog.db.query<{ id: EntityId; content: string; proofread: number; origin: { by?: string; checked?: boolean } | null; order: string; span: EntityId | null; sd: SpanData | null }>(
+  const { rows } = await catalog.db.query<{ id: EntityId; content: string; proofread: number; origin: { by?: string; checked?: boolean; edited?: boolean } | null; order: string; span: EntityId | null; sd: SpanData | null }>(
     `SELECT s.id, sr.data->>'content' AS content, (sr.data->>'proofread')::int AS proofread, sr.data->'origin' AS origin, sr.data->>'order' AS "order",
             sp.id AS span, sp.data AS sd
      FROM entity_ref x JOIN entity s ON s.id = x.from_id AND s.type = 'segment' AND NOT s.deleted
@@ -308,6 +310,7 @@ export async function recordingTranscript(catalog: Catalog, recording: EntityId)
       span: r.span,
       locked: Boolean(r.sd?.locked),
       checked: r.proofread > 0 || Boolean(r.origin?.checked),
+      edited: Boolean(r.origin?.edited) && !(r.proofread > 0 || r.origin?.checked),
       syncChecked: Boolean(r.sd?.locked || r.sd?.origin?.checked || (r.sd && !r.sd.origin)),
       by: r.origin?.by ?? null,
     })),
@@ -316,13 +319,16 @@ export async function recordingTranscript(catalog: Catalog, recording: EntityId)
 
 /**
  * Fixes a paragraph of a transcript as a suggestion: its words as the
- * person heard them, marked checked. When the words changed, their word
+ * person heard them, marked checked. A person who fixed only some words
+ * (`complete: false`) leaves the paragraph machine hearing, marked
+ * `edited`: the fix is on the site, but the paragraph stays labelled and
+ * is no training clip until someone checks the whole of it. When the words changed, their word
  * timings no longer fit, so they are let go (the paragraph keeps where it
  * is heard) until the next alignment run times the new words; words
  * checked unchanged keep theirs, and are training clips at once
  * (trainingClips.ts).
  */
-export async function fixParagraph(catalog: Catalog, by: string, input: { segment: EntityId; content: string }): Promise<ChangesetRow> {
+export async function fixParagraph(catalog: Catalog, by: string, input: { segment: EntityId; content: string; complete?: boolean }): Promise<ChangesetRow> {
   const content = input.content.replace(/\s+/g, ' ').trim();
   if (!content || content.length > 20_000) throw invalid('a paragraph of 1 to 20,000 characters');
   const segment = await catalog.get(input.segment);
@@ -332,7 +338,9 @@ export async function fixParagraph(catalog: Catalog, by: string, input: { segmen
   await catalog.putRevision(suggestion.id, by, {
     id: segment.id,
     type: 'segment',
-    data: { ...data, content, proofread: 1, ...(data.origin ? { origin: { ...data.origin, checked: true } } : {}) } as Json,
+    data: (input.complete === false
+      ? { ...data, content, ...(data.origin && !data.origin.checked ? { origin: { ...data.origin, edited: true } } : {}) }
+      : { ...data, content, proofread: 1, ...(data.origin ? { origin: { ...data.origin, checked: true } } : {}) }) as Json,
   });
   const spans = data.content === content ? [] : await catalog.backlinks(segment.id, { field: 'segment', type: 'alignment-span' });
   for (const s of spans) {
@@ -528,4 +536,95 @@ export async function hanachaSyncs(catalog: Catalog, recordings: readonly Entity
     });
   }
   return out;
+}
+
+/** One change to a transcript: a paragraph's words, its check, or where it is heard. */
+export interface TranscriptChange {
+  segment: EntityId;
+  /** words: its words changed; checked: a person checked them as they were; sync: where it is heard moved; made: the machine made it. */
+  kind: 'words' | 'checked' | 'sync' | 'made';
+  before?: string;
+  after?: string;
+  /** For words: whether the person checked the whole paragraph, or fixed only some of it. */
+  complete?: boolean;
+}
+
+export interface TranscriptCommit {
+  commit: number;
+  at: string;
+  author: string;
+  authorName: string | null;
+  authorIsBot: boolean;
+  /** The suggestion it came in (`/suggestions/{number}`), when it has a number. */
+  suggestion: number | null;
+  changes: TranscriptChange[];
+}
+
+/**
+ * Everything that happened to a recording's transcript, newest first, in
+ * one read: each approved change with who made it and what it changed,
+ * paragraph by paragraph (the full changelog of the editor). The machine's
+ * first hearing is one entry, however many paragraphs it made.
+ */
+export async function transcriptHistory(catalog: Catalog, recording: EntityId, options: { limit?: number } = {}): Promise<TranscriptCommit[] | null> {
+  const text = await one<{ id: EntityId }>(
+    catalog.db,
+    `SELECT t.id FROM entity_ref x JOIN entity t ON t.id = x.from_id AND t.type = 'text' AND NOT t.deleted
+     JOIN revision tr ON tr.id = t.main_rev WHERE x.to_id = $1 AND x.field = 'recording' AND tr.data->>'kind' = 'transcript' ORDER BY t.id LIMIT 1`,
+    [recording],
+  );
+  if (!text) return null;
+  const limit = Math.min(Math.max(options.limit ?? 60, 1), 200);
+  const { rows } = await catalog.db.query<{
+    seq: string;
+    at: string | Date;
+    author: string;
+    author_name: string | null;
+    is_bot: boolean | null;
+    number: number | null;
+    entity_id: EntityId;
+    type: string;
+    data: Record<string, unknown> | null;
+    prev: Record<string, unknown> | null;
+  }>(
+    `WITH segs AS (SELECT from_id AS id FROM entity_ref WHERE to_id = $1 AND field = 'text'),
+          spans AS (SELECT y.from_id AS id FROM entity_ref y JOIN segs ON segs.id = y.to_id WHERE y.field = 'segment'),
+          picked AS (
+            SELECT DISTINCT cc.commit_seq FROM commit_change cc
+            WHERE cc.entity_id IN (SELECT id FROM segs UNION ALL SELECT id FROM spans)
+            ORDER BY cc.commit_seq DESC LIMIT ${limit}
+          )
+     SELECT c.seq::text AS seq, c.at, r.author, a.display_name AS author_name, a.is_bot, cs.number, cc.entity_id, e.type, r.data, p.data AS prev
+     FROM picked JOIN commit c ON c.seq = picked.commit_seq
+     JOIN commit_change cc ON cc.commit_seq = c.seq
+     JOIN entity e ON e.id = cc.entity_id AND e.type IN ('segment', 'alignment-span')
+     JOIN revision r ON r.id = cc.rev_id
+     LEFT JOIN revision p ON p.id = cc.prev_rev_id
+     LEFT JOIN account a ON a.id = r.author
+     LEFT JOIN changeset cs ON cs.id = c.changeset_id
+     WHERE cc.entity_id IN (SELECT id FROM segs UNION ALL SELECT id FROM spans)
+     ORDER BY c.seq DESC, cc.entity_id`,
+    [text.id],
+  );
+  const commits = new Map<string, TranscriptCommit>();
+  for (const r of rows) {
+    let commit = commits.get(r.seq);
+    if (!commit) {
+      commit = { commit: Number(r.seq), at: new Date(r.at).toISOString(), author: r.author, authorName: r.author_name, authorIsBot: Boolean(r.is_bot), suggestion: r.number ?? null, changes: [] };
+      commits.set(r.seq, commit);
+    }
+    const d = r.data ?? {};
+    const p = r.prev;
+    if (r.type === 'segment') {
+      const origin = (d.origin ?? {}) as { checked?: boolean; edited?: boolean };
+      const complete = Number(d.proofread ?? 0) > 0 || Boolean(origin.checked);
+      if (!p) commit.changes.push({ segment: r.entity_id, kind: 'made', after: String(d.content ?? '') });
+      else if (p.content !== d.content) commit.changes.push({ segment: r.entity_id, kind: 'words', before: String(p.content ?? ''), after: String(d.content ?? ''), complete });
+      else if (complete) commit.changes.push({ segment: r.entity_id, kind: 'checked' });
+    } else {
+      const segment = String(d.segment ?? p?.segment ?? '') as EntityId;
+      if (p && (p.startMs !== d.startMs || Boolean(p.locked) !== Boolean(d.locked))) commit.changes.push({ segment, kind: 'sync', before: String(p.startMs ?? ''), after: String(d.startMs ?? '') });
+    }
+  }
+  return [...commits.values()].filter((c) => c.changes.length);
 }
