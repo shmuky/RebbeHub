@@ -195,7 +195,6 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
     }
     case 'recording': {
       ids(d.event).forEach((id) => wanted.add(id));
-      view.files[entity.id] = typeof d.file === 'string' ? await api.file(d.file) : null;
       // The farbrengen's other parts, and the texts of this one (transcripts, a hanacha synced to it).
       const [parts, texts] = await Promise.all([
         typeof d.event === 'string' ? linkedItems(api, d.event, 'event', 'recording') : [],
@@ -203,6 +202,10 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
       ]);
       view.lists.parts = parts.sort((a, b) => ((a.data as { part?: number }).part ?? 0) - ((b.data as { part?: number }).part ?? 0));
       view.lists.texts = texts;
+      // Every part's file in one request, so playing here goes on to the next part as on the farbrengen's page.
+      const all = parts.some((r) => r.id === entity.id) ? parts : [entity, ...parts];
+      const files = await api.files(all.map((r) => String((r.data as { file?: string }).file ?? '')).filter(Boolean));
+      all.forEach((r) => (view.files[r.id] = files.get(String((r.data as { file?: string }).file ?? '')) ?? null));
       break;
     }
     case 'author': {

@@ -444,9 +444,12 @@ function RecordingPage({ entity, view, lang }: { entity: Entity; view: ItemView;
   const videos = (d.videos ?? []) as Array<{ provider: string; url: string }>;
   const file = view.files[entity.id];
   // Its own transcript, heard and checked here as on its farbrengen's page, with its own talk and history tabs.
-  const tracks = tracksOf(event ?? { id: entity.id, path: entity.path, data: { title: d.title } }, [entity], lang, { [entity.id]: file?.url ?? null }, view.apiBase);
+  // It plays as part of its farbrengen, going on to the next part when it ends; only its own words are read here.
+  const all = event && (view.lists.parts ?? []).some((x) => x.id === entity.id) ? view.lists.parts! : [entity];
+  const tracks = tracksOf(event ?? { id: entity.id, path: entity.path, data: { title: d.title } }, all, lang, Object.fromEntries(all.map((x) => [x.id, view.files[x.id]?.url ?? null])), view.apiBase);
+  const own = tracks.some((tr) => tr.id === entity.id);
   // Its transcript is read in the player above; the other texts (hanachos, translations) are listed below it.
-  const texts = (view.lists.texts ?? []).filter((x) => !tracks.length || (x.data as D).kind !== 'transcript');
+  const texts = (view.lists.texts ?? []).filter((x) => !own || (x.data as D).kind !== 'transcript');
   // How many transcripts it has, once the browser has asked: null until then.
   const [transcripts, setTranscripts] = useState<number | null>(null);
   return (
@@ -495,9 +498,9 @@ function RecordingPage({ entity, view, lang }: { entity: Entity; view: ItemView;
           stands in where there is nothing to read along with (or while the transcript is still on its way, as a
           quiet box of the same height, so the page does not jump).
         */}
-        {!tracks.length || transcripts === 0 ? <AudioPlayer recordings={[entity]} sources={{ [entity.id]: file?.url ?? null }} /> : null}
-        {tracks.length && transcripts === null ? <div className="lyrics-wait" aria-hidden /> : null}
-        {tracks.length ? <Transcripts tracks={tracks} lang={lang} onLoaded={setTranscripts} /> : null}
+        {!own || transcripts === 0 ? <AudioPlayer recordings={[entity]} sources={{ [entity.id]: file?.url ?? null }} queue={own ? tracks : undefined} /> : null}
+        {own && transcripts === null ? <div className="lyrics-wait" aria-hidden /> : null}
+        {own ? <Transcripts tracks={tracks} only={entity.id} lang={lang} onLoaded={setTranscripts} /> : null}
         {texts.length ? (
           <section className="stack">
             <h2 className="h-sec">{ps(lang, 'transcripts')}</h2>
