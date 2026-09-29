@@ -12,6 +12,21 @@ rebbehub migrate                     # create or update the schema; seeds the bu
 rebbehub account --id shmuly --name "Shmuly" --steward
 ```
 
+Once, after deploying built-in schemas version 5 (a page's words as
+structure, no longer wiki markup; [data model](data-model.md#a-pages-words)):
+
+```sh
+rebbehub convert-bodies [--chunk 500]   # every page whose words are still markup, as structured words
+```
+
+It works in reviewed system changes of `--chunk` pages, and can be
+stopped and run again: it takes up only what is left (migration 0015
+indexes what is). Until it has run, the API reads those pages into
+structure on the way out, so nothing looks different. Where the catalog
+is still rebuildable, re-running `sichos-kodesh-works`,
+`sichos-kodesh-occasions` and `sefaria` gives the fullest structure
+(footnotes, the English beside the Hebrew), which markup had lost.
+
 Production is Postgres on Neon. The revision table is partitioned by time;
 `ensureRevisionPartitions(db, [2026, 2027])` (in `@rebbehub/db`) adds
 yearly partitions ahead of time.

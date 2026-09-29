@@ -1,6 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { EventLink, EventLinkKind, LocalName } from '@rebbehub/model';
+import { plainInline, type EventLink, type EventLinkKind, type LocalName, type PageSegment, type PageText } from '@rebbehub/model';
 
 /**
  * Everything mafteiach.app's index has for a farbrengen, as Sichos-Kodesh's
@@ -115,25 +115,30 @@ export function mafteiachLinks(record: MafteiachRecord, known: Set<string>, driv
   return out;
 }
 
-/** Plain text as wikitext: taken literally, a paragraph per line. */
-function asWikitext(text: string): string {
-  return text
-    .split(/\n+/)
-    .map((line) => line.trim().replace(/</g, '&lt;').replace(/''/g, "'<nowiki/>'").replace(/\[\[/g, '[<nowiki/>[').replace(/^([*#:=]|-{4})/, '<nowiki/>$1'))
-    .filter(Boolean)
-    .join('\n\n');
+/**
+ * Plain text as an outline section: its title, then one item per line,
+ * taken literally; a line the index numbers (`1. הפיכת העינוי`) keeps its
+ * number as the item's.
+ */
+function outlineSection(id: string, title: string, text: string): PageSegment {
+  const children: PageSegment[] = [];
+  for (const line of text.split(/\n+/).map((l) => l.trim()).filter(Boolean)) {
+    const numbered = /^(\d{1,4})[.)]\s+(.+)$/.exec(line);
+    children.push({ id: `${id}.${children.length + 1}`, kind: 'item', ...(numbered ? { n: Number(numbered[1]) } : {}), text: plainInline(numbered ? numbered[2]! : line) });
+  }
+  return { id, kind: 'section', text: plainInline(title), children };
 }
 
-/** The index's content outline and additions, as the page's words, and the record of where they came from. */
-export function mafteiachBody(record: MafteiachRecord): { body: string; bodySource: Record<string, string> } | null {
-  const parts: string[] = [];
+/** The index's content outline and additions, as the page's words (an outline), and the record of where they came from. */
+export function mafteiachBody(record: MafteiachRecord): { body: PageText; bodySource: Record<string, string> } | null {
+  const segments: PageSegment[] = [];
   const outline = record.detail.tochenInyanim?.text?.trim();
   const additions = record.detail.hosofos?.text?.trim();
-  if (outline) parts.push(`== ${OUTLINE.he} ==\n\n${asWikitext(outline)}`);
-  if (additions) parts.push(`== ${ADDITIONS.he} ==\n\n${asWikitext(additions)}`);
-  if (!parts.length) return null;
+  if (outline) segments.push(outlineSection('contents', OUTLINE.he, outline));
+  if (additions) segments.push(outlineSection('additions', ADDITIONS.he, additions));
+  if (!segments.length) return null;
   return {
-    body: parts.join('\n\n'),
+    body: { profile: 'outline', versions: [{ id: 'he', language: 'he', segments }] },
     bodySource: { source: 'mafteiach', via: 'mafteiach-index', sourceId: String(record.id), url: mafteiachPage(record), credit: 'mafteiach.app', rights: 'credit' },
   };
 }

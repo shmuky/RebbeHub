@@ -1,6 +1,7 @@
 import type { DateKey } from '@rebbehub/hebrew';
 import type { RightsState } from './rights.js';
 import type { EntityId } from './ids.js';
+import type { PageText } from './pageText.js';
 import type { EditionKind, Genre, Licence, SourceId } from './works.js';
 
 /**
@@ -114,11 +115,13 @@ export interface CommonFields {
   topics?: EntityId[];
   note?: string;
   /**
-   * The page itself, as wikitext: a letter's words, a chapter's text, a
-   * farbrengen's outline. Everything in the catalog is a page people read
-   * and edit, as on a wiki; the other fields are its infobox.
+   * The page's own words: a letter, a chapter, a farbrengen's outline, as
+   * versions of segments with a few marks (pageText.ts), drawn by the
+   * display rules of where they came from. Everything in the catalog is a
+   * page people read and fix segment by segment; the other fields are
+   * what is known about it.
    */
-  body?: string;
+  body?: PageText;
   /** Where the body came from, when an importer brought it: the source, how, its licence and credit. */
   bodySource?: BodySource;
 }

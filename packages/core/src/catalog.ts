@@ -17,6 +17,7 @@ import {
   type SetData,
 } from '@rebbehub/model';
 import { badState, CatalogError, forbidden, invalid, notFound } from './errors.js';
+import { withStructuredBody } from './legacyWords.js';
 import { diffData, threeWayMerge, resolveConflicts, UnresolvedConflictError, type Conflict, type FieldChange, type Json, type Resolution } from './merge.js';
 import { canApprove, canSuggest, earnedTrust, mayGoLive, type Account, type SetInfo } from './permissions.js';
 import { searchTextOf, toTsQuery } from './searchText.js';
@@ -671,12 +672,14 @@ export class Catalog {
         path = path.toLowerCase();
         if (!isEntityPath(path)) throw invalid(`"${path}" is not a path: lower-case letters, digits and hyphens between slashes`);
       }
-      const hash = await contentHash({ type: input.type, data: input.data, path });
+      // A body in the markup kept before words had structure is taken in as structured words (legacyWords.ts).
+      const data = input.data === null ? null : withStructuredBody(input.data);
+      const hash = await contentHash({ type: input.type, data, path });
       if (parent && parent.hash === hash) return id; // no change
       await tx.query(
         `INSERT INTO revision (entity_id, entity_type, parent_rev, data, path, hash, changeset_id, author)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [id, input.type, parent?.id ?? null, input.data === null ? null : JSON.stringify(input.data), path, hash, cs.id, by],
+        [id, input.type, parent?.id ?? null, data === null ? null : JSON.stringify(data), path, hash, cs.id, by],
       );
       return id;
     });
@@ -906,7 +909,9 @@ export class Catalog {
     for (const p of proposals) {
       const current = await this.targetRev(tx, null, p.entityId);
       if ((current?.id ?? null) === p.baseRev) {
-        planned.push({ proposal: p, current, data: p.rev.data, path: p.rev.path, direct: true });
+        // A suggestion sent before words had structure lands with its body read as structured words.
+        const data = withStructuredBody(p.rev.data);
+        planned.push({ proposal: p, current, data, path: p.rev.path, direct: data === p.rev.data });
         continue;
       }
       const base = p.baseRev === null ? null : await this.revision(p.baseRev, tx);
@@ -921,6 +926,7 @@ export class Catalog {
         }
         data = resolveConflicts(merged, decided!);
       }
+      data = withStructuredBody(data);
       // A path changed on one side only follows that side; changed on both, theirs wins unless the reviewer said otherwise.
       const path = (base?.path ?? null) === (current?.path ?? null) ? p.rev.path : (base?.path ?? null) === p.rev.path ? (current?.path ?? null) : p.rev.path;
       planned.push({ proposal: p, current, data, path, direct: false });

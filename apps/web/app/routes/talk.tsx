@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { data, Link, useRevalidator } from 'react-router';
 import type { Route } from './+types/talk';
 import { PageTabs } from '../components/PageTabs.js';
-import { Wikitext } from '../components/Wikitext.js';
+import { PlainWords } from '../components/PlainWords.js';
 import type { TalkComment } from '../lib/api.js';
 import { siteOf } from '../lib/context.server.js';
 import { langFrom, t, type Lang } from '../lib/i18n.js';
@@ -14,8 +14,8 @@ import { useAccount } from '../lib/useAccount.js';
 /**
  * A page's talk page (the wiki model): the conversation about the page,
  * beside it and its history. Anyone reads it; a signed-in person writes,
- * answers a comment, or hides their own. Comments are written in the same
- * wikitext as pages, so [[links]] to other pages work.
+ * answers a comment, or hides their own. Comments are plain words; web
+ * addresses, item ids and site paths in them become links.
  */
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { api, siteUrl } = siteOf(context);
@@ -84,7 +84,7 @@ function Thread({ comments, parent, entityId, lang, me, onChange }: { comments: 
           <p className="row-sub" suppressHydrationWarning>
             <b>{c.authorName}</b> · {when(c.at)}
           </p>
-          {c.hidden ? <p className="row-sub">{t(lang, 'talkHidden')}</p> : <Wikitext text={c.body ?? ''} lang={lang} />}
+          {c.hidden ? <p className="row-sub">{t(lang, 'talkHidden')}</p> : <PlainWords text={c.body ?? ''} lang={lang} />}
           {me && !c.hidden ? (
             <p className="talk-actions">
               <button type="button" className="link-button" onClick={() => setReplying(replying === c.id ? null : c.id)}>

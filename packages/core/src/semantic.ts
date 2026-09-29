@@ -1,8 +1,9 @@
 import { one, type Db } from '@rebbehub/db';
-import type { EntityId, EntityType } from '@rebbehub/model';
+import { pageTextPlain, type EntityId, type EntityType } from '@rebbehub/model';
 import type { Catalog, EntityView, RevisionRow } from './catalog.js';
 import { ExportGate } from './gate.js';
 import { momentOf, type Moment } from './moments.js';
+import { withStructuredBody } from './legacyWords.js';
 
 /**
  * Search by meaning (the plan, section 9: "pgvector embeddings for 'find
@@ -71,7 +72,7 @@ const nameText = (name: unknown): string => (name && typeof name === 'object' ? 
  */
 export function embeddingInput(view: Pick<EntityView, 'type' | 'data'>): string | null {
   const d = view.data as Record<string, unknown>;
-  const body = typeof d.body === 'string' ? d.body.replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, '$1').replace(/[=']{2,}/g, ' ') : '';
+  const body = pageTextPlain(withStructuredBody(d).body);
   let text = '';
   switch (view.type) {
     case 'unit':

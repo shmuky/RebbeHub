@@ -142,6 +142,15 @@ are set.
   lists its printings; *Map pages* marks what a teshura's pages hold,
   through a suggestion; the Teshuros set defaults to credit, and a family
   can ask for a teshura to stop being shown ([rights](rights.md)).
+- **A page's words as structure** ✅: no more wiki markup. A page's
+  words are versions of segments with a few marks
+  ([data model](data-model.md#a-pages-words)), drawn by their source's
+  display rules: Sefaria's numbered segments with the Hebrew and English
+  side by side, Sichos-Kodesh's paragraphs, the Mafteiach's outlines.
+  Every segment has a link of its own (`#s-3.14`); the Edit tab fixes a
+  segment in place, each fix its own suggestion; talk pages are plain
+  words with links. `rebbehub convert-bodies` turns the catalog's old
+  bodies over once (migration 0015).
 - Still to come: letters reproduced in teshuros found by text
   (cross-linking reads citations only).
 

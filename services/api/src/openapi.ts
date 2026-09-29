@@ -211,6 +211,29 @@ export const OPENAPI = {
         responses: { '201': { description: 'The suggestion sent for review' } },
       },
     },
+    '/v1/suggestions/words': {
+      post: {
+        summary: "A page's words fixed segment by segment: one segment's new words, a segment added after it or taken out, or a page's first words, sent for review",
+        security: signedIn,
+        requestBody: json({
+          type: 'object',
+          required: ['entityId', 'change'],
+          properties: {
+            entityId: { type: 'string' },
+            change: { enum: ['edit', 'add', 'remove', 'start'] },
+            version: { type: 'string' },
+            segment: { type: 'string' },
+            text: { type: 'array', items: { type: 'object' }, description: 'Runs: { text, marks?, href? }, { note }, { marker }, { br: true }' },
+            before: { type: 'array', items: { type: 'object' }, description: 'The segment as the person saw it; a change since answers 409' },
+            kind: { enum: ['paragraph', 'heading', 'verse', 'item'] },
+            language: { type: 'string' },
+            title: { type: 'string' },
+            note: { type: 'string' },
+          },
+        }),
+        responses: { '201': { description: 'The suggestion sent for review (merged at once where its author may)' }, '409': { description: 'The segment changed since it was opened' } },
+      },
+    },
     '/v1/teshuros/{id}/family-request': {
       post: {
         summary: "A family's request that a teshura not be shown (no account needed): its scans stop being served at once, and stewards review it",

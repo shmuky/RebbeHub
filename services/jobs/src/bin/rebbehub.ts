@@ -6,6 +6,7 @@ import { alignCommand, transcribeCommand } from '../transcribeCommand.js';
 import { fingerprintsCommand, pageImagesCommand } from '../scanPagesCommand.js';
 import {
   accountCommand,
+  convertBodiesCommand,
   archiveGapsCommand,
   crawlLibraryCommand,
   crawlSefariaCommand,
@@ -31,6 +32,9 @@ const HELP = `rebbehub - RebbeHub's command line
 
   rebbehub migrate                              create or update the database
   rebbehub schema-check                         check the built-in schemas
+  rebbehub convert-bodies [--chunk <n>]         pages whose words are still wiki markup, as structured
+                                                words (system changes of <n> pages; run once after
+                                                deploying built-in schemas version 5)
   rebbehub rebuildable [--guard]                prints rebuildable when importers made everything;
                                                 --guard prints SQL that fails otherwise
   rebbehub account --id <id> --name <name> [--steward] [--bot]
@@ -165,6 +169,9 @@ try {
       break;
     case 'schema-check':
       await schemaCheckCommand(ctx);
+      break;
+    case 'convert-bodies':
+      await convertBodiesCommand(ctx, { chunk: number(values.chunk) });
       break;
     case 'account':
       await accountCommand(ctx, { id: need(values.id, 'id'), name: need(values.name, 'name'), steward: values.steward, bot: values.bot });

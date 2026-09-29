@@ -1,4 +1,5 @@
 import { EVENT_LINK_KINDS, type EntityType, type LocalName } from '../entities.js';
+import { PAGE_HREF_PATTERN, PAGE_ID_PATTERN, PAGE_MARKS, PAGE_SEGMENT_KINDS, TEXT_PROFILES } from '../pageText.js';
 import { EDITION_KINDS, GENRES, LICENCES, SOURCE_IDS } from '../works.js';
 
 /**
@@ -76,6 +77,63 @@ const DEFS: Record<string, JsonSchema> = {
     required: ['name', 'version'],
     additionalProperties: false,
   },
+  // A page's words (pageText.ts): versions of segments, each segment's words as runs with a few marks.
+  pageId: str({ pattern: PAGE_ID_PATTERN }),
+  pageInline: {
+    oneOf: [
+      {
+        type: 'object',
+        properties: {
+          text: str({ minLength: 1, maxLength: 100_000 }),
+          marks: arrayOf(enumOf(PAGE_MARKS), { uniqueItems: true, maxItems: PAGE_MARKS.length }),
+          href: str({ pattern: PAGE_HREF_PATTERN, maxLength: 2000 }),
+        },
+        required: ['text'],
+        additionalProperties: false,
+      },
+      { type: 'object', properties: { note: ref('pageId') }, required: ['note'], additionalProperties: false },
+      { type: 'object', properties: { marker: str({ minLength: 1, maxLength: 200 }) }, required: ['marker'], additionalProperties: false },
+      { type: 'object', properties: { br: { const: true } }, required: ['br'], additionalProperties: false },
+    ],
+  },
+  pageSegment: {
+    type: 'object',
+    properties: {
+      id: ref('pageId'),
+      kind: enumOf(PAGE_SEGMENT_KINDS),
+      n: int({ minimum: 0, maximum: 1_000_000 }),
+      label: str({ minLength: 1, maxLength: 50 }),
+      level: enumOf([1, 2, 3, 4]),
+      end: { type: 'boolean' },
+      text: arrayOf(ref('pageInline'), { maxItems: 5000 }),
+      children: arrayOf(ref('pageSegment'), { maxItems: 20_000 }),
+      origin: ref('machineOrigin'),
+    },
+    required: ['id', 'kind'],
+    additionalProperties: false,
+  },
+  pageVersion: {
+    type: 'object',
+    properties: {
+      id: ref('pageId'),
+      language: ref('language'),
+      title: str({ maxLength: 500 }),
+      credit: str({ maxLength: 500 }),
+      licence: str({ maxLength: 100 }),
+      url: ref('url'),
+      segments: arrayOf(ref('pageSegment'), { maxItems: 20_000 }),
+      notes: arrayOf(ref('pageSegment'), { maxItems: 20_000 }),
+      origin: ref('machineOrigin'),
+    },
+    required: ['id', 'language', 'segments'],
+    additionalProperties: false,
+  },
+  pageText: {
+    type: 'object',
+    properties: { profile: enumOf(TEXT_PROFILES), versions: arrayOf(ref('pageVersion'), { maxItems: 20 }) },
+    required: ['profile', 'versions'],
+    additionalProperties: false,
+  },
 };
 
 /** The fields every catalog item may carry (entities.ts `CommonFields`). */
@@ -85,8 +143,8 @@ const COMMON: Record<string, JsonSchema> = {
   sources: arrayOf(ref('sourceRef')),
   topics: arrayOf(ref('entityId'), { uniqueItems: true }),
   note: str({ maxLength: 5000 }),
-  // The page as wikitext (entities.ts, CommonFields.body), and where an importer brought it from.
-  body: str({ maxLength: 2_000_000 }),
+  // The page's words (entities.ts, CommonFields.body; pageText.ts), and where an importer brought them from.
+  body: ref('pageText'),
   bodySource: {
     type: 'object',
     properties: {
@@ -168,10 +226,11 @@ const fractionalOrder = str({ pattern: '^[0-9A-Za-z]+$', maxLength: 64 });
 /**
  * The built-in schemas' own version. A catalog whose schema items are
  * older takes the new ones at start-up (Catalog.init), as one system
- * change in the history. 2: every page's `body` (wikitext) and `bodySource`.
+ * change in the history. 2: every page's `body` and `bodySource`.
  * 3: an event's English, audio and video links. 4: each link's exact file at its source (`origin`).
+ * 5: a page's body is structured words (pageText.ts), no longer markup.
  */
-export const BUILTIN_SCHEMA_VERSION = 4;
+export const BUILTIN_SCHEMA_VERSION = 5;
 
 export const BUILTIN_SCHEMAS: Record<EntityType, JsonSchema> = {
   set: entitySchema(

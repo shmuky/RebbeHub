@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono';
-import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, getDerivations, getFile, getPageFix, hanachaSync, itemsUsingFile, listWebhooks, pageImageCount, printingsOf, projectTodo, recordingTranscript, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type Mailer, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, getDerivations, getFile, getPageFix, hanachaSync, itemsUsingFile, listWebhooks, pageImageCount, printingsOf, projectTodo, recordingTranscript, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type Mailer, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
-import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType } from '@rebbehub/model';
+import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType, type Language, type PageInline, type PageSegmentKind } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
 import { adminRoutes } from './admin.js';
 import { uploadRoutes, type UploadOptions } from './uploads.js';
@@ -771,6 +771,36 @@ export function createApp(options: ApiOptions): Hono {
     const suggestion = await catalog.createChangeset(by, { title, description: input.note?.trim().slice(0, 2000) || undefined });
     await catalog.putRevision(suggestion.id, by, { id: entity.id, type: entity.type, data: input.data });
     return c.json(await catalog.submit(suggestion.id, by), 201);
+  });
+
+  /**
+   * A page's words fixed segment by segment: one segment's new words (or a
+   * segment added after it, or taken out, or a page's first words), sent
+   * for review as a suggestion of its own. What the site's in-place
+   * editing sends; `before` is the segment as the person saw it, so a
+   * change made since is never overwritten.
+   */
+  app.post('/v1/suggestions/words', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ entityId?: string; change?: string; version?: string; segment?: string; text?: unknown; before?: unknown; kind?: string; language?: string; title?: string; note?: string }>(c);
+    if (!input.entityId || !isEntityId(input.entityId)) throw new HttpError(400, 'say which item these words are on (entityId)');
+    if (!['edit', 'add', 'remove', 'start'].includes(input.change ?? '')) throw new HttpError(400, 'the change is edit, add, remove or start');
+    const runs = (value: unknown) => (value === undefined ? undefined : Array.isArray(value) ? (value as PageInline[]) : (() => { throw new HttpError(400, 'words are a list of runs'); })());
+    return c.json(
+      await suggestWords(catalog, by, {
+        entity: input.entityId as EntityId,
+        change: input.change as WordsChange,
+        version: input.version,
+        segment: input.segment,
+        text: runs(input.text),
+        before: runs(input.before),
+        kind: input.kind as PageSegmentKind | undefined,
+        language: input.language as Language | undefined,
+        title: input.title,
+        note: input.note,
+      }),
+      201,
+    );
   });
 
   app.post('/v1/suggestions', async (c) => {

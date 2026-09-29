@@ -3,7 +3,7 @@ import { siteOf } from '../lib/context.server.js';
 import { passThrough } from '../lib/pass.server.js';
 
 /** Suggestions and their review, from the site's own pages: /_/suggestions/* to the API's /v1/suggestions/*. Only these addresses pass. */
-const ALLOWED = /^(quick|contents-map|\d+|\d+\/(approve|send-back|withdraw|review-live))?$/;
+const ALLOWED = /^(quick|words|contents-map|\d+|\d+\/(approve|send-back|withdraw|review-live))?$/;
 
 async function pass({ request, params, context }: Route.LoaderArgs | Route.ActionArgs) {
   const path = params['*'] ?? '';

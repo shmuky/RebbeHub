@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   BUILTIN_SCHEMAS,
   ENTITY_TYPES,
+  changeSegment,
+  findSegment,
+  newSegmentId,
+  pageTextPlain,
+  plainPage,
+  tidyInline,
   SchemaRegistry,
   canonicalJson,
   contentHash,
@@ -132,7 +138,45 @@ describe('references', () => {
     expect(refs).toEqual([
       { field: 'work', id: 'rh-00000002', expected: ['work'] },
       { field: 'events', id: 'rh-00000003', expected: ['event'] },
+      { field: 'body.href', id: 'rh-00000005', expected: [] },
     ]);
     expect(referencesOf('segment', { ...EXAMPLES.segment, page: { scan: 'rh-00000006', page: 1 } }).map((r) => r.expected)).toEqual([['text'], ['scan']]);
+  });
+});
+
+describe('page words', () => {
+  const registry = SchemaRegistry.builtin();
+  const page = (runs: unknown[]) => ({ ...EXAMPLES.unit, body: { profile: 'plain', versions: [{ id: 'he', language: 'he', segments: [{ id: 'p1', kind: 'paragraph', text: runs }] }] } });
+
+  it('takes structured words and nothing else: no markup, no unknown marks, no unsafe links', () => {
+    expect(registry.validate('unit', page([{ text: 'שלום', marks: ['b', 'i'] }])).ok).toBe(true);
+    expect(registry.validate('unit', { ...EXAMPLES.unit, body: "'''wikitext'''" }).ok).toBe(false);
+    expect(registry.validate('unit', page([{ text: 'x', marks: ['script'] }])).ok).toBe(false);
+    expect(registry.validate('unit', page([{ text: 'x', href: 'javascript:alert(1)' }])).ok).toBe(false);
+    expect(registry.validate('unit', page([{ text: 'x', note: 'n1' }])).ok).toBe(false);
+    expect(registry.validate('unit', page([{ html: '<b>x</b>' }])).ok).toBe(false);
+  });
+
+  it('tidies words into their one kept form, and reads them as plain text', () => {
+    expect(
+      tidyInline([{ text: '  a' }, { text: 'b', marks: [] }, { text: 'c', marks: ['i', 'b', 'b'] }, { text: '' }, { text: 'd', marks: ['b', 'i'] }, { br: true }, { text: 'e', href: 'javascript:x' }, { br: true }]),
+    ).toEqual([{ text: 'ab' }, { text: 'cd', marks: ['b', 'i'] }, { br: true }, { text: 'e' }]);
+    expect(pageTextPlain(EXAMPLES.unit.body)).toBe('פרק א\nבראשית ברא\nעיין\nהערה');
+    expect(pageTextPlain('old words')).toBe('old words');
+    expect(plainPage('א\nב\n\nג').versions[0]!.segments).toEqual([
+      { id: 'p1', kind: 'paragraph', text: [{ text: 'א' }, { br: true }, { text: 'ב' }] },
+      { id: 'p2', kind: 'paragraph', text: [{ text: 'ג' }] },
+    ]);
+  });
+
+  it('changes one segment and leaves the rest as they were', () => {
+    const body = EXAMPLES.unit.body!;
+    const fixed = changeSegment(body, 'he', '1.1', { text: [{ text: 'בראשית ברא' }] });
+    expect(findSegment(fixed.versions[0]!, '1.1')?.segment.text).toEqual([{ text: 'בראשית ברא' }]);
+    expect(findSegment(body.versions[0]!, '1.1')?.segment.text).toHaveLength(6); // the original is untouched
+    const added = changeSegment(body, 'he', '1.1', { after: { id: newSegmentId(body.versions[0]!), kind: 'verse', text: [{ text: 'חדש' }] } });
+    expect(added.versions[0]!.segments[0]!.children!.map((s) => s.id)).toEqual(['1.1', 'p4']);
+    expect(changeSegment(added, 'he', 'p4', { remove: true })).toEqual(body);
+    expect(() => changeSegment(body, 'he', 'nope', { remove: true })).toThrow(RangeError);
   });
 });

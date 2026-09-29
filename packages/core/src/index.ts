@@ -53,6 +53,8 @@ export {
   type TranscriptView,
   type WordTiming,
 } from './sync.js';
+export { convertLegacyBodies, suggestWords, type WordsChange, type WordsInput } from './pageWords.js';
+export { fromWikitext as readLegacyBody, legacyProfile, withStructuredBody } from './legacyWords.js';
 export { comparePrintings, diffWords, pdfPagesOf, printingText, printingsOf, type DiffRun, type Printing } from './compare.js';
 export { matchWords, wordKey, words, type Word } from './words.js';
 export { CLAIM_HOURS, claimNext, focusCounts, projectTodo, releaseClaim, type ProjectItem } from './projectWork.js';

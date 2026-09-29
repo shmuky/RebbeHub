@@ -113,6 +113,14 @@ With a signed-in session:
   new teshura.
 - `POST /v1/suggestions/contents-map`: *Map pages*, what pages of a
   publication hold, as a suggestion.
+- `POST /v1/suggestions/words` (`{ entityId, change, version, segment,
+  text, before?, kind?, language?, title?, note? }`): a page's words fixed
+  segment by segment ([data model](data-model.md#a-pages-words)).
+  `change` is `edit` (the segment's new `text`, as runs), `add` (a new
+  segment after it), `remove`, or `start` (a page's first words). `before`
+  is the segment as the person saw it: if it has changed since, the
+  answer is 409 and nothing is overwritten. Words are only runs with the
+  fixed marks; anything else is refused or dropped.
 - `POST /v1/teshuros/<id>/family-request` (no account, captcha as for
   reports): a family asks that a teshura stop being shown
   ([rights](rights.md)).

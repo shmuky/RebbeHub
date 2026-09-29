@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Catalog } from '@rebbehub/core';
+import { Catalog, convertLegacyBodies } from '@rebbehub/core';
 import { connectPostgres, one, type Db } from '@rebbehub/db';
 import { openPGlite } from '@rebbehub/db/pglite';
 import {
@@ -140,6 +140,20 @@ export async function schemaCheckCommand(ctx: Context): Promise<void> {
   const registry = SchemaRegistry.builtin();
   for (const type of Object.keys(BUILTIN_SCHEMAS)) registry.validate(type, {});
   ctx.log(`${registry.types().length} entity types, every schema usable`);
+}
+
+/**
+ * Turns the pages whose words are still one string of wiki markup (from
+ * before built-in schemas version 5) into structured words, as system
+ * changes of `chunk` pages each. Safe to stop and run again: it takes up
+ * what is left. Until it has run, the API shows those pages as structured
+ * words anyway (they are read the same way on the way out).
+ */
+export async function convertBodiesCommand(ctx: Context, input: { chunk?: number } = {}): Promise<void> {
+  await withCatalog(ctx, async (catalog) => {
+    const done = await convertLegacyBodies(catalog, { batch: input.chunk, log: ctx.log });
+    ctx.log(done ? `${done} pages' words turned into structured words` : 'every page already has structured words');
+  });
 }
 
 export async function accountCommand(ctx: Context, input: { id: string; name: string; steward?: boolean; bot?: boolean }): Promise<void> {
