@@ -117,13 +117,13 @@ gathered with nobody doing it by hand:
    paragraph's words checked as they are; editing corrects them. Words a
    listener is not sure of are marked **לא ברור**, kept in the text as
    `[words?]` (`packages/model/src/unclear.ts`): the site shows them as
-   uncertain, and a paragraph with one is left out of the clips. **תזמון
-   מדוייק** confirms a paragraph's timing where it is; **מתחילה עכשיו**
-   moves its start to the moment it is heard. Under the
+   uncertain, and a paragraph with one is left out of the clips. People
+   check words only: the machine's timing is good enough, and the editor
+   has no tools to move it. Under the
    editor the house spelling is shown (the booklets': אויך, דעמאלט,
    ברענגט, ע"י as written; `packages/model/src/spelling.ts`), with a hint
    for each word written otherwise, so everything checked is in one
-   spelling. Both go for review like any suggestion.
+   spelling. Every fix goes for review like any suggestion.
 2. **The machine times the words again.** A corrected paragraph loses its
    word timings. The nightly run then runs `rebbehub align` on the
    recordings with corrected paragraphs first, timing the new words.

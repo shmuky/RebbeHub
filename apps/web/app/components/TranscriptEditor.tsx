@@ -1,4 +1,4 @@
-import { Check, CircleHelp, History, Pencil, Radio, ShieldQuestion, Timer, Undo2, X } from 'lucide-react';
+import { Check, CircleHelp, History, Pencil, ShieldQuestion, Undo2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { markUnclear, spellingHints, unclearRanges } from '@rebbehub/model';
@@ -6,7 +6,7 @@ import { t, type Lang } from '../lib/i18n.js';
 import { clockOf } from '../lib/i18nNetwork.js';
 import { href } from '../lib/links.js';
 import { postJson } from '../lib/post.js';
-import { get, tokensOf, wholeWords, within, type Paragraph, type Span, type Transcript, type TranscriptCommit } from '../lib/transcript.js';
+import { get, tokensOf, wholeWords, within, type Paragraph, type Transcript, type TranscriptCommit } from '../lib/transcript.js';
 import { wordDiff } from '../lib/wordDiff.js';
 import { usePlayer, type Track } from '../player/PlayerProvider.js';
 import { InlineDiff } from '../ui/Diff.js';
@@ -17,8 +17,7 @@ import { Bar, MachineLabel, RelativeTime } from '../ui/primitives.js';
  * recording's transcript by "Review machine text". The words are the
  * recording: tapping one plays from it. Selecting words opens a small
  * editor for just those, or marks them unclear (`[words?]`); the
- * paragraph's own tools (all exact, retype it, confirm its timing or move
- * its start to now, and its history) show under the paragraph being worked
+ * paragraph's own tools (all exact, retype it, and its history) show under the paragraph being worked
  * on, each saying what it does. The recording pauses while words are being
  * fixed, and this browser remembers where the listener was. A fix of
  * some words is on the site once approved but leaves the paragraph the
@@ -35,8 +34,6 @@ const W = {
   howSelect: { he: 'סמנו מילים (לחיצה ארוכה וגרירה) כדי לתקן רק אותן.', en: 'Select words (press and drag) to fix just those.' },
   howRight: { he: '„הכל מדוייק”: שמעתם, וכל המילים נכונות כפי שהמחשב שמע. כך היא נבדקת, ומלמדת את המודל הבא.', en: '"All exact": you listened and every word is right as the machine heard it. That checks it, and teaches the next model.' },
   howEdit: { he: '„עריכת הפסקה”: להקליד אותה מחדש. סמנו אם בדקתם את כולה; אם לא, היא נשארת טקסט מכונה.', en: '"Edit paragraph": retype it. Say whether you checked all of it; if not, it stays machine text.' },
-  howSync: { he: '„תזמון מדוייק”: הסימון עוקב נכון אחרי השמע בפסקה הזאת. מאשר את התזמון כפי שהוא, בלי להזיז כלום.', en: '"Exact timing": the highlight follows the audio right in this paragraph. Confirms the timing as it is, moving nothing.' },
-  howStarts: { he: '„מתחילה עכשיו”: כשהסימון מקדים או מאחר, נגנו ולחצו בדיוק כשהרבי מתחיל את הפסקה. ההמשך זז איתה, ואפשר לבטל.', en: '"Starts now": when the highlight runs ahead or behind, play and tap just as the Rebbe starts the paragraph. What follows moves with it, and it can be undone.' },
   howUnclear: { he: '„לא ברור”: סמנו מילים שלא בטוח מה נאמר בהן. הן נשמרות כך [מילים?], ולא מלמדים מהן את המודל.', en: '"Unclear": mark words you are not sure of. They are kept as [words?], and the model does not learn from them.' },
   howPause: { he: 'בזמן עריכה ההקלטה נעצרת, וממשיכה מעט לפני כן כשמסיימים.', en: 'The recording pauses while you edit, and goes on from a little before when you finish.' },
   howHistory: { he: '„היסטוריה”: כל מה ששונה בפסקה, מי ומתי.', en: '"History": everything changed in the paragraph, by whom and when.' },
@@ -45,11 +42,6 @@ const W = {
   partly: { he: 'תוקן בחלקו', en: 'Partly fixed' },
   allRight: { he: 'הכל מדוייק', en: 'All exact' },
   edit: { he: 'עריכת הפסקה', en: 'Edit paragraph' },
-  saidNow: { he: 'תזמון מדוייק', en: 'Exact timing' },
-  startsNow: { he: 'מתחילה עכשיו', en: 'Starts now' },
-  undo: { he: 'ביטול', en: 'Undo' },
-  syncOk: { he: 'התזמון אושר', en: 'Timing confirmed' },
-  syncUndone: { he: 'ההזזה בוטלה', en: 'The move was undone' },
   unclear: { he: 'לא ברור', en: 'Unclear' },
   markUnclear: { he: 'סימון כלא ברור', en: 'Mark as unclear' },
   continueHere: { he: 'כאן עצרת בפעם הקודמת', en: 'You stopped here last time' },
@@ -61,7 +53,6 @@ const W = {
   sent: { he: 'נשלח. יופיע באתר אחרי אישור.', en: 'Sent. It shows on the site once approved.' },
   saved: { he: 'נשמר.', en: 'Saved.' },
   yourFix: { he: 'התיקון שלך, מחכה לאישור', en: 'Your fix, waiting for approval' },
-  syncFixed: { he: 'הסנכרון תוקן מכאן', en: 'Sync fixed from here' },
   allChanges: { he: 'כל השינויים בתמלול', en: 'Every change to this transcript' },
   noChanges: { he: 'עוד אין שינויים מלבד שמיעת המחשב.', en: 'No changes yet besides what the machine heard.' },
   made: { he: 'המחשב שמע {n} פסקאות', en: 'The machine heard {n} paragraphs' },
@@ -74,8 +65,6 @@ const W = {
   suggestion: { he: 'הצעה', en: 'Suggestion' },
   fullHistory: { he: 'דף ההיסטוריה המלא', en: 'Full history page' },
   signIn: { he: 'כדי לתקן צריך להיכנס. ההאזנה והלחיצה על מילים פתוחות לכולם.', en: 'Sign in to fix. Listening and tapping words are open to all.' },
-  syncRight: { he: 'הסנכרון של כל ההקלטה נכון', en: 'The sync of the whole recording is right' },
-  syncRightHint: { he: 'אחרי שהאזנתם ובדקתם שהסימון תואם לשמע.', en: 'After listening and seeing the highlight follows the audio.' },
 } as const;
 const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
 
@@ -165,7 +154,7 @@ function offsetIn(host: HTMLElement, node: Node, offset: number): number {
 }
 
 type Editing = { kind: 'words'; from: number; to: number; value: string } | { kind: 'all'; value: string; complete: boolean };
-type Sent = { content: string; complete: boolean; merged: boolean } | { sync: 'confirmed' | 'moved' | 'undone'; was?: number };
+type Sent = { content: string; complete: boolean; merged: boolean };
 
 /*
  * Where a listener was, kept in this browser: the paragraph they had open
@@ -247,7 +236,6 @@ function Para({
   onOpen,
   onPlayFrom,
   onFixed,
-  onAnchored,
   pickWords,
   numberOf,
 }: {
@@ -267,7 +255,6 @@ function Para({
   onOpen: () => void;
   onPlayFrom: (ms: number) => void;
   onFixed: (content: string, complete: boolean, merged: boolean) => void;
-  onAnchored: (spans: Span[]) => void;
   pickWords: { from: number; to: number; unclear?: boolean } | null;
   numberOf: (segment: string) => number;
 }) {
@@ -332,26 +319,6 @@ function Para({
     }
   }
 
-  /*
-   * The paragraph's timing. "Exact timing" confirms it where it is: the
-   * sync is anchored at its own start, so nothing moves. "Starts now" moves
-   * its start to the moment of the tap (a quarter second earlier, for the
-   * hand), and what follows with it; it can be undone, by anchoring it back.
-   */
-  async function anchor(atMs: number, kind: 'confirmed' | 'moved' | 'undone') {
-    const was = paragraph.startMs ?? undefined;
-    setError(null);
-    setBusy(true);
-    try {
-      const fix = await postJson<{ spans: Span[] }>(`recordings/${recording}/sync/anchor`, { segment: paragraph.id, atMs: Math.max(0, Math.round(atMs)) });
-      onAnchored(fix.spans);
-      setSent({ sync: kind, was: kind === 'moved' ? was : undefined });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   const tokens = tokensOf(paragraph);
   const marks = unclearRanges(paragraph.content);
@@ -372,7 +339,7 @@ function Para({
   }
   if (at < paragraph.content.length) text.push(paragraph.content.slice(at));
 
-  const pending = sent && 'content' in sent && !sent.merged ? sent : null;
+  const pending = sent && !sent.merged ? sent : null;
   const status = paragraph.checked ? 'checked' : paragraph.edited ? 'partly' : 'machine';
   const classes = ['tx-para', open ? 'open' : '', active ? 'active' : '', found ? 'found' : '', `is-${status}`].filter(Boolean).join(' ');
 
@@ -396,7 +363,6 @@ function Para({
           <MachineLabel lang={lang} size="sm" />
         )}
         {resumed ? <span className="tx-state resumed">{w(lang, 'continueHere')}</span> : null}
-        {paragraph.syncChecked === false ? <span className="row-sub tx-sync-note">{t(lang, 'machineSyncShort')}</span> : null}
       </div>
 
       <div
@@ -484,18 +450,6 @@ function Para({
               {w(lang, 'edit')}
             </button>
           ) : null}
-          {canFix && paragraph.startMs !== null && paragraph.syncChecked === false && !(sent && 'sync' in sent) ? (
-            <button type="button" className="tx-tool" onClick={() => anchor(paragraph.startMs ?? 0, 'confirmed')} disabled={busy} title={w(lang, 'howSync')}>
-              <Timer size={16} aria-hidden />
-              {w(lang, 'saidNow')}
-            </button>
-          ) : null}
-          {canFix && playing && paragraph.startMs !== null && !(sent && 'sync' in sent && sent.sync === 'moved') ? (
-            <button type="button" className="tx-tool" onClick={() => anchor(player.now() * 1000 - 250, 'moved')} disabled={busy} title={w(lang, 'howStarts')}>
-              <Radio size={16} aria-hidden />
-              {w(lang, 'startsNow')} · <span className="num">{clockOf(nowMs)}</span>
-            </button>
-          ) : null}
           <button type="button" className={showHistory ? 'tx-tool on' : 'tx-tool'} onClick={() => setShowHistory((s) => !s)} aria-expanded={showHistory}>
             <History size={16} aria-hidden />
             {w(lang, 'history')}
@@ -503,19 +457,7 @@ function Para({
         </div>
       ) : null}
 
-      {sent ? (
-        <p className="row-sub tx-sent">
-          {'sync' in sent ? w(lang, sent.sync === 'confirmed' ? 'syncOk' : sent.sync === 'undone' ? 'syncUndone' : 'syncFixed') : w(lang, sent.merged ? 'saved' : 'sent')}
-          {'sync' in sent && sent.sync === 'moved' && sent.was !== undefined ? (
-            <>
-              {' '}
-              <button type="button" className="link-button" disabled={busy} onClick={() => anchor(sent.was!, 'undone')}>
-                {w(lang, 'undo')}
-              </button>
-            </>
-          ) : null}
-        </p>
-      ) : null}
+      {sent ? <p className="row-sub tx-sent">{w(lang, sent.merged ? 'saved' : 'sent')}</p> : null}
       {error ? <p role="alert">{error}</p> : null}
 
       {open && showHistory ? (
@@ -538,32 +480,6 @@ function Para({
   );
 }
 
-function ConfirmSync({ recording, lang }: { recording: string; lang: Lang }) {
-  const [state, setState] = useState<'idle' | 'sent'>('idle');
-  const [error, setError] = useState<string | null>(null);
-  if (state === 'sent') return <p className="row-sub">{t(lang, 'pageSent')}</p>;
-  return (
-    <p className="confirm-page">
-      <button
-        type="button"
-        className="btn"
-        onClick={async () => {
-          try {
-            await postJson(`recordings/${recording}/sync/confirm`);
-            setState('sent');
-          } catch (e) {
-            setError(e instanceof Error ? e.message : String(e));
-          }
-        }}
-      >
-        {w(lang, 'syncRight')}
-      </button>
-      <span className="row-sub"> {w(lang, 'syncRightHint')}</span>
-      {error ? <span role="alert"> {error}</span> : null}
-    </p>
-  );
-}
-
 export function TranscriptEditor({
   transcripts,
   tracks,
@@ -572,7 +488,6 @@ export function TranscriptEditor({
   found,
   account,
   onBack,
-  onAnchored,
   onFixed,
 }: {
   transcripts: Transcript[];
@@ -582,7 +497,6 @@ export function TranscriptEditor({
   found: string | null;
   account: unknown;
   onBack: () => void;
-  onAnchored: (recording: string, spans: Span[]) => void;
   onFixed: (recording: string, segment: string, content: string, complete: boolean) => void;
 }) {
   const player = usePlayer();
@@ -670,8 +584,6 @@ export function TranscriptEditor({
             <li>{w(lang, 'howRight')}</li>
             <li>{w(lang, 'howEdit')}</li>
             <li>{w(lang, 'howUnclear')}</li>
-            <li>{w(lang, 'howSync')}</li>
-            <li>{w(lang, 'howStarts')}</li>
             <li>{w(lang, 'howPause')}</li>
             <li>{w(lang, 'howHistory')}</li>
           </ul>
@@ -733,13 +645,11 @@ export function TranscriptEditor({
                     if (playing && !player.playing) player.toggle();
                   }}
                   onFixed={(content, complete) => onFixed(tr.recording, p.id, content, complete)}
-                  onAnchored={(spans) => onAnchored(tr.recording, spans)}
                   pickWords={pick?.segment === p.id ? pick : null}
                   numberOf={numberOf}
                 />
               ))}
             </ol>
-            {canFix && tr.paragraphs.some((p) => p.syncChecked === false) ? <ConfirmSync recording={tr.recording} lang={lang} /> : null}
           </div>
         );
       })}

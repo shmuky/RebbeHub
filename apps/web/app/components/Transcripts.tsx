@@ -5,7 +5,7 @@ import { unclearRanges } from '@rebbehub/model';
 import { t, type Lang } from '../lib/i18n.js';
 import { clockOf, tn } from '../lib/i18nNetwork.js';
 import { href } from '../lib/links.js';
-import { get, within, type Span, type Transcript, type Word } from '../lib/transcript.js';
+import { get, within, type Transcript, type Word } from '../lib/transcript.js';
 import { useAccount } from '../lib/useAccount.js';
 import { clock, usePlayer, type Track } from '../player/PlayerProvider.js';
 import { MachineLabel } from '../ui/primitives.js';
@@ -131,18 +131,6 @@ export function Transcripts({ tracks, lang, onLoaded, only }: { tracks: Track[];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ids]);
 
-  // A fix to the sync, followed at once: the spans as they now stand replace the old ones.
-  function anchored(recording: string, spans: Span[]) {
-    const bySegment = new Map(spans.map((s) => [s.segment, s]));
-    setTranscripts((all) =>
-      all.map((tr) =>
-        tr.recording !== recording
-          ? tr
-          : { ...tr, paragraphs: tr.paragraphs.map((p) => (bySegment.has(p.id) ? { ...p, ...bySegment.get(p.id)!, syncChecked: bySegment.get(p.id)!.locked || p.syncChecked } : p)) },
-      ),
-    );
-  }
-
   // An approved fix, shown at once: its words, and whether the paragraph is now checked or only fixed in part.
   function fixed(recording: string, segment: string, content: string, complete: boolean) {
     setTranscripts((all) =>
@@ -215,7 +203,6 @@ export function Transcripts({ tracks, lang, onLoaded, only }: { tracks: Track[];
         found={found}
         account={account}
         onBack={() => review(false)}
-        onAnchored={anchored}
         onFixed={fixed}
       />
       {ask}
