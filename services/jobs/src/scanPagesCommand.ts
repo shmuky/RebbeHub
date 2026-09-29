@@ -45,12 +45,13 @@ export async function fingerprintsCommand(ctx: Context, input: { limit?: number;
   });
 }
 
-/** `rebbehub covers`: sefarim's covers from their title pages; see covers.ts. */
-export async function coversCommand(ctx: Context, input: { work?: string; limit?: number; again?: boolean; files?: string; bucket?: string }): Promise<void> {
+/** `rebbehub covers`: sefarim's covers from their title pages; a linked PDF is kept in the preservation bucket; see covers.ts. */
+export async function coversCommand(ctx: Context, input: { work?: string; limit?: number; again?: boolean; files?: string; bucket?: string; preservationBucket?: string }): Promise<void> {
   const store = bucket(input.bucket ?? 'rebbehub-public');
   if (!store) throw new Error('set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (a token with R2 edit rights): covers go into the public bucket');
+  const preservation = bucket(input.preservationBucket ?? 'rebbehub-preservation') ?? undefined;
   await withCatalog(ctx, async (catalog) => {
-    const done = await makeCovers(catalog, { fetchFile: fetcher(input.files), store, work: input.work as EntityId | undefined, limit: input.limit, again: input.again, log: ctx.log });
+    const done = await makeCovers(catalog, { fetchFile: fetcher(input.files), store, preservation, work: input.work as EntityId | undefined, limit: input.limit, again: input.again, log: ctx.log });
     ctx.log(`covers of ${done.length} sefarim, ${done.filter((d) => d.machine).length} chosen by the machine`);
   });
 }

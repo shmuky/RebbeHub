@@ -22,7 +22,8 @@ decisions map one to one (`ship`→`open`, `ship-with-credit`→`credit`,
 
 - public domain, CC0, facts-and-links → `open`; CC BY and CC BY-NC (Sefaria) → `credit`;
 - free-to-read, site terms, unknown → `link`; commercial → `preserved`;
-- HebrewBooks → `link` whatever else is said;
+- HebrewBooks → `link` whatever else is said (a copy of a scan the jobs
+  draw a cover from is kept in the preservation bucket, never served);
 - chabadlibrary.org's texts → `credit`: each page's words are kept and shown,
   credited to the library, with a link to its page there (a steward's
   decision, 2026-09-28);
@@ -62,9 +63,17 @@ given freely or in the public domain is served and linked from its
 farbrengen's page. A hanacha's words follow the same statement: given
 freely or public domain, shown; otherwise kept and withheld.
 
-A sefer's **cover** is drawn from the title page of a PDF the site
-serves, as a derivation of it: it is shown only while the PDF may be,
-and a takedown of the PDF takes it down. Linked-only PDFs give no cover.
+A sefer's **cover** is drawn from the title page of one of its PDFs, as
+a derivation of it: a PDF the site serves first, else one it only links
+to (the Otzros library on Drive, HebrewBooks). We store everything and
+link in public (the owner's decision, 2026-09-29): a linked PDF is
+fetched from its link and kept in the preservation bucket, never served;
+its cover is our own picture and is served, credited to the PDF's source
+where it has a credit, and the sefer's page links to the source for the
+PDF itself. A PDF in a state that keeps no copy is not fetched (the job
+says so). The cover is shown only while its PDF is served or linked: a
+takedown of the PDF (`preserved`) takes the cover down, and clearing it
+again brings the cover back.
 
 A new teshura ("Add a teshura" on the Teshuros set, or a scan the upload
 check takes for one) is always a teshura scan: `credit`, credited to the

@@ -168,6 +168,27 @@ people check it.
   also proposes the citations found in the texts as links, for keepers to
   review ([operations](operations.md)).
 
+### 8. After a deploy: upkeep
+
+Some of the catalog's upkeep runs only when started, from **Actions →
+Upkeep (manual) → Run workflow**, one job a run (two runs never overlap:
+the second waits):
+
+1. **`convert-bodies`**, once after the redesign's schemas are deployed:
+   it turns every page whose words are still wiki markup into structured
+   words, as reviewed system changes. It needs only `DATABASE_URL`, and
+   running it again changes nothing that is already done.
+2. Then **`covers`** and **`page-images`**, as often as wanted, each for
+   `limit` sefarim or scans a run (empty: the command's own default):
+   `covers` draws sefarim's covers from their title pages - from a PDF
+   only linked too, which it fetches and keeps in `rebbehub-preservation`,
+   never served ([operations](operations.md#covers-from-the-shaar)) - and
+   `page-images` draws served scans' pages for the viewer. Both put their
+   pictures in `rebbehub-public`, so they need `CLOUDFLARE_ACCOUNT_ID`
+   and `CLOUDFLARE_API_TOKEN` (a token with **Workers R2 Storage: Edit**,
+   as for the import's stored texts) besides `DATABASE_URL`; without them
+   the run stops at once and says which secret to add.
+
 ## A domain of your own
 
 **Workers & Pages → rebbehub-web → Settings → Domains & Routes → Add →
@@ -179,7 +200,9 @@ Custom domain** (e.g. `rebbehub.org`), and the same for `rebbehub-api`
 Files that may be served live in `rebbehub-public` under
 `objects/<sha256>`. The API serves them at `/objects/<sha256>` only while
 their rights allow, so a takedown stops serving a file at once. Nothing
-binds `rebbehub-preservation`: what is kept there is never served.
+binds `rebbehub-preservation`: what is kept there is never served. The
+jobs write to it (a linked PDF a cover is drawn from) and read it back
+with their own token.
 
 ## Deploying by hand (fallback)
 

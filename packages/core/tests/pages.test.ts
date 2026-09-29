@@ -4,8 +4,11 @@ import {
   chooseTitlePage,
   coverSources,
   coversOf,
+  coverFetchFailed,
   coversWanted,
   fileAbout,
+  getFile,
+  hebrewBooksPdfUrl,
   findDateIn,
   hanachaOf,
   linkedCounts,
@@ -117,14 +120,14 @@ describe("a sefer's cover from its title page", () => {
     expect(chooseTitlePage([lookOfPage(1, page([]))]).page).toBe(1);
   });
 
-  it('draws only from served PDFs, lets a person choose the page, and hides the cover when its file is taken down', async () => {
+  it('draws from served PDFs first, lets a person choose the page, and hides the cover when its file is taken down', async () => {
     const { catalog, set } = await freshCatalog();
     const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'ספר' }, slug: 'sefer', authors: [], genre: 'sichos', levels: ['volume'], sets: [set] });
     const other = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'ספר אחר' }, slug: 'other', authors: [], genre: 'sichos', levels: ['volume'], sets: [set] });
     const pub = await add(catalog, 'mendy', 'keeper', 'publication', { kind: 'book-volume', title: { he: 'דפוס' }, work, date: '5742' });
     await registerFile(catalog.db, { sha256: sha('a'), bytes: 10, mime: 'application/pdf', source: 'contribution', licence: 'cc0', held: true });
     await registerFile(catalog.db, { sha256: sha('b'), bytes: 10, mime: 'application/pdf', source: 'contribution', licence: 'unknown', held: true });
-    await add(catalog, 'mendy', 'keeper', 'scan', { publication: pub, file: sha('b'), completeness: 'complete' });
+    const scanB = await add(catalog, 'mendy', 'keeper', 'scan', { publication: pub, file: sha('b'), completeness: 'complete' });
     const scan = await add(catalog, 'mendy', 'keeper', 'scan', { publication: pub, file: sha('a'), completeness: 'complete' });
     // A unit's PDF on Drive that RebbeHub holds and serves (the old Sichos Kodesh scans).
     await registerFile(catalog.db, { sha256: sha('c'), bytes: 10, mime: 'application/pdf', source: 'mafteiach', licence: 'unknown', fileClass: 'sichos-kodesh-hanacha', url: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMn/view', held: true });
@@ -136,7 +139,11 @@ describe("a sefer's cover from its title page", () => {
       editions: [{ source: 'mafteiach', sourceId: '1AbCdEfGhIjKlMn', kind: 'pdf', licence: 'facts-and-links', url: 'https://sichos-kodesh-media-proxy.shmuky.workers.dev/drive/1AbCdEfGhIjKlMn?filename=x.pdf' }],
     });
 
-    expect(await coverSources(catalog.db, work)).toEqual([{ sha256: sha('a'), via: 'scan', item: scan }]);
+    // The served scan first; the one kept privately (its uploader was not sure: linked) after it.
+    expect(await coverSources(catalog.db, work)).toEqual([
+      { sha256: sha('a'), via: 'scan', item: scan, linked: false },
+      { sha256: sha('b'), via: 'scan', item: scanB, linked: true },
+    ]);
     expect((await coverSources(catalog.db, other)).map((s) => s.sha256)).toEqual([sha('c')]);
     const wanted = await coversWanted(catalog.db);
     expect(wanted.map((w) => w.work).sort()).toEqual([work, other].sort());
@@ -164,6 +171,45 @@ describe("a sefer's cover from its title page", () => {
     expect(about?.covers).toEqual([{ entity: work, page: 2, machine: false }]);
     expect(about?.usedBy.total).toBe(1);
     expect(about?.derivations.map((d) => d.profile)).toEqual(expect.arrayContaining(['cover/2', 'cover-thumb/2']));
+  });
+
+  it("draws from a PDF RebbeHub only links to: the cover is served, the PDF never, and a takedown still hides it", async () => {
+    const { catalog, set } = await freshCatalog();
+    const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'ספר' }, slug: 'sefer', authors: [], genre: 'sichos', levels: ['volume'], sets: [set] });
+    const hb = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'ספר בהיברו בוקס' }, slug: 'hb', authors: [], genre: 'sichos', levels: ['volume'], sets: [set] });
+    const pub = await add(catalog, 'mendy', 'keeper', 'publication', { kind: 'book-volume', title: { he: 'דפוס' }, work: hb, date: '5710', identifiers: { hebrewbooks: '12345' } });
+    // An Otzros library PDF on Drive: known, not held (a publisher scan, link only).
+    await registerFile(catalog.db, { sha256: sha('a'), bytes: 10, mime: 'application/pdf', source: 'other', licence: 'free-to-read', fileClass: 'publisher-scan', credit: 'אוצרות הרבי', url: 'https://drive.google.com/file/d/1OtzrosAbCdEf/view', held: false });
+    const unit = await add(catalog, 'mendy', 'keeper', 'unit', {
+      work,
+      position: [{ level: 'volume', value: '1' }],
+      order: 'a0',
+      label: { he: 'א' },
+      editions: [{ source: 'other', sourceId: '1OtzrosAbCdEf', kind: 'pdf', licence: 'free-to-read', url: 'https://drive.google.com/file/d/1OtzrosAbCdEf/view' }],
+    });
+    expect(await coverSources(catalog.db, work)).toEqual([{ sha256: sha('a'), via: 'unit', item: unit, linked: true }]);
+    // The HebrewBooks scan is still to be fetched: no file yet.
+    const wanted = await coversWanted(catalog.db);
+    expect(wanted.map((w) => w.work).sort()).toEqual([work, hb].sort());
+    expect(wanted.find((w) => w.work === hb)).toMatchObject({ sources: [], toFetch: [{ item: pub, source: 'hebrewbooks', url: hebrewBooksPdfUrl('12345') }] });
+    // One that could not be fetched waits until its publication changes.
+    await coverFetchFailed(catalog.db, pub);
+    expect((await coversWanted(catalog.db)).map((w) => w.work)).toEqual([work]);
+
+    const picture = (c: string) => ({ sha256: sha(c), bytes: 5, width: 480, height: 672 });
+    await recordCover(catalog.db, { entity: work, src: sha('a'), page: 1, chosenBy: 'machine', image: picture('d'), thumb: picture('e') });
+    expect((await coversOf(catalog.db, [work]))[work]).toMatchObject({ file: sha('a'), machine: true, credit: 'אוצרות הרבי' });
+    // The cover's pictures are served, credited; the PDF stays linked.
+    expect(await getFile(catalog.db, sha('d'))).toMatchObject({ rights_state: 'credit', storage_tier: 'public', credit: 'אוצרות הרבי' });
+    expect(await getFile(catalog.db, sha('a'))).toMatchObject({ rights_state: 'link', storage_tier: 'none' });
+
+    // A takedown hides it, and clearing the PDF back to linked shows it again.
+    await setRights(catalog.db, 'shmuly', sha('a'), 'preserved', 'takedown');
+    expect(await coversOf(catalog.db, [work])).toEqual({});
+    expect(await getFile(catalog.db, sha('e'))).toMatchObject({ rights_state: 'preserved' });
+    await setRights(catalog.db, 'shmuly', sha('a'), 'link', 'cleared');
+    expect(await getFile(catalog.db, sha('e'))).toMatchObject({ rights_state: 'credit', storage_tier: 'public' });
+    expect(Object.keys(await coversOf(catalog.db, [work]))).toEqual([work]);
   });
 });
 

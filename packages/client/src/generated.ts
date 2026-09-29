@@ -454,7 +454,7 @@ export interface Operations {
     };
     output: Suggestion;
   };
-  /** Sefarim's covers, drawn from their title pages, while their PDFs are served */
+  /** Sefarim's covers, drawn from their title pages, while their PDFs are served or linked */
   covers: {
     input: {
       /** The sefarim */
@@ -1826,7 +1826,7 @@ export interface Operations {
       ok: true;
     };
   };
-  /** A sefer's cover, the page a person chose, and the served PDFs its title page may be chosen from */
+  /** A sefer's cover, the page a person chose, and the PDFs (served, or linked) its title page may be chosen from */
   workCover: {
     input: {
       id: string;
@@ -2094,7 +2094,7 @@ export abstract class GeneratedMethods {
     return this.call('confirmSync', input ?? {} as Operations['confirmSync']['input']);
   }
 
-  /** Sefarim's covers, drawn from their title pages, while their PDFs are served (GET /v1/covers) */
+  /** Sefarim's covers, drawn from their title pages, while their PDFs are served or linked (GET /v1/covers) */
   covers(input?: Operations['covers']['input']): Promise<Operations['covers']['output']> {
     return this.call('covers', input ?? {} as Operations['covers']['input']);
   }
@@ -2654,7 +2654,7 @@ export abstract class GeneratedMethods {
     return this.call('withdrawSuggestion', input ?? {} as Operations['withdrawSuggestion']['input']);
   }
 
-  /** A sefer's cover, the page a person chose, and the served PDFs its title page may be chosen from (GET /v1/works/{id}/cover) */
+  /** A sefer's cover, the page a person chose, and the PDFs (served, or linked) its title page may be chosen from (GET /v1/works/{id}/cover) */
   workCover(input: Operations['workCover']['input']): Promise<Operations['workCover']['output']> {
     return this.call('workCover', input ?? {} as Operations['workCover']['input']);
   }

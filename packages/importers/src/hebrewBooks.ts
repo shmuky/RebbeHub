@@ -14,8 +14,10 @@ import { GENRE_NAMES } from './sichosKodeshWorks.js';
  * HebrewBooks catalog and packages/works places each series with its sefer
  * (the shelf.json its works catalog carries). Each book becomes a
  * publication on RebbeHub with its HebrewBooks id, linking to its page
- * there; the scans stay at HebrewBooks, which its terms allow and nothing
- * more (docs/rights.md: HebrewBooks is link-only whatever else is said).
+ * there; the scans are served from HebrewBooks only (docs/rights.md:
+ * HebrewBooks is link-only whatever else is said). The importer copies
+ * nothing; `rebbehub covers` later keeps a private copy of a scan it draws
+ * a cover from.
  *
  * A series Sichos-Kodesh placed with a sefer it knows is printings of that
  * sefer; any other series becomes a sefer of its own, so its volumes are

@@ -1,7 +1,7 @@
 export { Catalog, PRIVATE_REASONS, isoWeekTag, type ArchiveGapRow, type ChangeEntry, type ChangesetKind, type ChangesetRow, type ChangesetStatus, type Check, type EntityView, type HistoryEntry, type NewRevision, type ProjectFocus, type ProjectView, type Proposal, type ReportReason, type RevisionRow } from './catalog.js';
 export { CatalogError, type CatalogErrorCode } from './errors.js';
 export { ExportGate } from './gate.js';
-export { fileFromDrive, getDerivations, getFile, getPageFix, recordDerivation, recordPageFix, registerFile, setRights, storageTierFor, type DerivationRow, type FileRow, type NewDerivation, type NewFile, type NewPageFix, type PageFixRow, type PageFixVerdict } from './files.js';
+export { derivedRights, fileFromDrive, getDerivations, isCoverProfile, getFile, getPageFix, recordDerivation, recordPageFix, registerFile, setRights, storageTierFor, type DerivationRow, type FileRow, type NewDerivation, type NewFile, type NewPageFix, type PageFixRow, type PageFixVerdict } from './files.js';
 export { diffData, resolveConflicts, threeWayMerge, UnresolvedConflictError, type Conflict, type FieldChange, type Json, type MergeResult, type Resolution } from './merge.js';
 export { LIVE_TYPES, STEWARD_TYPES, TRUST_THRESHOLD, UPLOAD_HOLD_HOURS, UPLOAD_LIMITS, canApprove, canSuggest, earnedTrust, mayGoLive, uploadAllowance, type Account, type SetInfo } from './permissions.js';
 export { searchTextOf, toTsQuery } from './searchText.js';
@@ -122,15 +122,19 @@ export {
   COVER_THUMB_WIDTH,
   COVER_WIDTH,
   chooseTitlePage,
+  COVERS_FETCH_PASS,
+  coverFetchFailed,
   coverSources,
   coversOf,
   coversWanted,
+  hebrewBooksPdfUrl,
   lookOfPage,
   pdfPageCount,
   recordCover,
   titlePageScore,
   type CoverPicture,
   type CoverSource,
+  type CoverToFetch,
   type CoverView,
   type CoverWanted,
   type GreyPage,

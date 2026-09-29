@@ -1,0 +1,79 @@
+name: Upkeep (manual)
+
+# The catalog's upkeep after a deploy, one job a run, only when started
+# (docs/deploy.md, "After a deploy"):
+#
+#   convert-bodies  turns pages whose words are still wiki markup into
+#                   structured words, as reviewed system changes; once,
+#                   after the redesign's schemas are deployed;
+#   covers          each sefer's cover from its title page, into the public
+#                   bucket; a PDF only linked (Drive, HebrewBooks) is
+#                   fetched and kept in the preservation bucket, never served;
+#   page-images     page images and thumbnails of served scans, into the
+#                   public bucket (the viewer and the IIIF manifests).
+#
+# Needs the DATABASE_URL repository secret, as the import does; covers and
+# page-images also CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (a token
+# with Workers R2 Storage: Edit, on rebbehub-public and rebbehub-preservation).
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Which job to run
+        type: choice
+        options: [convert-bodies, covers, page-images]
+        default: covers
+      limit:
+        description: How many sefarim or scans this run (covers, page-images; empty for the command's own default)
+        required: false
+
+permissions:
+  contents: read
+
+# Two upkeep runs never overlap: a second one waits for the first.
+concurrency:
+  group: upkeep-production
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: ${{ inputs.job }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 180
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      JOB: ${{ inputs.job }}
+      LIMIT: ${{ inputs.limit }}
+    steps:
+      - name: Check it is configured
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "::error::Add the DATABASE_URL repository secret (see docs/deploy.md)."; exit 1; fi
+          if [ "$JOB" != "convert-bodies" ] && { [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$CLOUDFLARE_API_TOKEN" ]; }; then
+            echo "::error::Add the CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN repository secrets (a token with Workers R2 Storage: Edit; see docs/deploy.md)."; exit 1
+          fi
+          if [ -n "$LIMIT" ] && ! [[ "$LIMIT" =~ ^[0-9]+$ ]]; then echo "::error::limit is a whole number, or empty."; exit 1; fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Run
+        run: |
+          npm run rebbehub -- migrate
+          case "$JOB" in
+            convert-bodies)
+              # Goes through every page still in markup; it takes no limit.
+              npm run rebbehub -- convert-bodies
+              ;;
+            covers|page-images)
+              if [ -n "$LIMIT" ]; then npm run rebbehub -- "$JOB" --limit "$LIMIT"; else npm run rebbehub -- "$JOB"; fi
+              ;;
+            *) echo "::error::Unknown job: $JOB"; exit 1 ;;
+          esac

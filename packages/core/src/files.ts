@@ -102,10 +102,27 @@ export interface NewDerivation {
   encoder: string;
 }
 
+/** A cover's pictures (`cover/<n>`, `cover-thumb/<n>`): a sefer's title page, drawn by RebbeHub. */
+export const isCoverProfile = (profile: string): boolean => /^cover(-thumb)?\//.test(profile);
+
 /**
- * Records a derivation, and its bytes as a file with its source's rights:
- * a copy made from a file may be served exactly when the file may. Made
- * again (a new version of the tool), it replaces the old one.
+ * The rights of something made from a file: the file's own, with one
+ * exception. A cover drawn from a PDF RebbeHub only links to is RebbeHub's
+ * own picture and is served (with the PDF's credit, when it has one),
+ * while the PDF itself stays linked, never served (the owner's decision,
+ * 2026-09-29: "we store everything; link in public"). A takedown still
+ * takes it down: `preserved` is never served.
+ */
+export function derivedRights(profile: string, source: Pick<FileRow, 'rights_state' | 'storage_tier' | 'credit'>): { state: RightsState; tier: FileRow['storage_tier'] } {
+  if (isCoverProfile(profile) && source.rights_state === 'link') return { state: source.credit ? 'credit' : 'open', tier: 'public' };
+  return { state: source.rights_state, tier: source.storage_tier };
+}
+
+/**
+ * Records a derivation, and its bytes as a file with its source's rights
+ * (derivedRights): a copy made from a file may be served exactly when the
+ * file may, and a cover also while the file is linked. Made again (a new
+ * version of the tool), it replaces the old one.
  */
 export async function recordDerivation(db: Db, input: NewDerivation): Promise<DerivationRow> {
   if (!/^[0-9a-f]{64}$/.test(input.sha256) || !/^[0-9a-f]{64}$/.test(input.src)) throw invalid('sha256 must be 64 lower-case hex characters');
@@ -113,10 +130,11 @@ export async function recordDerivation(db: Db, input: NewDerivation): Promise<De
   return db.transaction(async (tx) => {
     const source = await one<FileRow>(tx, 'SELECT * FROM file WHERE sha256 = $1', [input.src]);
     if (!source) throw notFound(`file ${input.src}`);
+    const rights = derivedRights(input.profile, source);
     await tx.query(
       `INSERT INTO file (sha256, bytes, mime, rights_state, credit, storage_tier) VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (sha256) DO NOTHING`,
-      [input.sha256, input.bytes, input.mime, source.rights_state, source.credit, source.storage_tier],
+      [input.sha256, input.bytes, input.mime, rights.state, source.credit, rights.tier],
     );
     return (await one<DerivationRow>(
       tx,
@@ -203,11 +221,17 @@ export async function setRights(db: Db, by: string, sha256: string, state: Right
       'UPDATE file SET rights_state = $2, storage_tier = $3, rights_changed_at = now(), rights_changed_by = $4 WHERE sha256 = $1 RETURNING *',
       [sha256, state, storageTierFor(state, held), by],
     );
-    // What was made from it follows it: a takedown takes its reading copy down too.
+    // What was made from it follows it: a takedown takes its reading copy and its cover down too.
+    // A cover of a PDF that is now linked stays served (derivedRights).
+    const cover = derivedRights('cover/1', updated!);
     await tx.query(
-      `UPDATE file SET rights_state = $2, storage_tier = CASE WHEN storage_tier = 'none' THEN 'none' ELSE $3 END, rights_changed_at = now(), rights_changed_by = $4
-       WHERE sha256 IN (SELECT sha256 FROM derivation WHERE src_sha256 = $1)`,
-      [sha256, state, storageTierFor(state, true), by],
+      `UPDATE file SET
+         rights_state = CASE WHEN d.cover AND $2 = 'link' THEN $5 ELSE $2 END,
+         storage_tier = CASE WHEN file.storage_tier = 'none' THEN 'none' WHEN d.cover AND $2 = 'link' THEN 'public' ELSE $3 END,
+         rights_changed_at = now(), rights_changed_by = $4
+       FROM (SELECT sha256, bool_and(profile ~ '^cover(-thumb)?/') AS cover FROM derivation WHERE src_sha256 = $1 GROUP BY sha256) d
+       WHERE file.sha256 = d.sha256`,
+      [sha256, state, storageTierFor(state, true), by, cover.state],
     );
     await tx.query("INSERT INTO audit_log (actor, action, target_kind, target_id, detail) VALUES ($1, 'file.rights', 'file', $2, $3)", [
       by,
