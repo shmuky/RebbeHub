@@ -37,6 +37,8 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 deploying built-in schemas version 5)
   rebbehub rebuildable [--guard]                prints rebuildable when importers made everything;
                                                 --guard prints SQL that fails otherwise
+  rebbehub rebuildable --mark | --guard-mark <mark>
+                                                the catalog's mark; SQL that fails unless it still has it
   rebbehub account --id <id> --name <name> [--steward] [--bot]
   rebbehub import <importer> --from <Sichos-Kodesh checkout> [--approve-as <steward>] [--dry-run] [--chunk <n>]
                                                 sichos-kodesh-works, sichos-kodesh-occasions, otzros, hebrewbooks;
@@ -148,6 +150,8 @@ const { values, positionals } = parseArgs({
     again: { type: 'boolean' },
     files: { type: 'string' },
     minutes: { type: 'string' },
+    mark: { type: 'boolean' },
+    'guard-mark': { type: 'string' },
     cache: { type: 'string' },
     keep: { type: 'boolean' },
     texts: { type: 'boolean' },
@@ -173,7 +177,7 @@ try {
       await migrateCommand(ctx);
       break;
     case 'rebuildable':
-      await rebuildableCommand(ctx, { guard: values.guard });
+      await rebuildableCommand(ctx, { guard: values.guard, mark: values.mark, guardMark: values['guard-mark'] });
       break;
     case 'schema-check':
       await schemaCheckCommand(ctx);
