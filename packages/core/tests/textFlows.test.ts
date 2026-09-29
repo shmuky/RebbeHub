@@ -9,6 +9,7 @@ import {
   confirmSync,
   fixLine,
   fixParagraph,
+  machineToCheck,
   printingsOf,
   projectTodo,
   recordingTranscript,
@@ -220,5 +221,28 @@ describe('compare printings of a unit', () => {
     expect(diff).toMatchObject({ same: 4, removed: 0, added: 1, a: { checked: true } });
     expect(diff.runs.at(-1)).toEqual({ op: 'added', text: 'רבינו' });
     await expect(comparePrintings(catalog, 'nonsense', `text:${first}`)).rejects.toThrow(/a printing is/);
+  });
+});
+
+describe('what the machines wrote for people to check', () => {
+  it('lists transcripts and OCR scans with something unchecked, and drops what people finished', async () => {
+    const { catalog, set } = await freshCatalog();
+    expect(await machineToCheck(catalog)).toEqual({ transcripts: [], scans: [], totals: { transcripts: 0, paragraphs: 0, scans: 0, pages: 0 } });
+    const { event, segments } = await transcribed(catalog, set);
+    const { scan } = await scanWithMachineText(catalog, set, [['שורה א'], ['עמוד ב']]);
+
+    let list = await machineToCheck(catalog);
+    expect(list.transcripts).toMatchObject([{ event, paragraphs: 3, checked: 0 }]);
+    expect(list.scans).toMatchObject([{ scan, pages: 2, checked: 0 }]);
+    expect(list.totals).toEqual({ transcripts: 1, paragraphs: 3, scans: 1, pages: 2 });
+
+    await catalog.merge((await confirmPage(catalog, 'chaim', { scan, page: 1 })).id, 'keeper');
+    await catalog.merge((await fixParagraph(catalog, 'chaim', { segment: segments[0]!, content: 'לחיים לחיים' })).id, 'keeper');
+    list = await machineToCheck(catalog);
+    expect(list.totals).toEqual({ transcripts: 1, paragraphs: 2, scans: 1, pages: 1 });
+
+    await catalog.merge((await confirmPage(catalog, 'chaim', { scan, page: 2 })).id, 'keeper');
+    for (const segment of segments.slice(1)) await catalog.merge((await fixParagraph(catalog, 'chaim', { segment, content: 'אין פסוק' })).id, 'keeper');
+    expect((await machineToCheck(catalog)).totals).toEqual({ transcripts: 0, paragraphs: 0, scans: 0, pages: 0 });
   });
 });

@@ -17,6 +17,11 @@ any time. `@rebbehub/client` carries the API's version.
   again and its set's keepers are asked to look again. On the site, a
   withdrawn suggestion has a Reopen button and an approved one an "Undo
   this change" button (a revert).
+- **Checking what the machines wrote: `/check`, linked from the home page.**
+  Farbrengens with machine transcript paragraphs nobody checked, and scans
+  read by OCR with pages nobody proofread, the newest first, each leading
+  to where it is checked. From `GET /v1/machine/to-check` (two queries,
+  kept five minutes at the edge) and the MCP tool `machine_to_check`.
 - **`GET /v1/events?brief=1`: each event's facts with each link's kind
   alone.** A farbrengen's links (where it is printed, each with its label
   and pages) are most of it, and a calendar's row shows whether it has a
