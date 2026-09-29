@@ -121,11 +121,13 @@ database address but cannot read the private Sichos-Kodesh repository.
    the catalog in place (`scripts/import-catalog.sh`).
 
    Each run also crawls, politely and cached, what the other importers
-   read: the mafteiach index, chabadlibrary.org's contents, JEM's catalog,
-   HebrewBooks' shelf and Sefaria's Chabad books ([importers](importers.md)).
-   To keep Sefaria's texts on RebbeHub's own storage, add
-   `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (a token with
-   **Workers R2 Storage: Edit**); without them the pages link to Sefaria.
+   read: the mafteiach index, chabadlibrary.org's contents and texts, JEM's
+   catalog, HebrewBooks' shelf and Sefaria's Chabad books
+   ([importers](importers.md)). To keep Sefaria's and the Chabad Library's
+   texts on RebbeHub's own storage, add `CLOUDFLARE_ACCOUNT_ID` and
+   `CLOUDFLARE_API_TOKEN` (a token with **Workers R2 Storage: Edit**);
+   without them the pages link to Sefaria, and the Chabad Library's pages
+   carry their words with no copy of their own to link to.
 
 Or, from a computer with this repository and a Sichos-Kodesh checkout:
 
