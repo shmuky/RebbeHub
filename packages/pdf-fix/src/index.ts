@@ -3,6 +3,7 @@ export { PAGE_IMAGES_ENCODER, renderPageImages, renderPages, type EncodedImage, 
 export { checkFixed, fileScale, fixPdf, LEVEL_TOLERANCE, planPage, type CheckResult, type FixOptions, type FixReport, type PagePlan } from './fix.js';
 export { inspectPdf, SCAN_COVER, spread, type PdfKind } from './inspect.js';
 export { levelPdf, levelTransform, measureAngles, MIN_TURN, type LevelOptions, type LevelReport, type PageTurn } from './level.js';
+export { pageTexts, pdfPageTotal } from './text.js';
 
 /** The tool and its version, as a derivation's `encoder`: bumped whenever a reading copy would come out differently. */
 export const PDF_FIX_ENCODER = 'pdf-fix@1';

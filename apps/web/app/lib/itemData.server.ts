@@ -1,4 +1,4 @@
-import type { Backlink, Entity, FileInfo, RebbeHubApi, RelationLink, ScanPages } from './api.js';
+import type { Backlink, Cover, Entity, FileInfo, LinkGroup, RebbeHubApi, RelationLink, ScanPages, WorkCover } from './api.js';
 
 /**
  * What an item's page needs beyond the item itself, by type: a work's
@@ -28,7 +28,30 @@ export interface ItemView {
   pages: Record<string, ScanPages>;
   /** How many scans each printing has, for a sefer's list of printings. */
   scanCounts?: Record<string, number>;
+  /** Everything that points at the item, by type and field, counted: no list on the page ends without its total. */
+  linked: LinkGroup[];
+  /** Sefarim's covers from their title pages, by work id, where the jobs have drawn them. */
+  covers: Record<string, Cover>;
+  /** A sefer's own cover, and the PDFs a keeper may choose its title page from. */
+  workCover?: WorkCover | null;
 }
+
+/** A text's paragraphs, all of them, a page at a time (a hanacha may have up to 2,000; a sefer's text more). */
+const MAX_SEGMENT_PAGES = 20;
+async function allSegments(api: RebbeHubApi, text: string): Promise<Entity[]> {
+  const out: Entity[] = [];
+  let after: string | undefined;
+  for (let i = 0; i < MAX_SEGMENT_PAGES; i++) {
+    const page = await api.children(text, 'text', 'segment', { after, limit: 1000 });
+    out.push(...page.items);
+    if (!page.next || page.items.length < 1000) break;
+    after = page.next;
+  }
+  return out;
+}
+
+/** An API from before covers and counts were served has none to give. */
+const orNone = <T>(promise: Promise<T>, none: T): Promise<T> => promise.catch(() => none);
 
 const ids = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : typeof value === 'string' ? [value] : []);
 
@@ -50,7 +73,7 @@ export function sortPrintings(publications: Entity[]): Entity[] {
 
 export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): Promise<ItemView> {
   const d = entity.data as Record<string, unknown>;
-  const view: ItemView = { refs: {}, lists: {}, files: {}, segments: {}, next: null, backlinks: [], relations: [], pages: {} };
+  const view: ItemView = { refs: {}, lists: {}, files: {}, segments: {}, next: null, backlinks: [], relations: [], pages: {}, linked: [], covers: {} };
   /** The page images of the first few served scans that have them. */
   const loadPages = async (scans: Entity[]) => {
     for (const scan of scans.slice(0, 3)) {
@@ -66,13 +89,19 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
       const [members, units] = await Promise.all([api.list({ set: entity.id, limit: 500 }), api.refCounts('work', 'unit')]);
       view.lists.members = members.items;
       view.counts = units;
+      view.covers = await orNone(api.covers(members.items.filter((m) => m.type === 'work').map((m) => m.id)), {});
       break;
     }
     case 'work': {
       ids(d.authors).forEach((id) => wanted.add(id));
       // Its volumes first; one volume's units when one is opened (?part=), else the units of a work of one level.
-      const [outline, publications] = await Promise.all([api.workOutline(entity.id), entitiesOf(api, await api.backlinks(entity.id, { field: 'work', type: 'publication' }))]);
+      const [outline, publications, cover] = await Promise.all([
+        api.workOutline(entity.id),
+        entitiesOf(api, await api.backlinks(entity.id, { field: 'work', type: 'publication' })),
+        orNone(api.workCover(entity.id), null),
+      ]);
       view.outline = outline;
+      view.workCover = cover;
       // Its printings in the order they came out, each with how many scans it has.
       view.lists.publications = sortPrintings(publications);
       if (publications.length) view.scanCounts = await api.refCounts('publication', 'scan');
@@ -89,7 +118,7 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
       [...ids(d.work), ...ids(d.events)].forEach((id) => wanted.add(id));
       const texts = await entitiesOf(api, await api.backlinks(entity.id, { field: 'unit', type: 'text' }));
       view.lists.texts = texts;
-      for (const text of texts) view.segments[text.id] = (await api.children(text.id, 'text', 'segment', { limit: 1000 })).items;
+      for (const text of texts) view.segments[text.id] = await allSegments(api, text.id);
       const maps = await entitiesOf(api, await api.backlinks(entity.id, { field: 'unit', type: 'contents-map' }));
       view.lists.printedIn = maps;
       maps.forEach((m) => ids((m.data as { publication?: string }).publication).forEach((id) => wanted.add(id)));
@@ -138,17 +167,25 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
     case 'recording': {
       ids(d.event).forEach((id) => wanted.add(id));
       view.files[entity.id] = typeof d.file === 'string' ? await api.file(d.file) : null;
+      // The farbrengen's other parts, and the texts of this one (transcripts, a hanacha synced to it).
+      const [parts, texts] = await Promise.all([
+        typeof d.event === 'string' ? entitiesOf(api, await api.backlinks(d.event, { field: 'event', type: 'recording' })) : [],
+        entitiesOf(api, await api.backlinks(entity.id, { field: 'recording', type: 'text' })),
+      ]);
+      view.lists.parts = parts.sort((a, b) => ((a.data as { part?: number }).part ?? 0) - ((b.data as { part?: number }).part ?? 0));
+      view.lists.texts = texts;
       break;
     }
     case 'author': {
       const [works, units] = await Promise.all([entitiesOf(api, await api.backlinks(entity.id, { field: 'authors', type: 'work' })), api.refCounts('work', 'unit')]);
       view.lists.works = works;
       view.counts = units;
+      view.covers = await orNone(api.covers(works.map((w) => w.id)), {});
       break;
     }
     case 'text': {
       [...ids(d.unit), ...ids(d.publication), ...ids(d.recording)].forEach((id) => wanted.add(id));
-      view.segments[entity.id] = (await api.children(entity.id, 'text', 'segment', { limit: 1000 })).items;
+      view.segments[entity.id] = await allSegments(api, entity.id);
       break;
     }
     default: {
@@ -156,6 +193,7 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
     }
   }
   view.backlinks = await api.backlinks(entity.id);
+  view.linked = await orNone(api.linkedCounts(entity.id), []);
   // An API from before links were served has none to give.
   view.relations = await api.relations(entity.id).catch(() => []);
   view.relations.forEach((r) => wanted.add(r.other));

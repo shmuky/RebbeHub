@@ -14,6 +14,7 @@ import { readingRoutes } from './reading.js';
 import { tokenGate, tokenGrantOf, tokenRoutes } from './tokens.js';
 import { ERROR_CODES, caching, cors, cursor, nextLink, type RateLimits } from './platform.js';
 import { mcpRoutes } from './mcp.js';
+import { pageRoutes } from './pages.js';
 
 /**
  * The RebbeHub API, version 1 (docs/developers/api.md). Reading needs
@@ -162,7 +163,9 @@ export function createApp(options: ApiOptions): Hono {
   adminRoutes(app, catalog, signedIn);
   tokenRoutes(app, catalog, signedIn);
   mcpRoutes(app, { siteUrl, version: options.version ?? API_VERSION });
-  uploadRoutes(app, catalog, signedIn, options.uploads);
+  const filesBase = (c: Context) => options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
+  uploadRoutes(app, catalog, signedIn, options.uploads, filesBase);
+  pageRoutes(app, catalog, { filesBase });
   networkRoutes(app, catalog, { embedder: options.embedder });
   if (options.oai) oaiRoutes(app, catalog, options.oai);
   readingRoutes(app, catalog, signedIn, (status, message) => {
@@ -170,7 +173,7 @@ export function createApp(options: ApiOptions): Hono {
   });
   mirrorRoutes(app, catalog, { mirrors: options.mirrors, files: options.files });
   scanRoutes(app, catalog, {
-    filesBase: (c) => options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null),
+    filesBase,
     siteUrl,
     signedIn,
     authenticate,

@@ -243,6 +243,34 @@ printing". A rebuild import clears them with the rest of the database;
 run both commands again after one. They are machine output and are only
 ever shown as a guess.
 
+## Covers from the shaar
+
+A sefer's cover on the site is its **title page** (the shaar), where one
+of its PDFs is served: `rebbehub covers` samples the first ten pages of
+the best one (a preferred, complete scan of its printings first, then a
+sicha's PDF on Drive that RebbeHub holds), reads their ink and their
+words (the PDF's own, or the machine OCR of the scan), skips blank pages
+and dark cover sheets, and takes the page that looks most like a shaar:
+little ink, a few centred lines, "ספר", a publisher, a year. Failing
+that, the first real page, else page 1. The page is drawn at 480px and
+180px wide into the public bucket, as derivations of the PDF
+(`cover/<n>`, `cover-thumb/<n>`, encoder `cover@1`), so a takedown of
+the PDF takes the cover down too (migration 0017, table `cover`).
+
+A keeper who disagrees chooses another page on the sefer's page ("Choose
+another page as the title page"), a suggestion that sets the work's
+`cover` (`{ file, page }`); once approved, the next run draws that page
+and keeps it as the person's choice. A cover the machine chose says so.
+
+```sh
+export CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=…   # R2 edit rights on rebbehub-public
+rebbehub covers --limit 200                              # or --work <id>; --again after the tool changes
+```
+
+Only PDFs the site serves (`open` or `credit`, in the public bucket) give
+covers: a linked-only PDF (the Otzros library, HebrewBooks) keeps the
+drawn cloth cover. The command is not in any workflow yet.
+
 ## The API
 
 - Local: `npm run dev:api` (PGlite, or `DATABASE_URL`). `DEV_ACCOUNT=me`

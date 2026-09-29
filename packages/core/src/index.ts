@@ -116,3 +116,47 @@ export {
   type UploadProposal,
 } from './print.js';
 export { MAX_TOKENS_PER_PERSON, TOKEN_PREFIX, TOKEN_SCOPES, createApiToken, listApiTokens, looksLikeToken, revokeAllApiTokens, revokeApiToken, tokenGrant, type ApiTokenView, type TokenGrant, type TokenScope } from './tokens.js';
+export {
+  COVER_ENCODER,
+  COVER_SAMPLE_PAGES,
+  COVER_THUMB_WIDTH,
+  COVER_WIDTH,
+  chooseTitlePage,
+  coverSources,
+  coversOf,
+  coversWanted,
+  lookOfPage,
+  pdfPageCount,
+  recordCover,
+  titlePageScore,
+  type CoverPicture,
+  type CoverSource,
+  type CoverView,
+  type CoverWanted,
+  type GreyPage,
+  type NewCover,
+  type PageLook,
+} from './covers.js';
+export { linkedCounts, linkedPage, type LinkGroup } from './linked.js';
+export {
+  HANACHA_TEXT_RIGHTS,
+  MAX_HANACHA_PARAGRAPHS,
+  addHanachaText,
+  findDateIn,
+  proposeNewMaterial,
+  suggestDocument,
+  suggestHanachaPdf,
+  suggestRecording,
+  type DocumentKind,
+  type HanachaTextRights,
+  type NewDocument,
+  type NewEvent,
+  type NewHanachaPdf,
+  type NewHanachaText,
+  type NewMaterialKind,
+  type NewMaterialProposal,
+  type NewRecording,
+  type Place,
+  type PlaceCandidate,
+} from './contribute.js';
+export { fileAbout, type FileAbout } from './fileInfo.js';

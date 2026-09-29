@@ -25,6 +25,12 @@ export default [
   route('_/places', 'routes/places.ts'),
   route('_/translations/*', 'routes/translations-pass.ts'),
   route('_/uploads/check', 'routes/uploads-check.ts'),
+  route('_/uploads/propose', 'routes/uploads-propose.ts'),
+  route('_/hanachos/text', 'routes/hanachos-text.ts'),
+  // Adding what the catalog lacks (a hanacha, a recording, a sefer), guided; all that belongs to an item, a page at a time; a file's own page.
+  route('add', 'routes/add.tsx'),
+  route('all/:id', 'routes/all.tsx'),
+  route('files/:sha256', 'routes/file.tsx'),
   route('_/lookup', 'routes/lookup.ts'),
   route('_/steward/*', 'routes/admin-pass.ts'),
   route('admin', 'routes/admin.tsx'),

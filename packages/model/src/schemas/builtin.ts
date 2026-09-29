@@ -229,8 +229,10 @@ const fractionalOrder = str({ pattern: '^[0-9A-Za-z]+$', maxLength: 64 });
  * change in the history. 2: every page's `body` and `bodySource`.
  * 3: an event's English, audio and video links. 4: each link's exact file at its source (`origin`).
  * 5: a page's body is structured words (pageText.ts), no longer markup.
+ * 6: a sefer's cover, the page of a PDF a person chose as its title page
+ * (made as a second 5 alongside the words; 6 so a catalog on either 5 takes both).
  */
-export const BUILTIN_SCHEMA_VERSION = 5;
+export const BUILTIN_SCHEMA_VERSION = 6;
 
 export const BUILTIN_SCHEMAS: Record<EntityType, JsonSchema> = {
   set: entitySchema(
@@ -270,6 +272,12 @@ export const BUILTIN_SCHEMAS: Record<EntityType, JsonSchema> = {
       levels: arrayOf(str({ pattern: '^[a-z][a-z0-9-]*$' })),
       sourceCopies: arrayOf(workSource),
       description: ref('localName'),
+      cover: {
+        type: 'object',
+        properties: { file: ref('sha256'), page: int({ minimum: 1, maximum: 100000 }) },
+        required: ['file', 'page'],
+        additionalProperties: false,
+      },
     },
     ['title', 'slug', 'authors', 'genre', 'levels'],
   ),

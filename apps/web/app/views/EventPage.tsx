@@ -4,6 +4,7 @@ import { dateKeyToHDate } from '@rebbehub/hebrew';
 import type { LocalName } from '@rebbehub/model';
 import { eventData, type EventItem } from '../components/EventRow.js';
 import { ItemList } from '../components/ItemLink.js';
+import { SeeAll } from '../components/Linked.js';
 import { Transcripts } from '../components/Transcripts.js';
 import { readHref } from '../routes/read.js';
 import type { Entity } from '../lib/api.js';
@@ -11,6 +12,7 @@ import { dateLabel, yearLabel } from '../lib/dates.js';
 import { nameOf, t, type Lang } from '../lib/i18n.js';
 import type { ItemView } from '../lib/itemData.server.js';
 import { href, itemPath } from '../lib/links.js';
+import { eventKindName, ps } from '../lib/pageStrings.js';
 import { totalLength, tracksOf } from '../lib/tracks.js';
 import { parshaOf } from '../lib/week.js';
 import { clock, usePlayer } from '../player/PlayerProvider.js';
@@ -32,11 +34,11 @@ interface EventLink {
   origin?: string;
 }
 
-/** `התוועדות · יום חמישי` */
-function kicker(date: string | undefined, lang: Lang): string {
+/** `התוועדות · יום חמישי`: what kind of event it is (a farbrengen unless it says otherwise), and the day. */
+function kicker(date: string | undefined, lang: Lang, kind?: string): string {
   const h = date ? dateKeyToHDate(date) : null;
   const day = h ? (lang === 'he' ? `יום ${WEEKDAYS_HE[h.getDay()]}` : WEEKDAYS_EN[h.getDay()]!) : '';
-  return [t(lang, 'farbrengen'), day].filter(Boolean).join(' · ');
+  return [kind && kind !== 'farbrengen' ? eventKindName(kind, lang) : t(lang, 'farbrengen'), day].filter(Boolean).join(' · ');
 }
 
 const KIND_KEYS = {
@@ -233,7 +235,7 @@ function Neighbor({ event, lang, which }: { event: EventItem | undefined; lang: 
 }
 
 export function EventPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang: Lang }) {
-  const d = entity.data as unknown as { title: LocalName; date?: string; links?: EventLink[] };
+  const d = entity.data as unknown as { title: LocalName; date?: string; kind?: string; links?: EventLink[] };
   const recordings = view.lists.recordings ?? [];
   const sources = Object.fromEntries(recordings.map((r) => [r.id, view.files[r.id]?.url ?? null]));
   const year = d.date ? Number(d.date.slice(0, 4)) : null;
@@ -257,7 +259,7 @@ export function EventPage({ entity, view, lang }: { entity: Entity; view: ItemVi
         ) : null}
       </ol>
       <header className="event-hero">
-        <p className="event-hero-kicker">{kicker(d.date, lang)}</p>
+        <p className="event-hero-kicker">{kicker(d.date, lang, d.kind)}</p>
         <h1>{nameOf(d.title, lang)}</h1>
         {d.date ? <p className="event-hero-date">{dateLabel(d.date, lang)}</p> : null}
         <ul className="event-hero-chips">
@@ -285,6 +287,7 @@ export function EventPage({ entity, view, lang }: { entity: Entity; view: ItemVi
       </header>
 
       <Recordings entity={entity} recordings={recordings} sources={sources} lang={lang} />
+      <SeeAll id={entity.id} group={view.linked.find((g) => g.field === 'event' && g.type === 'recording')} shown={recordings.length} lang={lang} />
       <Transcripts tracks={tracksOf(entity, recordings, lang, sources)} lang={lang} />
       {links.some((l) => readable(l.url)) ? <Texts links={links.filter((l) => readable(l.url))} lang={lang} subtitle={[nameOf(d.title, lang), d.date ? dateLabel(d.date, lang, { civil: false }) : ''].filter(Boolean).join(' · ')} /> : null}
       <Videos links={links.filter((l) => youtubeId(l.url))} lang={lang} />
@@ -294,8 +297,15 @@ export function EventPage({ entity, view, lang }: { entity: Entity; view: ItemVi
         <section>
           <h2 className="section-header">{t(lang, 'saidThere')}</h2>
           <ItemList items={view.lists.units} />
+          <SeeAll id={entity.id} group={view.linked.find((g) => g.field === 'events' && g.type === 'unit')} shown={view.lists.units.length} lang={lang} />
         </section>
       ) : null}
+      {/* What the catalog lacks of it, added from here: the guided flow, with this farbrengen already chosen. */}
+      <p className="add-links">
+        <Link to={href('/add', lang, { what: 'hanacha', for: entity.id })}>{ps(lang, 'addHanacha')}</Link>
+        {' · '}
+        <Link to={href('/add', lang, { what: 'recording', for: entity.id })}>{ps(lang, 'addRecording')}</Link>
+      </p>
 
       {view.lists.otherYears?.length ? (
         <section>

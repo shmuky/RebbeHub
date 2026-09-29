@@ -160,6 +160,22 @@ are set.
   server at `api.rebbehub.org/mcp` (search, items, texts, suggest a fix);
   the typed client `@rebbehub/client`. The rate limits need the
   `[[ratelimits]]` bindings deployed ([configuration](configuration.md)).
+- **Covers from the shaar** ✅: `rebbehub covers` draws a sefer's cover
+  from the title page of its best served PDF (past blank pages and cover
+  sheets, by ink and words), labelled as the machine's choice; a keeper
+  chooses another page through a suggestion. Linked-only PDFs keep the
+  drawn cloth cover. Not yet in a workflow; needs the R2 keys
+  ([operations](operations.md)).
+- **Adding what the catalog lacks** ✅: `/add` takes a new hanacha (PDF
+  or words), a recording, or a sefer, letter or document; the machine
+  proposes where it belongs from its name, the person confirms or names
+  a farbrengen the catalog lacks, and it goes in as a suggestion with the
+  usual rights statement ([rights](rights.md), Uploads).
+- **Every item has a page, and every list its total** ✅: recordings,
+  people, scans, files (`/files/<sha256>`) and every other kind have a
+  page of facts, sources and history, and can be followed; each page
+  ends with all that points at it, counted, each kind listed in full a
+  page at a time (`/all/<id>`), so no list ends without saying so.
 - Still to come: letters reproduced in teshuros found by text
   (cross-linking reads citations only).
 

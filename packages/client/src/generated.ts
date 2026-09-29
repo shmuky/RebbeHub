@@ -151,6 +151,27 @@ export type File = {
   pageImages?: number;
 };
 
+export type Cover = {
+  /** A file, named by its sha256 */
+  file: string;
+  /** The PDF page drawn */
+  page: number;
+  /** true: a machine chose the title page and no person has yet */
+  machine: boolean;
+  reasons?: Array<string>;
+  credit?: string | null;
+  image: {
+    url: string;
+    width: number;
+    height: number;
+  };
+  thumb: {
+    url: string;
+    width: number;
+    height: number;
+  };
+};
+
 export type ApiToken = {
   id: string;
   name: string;
@@ -169,6 +190,31 @@ export interface Operations {
   about: {
     input: Record<string, never>;
     output: About;
+  };
+  /** A hanacha's words for a farbrengen or sicha (or a new farbrengen), a paragraph to a segment */
+  addHanachaText: {
+    input: {
+      body: {
+        /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+        for?: string;
+        /** For a farbrengen the catalog lacks: its name */
+        eventTitle?: string;
+        /** With eventTitle: its date key */
+        eventDate?: string;
+        /** A blank line between paragraphs */
+        content: string;
+        rights: "mine" | "public-domain" | "free" | "unsure";
+        language?: string;
+        credit?: string;
+      };
+    };
+    output: {
+      suggestion: number;
+      /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+      text: string;
+      event?: string | null;
+      publication?: string | null;
+    };
   };
   /** Suggest a translation of a unit, as its own text */
   addTranslation: {
@@ -312,6 +358,16 @@ export interface Operations {
     };
     output: Suggestion;
   };
+  /** Sefarim's covers, drawn from their title pages, while their PDFs are served */
+  covers: {
+    input: {
+      /** The sefarim */
+      ids?: string;
+    };
+    output: {
+      covers: Record<string, Cover>;
+    };
+  };
   /** Open a project on a gap (farbrengens without recordings or texts, recordings to sync, pages to proofread) */
   createProject: {
     input: {
@@ -406,6 +462,15 @@ export interface Operations {
       report: number;
       paused: number;
     };
+  };
+  /** A file's own page: its rights, where it came from, what was made from it, and what uses it */
+  fileAbout: {
+    input: {
+      sha256: string;
+      /** How many (at most 500) */
+      limit?: number;
+    };
+    output: Record<string, unknown>;
   };
   /** Fix one line of a scan's text (a suggestion) */
   fixScanLine: {
@@ -619,6 +684,19 @@ export interface Operations {
       talk: Array<Comment>;
     };
   };
+  /** What points at an item, by type and field, with how many of each */
+  linkedCounts: {
+    input: {
+      id: string;
+    };
+    output: {
+      groups: Array<{
+        type: string;
+        field: string;
+        count: number;
+      }>;
+    };
+  };
   /** An item's children in their own order (a work's units, a text's paragraphs), a page at a time */
   listChildren: {
     input: {
@@ -695,6 +773,27 @@ export interface Operations {
       cursor?: string;
     };
     output: ItemPage;
+  };
+  /** One group of what points at an item, in its own order, a page at a time, with the total */
+  listLinked: {
+    input: {
+      id: string;
+      /** The field that points here (work, event, sets…) */
+      field: string;
+      /** Only items of this type */
+      type?: string;
+      /** Deprecated: the same as cursor */
+      after?: string;
+      /** How many (at most 500) */
+      limit?: number;
+      /** The `next` of the page before */
+      cursor?: string;
+    };
+    output: {
+      items: Array<Item>;
+      total: number;
+      next: string | null;
+    };
   };
   /** Where you stopped reading and listening lately (never cached) */
   listPlaces: {
@@ -851,6 +950,20 @@ export interface Operations {
       he?: string;
       en?: string;
     };
+  };
+  /** Before adding something new: the machine's guess of what it is and where it belongs, from its name (a date in it, words of a title), and files already held that look like it */
+  proposeUpload: {
+    input: {
+      body: {
+        what: "hanacha" | "recording" | "document";
+        /** Its file name or title */
+        name?: string;
+        /** A file, named by its sha256 */
+        sha256?: string;
+        pageHashes?: Array<string | null>;
+      };
+    };
+    output: Record<string, unknown>;
   };
   /** Add or change one item in a draft suggestion (data null deletes it) */
   putSuggestionItem: {
@@ -1198,16 +1311,31 @@ export interface Operations {
       stopped?: boolean;
     };
   };
-  /** Add a recording to a farbrengen, or a scan: another scan of a printing, a new printing of a sefer, or a new teshura */
+  /** Add a file: a recording of a farbrengen; a hanacha's PDF for a farbrengen or sicha; a scan (another scan of a printing, a new printing of a sefer, a teshura); or other material (a new sefer, a letter, a document) */
   upload: {
     input: {
       /** What it is */
-      what: "recording" | "scan";
-      /** The farbrengen, sefer, printing or Teshuros set it is added to */
-      for: string;
+      what: "recording" | "hanacha" | "scan" | "document";
+      /** The farbrengen, sicha, sefer, printing or Teshuros set it is added to */
+      for?: string;
+      /** For a recording or hanacha of a farbrengen the catalog lacks: its name */
+      eventTitle?: string;
+      /** With eventTitle: its date key */
+      eventDate?: string;
+      /** For a hanacha: what kind */
+      kind?: "bilti-mugah" | "mugah" | "maamar" | "hagahos" | "hosofos" | "english" | "other";
+      /** For a document: the set it belongs in */
+      set?: string;
+      /** For a new sefer: its author */
+      author?: string;
+      /** For a new sefer: its genre */
+      genre?: string;
+      /** For a letter: the letter the catalog has that it reproduces */
+      unit?: string;
       /** What you know of its rights */
       rights: "mine" | "free" | "public-domain" | "unsure";
-      as?: "scan-of" | "printing" | "teshura";
+      /** For a scan: scan-of, printing or teshura. For a document: sefer, letter or document */
+      as?: "scan-of" | "printing" | "teshura" | "sefer" | "letter" | "document";
       /** Its name */
       title?: string;
       /** For scan-of: the printing */
@@ -1222,7 +1350,7 @@ export interface Operations {
       families?: string;
       /** For a teshura: wedding, bar-mitzvah, and so on */
       simcha?: string;
-      /** For a teshura: the simcha's date key */
+      /** For a teshura: the simcha's date key; for a letter or document, its date */
       date?: string;
       body: Blob | ArrayBuffer | Uint8Array | ReadableStream;
       /** The body's type (audio/mpeg, application/pdf…); default application/octet-stream */
@@ -1256,6 +1384,23 @@ export interface Operations {
       ok: true;
     };
   };
+  /** A sefer's cover, the page a person chose, and the served PDFs its title page may be chosen from */
+  workCover: {
+    input: {
+      id: string;
+    };
+    output: {
+      /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+      work: string;
+      chosen: {
+        /** A file, named by its sha256 */
+        file: string;
+        page: number;
+      } | null;
+      cover: Cover | null;
+      sources: Array<Record<string, unknown>>;
+    };
+  };
   /** A work's volumes (its top-level parts), with how many units each holds */
   workOutline: {
     input: {
@@ -1287,6 +1432,7 @@ export interface Operations {
 /** How each operation is called. */
 export const OPERATIONS = {
   about: {"method":"GET","path":"/v1","pathParams":[],"query":[],"body":null,"answer":"json"},
+  addHanachaText: {"method":"POST","path":"/v1/hanachos/text","pathParams":[],"query":[],"body":"json","answer":"json"},
   addTranslation: {"method":"POST","path":"/v1/units/{id}/translations","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   anchorSync: {"method":"POST","path":"/v1/recordings/{id}/sync/anchor","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   approveSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/approve","pathParams":["id"],"query":[],"body":"json","answer":"json"},
@@ -1299,6 +1445,7 @@ export const OPERATIONS = {
   comparePrintings: {"method":"GET","path":"/v1/compare","pathParams":[],"query":["a","b"],"body":null,"answer":"json"},
   confirmScanPage: {"method":"POST","path":"/v1/scans/{id}/text/confirm","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   confirmSync: {"method":"POST","path":"/v1/recordings/{id}/sync/confirm","pathParams":["id"],"query":[],"body":null,"answer":"json"},
+  covers: {"method":"GET","path":"/v1/covers","pathParams":[],"query":["ids"],"body":null,"answer":"json"},
   createProject: {"method":"POST","path":"/v1/projects","pathParams":[],"query":[],"body":"json","answer":"json"},
   createSuggestion: {"method":"POST","path":"/v1/suggestions","pathParams":[],"query":[],"body":"json","answer":"json"},
   createWebhook: {"method":"POST","path":"/v1/webhooks","pathParams":[],"query":[],"body":"json","answer":"json"},
@@ -1308,6 +1455,7 @@ export const OPERATIONS = {
   editionManifest: {"method":"GET","path":"/v1/editions/{tag}/manifest.json","pathParams":["tag"],"query":[],"body":null,"answer":"json"},
   editions: {"method":"GET","path":"/v1/editions","pathParams":[],"query":[],"body":null,"answer":"json"},
   familyRequest: {"method":"POST","path":"/v1/teshuros/{id}/family-request","pathParams":["id"],"query":[],"body":"json","answer":"json"},
+  fileAbout: {"method":"GET","path":"/v1/files/{sha256}/about","pathParams":["sha256"],"query":["limit"],"body":null,"answer":"json"},
   fixScanLine: {"method":"POST","path":"/v1/scans/{id}/text/fix","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   fixTranscript: {"method":"POST","path":"/v1/recordings/{id}/transcript/fix","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   fixTranslation: {"method":"POST","path":"/v1/translations/fix","pathParams":[],"query":[],"body":"json","answer":"json"},
@@ -1330,11 +1478,13 @@ export const OPERATIONS = {
   itemHistory: {"method":"GET","path":"/v1/entities/{id}/history","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   itemRelations: {"method":"GET","path":"/v1/entities/{id}/relations","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   itemTalk: {"method":"GET","path":"/v1/entities/{id}/talk","pathParams":["id"],"query":[],"body":null,"answer":"json"},
+  linkedCounts: {"method":"GET","path":"/v1/entities/{id}/linked/counts","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   listChildren: {"method":"GET","path":"/v1/entities/{id}/children","pathParams":["id"],"query":["field","type","after","limit","cursor"],"body":null,"answer":"json","items":"items"},
   listCommits: {"method":"GET","path":"/v1/commits","pathParams":[],"query":["since","limit","cursor"],"body":null,"answer":"json","items":"commits"},
   listEvents: {"method":"GET","path":"/v1/events","pathParams":[],"query":["within","day","dates","missing","limit"],"body":null,"answer":"json"},
   listFollows: {"method":"GET","path":"/v1/follows","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
   listItems: {"method":"GET","path":"/v1/entities","pathParams":[],"query":["type","set","after","limit","cursor"],"body":null,"answer":"json","items":"items"},
+  listLinked: {"method":"GET","path":"/v1/entities/{id}/linked","pathParams":["id"],"query":["field","type","after","limit","cursor"],"body":null,"answer":"json","items":"items"},
   listPlaces: {"method":"GET","path":"/v1/places","pathParams":[],"query":["kind","key","limit"],"body":null,"answer":"json"},
   listProjects: {"method":"GET","path":"/v1/projects","pathParams":[],"query":["status"],"body":null,"answer":"json"},
   listReports: {"method":"GET","path":"/v1/reports","pathParams":[],"query":["set","status"],"body":null,"answer":"json"},
@@ -1349,6 +1499,7 @@ export const OPERATIONS = {
   oaiPost: {"method":"POST","path":"/oai","pathParams":[],"query":[],"body":"application/x-www-form-urlencoded","answer":"text"},
   openapi: {"method":"GET","path":"/openapi.json","pathParams":[],"query":[],"body":null,"answer":"json"},
   parseDate: {"method":"GET","path":"/v1/dates/parse","pathParams":[],"query":["q"],"body":null,"answer":"json"},
+  proposeUpload: {"method":"POST","path":"/v1/uploads/propose","pathParams":[],"query":[],"body":"json","answer":"json"},
   putSuggestionItem: {"method":"PUT","path":"/v1/suggestions/{id}/items","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   recordingHanacha: {"method":"GET","path":"/v1/recordings/{id}/hanacha","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   recordingTranscript: {"method":"GET","path":"/v1/recordings/{id}/transcript","pathParams":["id"],"query":[],"body":null,"answer":"json"},
@@ -1378,16 +1529,17 @@ export const OPERATIONS = {
   types: {"method":"GET","path":"/v1/types","pathParams":[],"query":[],"body":null,"answer":"json"},
   unitPrintings: {"method":"GET","path":"/v1/units/{id}/printings","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   unsubscribe: {"method":"POST","path":"/v1/auth/email/unsubscribe","pathParams":[],"query":["token"],"body":"json","answer":"json"},
-  upload: {"method":"POST","path":"/v1/uploads","pathParams":[],"query":["what","for","rights","as","title","publication","publisher","year","printing","families","simcha","date"],"body":"application/octet-stream","answer":"raw"},
+  upload: {"method":"POST","path":"/v1/uploads","pathParams":[],"query":["what","for","eventTitle","eventDate","kind","set","author","genre","unit","rights","as","title","publication","publisher","year","printing","families","simcha","date"],"body":"application/octet-stream","answer":"raw"},
   uploadOcr: {"method":"POST","path":"/v1/scans/{id}/ocr","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   withdrawSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/withdraw","pathParams":["id"],"query":[],"body":null,"answer":"json"},
+  workCover: {"method":"GET","path":"/v1/works/{id}/cover","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   workOutline: {"method":"GET","path":"/v1/works/{id}/outline","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   workPart: {"method":"GET","path":"/v1/works/{id}/parts/{part}","pathParams":["id","part"],"query":["limit"],"body":null,"answer":"json"},
 } as const;
 
 export type OperationId = keyof Operations;
 /** Operations whose answers come a page at a time. */
-export type PagedOperationId = "listChildren" | "listCommits" | "listItems" | "listSuggestions";
+export type PagedOperationId = "listChildren" | "listCommits" | "listItems" | "listLinked" | "listSuggestions";
 
 /** A typed method for every operation; the calls themselves are in client.ts. */
 export abstract class GeneratedMethods {
@@ -1396,6 +1548,11 @@ export abstract class GeneratedMethods {
   /** About this API: its version, the latest commit, where the docs are (GET /v1) */
   about(): Promise<Operations['about']['output']> {
     return this.call('about', {} as Operations['about']['input']);
+  }
+
+  /** A hanacha's words for a farbrengen or sicha (or a new farbrengen), a paragraph to a segment (POST /v1/hanachos/text) */
+  addHanachaText(input: Operations['addHanachaText']['input']): Promise<Operations['addHanachaText']['output']> {
+    return this.call('addHanachaText', input ?? {} as Operations['addHanachaText']['input']);
   }
 
   /** Suggest a translation of a unit, as its own text (POST /v1/units/{id}/translations) */
@@ -1458,6 +1615,11 @@ export abstract class GeneratedMethods {
     return this.call('confirmSync', input ?? {} as Operations['confirmSync']['input']);
   }
 
+  /** Sefarim's covers, drawn from their title pages, while their PDFs are served (GET /v1/covers) */
+  covers(input?: Operations['covers']['input']): Promise<Operations['covers']['output']> {
+    return this.call('covers', input ?? {} as Operations['covers']['input']);
+  }
+
   /** Open a project on a gap (farbrengens without recordings or texts, recordings to sync, pages to proofread) (POST /v1/projects) */
   createProject(input: Operations['createProject']['input']): Promise<Operations['createProject']['output']> {
     return this.call('createProject', input ?? {} as Operations['createProject']['input']);
@@ -1501,6 +1663,11 @@ export abstract class GeneratedMethods {
   /** A family's request that a teshura not be shown (no account needed): its scans stop being served at once, and stewards review it (POST /v1/teshuros/{id}/family-request) */
   familyRequest(input: Operations['familyRequest']['input']): Promise<Operations['familyRequest']['output']> {
     return this.call('familyRequest', input ?? {} as Operations['familyRequest']['input']);
+  }
+
+  /** A file's own page: its rights, where it came from, what was made from it, and what uses it (GET /v1/files/{sha256}/about) */
+  fileAbout(input: Operations['fileAbout']['input']): Promise<Operations['fileAbout']['output']> {
+    return this.call('fileAbout', input ?? {} as Operations['fileAbout']['input']);
   }
 
   /** Fix one line of a scan's text (a suggestion) (POST /v1/scans/{id}/text/fix) */
@@ -1613,6 +1780,11 @@ export abstract class GeneratedMethods {
     return this.call('itemTalk', input ?? {} as Operations['itemTalk']['input']);
   }
 
+  /** What points at an item, by type and field, with how many of each (GET /v1/entities/{id}/linked/counts) */
+  linkedCounts(input: Operations['linkedCounts']['input']): Promise<Operations['linkedCounts']['output']> {
+    return this.call('linkedCounts', input ?? {} as Operations['linkedCounts']['input']);
+  }
+
   /** An item's children in their own order (a work's units, a text's paragraphs), a page at a time (GET /v1/entities/{id}/children) */
   listChildren(input: Operations['listChildren']['input']): Promise<Operations['listChildren']['output']> {
     return this.call('listChildren', input ?? {} as Operations['listChildren']['input']);
@@ -1636,6 +1808,11 @@ export abstract class GeneratedMethods {
   /** Items on main, by type and set, in path order, a page at a time (GET /v1/entities) */
   listItems(input?: Operations['listItems']['input']): Promise<Operations['listItems']['output']> {
     return this.call('listItems', input ?? {} as Operations['listItems']['input']);
+  }
+
+  /** One group of what points at an item, in its own order, a page at a time, with the total (GET /v1/entities/{id}/linked) */
+  listLinked(input: Operations['listLinked']['input']): Promise<Operations['listLinked']['output']> {
+    return this.call('listLinked', input ?? {} as Operations['listLinked']['input']);
   }
 
   /** Where you stopped reading and listening lately (never cached) (GET /v1/places) */
@@ -1706,6 +1883,11 @@ export abstract class GeneratedMethods {
   /** Read a Hebrew date as people write it (GET /v1/dates/parse) */
   parseDate(input: Operations['parseDate']['input']): Promise<Operations['parseDate']['output']> {
     return this.call('parseDate', input ?? {} as Operations['parseDate']['input']);
+  }
+
+  /** Before adding something new: the machine's guess of what it is and where it belongs, from its name (a date in it, words of a title), and files already held that look like it (POST /v1/uploads/propose) */
+  proposeUpload(input: Operations['proposeUpload']['input']): Promise<Operations['proposeUpload']['output']> {
+    return this.call('proposeUpload', input ?? {} as Operations['proposeUpload']['input']);
   }
 
   /** Add or change one item in a draft suggestion (data null deletes it) (PUT /v1/suggestions/{id}/items) */
@@ -1853,7 +2035,7 @@ export abstract class GeneratedMethods {
     return this.call('unsubscribe', input ?? {} as Operations['unsubscribe']['input']);
   }
 
-  /** Add a recording to a farbrengen, or a scan: another scan of a printing, a new printing of a sefer, or a new teshura (POST /v1/uploads) */
+  /** Add a file: a recording of a farbrengen; a hanacha's PDF for a farbrengen or sicha; a scan (another scan of a printing, a new printing of a sefer, a teshura); or other material (a new sefer, a letter, a document) (POST /v1/uploads) */
   upload(input: Operations['upload']['input']): Promise<Operations['upload']['output']> {
     return this.call('upload', input ?? {} as Operations['upload']['input']);
   }
@@ -1866,6 +2048,11 @@ export abstract class GeneratedMethods {
   /** Withdraw your suggestion (POST /v1/suggestions/{id}/withdraw) */
   withdrawSuggestion(input: Operations['withdrawSuggestion']['input']): Promise<Operations['withdrawSuggestion']['output']> {
     return this.call('withdrawSuggestion', input ?? {} as Operations['withdrawSuggestion']['input']);
+  }
+
+  /** A sefer's cover, the page a person chose, and the served PDFs its title page may be chosen from (GET /v1/works/{id}/cover) */
+  workCover(input: Operations['workCover']['input']): Promise<Operations['workCover']['output']> {
+    return this.call('workCover', input ?? {} as Operations['workCover']['input']);
   }
 
   /** A work's volumes (its top-level parts), with how many units each holds (GET /v1/works/{id}/outline) */

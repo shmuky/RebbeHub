@@ -454,7 +454,7 @@ export async function confirmSync(catalog: Catalog, by: string, input: { recordi
   return catalog.submit(suggestion.id, by);
 }
 
-/** The hanacha of a recording's farbrengen, when the catalog has its text: kind `hanacha`, of the recording or of a unit of its event. */
+/** The hanacha of a recording's farbrengen, when the catalog has its text: kind `hanacha`, of the recording, of a unit of its event, or "based on" its event (a hanacha added for the farbrengen as a whole). */
 export async function hanachaOf(catalog: Catalog, recording: EntityId): Promise<EntityId | null> {
   const row = await one<{ id: EntityId }>(
     catalog.db,
@@ -463,7 +463,11 @@ export async function hanachaOf(catalog: Catalog, recording: EntityId): Promise<
        tr.data->>'recording' = $1 OR EXISTS (
          SELECT 1 FROM entity rec JOIN revision rr ON rr.id = rec.main_rev
          JOIN entity u ON u.id = tr.data->>'unit' JOIN revision ur ON ur.id = u.main_rev
-         WHERE rec.id = $1 AND rr.data->>'event' IS NOT NULL AND ur.data->'events' ? (rr.data->>'event')))
+         WHERE rec.id = $1 AND rr.data->>'event' IS NOT NULL AND ur.data->'events' ? (rr.data->>'event'))
+       OR EXISTS (
+         SELECT 1 FROM entity_ref a JOIN entity rel ON rel.id = a.from_id AND rel.type = 'relation' AND NOT rel.deleted JOIN revision rlr ON rlr.id = rel.main_rev
+         JOIN entity rec ON rec.id = $1 JOIN revision rr ON rr.id = rec.main_rev
+         WHERE a.to_id = t.id AND a.field = 'from' AND rlr.data->>'kind' = 'based-on' AND rlr.data->>'to' = rr.data->>'event'))
      ORDER BY t.id LIMIT 1`,
     [recording],
   );

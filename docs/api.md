@@ -71,6 +71,19 @@ route's examples and a reference to try them in, are at
   thumbnails.
 - `GET /v1/files/<sha256>/similar`: other files that look like this one
   (the same pages, or the same recording), a machine guess.
+- `GET /v1/entities/<id>/linked/counts`: everything that points at an
+  item, by type and field, with how many of each.
+- `GET /v1/entities/<id>/linked?field=work&type=unit&after=…&limit=…`:
+  one of those groups in its own order (order key, date, part, page), up
+  to 500 at a time, with `total` and `next` (null at the end).
+- `GET /v1/covers?ids=rh-…,rh-…` (up to 200): sefarim's covers, drawn
+  from their title pages, while their PDFs are served; `machine: true`
+  until a person chose the page. `GET /v1/works/<id>/cover`: one sefer's
+  cover, the page chosen, and the PDFs it may be chosen from.
+- `GET /v1/files/<sha256>/about`: a file's own page: rights, where it
+  came from, what was made from it and measured in it, the covers drawn
+  from it, and the items that use it (`usedBy.total` and the first of
+  them).
 
 ## OAI-PMH for libraries
 
@@ -105,6 +118,18 @@ With a signed-in session or a token with the `write` scope:
   before an upload, whether RebbeHub has the file or one like it, and
   whether it looks like another scan of a printing, a new printing or a
   new teshura.
+- `POST /v1/uploads` also takes `what=hanacha` (a PDF for a farbrengen
+  or sicha, `kind=mugah|bilti-mugah|…`) and `what=document` (`as=sefer`,
+  `letter` or `document`, with `title`, and `set`, `author`, `genre`,
+  `year`, `unit` as they apply); a recording or a hanacha may name a
+  farbrengen the catalog lacks (`eventTitle`, `eventDate`) instead of
+  `for`, and it is added with it.
+- `POST /v1/uploads/propose` (`{ what, name, sha256? }`): the machine's
+  guess of where something new belongs, from the date and words in its
+  name, and where the file already is.
+- `POST /v1/hanachos/text` (`{ for | eventTitle+eventDate, content,
+  rights, language?, credit? }`): a hanacha's words, a paragraph to a
+  segment, as a suggestion.
 - `POST /v1/suggestions/contents-map`: *Map pages*, what pages of a
   publication hold, as a suggestion.
 - `POST /v1/suggestions/words` (`{ entityId, change, version, segment,

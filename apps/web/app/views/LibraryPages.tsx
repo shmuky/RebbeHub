@@ -2,7 +2,9 @@ import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, History } from 'luci
 import { Link, useSearchParams } from 'react-router';
 import type { LocalName } from '@rebbehub/model';
 import { ItemList } from '../components/ItemLink.js';
-import { Books, RebbePortrait, coverColour } from '../components/Library.js';
+import { CoverChoice } from '../components/CoverChoice.js';
+import { Books, CoverPicture, RebbePortrait } from '../components/Library.js';
+import { SeeAll } from '../components/Linked.js';
 import { Printings } from '../components/Printings.js';
 import type { Entity } from '../lib/api.js';
 import { dateLabel } from '../lib/dates.js';
@@ -73,13 +75,19 @@ export function SetPage({ entity, view, lang }: { entity: Entity; view: ItemView
           </p>
         </div>
       </div>
-      {works.length ? <Books works={works} lang={lang} grid meta={(w) => (counts[w.id] ? `${n(counts[w.id]!, lang)} ${t(lang, 'unitsShort')}` : undefined)} /> : null}
+      {works.length ? <Books works={works} lang={lang} grid covers={view.covers} meta={(w) => (counts[w.id] ? `${n(counts[w.id]!, lang)} ${t(lang, 'unitsShort')}` : undefined)} /> : null}
+      <SeeAll id={entity.id} group={view.linked.find((g) => g.field === 'sets' && g.type === 'work')} shown={works.length} lang={lang} />
       {others.length ? (
         <section>
           <h2 className="section-header">{t(lang, 'moreInShelf')}</h2>
           <ItemList items={others} />
         </section>
       ) : null}
+      {view.linked
+        .filter((g) => g.field === 'sets' && g.type !== 'work')
+        .map((g) => (
+          <SeeAll key={g.type} id={entity.id} group={g} shown={others.filter((o) => o.type === g.type).length} lang={lang} />
+        ))}
       <HelpCallout lang={lang} title={t(lang, 'missingSefer')} text={t(lang, 'missingSeferText')} />
     </>
   );
@@ -136,9 +144,7 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
     <>
       <Crumbs items={[{ label: t(lang, 'tabLibrary'), to: href('/sets', lang) }, ...sets.map((s) => ({ label: nameOf((s.data as D).name, lang), to: href(itemPath(s), lang) }))]} />
       <div className="item-hero">
-        <span className="cover" style={{ background: coverColour(entity) }} aria-hidden="true">
-          <span className="cover-title">{nameOf(d.title, lang)}</span>
-        </span>
+        <CoverPicture work={entity} cover={view.workCover?.cover ?? undefined} lang={lang} big />
         <div>
           <p className="kicker">
             {GENRES[d.genre]?.[lang] ?? d.genre}
@@ -162,6 +168,7 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
           </p>
         </div>
       </div>
+      {view.workCover ? <CoverChoice work={entity} cover={view.workCover} lang={lang} /> : null}
       {d.description ? <p>{nameOf(d.description, lang)}</p> : null}
       {copies.length && tab !== 'sources' ? (
         // Where to read it, one tap away whatever tab is open.
@@ -214,6 +221,7 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
             </Link>
             <h2>{openPart.label ? nameOf(openPart.label, lang) : openPart.value}</h2>
             <ItemList items={units} meta={(u) => ((u.data as D).date ? dateLabel((u.data as D).date, lang, { civil: false }) : null)} />
+            <SeeAll id={entity.id} group={{ type: 'unit', field: 'work', count: openPart.units }} shown={units.length} lang={lang} />
           </section>
         ) : volumes ? (
           <ul className="volumes">
@@ -243,7 +251,12 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
         )
       ) : null}
       {tab === 'sources' && copies.length ? <Sources copies={copies} lang={lang} /> : null}
-      {tab === 'printings' && publications.length ? <Printings publications={publications} scanCounts={view.scanCounts} lang={lang} /> : null}
+      {tab === 'printings' && publications.length ? (
+        <>
+          <Printings publications={publications} scanCounts={view.scanCounts} lang={lang} />
+          <SeeAll id={entity.id} group={view.linked.find((g) => g.field === 'work' && g.type === 'publication')} shown={publications.length} lang={lang} />
+        </>
+      ) : null}
 
       <HelpCallout lang={lang} title={t(lang, 'knowPrinting')} text={t(lang, 'knowPrintingText')} />
     </>
@@ -267,7 +280,8 @@ export function AuthorPage({ entity, view, lang }: { entity: Entity; view: ItemV
         </div>
       </div>
       {d.description ? <p>{nameOf(d.description as LocalName, lang)}</p> : null}
-      {works.length ? <Books works={works} lang={lang} grid meta={(w) => (counts[w.id] ? `${n(counts[w.id]!, lang)} ${t(lang, 'unitsShort')}` : undefined)} /> : null}
+      {works.length ? <Books works={works} lang={lang} grid covers={view.covers} meta={(w) => (counts[w.id] ? `${n(counts[w.id]!, lang)} ${t(lang, 'unitsShort')}` : undefined)} /> : null}
+      <SeeAll id={entity.id} group={view.linked.find((g) => g.field === 'authors' && g.type === 'work')} shown={works.length} lang={lang} />
     </>
   );
 }

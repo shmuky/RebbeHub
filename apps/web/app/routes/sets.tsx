@@ -24,7 +24,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     api.refCounts('work', 'unit'),
     api.stats(),
   ]);
+  // The well-known sefarim's covers, from their title pages where the jobs have drawn them.
+  const shown = works.items.filter((w) => WELL_KNOWN.includes(String((w.data as { slug?: string }).slug)));
+  const covers = await api.covers(shown.map((w) => w.id)).catch(() => ({}));
   return {
+    covers,
     lang,
     siteUrl,
     sets: sets.items.filter((s) => !(s.data as { parent?: string }).parent),
@@ -118,7 +122,7 @@ export default function Library({ loaderData }: Route.ComponentProps) {
       {known.length ? (
         <section>
           <h2 className="section-header">{t(lang, 'wellKnown')}</h2>
-          <Books works={known} lang={lang} meta={(w) => unitsLabel(units[w.id], lang)} />
+          <Books works={known} lang={lang} covers={loaderData.covers} meta={(w) => unitsLabel(units[w.id], lang)} />
         </section>
       ) : null}
     </>
