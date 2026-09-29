@@ -21,6 +21,7 @@ import { clock, usePlayer, type Track } from '../player/PlayerProvider.js';
 import { Icon } from '../ui/Icon.js';
 import { ItemShell, type ItemHead } from '../ui/ItemShell.js';
 import { PageThumb } from '../ui/Shaar.js';
+import { driveFileId } from '../lib/drive.js';
 import { EmptyState, Label, MachineLabel, Segmented, cx } from '../ui/primitives.js';
 import { commonTabs, SideActivity, SideDetails, SideSection } from './itemParts.js';
 
@@ -120,8 +121,8 @@ const KIND_KEYS = {
 } as const;
 const kindName = (kind: string, lang: Lang) => t(lang, KIND_KEYS[kind as keyof typeof KIND_KEYS] ?? 'kind_other');
 
-/** PDFs the site's own reader opens (read.tsx lets only these hosts in). */
-export const readable = (url: string) => /^https:\/\/(sichos-kodesh-media-proxy\.shmuky\.workers\.dev|api\.rebbehub\.org|files\.rebbehub\.org)\//.test(url);
+/** PDFs the site's own reader opens (read.tsx lets only these in): RebbeHub's own files, and files on Google Drive. */
+export const readable = (url: string) => Boolean(driveFileId(url)) || /^https:\/\/(api\.rebbehub\.org|files\.rebbehub\.org)\//.test(url);
 
 /** A YouTube video's id, when the link is one. */
 function youtubeId(url: string): string | null {
@@ -489,7 +490,7 @@ export function EventPage({ entity, view, lang }: { entity: Entity; view: ItemVi
   const d = entity.data as unknown as { title: LocalName; date?: string; kind?: string; place?: string; links?: EventLink[] };
   const recordings = view.lists.recordings ?? [];
   const sources = Object.fromEntries(recordings.map((r) => [r.id, view.files[r.id]?.url ?? null]));
-  const tracks = tracksOf(entity, recordings, lang, sources);
+  const tracks = tracksOf(entity, recordings, lang, sources, view.apiBase);
   const year = d.date ? Number(d.date.slice(0, 4)) : null;
   const monthToken = d.date ? d.date.split('-')[1] : undefined;
   const month = monthToken ? (monthByToken(monthToken) ?? monthByToken(monthToken.toUpperCase())) : undefined;

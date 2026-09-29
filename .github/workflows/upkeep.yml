@@ -10,7 +10,11 @@ name: Upkeep (manual)
 #                   bucket; a PDF only linked (Drive, HebrewBooks) is
 #                   fetched and kept in the preservation bucket, never served;
 #   page-images     page images and thumbnails of served scans, into the
-#                   public bucket (the viewer and the IIIF manifests).
+#                   public bucket (the viewer and the IIIF manifests);
+#   relink-drive    links older imports stored on Sichos-Kodesh's media
+#                   proxy, as the files' own Google Drive links: one bot
+#                   suggestion of up to 500 items at a time, for review;
+#   relink-drive-dry-run  only counts what relink-drive would change.
 #
 # Needs the DATABASE_URL repository secret, as the import does; covers and
 # page-images also CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (a token
@@ -21,10 +25,10 @@ on:
       job:
         description: Which job to run
         type: choice
-        options: [convert-bodies, covers, page-images]
+        options: [convert-bodies, covers, page-images, relink-drive, relink-drive-dry-run]
         default: covers
       limit:
-        description: How many sefarim or scans this run (covers, page-images; empty for the command's own default)
+        description: How many sefarim or scans this run (covers, page-images), or items per suggestion (relink-drive); empty for the command's own default
         required: false
 
 permissions:
@@ -51,7 +55,7 @@ jobs:
       - name: Check it is configured
         run: |
           if [ -z "$DATABASE_URL" ]; then echo "::error::Add the DATABASE_URL repository secret (see docs/deploy.md)."; exit 1; fi
-          if [ "$JOB" != "convert-bodies" ] && { [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$CLOUDFLARE_API_TOKEN" ]; }; then
+          if [ "$JOB" != "convert-bodies" ] && [ "${JOB#relink-drive}" = "$JOB" ] && { [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$CLOUDFLARE_API_TOKEN" ]; }; then
             echo "::error::Add the CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN repository secrets (a token with Workers R2 Storage: Edit; see docs/deploy.md)."; exit 1
           fi
           if [ -n "$LIMIT" ] && ! [[ "$LIMIT" =~ ^[0-9]+$ ]]; then echo "::error::limit is a whole number, or empty."; exit 1; fi
@@ -71,6 +75,13 @@ jobs:
             convert-bodies)
               # Goes through every page still in markup; it takes no limit.
               npm run rebbehub -- convert-bodies
+              ;;
+            relink-drive|relink-drive-dry-run)
+              # Sends all that is still on the proxy, a suggestion per <limit> items (500); what already waits in one is left to it.
+              args=()
+              if [ -n "$LIMIT" ]; then args+=(--chunk "$LIMIT"); fi
+              if [ "$JOB" = "relink-drive-dry-run" ]; then args+=(--dry-run); fi
+              npm run rebbehub -- relink-drive "${args[@]}"
               ;;
             covers|page-images)
               if [ -n "$LIMIT" ]; then npm run rebbehub -- "$JOB" --limit "$LIMIT"; else npm run rebbehub -- "$JOB"; fi

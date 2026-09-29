@@ -14,7 +14,7 @@ export interface ApiErrorBody {
   detail?: unknown;
 }
 
-export type ErrorCode = 'bad-request' | 'unauthorized' | 'forbidden' | 'not-found' | 'conflict' | 'invalid' | 'rate-limited' | 'internal';
+export type ErrorCode = 'bad-request' | 'unauthorized' | 'forbidden' | 'not-found' | 'conflict' | 'too-large' | 'invalid' | 'rate-limited' | 'internal' | 'upstream';
 
 export const ERROR_CODES: Record<number, ErrorCode> = {
   400: 'bad-request',
@@ -22,9 +22,11 @@ export const ERROR_CODES: Record<number, ErrorCode> = {
   403: 'forbidden',
   404: 'not-found',
   409: 'conflict',
+  413: 'too-large',
   422: 'invalid',
   429: 'rate-limited',
   500: 'internal',
+  502: 'upstream',
 };
 
 // ------------------------------------------------------------------ cursors
@@ -127,7 +129,7 @@ export function mayUseEdgeCache(request: Request): boolean {
   if (/no-cache|no-store/.test(request.headers.get('cache-control') ?? '') || request.headers.get('pragma') === 'no-cache') return false;
   const path = new URL(request.url).pathname;
   if (path === '/mcp' || path.startsWith('/v1/auth/')) return false;
-  if (path.startsWith('/objects/') && request.headers.has('range')) return false;
+  if ((path.startsWith('/objects/') || path.startsWith('/v1/drive/')) && request.headers.has('range')) return false;
   return true;
 }
 

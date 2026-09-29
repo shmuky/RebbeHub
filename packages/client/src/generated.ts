@@ -7,7 +7,7 @@ export const API_VERSION = "1.0.0";
 
 export type ApiError = {
   /** What kind of error, for programs */
-  error: "bad-request" | "unauthorized" | "forbidden" | "not-found" | "conflict" | "invalid" | "rate-limited" | "internal" | "state";
+  error: "bad-request" | "unauthorized" | "forbidden" | "not-found" | "conflict" | "invalid" | "rate-limited" | "internal" | "state" | "too-large" | "upstream";
   /** What went wrong, for people */
   message: string;
   /** More, when there is more (a check that failed, the clashes of a merge) */
@@ -526,6 +526,13 @@ export interface Operations {
     output: {
       ok: true;
     };
+  };
+  /** A Google Drive file the catalog links to (a hanacha's PDF, an Otzros scan), read for the site's reader and player */
+  driveFile: {
+    input: {
+      id: string;
+    };
+    output: Response;
   };
   /** What a PDF on Google Drive needs to read straight, by its Drive id, or the reading copy to open instead */
   driveFix: {
@@ -1925,6 +1932,7 @@ export const OPERATIONS = {
   createSuggestion: {"method":"POST","path":"/v1/suggestions","pathParams":[],"query":[],"body":"json","answer":"json"},
   createWebhook: {"method":"POST","path":"/v1/webhooks","pathParams":[],"query":[],"body":"json","answer":"json"},
   deleteWebhook: {"method":"DELETE","path":"/v1/webhooks/{id}","pathParams":["id"],"query":[],"body":null,"answer":"json"},
+  driveFile: {"method":"GET","path":"/v1/drive/{id}","pathParams":["id"],"query":[],"body":null,"answer":"raw"},
   driveFix: {"method":"GET","path":"/v1/page-fixes/drive/{id}","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   editComment: {"method":"PATCH","path":"/v1/comments/{id}","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   editionChecksums: {"method":"GET","path":"/v1/editions/{tag}/SHA256SUMS","pathParams":["tag"],"query":[],"body":null,"answer":"text"},
@@ -2154,6 +2162,11 @@ export abstract class GeneratedMethods {
   /** Remove a webhook (DELETE /v1/webhooks/{id}) */
   deleteWebhook(input: Operations['deleteWebhook']['input']): Promise<Operations['deleteWebhook']['output']> {
     return this.call('deleteWebhook', input ?? {} as Operations['deleteWebhook']['input']);
+  }
+
+  /** A Google Drive file the catalog links to (a hanacha's PDF, an Otzros scan), read for the site's reader and player (GET /v1/drive/{id}) */
+  driveFile(input: Operations['driveFile']['input']): Promise<Operations['driveFile']['output']> {
+    return this.call('driveFile', input ?? {} as Operations['driveFile']['input']);
   }
 
   /** What a PDF on Google Drive needs to read straight, by its Drive id, or the reading copy to open instead (GET /v1/page-fixes/drive/{id}) */

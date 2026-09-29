@@ -25,6 +25,7 @@ describe('migrations', () => {
       'commit_change',
       'cover',
       'derivation',
+      'drive_file',
       'embedding',
       'entity',
       'entity_external_id',

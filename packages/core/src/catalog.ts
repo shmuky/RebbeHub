@@ -17,6 +17,7 @@ import {
   type SetData,
 } from '@rebbehub/model';
 import { badState, CatalogError, forbidden, invalid, notFound } from './errors.js';
+import { indexDriveFiles } from './driveFiles.js';
 import { withStructuredBody } from './legacyWords.js';
 import { diffData, threeWayMerge, resolveConflicts, UnresolvedConflictError, type Conflict, type FieldChange, type Json, type Resolution } from './merge.js';
 import { canApprove, canSuggest, earnedTrust, mayGoLive, type Account, type SetInfo } from './permissions.js';
@@ -1039,6 +1040,8 @@ export class Catalog {
     if (path !== null) await tx.query('DELETE FROM path_redirect WHERE path = $1', [path]);
     await tx.query('DELETE FROM entity_ref WHERE from_id = $1', [id]);
     await tx.query('DELETE FROM entity_external_id WHERE entity_id = $1', [id]);
+    // The Drive files it links to, which the API reads for the site (driveFiles.ts).
+    await indexDriveFiles(tx, id, data);
     if (!deleted) {
       const externalIds = (data as { externalIds?: Record<string, string> }).externalIds ?? {};
       for (const [key, value] of Object.entries(externalIds)) {

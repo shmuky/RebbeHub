@@ -49,8 +49,9 @@ describe('the Sichos-Kodesh occasions importer', () => {
     expect(event?.data).toMatchObject({ kind: 'farbrengen', title: { he: 'י"ט כסלו', en: '19 Kislev' }, date: '5714-03-19', externalIds: { mafteiach: '11113014' } });
     const links = (event!.data as { links: Array<{ kind: string; url: string }> }).links;
     expect(links.map((l) => l.kind)).toEqual(['bilti-mugah', 'mugah']);
-    expect(links[0]!.url).toBe(pdfUrl({ driveFileId: '1tk7tznpZCW0cyFVuNPcwYZMaqzSIC9oO', resourceKey: '0-Xqz7bN0vTC1CZxMnwXcPeg' }));
-    expect(links[0]!.url).toContain('&resourcekey=0-Xqz7bN0vTC1CZxMnwXcPeg');
+    // The file's own Drive link, as the mafteiach gives it, with its resource key; the site reads it through the API.
+    expect(links[0]!.url).toBe('https://drive.google.com/file/d/1tk7tznpZCW0cyFVuNPcwYZMaqzSIC9oO/view?resourcekey=0-Xqz7bN0vTC1CZxMnwXcPeg');
+    expect(links[0]).toMatchObject({ origin: links[0]!.url });
 
     const second = await catalog.get(await idForKey('mafteiach-occasion:11113015'));
     expect(second?.data).toMatchObject({ date: '5714-03-19', order: 1 });
@@ -92,9 +93,9 @@ describe('the Sichos-Kodesh occasions importer', () => {
     const data = event!.data as { links: Array<{ kind: string; url: string; label: { he: string } }>; body: unknown; bodySource: object };
     expect(data.links.map((l) => [l.kind, l.url])).toEqual([
       ['bilti-mugah', expect.any(String)],
-      ['mugah', pdfUrl({ driveFileId: '1KgxR1B-ab3l4kp_VMg-1WgudgSZpxfdJ' })],
+      ['mugah', 'https://drive.google.com/file/d/1KgxR1B-ab3l4kp_VMg-1WgudgSZpxfdJ/view'],
       ['mugah', 'https://hebrewbooks.org/pdfpager.aspx?req=1&pgnum=22'],
-      ['mugah', pdfUrl({ driveFileId: '1db9QCEC2tRx' })],
+      ['mugah', 'https://drive.google.com/file/d/1db9QCEC2tRx/view'],
       ['maamar', 'https://www.mafteiach.app/maamorim/134'],
       ['english', 'https://www.sie.org/templates/1.htm'],
       ['video', 'https://videos.jem.tv/v/1'],

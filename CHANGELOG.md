@@ -12,6 +12,20 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Drive files read through RebbeHub.** `GET /v1/drive/{id}` reads a
+  Google Drive file the catalog links to (a hanacha's PDF, an Otzros
+  scan) for the site's reader and player, with CORS and Range, kept at the
+  edge; only files an item links to, up to 300 MB, 120 a minute per
+  address. New error codes `too-large` (413) and `upstream` (502). The
+  site no longer depends on Sichos-Kodesh's media proxy for PDFs.
+- **`rebbehub relink-drive`** (and the Upkeep workflow's `relink-drive`,
+  `relink-drive-dry-run`): links older imports stored on the media proxy
+  become the files' own Drive links, as reviewed bot Suggestions of 500
+  items; `--dry-run` counts them.
+- **The Otzros library as a tree.** Its Drive folders become nested Sets
+  under `/sets/otzros`, each sefer in its folder's Set, to browse and sort
+  from; the sefarim keep their paths.
+
 - **Ready for search engines and crowds.** Sitemaps a page of 10,000 items
   at a time in both languages, with when each item last changed
   (`/sitemap.xml`; the API's new `/v1/sitemap` and
@@ -55,6 +69,15 @@ any time. `@rebbehub/client` carries the API's version.
   developer docs.
 
 ### Changed
+
+- Importers store a PDF on Google Drive at its own Drive address
+  (`https://drive.google.com/file/d/<id>/view`), the mafteiach's and
+  Otzros HaRebbe's link, not the media proxy's; an Otzros page has one
+  edition, its Drive file. JEM's recordings still play through the proxy.
+- Running an importer again leaves an item people moved to a new path, or
+  deleted, where they left it, and a sefer's Sets as people sorted them.
+- `rebbehub reading-copies make` reads the archive's list from the
+  archive's own bucket, not from Sichos-Kodesh's pack API.
 
 - Every `401` answer says `unauthorized` (sign-in routes said
   `bad-request`), and every `429` says

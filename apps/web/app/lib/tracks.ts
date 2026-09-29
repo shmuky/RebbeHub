@@ -2,6 +2,7 @@ import type { LocalName } from '@rebbehub/model';
 import type { Track } from '../player/PlayerProvider.js';
 import type { Entity } from './api.js';
 import { dateLabel } from './dates.js';
+import { driveReadUrl } from './drive.js';
 import { nameOf, t, type Lang } from './i18n.js';
 import { href, itemPath } from './links.js';
 
@@ -17,15 +18,19 @@ interface EventData {
   date?: string;
 }
 
-/** An event's recordings as the player's queue, part by part; parts with nowhere to be heard are left out. */
-export function tracksOf(event: Pick<Entity, 'id' | 'path' | 'data'>, recordings: Entity[], lang: Lang, sources: Record<string, string | null> = {}): Track[] {
+/**
+ * An event's recordings as the player's queue, part by part; parts with
+ * nowhere to be heard are left out. A recording on Google Drive plays
+ * through the API at `apiBase` (lib/drive.ts).
+ */
+export function tracksOf(event: Pick<Entity, 'id' | 'path' | 'data'>, recordings: Entity[], lang: Lang, sources: Record<string, string | null> = {}, apiBase?: string): Track[] {
   const e = event.data as unknown as EventData;
   const subtitle = [nameOf(e.title, lang), e.date ? dateLabel(e.date, lang, { civil: false }) : ''].filter(Boolean).join(' · ');
   return recordings
     .map((r) => ({ r, d: r.data as unknown as RecordingData }))
     .sort((a, b) => (a.d.part ?? 0) - (b.d.part ?? 0))
     .flatMap(({ r, d }) => {
-      const url = sources[r.id] ?? d.url;
+      const url = sources[r.id] ?? (d.url && apiBase ? (driveReadUrl(d.url, apiBase) ?? d.url) : d.url);
       if (!url) return [];
       return [{ id: r.id, title: nameOf(d.title, lang) || `${t(lang, 'part')} ${d.part ?? ''}`, subtitle, url, durationMs: d.durationMs, href: href(itemPath(event), lang) }];
     });

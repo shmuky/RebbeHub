@@ -15,6 +15,7 @@ import { tokenGate, tokenGrantOf, tokenRoutes } from './tokens.js';
 import { ERROR_CODES, PUBLIC_SUMMARY, caching, cors, cursor, nextLink, type RateLimits } from './platform.js';
 import { mcpRoutes } from './mcp.js';
 import { pageRoutes } from './pages.js';
+import { driveRoutes, type DriveOptions } from './drive.js';
 import { threadRoutes } from './threads.js';
 
 /**
@@ -61,6 +62,8 @@ export interface ApiOptions {
   oai?: OaiOptions;
   /** Requests allowed per address and per token (platform.ts); unset, none are counted (local work, tests). */
   rateLimits?: RateLimits;
+  /** Reading the Google Drive files the catalog links to (drive.ts): how Drive is reached, the size cap, and a limit per address. */
+  drive?: DriveOptions;
 }
 
 /** A byte range asked for with `Range: bytes=…`. */
@@ -167,6 +170,7 @@ export function createApp(options: ApiOptions): Hono {
   const filesBase = (c: Context) => options.filesBaseUrl ?? (options.files ? new URL(c.req.url).origin : null);
   uploadRoutes(app, catalog, signedIn, options.uploads, filesBase);
   pageRoutes(app, catalog, { filesBase });
+  driveRoutes(app, catalog, options.drive);
   networkRoutes(app, catalog, { embedder: options.embedder });
   if (options.oai) oaiRoutes(app, catalog, options.oai);
   readingRoutes(app, catalog, signedIn, (status, message) => {

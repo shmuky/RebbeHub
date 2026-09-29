@@ -38,8 +38,13 @@ export const READING_COPY = 'reading-copy';
 /** Where the manifest is published in the public bucket, and served by the API. */
 export const MANIFEST_KEY = 'manifests/reading-copies/sichos-kodesh.json';
 export const MANIFEST_URL = `https://api.rebbehub.org/${MANIFEST_KEY}`;
-/** Sichos-Kodesh's archive index: every object it holds, by sha256, with the Drive id it came from. */
-export const ARCHIVE_OBJECTS_URL = 'https://sichos-kodesh-pack-api.shmuky.workers.dev/v1/objects.json';
+/**
+ * Sichos-Kodesh's archive index: every object it holds, by sha256, with the
+ * Drive id it came from. Read from the archive's own bucket
+ * (sichos-kodesh-archive, beside the objects `make` copies), where its
+ * publish puts it, so no other server is needed.
+ */
+export const ARCHIVE_OBJECTS_KEY = 'objects.json';
 
 export interface ScanRef {
   driveFileId: string;
@@ -63,9 +68,14 @@ export async function sichosKodeshScans(checkout: string): Promise<ScanRef[]> {
   return [...found.values()];
 }
 
-/** The archive's PDFs by Drive id: its `objects.json` (a URL or a file). */
-export async function archivePdfs(from: string): Promise<Map<string, { sha256: string; bytes: number }>> {
-  const text = /^https?:\/\//.test(from) ? await (await fetchOk(from)).text() : await readFile(from, 'utf8');
+/** The archive's PDFs by Drive id: its `objects.json`, from its bucket, a URL or a file. */
+export async function archivePdfs(from: string | Pick<ObjectStore, 'get'>): Promise<Map<string, { sha256: string; bytes: number }>> {
+  let text: string;
+  if (typeof from !== 'string') {
+    const bytes = await from.get(ARCHIVE_OBJECTS_KEY);
+    if (!bytes) throw new Error(`the archive's bucket has no ${ARCHIVE_OBJECTS_KEY}`);
+    text = new TextDecoder().decode(bytes);
+  } else text = /^https?:\/\//.test(from) ? await (await fetchOk(from)).text() : await readFile(from, 'utf8');
   const index = JSON.parse(text) as { objects: Record<string, { kind: string; bytes: number; sourceId: string; aliases?: string[] }> };
   const byDrive = new Map<string, { sha256: string; bytes: number }>();
   for (const [sha256, object] of Object.entries(index.objects)) {

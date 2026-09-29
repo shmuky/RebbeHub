@@ -87,9 +87,10 @@ const SECTIONS: Array<[keyof MafteiachRecord['detail'], EventLinkKind]> = [
 
 /**
  * Every link the index has for a farbrengen that is not already among
- * `known` (the Drive files Sichos-Kodesh's catalog brought). Drive PDFs are
- * read through `drive` (the media proxy, so they open in the site's own
- * reader); every other link goes where it is.
+ * `known` (the Drive files Sichos-Kodesh's catalog brought). A Drive PDF's
+ * address is `drive`'s (its own Drive link, which the site's reader opens
+ * through RebbeHub's API), with the index's link kept as its origin; every
+ * other link goes where it is.
  */
 export function mafteiachLinks(record: MafteiachRecord, known: Set<string>, drive: (fileId: string, url: string) => string): EventLink[] {
   const out: EventLink[] = [];
@@ -97,7 +98,7 @@ export function mafteiachLinks(record: MafteiachRecord, known: Set<string>, driv
   const add = (kind: EventLinkKind, label: string, url: string, origin?: string) => {
     if (seen.has(url)) return;
     seen.add(url);
-    out.push({ kind, label: { he: label.slice(0, 500) }, url, source: 'mafteiach', ...(origin && origin !== url ? { origin } : {}) });
+    out.push({ kind, label: { he: label.slice(0, 500) }, url, source: 'mafteiach', ...(origin ? { origin } : {}) });
   };
   for (const [section, kind] of SECTIONS) {
     for (const link of (record.detail[section] as LinkSection | undefined)?.links ?? []) {
@@ -106,7 +107,7 @@ export function mafteiachLinks(record: MafteiachRecord, known: Set<string>, driv
       if (!/^https?:\/\//.test(url)) continue;
       const fileId = driveFileId(url);
       if (fileId && known.has(fileId)) continue;
-      add(kind, label, fileId ? drive(fileId, url) : url, url);
+      add(kind, label, fileId ? drive(fileId, url) : url, fileId ? url : undefined);
     }
   }
   for (const id of record.detail.video?.youtubeIds ?? []) {

@@ -16,6 +16,8 @@ export interface ItemView {
   lists: Record<string, Entity[]>;
   /** Files, by the id of the item that holds them. */
   files: Record<string, FileInfo | null>;
+  /** The API's address, where a recording on Google Drive is played from (lib/drive.ts). */
+  apiBase?: string;
   /** A text's paragraphs, by text id. */
   segments: Record<string, Entity[]>;
   /** The cursor for the next page of a long list (a work's units). */
@@ -86,7 +88,7 @@ export function sortPrintings(publications: Entity[]): Entity[] {
 
 export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): Promise<ItemView> {
   const d = entity.data as Record<string, unknown>;
-  const view: ItemView = { refs: {}, lists: {}, files: {}, segments: {}, next: null, backlinks: [], relations: [], pages: {}, linked: [], covers: {}, about: [], keepers: [], talk: 0 };
+  const view: ItemView = { refs: {}, lists: {}, files: {}, apiBase: api.baseUrl, segments: {}, next: null, backlinks: [], relations: [], pages: {}, linked: [], covers: {}, about: [], keepers: [], talk: 0 };
   // What the conversations about it are matched by: the item, and what is in it.
   const aboutIds = new Set<string>([entity.id]);
   /** The page images of the first few served scans that have them. */
