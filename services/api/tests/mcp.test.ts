@@ -124,6 +124,26 @@ describe('the MCP server', () => {
     expect(words.content[0].text).toContain('[machine] אלקים את השמים');
     expect(words.content[0].text).toMatch(/no person has checked/);
     expect((await tool('get_text', { id: event })).isError).toBe(true);
+
+    // A page imported with its words keeps them on the unit (the Chabad Library's): read with their credit.
+    const page = await add(catalog, 'mendy', 'keeper', 'unit', {
+      work,
+      position: [{ level: 'sicha', value: '2' }],
+      order: 'k',
+      label: { he: 'ב' },
+      body: {
+        profile: 'chabad-library',
+        versions: [{ id: 'he', language: 'he', credit: 'ספריית ליובאוויטש', url: 'https://chabadlibrary.org/books/1', segments: [
+          { id: 'h1', kind: 'heading', text: [{ text: 'חצי יום בכולל', marks: ['b'] }] },
+          { id: 'p1', kind: 'paragraph', text: [{ text: 'והרבי השיב' }] },
+        ] }],
+      },
+    });
+    const library = await tool('get_text', { id: page });
+    expect(library.isError).toBe(false);
+    expect(library.content[0].text).toBe('חצי יום בכולל\n\nוהרבי השיב\n\nספריית ליובאוויטש (https://chabadlibrary.org/books/1)');
+    expect(library.structuredContent).toMatchObject({ unit: page, language: 'he', paragraphs: [{ id: 'h1' }, { id: 'p1' }] });
+    expect((await tool('get_text', { id: page, language: 'en' })).isError).toBe(true);
   });
 
   it('suggests a fix only with a write token, as its person, for review', async () => {
