@@ -129,7 +129,9 @@ jobs:
         run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
       - name: Install faster-whisper
         if: env.ENGINE == 'local'
-        run: python3 -m pip install faster-whisper
+        # Pinned: PyAV 19 (2026-09-29) dropped the open() argument faster-whisper 1.2.1 passes, and every recording failed.
+        # Raise both together, after a run on one recording.
+        run: python3 -m pip install 'faster-whisper==1.2.1' 'av<19'
       - name: Keep the Whisper model between runs
         if: env.ENGINE == 'local'
         uses: actions/cache@v4

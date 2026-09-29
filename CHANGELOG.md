@@ -126,6 +126,9 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Fixed
 
+- **Transcription runs work again.** PyAV 19, out on 2026-09-29, broke
+  faster-whisper's audio reading, so every recording failed; the workflow
+  now pins faster-whisper 1.2.1 and PyAV below 19.
 - **A calendar year is a quarter lighter, and the home page's feed a
   third cheaper to make.** The calendar's year, the home page's week and
   a farbrengen's other years keep each farbrengen as its row (name, date,
