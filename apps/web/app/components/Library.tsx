@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 import type { LocalName } from '@rebbehub/model';
-import type { Entity } from '../lib/api.js';
+import type { Cover, Entity } from '../lib/api.js';
 import { nameOf, type Lang } from '../lib/i18n.js';
 import { href, itemPath } from '../lib/links.js';
 
@@ -69,25 +69,44 @@ export function coverColour(work: Pick<Entity, 'id' | 'data'>): string {
   return shade < 0 ? `color-mix(in srgb, ${base}, white ${-shade}%)` : `color-mix(in srgb, ${base}, black ${shade}%)`;
 }
 
-export function BookCover({ work, lang, meta, size = 'medium' }: { work: Entity; lang: Lang; meta?: string; size?: 'medium' | 'large' }) {
-  const d = work.data as { title?: LocalName; genre?: string };
+/**
+ * A sefer's cover: its title page (the shaar), drawn from a PDF the site
+ * serves (core/covers.ts), where the jobs have drawn one; else its cloth
+ * cover, lettered with its name. A page a machine chose says so on hover.
+ */
+export function CoverPicture({ work, cover, lang, big }: { work: Pick<Entity, 'id' | 'data'>; cover?: Cover; lang: Lang; big?: boolean }) {
+  const d = work.data as { title?: LocalName };
+  if (cover) {
+    const picture = big ? cover.image : cover.thumb;
+    return (
+      <span className="cover shaar" title={cover.machine ? (lang === 'he' ? 'השער נבחר על ידי מחשב' : 'Title page chosen by a machine') : undefined}>
+        <img src={picture.url} width={picture.width} height={picture.height} alt={nameOf(d.title, lang)} loading="lazy" decoding="async" />
+      </span>
+    );
+  }
+  return (
+    <span className="cover" style={{ background: coverColour(work) }} aria-hidden={big ? true : undefined}>
+      <span className="cover-title">{nameOf(d.title, lang)}</span>
+    </span>
+  );
+}
+
+export function BookCover({ work, lang, meta, size = 'medium', cover }: { work: Entity; lang: Lang; meta?: string; size?: 'medium' | 'large'; cover?: Cover }) {
   return (
     <Link to={href(itemPath(work), lang)} className={`book ${size}`}>
-      <span className="cover" style={{ background: coverColour(work) }}>
-        <span className="cover-title">{nameOf(d.title, lang)}</span>
-      </span>
+      <CoverPicture work={work} cover={cover} lang={lang} />
       {meta ? <span className="book-meta">{meta}</span> : null}
     </Link>
   );
 }
 
 /** Covers in a row that scrolls sideways, or in a grid. */
-export function Books({ works, lang, meta, grid }: { works: Entity[]; lang: Lang; meta?: (w: Entity) => string | undefined; grid?: boolean }) {
+export function Books({ works, lang, meta, grid, covers }: { works: Entity[]; lang: Lang; meta?: (w: Entity) => string | undefined; grid?: boolean; covers?: Record<string, Cover> }) {
   return (
     <ul className={grid ? 'books grid' : 'books'}>
       {works.map((w) => (
         <li key={w.id}>
-          <BookCover work={w} lang={lang} meta={meta?.(w)} />
+          <BookCover work={w} lang={lang} meta={meta?.(w)} cover={covers?.[w.id]} />
         </li>
       ))}
     </ul>

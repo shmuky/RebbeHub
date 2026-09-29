@@ -166,13 +166,21 @@ export const OPENAPI = {
     '/manifests/iiif/{id}.json': { get: { summary: 'A served scan as a IIIF Presentation 3 manifest, for any IIIF viewer', parameters: [idParam], responses: ok('The manifest') } },
     '/v1/uploads': {
       post: {
-        summary: 'Add a recording to a farbrengen, or a scan: another scan of a printing, a new printing of a sefer, or a new teshura (the file is the body)',
+        summary:
+          "Add a file (the body): a recording of a farbrengen; a hanacha's PDF for a farbrengen or sicha; a scan (another scan of a printing, a new printing of a sefer, a teshura); or other material (a new sefer, a letter, a document). A recording or hanacha may name a new farbrengen instead of `for`",
         security: signedIn,
         parameters: [
-          { ...q('what', 'recording or scan'), required: true },
-          { ...q('for', 'The farbrengen, sefer, printing or Teshuros set it is added to'), required: true },
+          { ...q('what', 'recording, hanacha, scan or document'), required: true },
+          q('for', 'The farbrengen, sicha, sefer, printing or Teshuros set it is added to'),
+          q('eventTitle', 'For a recording or hanacha of a farbrengen the catalog lacks: its name'),
+          q('eventDate', 'With eventTitle: its date key (5742-05-10)'),
+          q('kind', 'For a hanacha: mugah, bilti-mugah, maamar, hagahos, hosofos, english or other'),
+          q('set', 'For a document: the set it belongs in'),
+          q('author', 'For a new sefer: its author'),
+          q('genre', 'For a new sefer'),
+          q('unit', 'For a letter: the letter the catalog has that it reproduces'),
           { ...q('rights', 'mine, free, public-domain or unsure'), required: true },
-          q('as', 'scan-of, printing or teshura'),
+          q('as', 'For a scan: scan-of, printing or teshura. For a document: sefer, letter or document'),
           q('title', 'Its name'),
           q('publication', 'For scan-of: the printing'),
           q('publisher', 'For a printing'),
@@ -180,7 +188,7 @@ export const OPENAPI = {
           q('printing', 'For a printing: 1 for the first'),
           q('families', 'For a teshura: its families, as printed'),
           q('simcha', 'For a teshura: wedding, bar-mitzvah, and so on'),
-          q('date', "For a teshura: the simcha's date key"),
+          q('date', "For a teshura: the simcha's date key; for a letter or document, its date"),
         ],
         responses: { '201': { description: 'Stored, and a suggestion sent for review' }, '200': { description: 'We already have this file: where it is' } },
       },
@@ -191,6 +199,57 @@ export const OPENAPI = {
         security: signedIn,
         requestBody: json({ type: 'object', required: ['for'], properties: { for: { type: 'string' }, sha256: { type: 'string' }, pageHashes: { type: 'array', items: { type: ['string', 'null'] } }, title: { type: 'string' } } }),
         responses: ok("The guess, files already held that look like it, and the sefer's printings"),
+      },
+    },
+    '/v1/uploads/propose': {
+      post: {
+        summary: "Before adding something new: the machine's guess of what it is and where it belongs, from its name (a date in it, words of a title), and files already held that look like it",
+        security: signedIn,
+        requestBody: json({ type: 'object', required: ['what'], properties: { what: { enum: ['hanacha', 'recording', 'document'] }, name: { type: 'string' }, sha256: { type: 'string' }, pageHashes: { type: 'array', items: { type: ['string', 'null'] } } } }),
+        responses: ok('The date read, what it likely is, the items it may belong to, and where the file already is'),
+      },
+    },
+    '/v1/hanachos/text': {
+      post: {
+        summary: "A hanacha's words for a farbrengen or sicha (or a new farbrengen), a paragraph to a segment; words of unsure rights are kept and not shown until a steward decides",
+        security: signedIn,
+        requestBody: json({
+          type: 'object',
+          required: ['content', 'rights'],
+          properties: {
+            for: { type: 'string' },
+            eventTitle: { type: 'string' },
+            eventDate: { type: 'string' },
+            content: { type: 'string' },
+            rights: { enum: ['mine', 'public-domain', 'free', 'unsure'] },
+            language: { type: 'string' },
+            credit: { type: 'string' },
+          },
+        }),
+        responses: { '201': { description: 'The suggestion sent for review, and the text' } },
+      },
+    },
+    '/v1/entities/{id}/linked/counts': {
+      get: { summary: 'What points at an item, by type and field, with how many of each', parameters: [idParam], responses: ok('The groups') },
+    },
+    '/v1/entities/{id}/linked': {
+      get: {
+        summary: 'One group of what points at an item, in its own order, a page at a time, with the total',
+        parameters: [idParam, { ...q('field', 'The field that points here (work, event, sets, ...)'), required: true }, q('type', 'Only items of this type'), q('after', 'The `next` of the page before'), q('limit', 'Up to 500')],
+        responses: ok('Items, the total, and `next` (null at the end)'),
+      },
+    },
+    '/v1/covers': {
+      get: { summary: "Sefarim's covers, drawn from their title pages, while their PDFs are served; `machine` until a person chose the page", parameters: [q('ids', 'Up to 200 ids, comma separated')], responses: ok('Covers by id') },
+    },
+    '/v1/works/{id}/cover': {
+      get: { summary: "A sefer's cover, the page a person chose, and the served PDFs its title page may be chosen from", parameters: [idParam], responses: ok('The cover and its sources') },
+    },
+    '/v1/files/{sha256}/about': {
+      get: {
+        summary: "A file's own page: its rights, where it came from, what was made from it, and what uses it",
+        parameters: [{ name: 'sha256', in: 'path', required: true, schema: { type: 'string' } }, q('limit', 'Items using it, up to 500')],
+        responses: ok('The file'),
       },
     },
     '/v1/suggestions/contents-map': {

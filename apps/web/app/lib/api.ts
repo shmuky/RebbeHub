@@ -185,6 +185,50 @@ export interface SimilarItem {
 }
 
 /** One of an item's links, seen from the item. */
+/** A group of items pointing at one item through one field (a set's sefarim, a farbrengen's recordings). */
+export interface LinkGroup {
+  type: string;
+  field: string;
+  count: number;
+}
+
+/** A sefer's cover, drawn from a page of a served PDF; `machine` until a person chose the page. */
+export interface Cover {
+  file: string;
+  page: number;
+  machine: boolean;
+  reasons: string[];
+  credit: string | null;
+  image: { url: string; width: number; height: number };
+  thumb: { url: string; width: number; height: number };
+}
+
+export interface WorkCover {
+  work: string;
+  chosen: { file: string; page: number } | null;
+  cover: Cover | null;
+  sources: Array<{ sha256: string; via: string; item: string; pages: number | null }>;
+}
+
+export interface FileAbout {
+  sha256: string;
+  bytes: number;
+  mime: string;
+  rights: FileInfo['rights'];
+  credit: string | null;
+  storage: string;
+  url: string | null;
+  createdAt: string;
+  sources: Array<{ source: string; url: string | null; fetchedAt: string | null; attestation: string | null; uploaded: boolean; at: string }>;
+  derivations: Array<{ profile: string; sha256: string; bytes: number; encoder: string }>;
+  derivedFrom: Array<{ profile: string; sha256: string }>;
+  measured: { kind: 'pdf-pages' | 'audio'; pages: number | null; durationMs: number | null; encoder: string } | null;
+  pageImages: number;
+  pageFix: { verdict: string; reason: string | null; encoder: string } | null;
+  covers: Array<{ entity: string; page: number; machine: boolean }>;
+  usedBy: { total: number; items: Entity[] };
+}
+
 export interface RelationLink {
   id: string;
   kind: string;
@@ -368,6 +412,34 @@ export class RebbeHubApi {
 
   async backlinks(id: string, options: { field?: string; type?: string } = {}) {
     return (await this.get<{ backlinks: Backlink[] }>(`/v1/entities/${encodeURIComponent(id)}/backlinks`, options)).backlinks;
+  }
+
+  /** What points at an item, by type and field, with how many of each (an item page's "all of it"). */
+  async linkedCounts(id: string) {
+    return (await this.get<{ groups: LinkGroup[] }>(`/v1/entities/${encodeURIComponent(id)}/linked/counts`)).groups;
+  }
+
+  /** One group of what points at an item, in its own order, a page at a time, with the total. */
+  linked(id: string, options: { field: string; type?: string; after?: string; limit?: number }) {
+    return this.get<{ items: Entity[]; total: number; next: string | null }>(`/v1/entities/${encodeURIComponent(id)}/linked`, options);
+  }
+
+  /** Sefarim's covers from their title pages, by id; none for those without one. */
+  async covers(ids: readonly string[]): Promise<Record<string, Cover>> {
+    const unique = [...new Set(ids)].filter((id) => /^rh-[0-9a-z]+$/.test(id));
+    const out: Record<string, Cover> = {};
+    for (let i = 0; i < unique.length; i += 200) Object.assign(out, (await this.get<{ covers: Record<string, Cover> }>('/v1/covers', { ids: unique.slice(i, i + 200).join(',') })).covers);
+    return out;
+  }
+
+  /** A sefer's cover and the served PDFs a keeper may choose its title page from. */
+  workCover(id: string) {
+    return this.maybe(this.get<WorkCover>(`/v1/works/${encodeURIComponent(id)}/cover`));
+  }
+
+  /** A file's own page. */
+  fileAbout(sha256: string, limit?: number) {
+    return this.maybe(this.get<FileAbout>(`/v1/files/${encodeURIComponent(sha256)}/about`, { limit }));
   }
 
   async history(id: string) {
