@@ -6,6 +6,7 @@ import type { Resolution } from './merge.js';
 import { canSuggest } from './permissions.js';
 import { followersOf, noteWriting, requestReviewers, reviewGiven, threadEvent, type ThreadEventKind } from './threads.js';
 import { idsOfUsernames } from './usernames.js';
+import { viaColumn, type Via } from './via.js';
 
 /**
  * A Suggestion as a pull request (the plan, section 7): its conversation
@@ -51,8 +52,10 @@ export type TimelineItem =
       review: number | null;
       resolved: boolean;
       edited: boolean;
+      /** Sent by an agent for its author (via.ts). */
+      via: Via | null;
     }
-  | { type: 'review'; id: number; at: string; author: string; verdict: 'approve' | 'send_back' | 'comment'; body: string | null }
+  | { type: 'review'; id: number; at: string; author: string; verdict: 'approve' | 'send_back' | 'comment'; body: string | null; via: Via | null }
   | { type: 'event'; id: string; at: string; actor: string | null; kind: ThreadEventKind | 'opened'; detail: Record<string, unknown> };
 
 const iso = (value: Date | string) => new Date(value).toISOString();
@@ -68,13 +71,14 @@ interface CommentRow {
   review_id: string | number | null;
   resolved_at: Date | string | null;
   edited_at: Date | string | null;
+  via: Via | null;
 }
 
 /** The comments and events of a thread, as timeline items. */
 export async function threadItems(db: Db, kind: 'changeset' | 'report', id: number): Promise<TimelineItem[]> {
   const [comments, events] = await Promise.all([
     db.query<CommentRow>(
-      'SELECT id, parent_id, author, body, created_at, hidden_at, anchor, review_id, resolved_at, edited_at FROM comment WHERE target_kind = $1 AND target_id = $2 ORDER BY created_at, id',
+      'SELECT id, parent_id, author, body, created_at, hidden_at, anchor, review_id, resolved_at, edited_at, via FROM comment WHERE target_kind = $1 AND target_id = $2 ORDER BY created_at, id',
       [kind, String(id)],
     ),
     db.query<{ id: string | number; actor: string; kind: ThreadEventKind; detail: Record<string, unknown>; created_at: Date | string }>(
@@ -96,6 +100,7 @@ export async function threadItems(db: Db, kind: 'changeset' | 'report', id: numb
         review: c.review_id === null ? null : Number(c.review_id),
         resolved: c.resolved_at !== null,
         edited: c.edited_at !== null,
+        via: c.via ?? null,
       }),
     ),
     ...events.rows.map((e): TimelineItem => ({ type: 'event', id: `e${e.id}`, at: iso(e.created_at), actor: e.actor === 'system' ? null : e.actor, kind: e.kind, detail: e.detail ?? {} })),
@@ -118,11 +123,11 @@ export const byTime = (a: TimelineItem, b: TimelineItem) => a.at.localeCompare(b
 export async function suggestionTimeline(catalog: Catalog, id: number): Promise<{ items: TimelineItem[]; people: Record<string, PersonTag> }> {
   const cs = await catalog.changeset(id);
   const items = await threadItems(catalog.db, 'changeset', id);
-  const { rows: reviews } = await catalog.db.query<{ id: string | number; reviewer: string; verdict: 'approve' | 'send_back' | 'comment'; body: string | null; created_at: Date | string }>(
-    'SELECT id, reviewer, verdict, body, created_at FROM review WHERE changeset_id = $1 ORDER BY created_at, id',
+  const { rows: reviews } = await catalog.db.query<{ id: string | number; reviewer: string; verdict: 'approve' | 'send_back' | 'comment'; body: string | null; created_at: Date | string; via: Via | null }>(
+    'SELECT id, reviewer, verdict, body, created_at, via FROM review WHERE changeset_id = $1 ORDER BY created_at, id',
     [id],
   );
-  items.push(...reviews.map((r): TimelineItem => ({ type: 'review', id: Number(r.id), at: iso(r.created_at), author: r.reviewer, verdict: r.verdict, body: r.body })));
+  items.push(...reviews.map((r): TimelineItem => ({ type: 'review', id: Number(r.id), at: iso(r.created_at), author: r.reviewer, verdict: r.verdict, body: r.body, via: r.via ?? null })));
   items.push({ type: 'event', id: 'opened', at: iso(cs.created_at), actor: cs.author, kind: 'opened', detail: {} });
   const has = (kind: ThreadEventKind) => items.some((i) => i.type === 'event' && i.kind === kind);
   if (!has('submitted') && cs.submitted_at) items.push({ type: 'event', id: 'submitted', at: iso(cs.submitted_at), actor: cs.author, kind: 'submitted', detail: {} });
@@ -227,7 +232,7 @@ export async function reviewSuggestion(
     reviewId = await latestReview(catalog.db, id, by, 'send_back');
   } else if (input.verdict === 'comment') {
     reviewId = await catalog.db.transaction(async (tx) => {
-      const row = await one<{ id: number }>(tx, "INSERT INTO review (changeset_id, reviewer, verdict, body) VALUES ($1, $2, 'comment', $3) RETURNING id", [id, by, body || null]);
+      const row = await one<{ id: number }>(tx, "INSERT INTO review (changeset_id, reviewer, verdict, body, via) VALUES ($1, $2, 'comment', $3, $4) RETURNING id", [id, by, body || null, viaColumn()]);
       await reviewGiven(tx, { changesetId: id, by, verdict: 'comment', reviewId: Number(row!.id), body });
       return Number(row!.id);
     });
@@ -348,6 +353,8 @@ export interface SuggestionListItem {
   approvals: number;
   changesRequested: boolean;
   fixes: number[];
+  /** Sent by an agent for its author (via.ts). */
+  via: Via | null;
 }
 
 /**
@@ -393,8 +400,9 @@ export async function listSuggestions(
     approvals: number;
     changes_requested: boolean;
     fixes: Array<string | number>;
+    via: Via | null;
   }>(
-    `SELECT c.id, c.number, c.title, c.status, c.kind, c.author, c.created_at, c.submitted_at, c.closed_at,
+    `SELECT c.id, c.number, c.title, c.status, c.kind, c.author, c.created_at, c.submitted_at, c.closed_at, c.via,
             (SELECT count(*)::int FROM comment m WHERE m.target_kind = 'changeset' AND m.target_id = c.id::text AND m.hidden_at IS NULL) AS comments,
             ARRAY(SELECT q.reviewer FROM review_request q WHERE q.changeset_id = c.id ORDER BY q.requested_at) AS reviewers,
             (SELECT count(*)::int FROM review v WHERE v.changeset_id = c.id AND v.verdict = 'approve') AS approvals,
@@ -419,6 +427,7 @@ export async function listSuggestions(
     approvals: r.approvals,
     changesRequested: r.changes_requested,
     fixes: r.fixes.map(Number),
+    via: r.via ?? null,
   }));
   return { items, people: await peopleOf(db, items.flatMap((i) => [i.author, ...i.reviewers])), counts: counts ?? { open: 0, closed: 0 } };
 }

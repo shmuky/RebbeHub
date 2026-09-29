@@ -10,7 +10,7 @@ import { tt } from '../lib/threadStrings.js';
 import { useAccount } from '../lib/useAccount.js';
 import { useLang } from '../lib/useLang.js';
 import { Icon } from '../ui/Icon.js';
-import { Avatar, Box, EmptyState, Label, RelativeTime, StateIcon, Tabs } from '../ui/primitives.js';
+import { AgentBy, Avatar, Box, EmptyState, Label, RelativeTime, StateIcon, Tabs } from '../ui/primitives.js';
 import '../styles/pages/people.css';
 
 /**
@@ -175,6 +175,13 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
                             </span>
                           )}
                         </span>
+                        {a.via ? (
+                          <span className="row-sub">
+                            <AgentBy via={a.via} lang={lang} who={`@${person.username}`}>
+                              <span dir="ltr">@{person.username}</span>
+                            </AgentBy>
+                          </span>
+                        ) : null}
                         {a.excerpt ? (
                           <span className="row-sub activity-excerpt">
                             <bdi>{a.excerpt}</bdi>

@@ -643,6 +643,57 @@
   }
 }
 
+/* ================================================================== connecting an app (OAuth) */
+
+/* A little wider than sign-in: the redirect address is shown whole. */
+.auth.consent {
+  max-width: 520px;
+}
+
+.consent-h {
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.consent-scope {
+  cursor: pointer;
+  align-items: flex-start;
+}
+
+.consent-scope input {
+  margin-top: 4px;
+  accent-color: var(--accent-strong);
+}
+
+.consent-scope > .i {
+  margin-top: 2px;
+}
+
+.consent-never .row-sub {
+  margin-top: 0;
+}
+
+.consent-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.consent-actions .btn.primary {
+  flex: 1;
+  justify-content: center;
+}
+
+.consent-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+}
+
+.consent-links {
+  text-align: center;
+}
+
 /* ================================================================== the inbox */
 
 .inbox-row {

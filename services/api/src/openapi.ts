@@ -239,7 +239,18 @@ const OPERATIONS: Operation[] = [
   // Tokens (site only: a token never makes tokens)
   { method: 'get', path: '/v1/tokens', operationId: 'listTokens', tag: 'Tokens', summary: 'Your API tokens (their prefixes only), revoked ones marked', access: 'site', ok: { description: 'Tokens', schema: obj({ tokens: arr(ref('ApiToken')) }, ['tokens']) } },
   { method: 'post', path: '/v1/tokens', operationId: 'createToken', tag: 'Tokens', summary: 'Make an API token; the token itself is shown this once', access: 'site', body: obj({ name: str('What uses it', { minLength: 1, maxLength: 80 }), scopes: arr({ enum: ['read', 'write'] }, 'Default: read'), expiresInDays: int(undefined, { minimum: 1, maximum: 3650 }) }, ['name']), ok: { status: 201, description: 'The token, and what is kept of it', schema: { allOf: [ref('ApiToken'), obj({ token: str('rhp_… - keep it secret') }, ['token'])] } } },
-  { method: 'delete', path: '/v1/tokens/{id}', operationId: 'revokeToken', tag: 'Tokens', summary: 'Revoke a token; it stops working at once', access: 'site', params: [path('id', str(undefined, { pattern: '^tok-[\\w-]+$' }))], ok: { description: 'Revoked', schema: OK } },
+  { method: 'delete', path: '/v1/tokens/{id}', operationId: 'revokeToken', tag: 'Tokens', summary: 'Revoke a token, or end a connected app; it stops working at once', access: 'site', params: [path('id', str('tok-… for a token, oac-… for a connected app', { pattern: '^(tok|oac)-[\\w-]+$' }))], ok: { description: 'Revoked', schema: OK } },
+
+  // Connecting an app with OAuth 2.1 (Claude and other MCP clients)
+  { method: 'get', path: '/.well-known/oauth-protected-resource', operationId: 'protectedResource', tag: 'OAuth', summary: "The API's Protected Resource Metadata (RFC 9728): which authorization server gives its tokens", access: 'public', ok: { description: 'Metadata', schema: ref('ProtectedResource') } },
+  { method: 'get', path: '/.well-known/oauth-protected-resource/mcp', operationId: 'mcpProtectedResource', tag: 'OAuth', summary: "The MCP server's Protected Resource Metadata (RFC 9728), named in its 401's WWW-Authenticate", access: 'public', ok: { description: 'Metadata', schema: ref('ProtectedResource') } },
+  { method: 'get', path: '/.well-known/oauth-authorization-server', operationId: 'authorizationServer', tag: 'OAuth', summary: 'Authorization Server Metadata (RFC 8414): the endpoints, scopes read and write, PKCE S256, registration and Client ID Metadata Documents', access: 'public', ok: { description: 'Metadata', schema: any() } },
+  { method: 'post', path: '/oauth/register', operationId: 'oauthRegister', tag: 'OAuth', summary: 'Register an app (RFC 7591): its name and redirect addresses; a secret only if it asks for one', access: 'public', body: obj({ client_name: str(), client_uri: str(), redirect_uris: arr(str(), "https, http://localhost, or an app's own scheme"), token_endpoint_auth_method: { enum: ['none', 'client_secret_post', 'client_secret_basic'] }, grant_types: arr(str()), response_types: arr(str()) }, ['redirect_uris']), ok: { status: 201, description: 'The app, with its client_id', schema: any() } },
+  { method: 'get', path: '/oauth/authorize', operationId: 'oauthAuthorize', tag: 'OAuth', summary: "Start connecting (authorization code with PKCE): the person is sent to the site's consent page, then back to the app", access: 'public', params: [query('response_type', { enum: ['code'] }, undefined, true), query('client_id', str("A registered client_id, or the https address of the app's Client ID Metadata Document"), undefined, true), query('redirect_uri', str()), query('scope', str('read, write or both, space separated (default both; the person may allow reading only)')), query('state', str()), query('code_challenge', str('base64url sha256 of the verifier'), undefined, true), query('code_challenge_method', { enum: ['S256'] }, undefined, true), query('resource', str('RFC 8707: https://api.rebbehub.org/mcp (the MCP server) or https://api.rebbehub.org (the whole API)')), query('ui_locales', str('en for the consent page in English'))], ok: { status: 302, description: 'To the consent page, or back to the app with an error' } },
+  { method: 'post', path: '/oauth/token', operationId: 'oauthToken', tag: 'OAuth', summary: 'Trade a code (with its PKCE verifier) or a refresh token for an access token (an hour) and a new refresh token', access: 'public', body: { raw: 'application/x-www-form-urlencoded', description: 'grant_type, client_id, and code, code_verifier, redirect_uri, resource; or refresh_token (and scope, resource)' }, ok: { description: 'Tokens', schema: obj({ access_token: str('rho_…'), token_type: { const: 'Bearer' }, expires_in: int(), refresh_token: str('rhr_…'), scope: str() }, ['access_token', 'token_type', 'expires_in', 'refresh_token', 'scope']) }, also: { '401': 'invalid_client: the app is not known, or its secret is wrong' } },
+  { method: 'post', path: '/oauth/revoke', operationId: 'oauthRevoke', tag: 'OAuth', summary: 'Revoke an access or refresh token (RFC 7009): the whole connection ends', access: 'public', body: { raw: 'application/x-www-form-urlencoded', description: 'token (and token_type_hint, client_id)' }, ok: { description: 'Done, whether or not the token was known' } },
+  { method: 'get', path: '/v1/oauth/requests/{id}', operationId: 'oauthRequest', tag: 'OAuth', summary: "An app's request to connect, for the consent page: the app, where it sends the person back, the scopes", access: 'site', params: [path('id', str(undefined, { pattern: '^oar-[\\w-]+$' }))], ok: { description: 'The request', schema: any() } },
+  { method: 'post', path: '/v1/oauth/requests/{id}', operationId: 'oauthDecide', tag: 'OAuth', summary: "The person's answer to an app's request to connect; answers where to send the browser", access: 'site', params: [path('id', str(undefined, { pattern: '^oar-[\\w-]+$' }))], body: obj({ approve: bool(), scopes: arr({ enum: ['read', 'write'] }, 'Allowed; never more than asked') }, ['approve']), ok: { description: 'Where to go', schema: obj({ redirect: str() }, ['redirect']) } },
 
   // Mirrors and dumps
   { method: 'get', path: '/v1/mirrors', operationId: 'mirrors', tag: 'Mirrors', summary: 'Everything a mirror needs: the git mirror, the release keys, every edition and its dumps', access: 'public', ok: { description: 'Mirrors', schema: any() } },
@@ -253,7 +264,7 @@ const OPERATIONS: Operation[] = [
   { method: 'post', path: '/oai', operationId: 'oaiPost', tag: 'Libraries', summary: 'OAI-PMH, the same arguments sent as a form', access: 'public', body: { raw: 'application/x-www-form-urlencoded', description: 'verb and the other arguments' }, ok: { description: 'OAI-PMH XML', type: 'text/xml' } },
 
   // Agents
-  { method: 'post', path: '/mcp', operationId: 'mcp', tag: 'Agents', summary: 'The Model Context Protocol server (Streamable HTTP, JSON answers, no sessions)', description: 'Tools: search, get_item, list_children, get_text, suggest_fix (with a write token). Send JSON-RPC 2.0; see docs/developers/agents.md.', access: 'optional', body: any('A JSON-RPC 2.0 message, or a batch'), ok: { description: 'The JSON-RPC answer', schema: any() }, also: { '202': 'Only notifications were sent: nothing to answer' } },
+  { method: 'post', path: '/mcp', operationId: 'mcp', tag: 'Agents', summary: 'The Model Context Protocol server (Streamable HTTP, JSON answers, no sessions)', description: 'Tools: search, get_item, list_children, get_text, suggest_fix, list_issues, open_issue. Send JSON-RPC 2.0. Reading needs no account. A writing tool without a token answers 401 with WWW-Authenticate naming the Protected Resource Metadata (so MCP clients such as claude.ai ask the person to connect with OAuth), and with a read-only token 403 insufficient_scope. See docs/developers/agents.md.', access: 'optional', body: any('A JSON-RPC 2.0 message, or a batch'), ok: { description: 'The JSON-RPC answer', schema: any() }, also: { '202': 'Only notifications were sent: nothing to answer', '401': 'A writing tool without a token: WWW-Authenticate says where to connect', '403': 'A writing tool with a read-only token: insufficient_scope' } },
   { method: 'get', path: '/mcp', operationId: 'mcpStream', tag: 'Agents', summary: 'Not offered: this server opens no event stream', access: 'public', ok: { status: 405, description: 'POST only' } },
   { method: 'delete', path: '/mcp', operationId: 'mcpEnd', tag: 'Agents', summary: 'Not offered: there are no sessions to end', access: 'public', ok: { status: 405, description: 'POST only' } },
 
@@ -288,6 +299,7 @@ const OPERATIONS: Operation[] = [
 // ------------------------------------------------------------------ shared schemas
 
 const SCHEMAS: Record<string, Schema> = {
+  Via: obj({ kind: { enum: ['token', 'oauth'], description: 'A personal API token, or an app connected with OAuth' }, id: str('The token (tok-…) or the connection (oac-…)'), name: str("The token's name, or the app's (Claude)"), client: str("A connected app's client id") }, ['kind', 'id', 'name'], { description: 'Sent by an agent for its author, not by their own hands; null otherwise. The site shows it as "Claude · for @person".' }),
   ApiError: obj(
     {
       error: { enum: ['bad-request', 'unauthorized', 'forbidden', 'not-found', 'conflict', 'invalid', 'rate-limited', 'internal', 'state', 'too-large', 'upstream'], description: 'What kind of error, for programs' },
@@ -297,7 +309,7 @@ const SCHEMAS: Record<string, Schema> = {
     },
     ['error', 'message'],
   ),
-  About: obj({ name: str(), version: str(), head: int('The latest commit\'s seq'), docs: str(), developers: str(), mcp: str(), licence: any() }, ['name', 'version', 'head']),
+  About: obj({ name: str(), version: str(), head: int('The latest commit\'s seq'), docs: str(), developers: str(), mcp: str('The MCP server'), licence: any() }, ['name', 'version', 'head']),
   Item: obj(
     {
       id: idSchema,
@@ -311,13 +323,14 @@ const SCHEMAS: Record<string, Schema> = {
     ['id', 'type', 'path', 'rev', 'data'],
   ),
   ItemPage: obj({ items: arr(ref('Item')), next: nullable(str('Pass back as cursor for the next page; null on the last')) }, ['items', 'next']),
-  Commit: obj({ seq: int(), at: str(undefined, { format: 'date-time' }), message: str(), mergedBy: str(), author: str(), changes: arr(obj({ id: idSchema, type: str(), path: nullable(str()), rev: int(), data: nullable(any()) })) }, ['seq', 'at', 'message', 'mergedBy', 'author', 'changes']),
+  Commit: obj({ seq: int(), at: str(undefined, { format: 'date-time' }), message: str(), mergedBy: str(), author: str(), via: nullable(ref('Via')), changes: arr(obj({ id: idSchema, type: str(), path: nullable(str()), rev: int(), data: nullable(any()) })) }, ['seq', 'at', 'message', 'mergedBy', 'author', 'changes']),
   Suggestion: obj(
     {
       id: int(),
       title: str(),
       description: nullable(str()),
       author: str(),
+      via: nullable(ref('Via')),
       status: { enum: ['draft', 'open', 'merged', 'sent_back', 'withdrawn'] },
       kind: str(),
       project_id: nullable(int()),
@@ -331,7 +344,7 @@ const SCHEMAS: Record<string, Schema> = {
     },
     ['id', 'title', 'author', 'status'],
   ),
-  SuggestionListItem: obj({ id: int(), number: int(), title: str(), status: { enum: ['draft', 'open', 'merged', 'sent_back', 'withdrawn'] }, kind: str(), author: str(), createdAt: str(), submittedAt: nullable(str()), closedAt: nullable(str()), comments: int(), reviewers: arr(str()), approvals: int(), changesRequested: bool(), fixes: arr(int(), 'Issues it closes, by number') }, ['id', 'number', 'title', 'status', 'author']),
+  SuggestionListItem: obj({ id: int(), number: int(), title: str(), status: { enum: ['draft', 'open', 'merged', 'sent_back', 'withdrawn'] }, kind: str(), author: str(), createdAt: str(), submittedAt: nullable(str()), closedAt: nullable(str()), comments: int(), reviewers: arr(str()), approvals: int(), changesRequested: bool(), fixes: arr(int(), 'Issues it closes, by number'), via: nullable(ref('Via')) }, ['id', 'number', 'title', 'status', 'author']),
   Issue: obj(
     {
       id: int(),
@@ -344,6 +357,7 @@ const SCHEMAS: Record<string, Schema> = {
       body: nullable(str()),
       private: bool(),
       author: nullable(str('An account id; null for a reader without an account')),
+      via: nullable(ref('Via')),
       entity: nullable(any()),
       set: nullable(str()),
       labels: arr(obj({ name: str(), description: nullable(str()), color: str() })),
@@ -396,7 +410,8 @@ const SCHEMAS: Record<string, Schema> = {
     },
     ['file', 'page', 'machine', 'image', 'thumb'],
   ),
-  ApiToken: obj({ id: str(), name: str(), prefix: str('Its first characters, to recognise it'), scopes: arr({ enum: ['read', 'write'] }), createdAt: str(), lastUsedAt: nullable(str()), expiresAt: nullable(str()), revokedAt: nullable(str()) }, ['id', 'name', 'prefix', 'scopes', 'createdAt']),
+  ApiToken: obj({ id: str(), kind: { enum: ['personal', 'oauth'], description: "A personal token, or an app connected with OAuth (its name is the app's)" }, name: str(), prefix: str('Its first characters, to recognise it'), scopes: arr({ enum: ['read', 'write'] }), createdAt: str(), lastUsedAt: nullable(str()), expiresAt: nullable(str()), revokedAt: nullable(str()), client: obj({ id: str(), name: str(), uri: nullable(str()), host: nullable(str()) }, ['id', 'name']) }, ['id', 'kind', 'name', 'prefix', 'scopes', 'createdAt']),
+  ProtectedResource: obj({ resource: str(), authorization_servers: arr(str()), scopes_supported: arr(str()), bearer_methods_supported: arr(str()), resource_name: str(), resource_documentation: str() }, ['resource', 'authorization_servers']),
 };
 
 // ------------------------------------------------------------------ the document
@@ -487,7 +502,8 @@ export const API_TAGS = [
   { name: 'Projects', description: 'Group efforts through a gap, the Missing board' },
   { name: 'Personal', description: 'What you follow, where you stopped' },
   { name: 'Webhooks', description: 'Every merge posted to your address, signed' },
-  { name: 'Tokens', description: 'Personal API tokens, made on the account page' },
+  { name: 'Tokens', description: 'Personal API tokens, made on the account page, and apps connected with OAuth' },
+  { name: 'OAuth', description: 'Connecting an app (Claude, other MCP clients) as a person: OAuth 2.1 with PKCE, registration and metadata' },
   { name: 'Mirrors', description: 'Editions and their signed dumps' },
   { name: 'Libraries', description: 'OAI-PMH and IIIF' },
   { name: 'Agents', description: 'llms.txt and the MCP server' },
@@ -512,7 +528,7 @@ export const OPENAPI = {
   tags: API_TAGS,
   components: {
     securitySchemes: {
-      token: { type: 'http', scheme: 'bearer', bearerFormat: 'rhp_…', description: 'A personal API token from the account page, with the read or write scope.' },
+      token: { type: 'http', scheme: 'bearer', bearerFormat: 'rhp_… or rho_…', description: 'A personal API token from the account page, or an OAuth access token given to a connected app, with the read or write scope.' },
       session: { type: 'apiKey', in: 'cookie', name: '__Host-rh_session', description: "The site's own session, from its own pages only." },
     },
     schemas: SCHEMAS,

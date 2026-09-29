@@ -3,6 +3,7 @@ import type { LocalName } from '@rebbehub/model';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import type { Route } from './+types/home';
+import type { Via } from '../lib/threads.js';
 import { ContinueRow } from '../components/ContinueRow.js';
 import { eventData, type EventItem } from '../components/EventRow.js';
 import type { Entity, SuggestionDetail } from '../lib/api.js';
@@ -22,7 +23,7 @@ import { kviusYears, thisWeek } from '../lib/week.js';
 import type { DiffPart } from '../lib/wordDiff.js';
 import { InlineDiff } from '../ui/Diff.js';
 import { Icon, type IconName } from '../ui/Icon.js';
-import { Bar, Label, MachineLabel, RelativeTime, StatusBadge, cx } from '../ui/primitives.js';
+import { AgentBy, Bar, Label, MachineLabel, RelativeTime, StatusBadge, cx } from '../ui/primitives.js';
 
 /**
  * The home page is the community's desk. Under the header, the day: its
@@ -95,6 +96,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       number: d.changeset.number ?? null,
       who: d.names[d.changeset.author] ?? d.changeset.author,
       whoId: d.changeset.author,
+      via: d.changeset.via ?? null,
       title: d.changeset.title,
       diff,
       labels: detailLabels(d),
@@ -127,6 +129,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         at: c.at,
         who: personName(c.author, who?.authorName, lang),
         whoId: c.author,
+        via: c.via ?? null,
         by: who?.mergedByName && c.mergedBy !== c.author ? who.mergedByName : null,
         title: c.message,
         count: c.changes.length,
@@ -175,9 +178,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 type FeedItem =
-  | { kind: 'suggestion'; key: string; at: string; id: number; number: number | null; who: string; whoId: string; title: string; diff: DiffPart[] | null; labels: string[]; where: string | null; whereHref: string | null; entities: string[]; words: number; items: number }
+  | { kind: 'suggestion'; key: string; at: string; id: number; number: number | null; who: string; whoId: string; via?: Via | null; title: string; diff: DiffPart[] | null; labels: string[]; where: string | null; whereHref: string | null; entities: string[]; words: number; items: number }
   | { kind: 'issue'; key: string; at: string; number: number; who: string; whoId: string; title: string; labels: Array<{ name: string; color: string }>; where: { label: string; path: string } | null; comments: number; entities: string[] }
-  | { kind: 'merged' | 'bot'; key: string; at: string; who: string; whoId: string; by: string | null; title: string; count: number; types: string[]; items: Array<{ id: string; path: string; label: string; type: string }>; entities: string[] };
+  | { kind: 'merged' | 'bot'; key: string; at: string; who: string; whoId: string; via?: Via | null; by: string | null; title: string; count: number; types: string[]; items: Array<{ id: string; path: string; label: string; type: string }>; entities: string[] };
 
 export function meta({ loaderData }: Route.MetaArgs) {
   if (!loaderData) return [];
@@ -358,7 +361,10 @@ function FeedEntry({ item, lang, forMe }: { item: FeedItem; lang: Lang; forMe?: 
         </span>
         <div>
           <div className="line">
-            <b>{item.who}</b> {w(lang, forMe ? 'askedYourReview' : 'askedReview')}{' '}
+            <AgentBy via={item.via} lang={lang} who={item.who}>
+              <b>{item.who}</b>
+            </AgentBy>{' '}
+            {w(lang, forMe ? 'askedYourReview' : 'askedReview')}{' '}
             <Link to={to}>
               <b>#{item.number ?? item.id}</b>
             </Link>
@@ -429,11 +435,17 @@ function FeedEntry({ item, lang, forMe }: { item: FeedItem; lang: Lang; forMe?: 
         <div className="line">
           {item.by ? (
             <>
-              <b>{item.by}</b> {w(lang, 'approved')} {w(lang, 'approvedChange')} <b>{item.who}</b>
+              <b>{item.by}</b> {w(lang, 'approved')} {w(lang, 'approvedChange')}{' '}
+              <AgentBy via={item.via} lang={lang} who={item.who}>
+                <b>{item.who}</b>
+              </AgentBy>
             </>
           ) : (
             <>
-              <b>{item.who}</b> {lang === 'he' ? 'הוסיף' : 'added'}
+              <AgentBy via={item.via} lang={lang} who={item.who}>
+                <b>{item.who}</b>
+              </AgentBy>{' '}
+              {lang === 'he' ? 'הוסיף' : 'added'}
             </>
           )}
           {item.items[0] ? (

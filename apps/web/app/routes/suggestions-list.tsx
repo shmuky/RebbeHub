@@ -12,7 +12,7 @@ import { useAccount } from '../lib/useAccount.js';
 import { useLang } from '../lib/useLang.js';
 import { Icon } from '../ui/Icon.js';
 import { TokenSearch } from '../ui/TokenSearch.js';
-import { Avatar, EmptyState, RelativeTime, Skeleton, StateIcon, StatusBadge, cx } from '../ui/primitives.js';
+import { AgentBy, Avatar, EmptyState, RelativeTime, Skeleton, StateIcon, StatusBadge, cx } from '../ui/primitives.js';
 
 /**
  * Suggestions as pull requests are listed: open (waiting for review, or
@@ -281,7 +281,9 @@ export default function Suggestions({ loaderData }: Route.ComponentProps) {
                       </div>
                       <div className="row-sub">
                         <span className="num">#{s.number}</span> · {w(lang, 'opened')} <RelativeTime at={s.submittedAt ?? s.createdAt} lang={lang} /> {w(lang, 'by')}{' '}
-                        {author?.username ? <Link to={href(personPath(author.username), lang)}>{author.name}</Link> : <span>{author?.name ?? s.author}</span>}
+                        <AgentBy via={s.via} lang={lang} who={author?.username ? `@${author.username}` : author?.name}>
+                          {author?.username ? <Link to={href(personPath(author.username), lang)}>{author.name}</Link> : <span>{author?.name ?? s.author}</span>}
+                        </AgentBy>
                         {s.approvals ? (
                           <span className="st-approved">
                             {' '}

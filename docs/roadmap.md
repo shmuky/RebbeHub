@@ -170,7 +170,12 @@ inside talk pages' wiki text, and a steward's page to edit labels.
   OpenAPI 3.1 document, checked by a test; rate limits by address and by
   token; `/developers`, drawn from [docs/developers](developers/index.md),
   with an interactive reference; `/llms.txt`, `/llms-full.txt`, and an MCP
-  server at `api.rebbehub.org/mcp` (search, items, texts, suggest a fix);
+  server at `api.rebbehub.org/mcp` (search, items, texts, suggest a fix)
+  that Claude and other MCP clients connect to with OAuth 2.1 (PKCE,
+  registration or a Client ID Metadata Document, refresh and revoking),
+  approved on `/oauth/consent` and listed on the account page; reading
+  needs no account, and a writing tool asks for sign-in (step-up);
+  what a token or app sends shows as the agent's, for the person;
   the typed client `@rebbehub/client`. The rate limits need the
   `[[ratelimits]]` bindings deployed ([configuration](configuration.md)).
 - **Covers from the shaar** ✅: `rebbehub covers` draws a sefer's cover
