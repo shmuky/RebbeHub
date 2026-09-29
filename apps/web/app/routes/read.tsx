@@ -1,4 +1,3 @@
-import { Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { data, Link, useNavigate } from 'react-router';
 import type { Route } from './+types/read';
@@ -11,6 +10,9 @@ import { useAccount } from '../lib/useAccount.js';
 import { useLang } from '../lib/useLang.js';
 import { PDF_COLORS, pdfCssFilter, resolvedColors, setPdfLook, usePdfLook, usePrefersDark, type PdfColors } from '../reader/look.js';
 import { fixesByPage } from '../reader/pageFix.js';
+import { Icon } from '../ui/Icon.js';
+import { Bar, EmptyState, cx } from '../ui/primitives.js';
+import '../styles/pages/reader.css';
 
 /**
  * Reading a PDF in the site itself: a hanacha, a scan, the scan behind a
@@ -99,22 +101,29 @@ export function readHref(doc: { url: string; title: string; sub?: string; page?:
 type LoadState = { status: 'loading'; percent: number | null } | { status: 'ready'; pages: number } | { status: 'error' };
 
 const WORDS = {
-  pagesLook: { he: 'הדפים', en: 'Pages' },
-  auto: { he: 'לפי מצב המכשיר', en: 'As the device (dark at night)' },
+  pagesLook: { he: 'צבע הדפים', en: 'Page colours' },
+  auto: { he: 'אוטומטי', en: 'Auto' },
+  autoHint: { he: 'כהים כשהמכשיר במצב כהה', en: 'Dark when the device is' },
   original: { he: 'כפי שנסרקו', en: 'As scanned' },
-  sepia: { he: 'ספיה (צהבהב)', en: 'Sepia' },
+  sepia: { he: 'ספיה', en: 'Sepia' },
   gray: { he: 'אפור', en: 'Grey' },
   dark: { he: 'כהים', en: 'Dark' },
-  contrast: { he: 'ניגודיות חזקה', en: 'Stronger contrast' },
+  contrast: { he: 'ניגודיות', en: 'Contrast' },
+  contrastHint: { he: 'ניגודיות חזקה, לסריקה דהויה', en: 'Stronger contrast, for a faint scan' },
   resumed: { he: 'נפתח בעמוד', en: 'Opened at page' },
   resumedTail: { he: ', היכן שהפסקתם.', en: ', where you stopped.' },
   fromStart: { he: 'מההתחלה', en: 'From the start' },
+  page: { he: 'עמ׳', en: 'p.' },
+  of: { he: 'מתוך', en: 'of' },
+  toolbar: { he: 'כלי הקריאה', en: 'Reading tools' },
+  original_file: { he: 'הקובץ', en: 'File' },
 } as const;
 
-/** The page at the top of the screen: the first whose foot is still below the reader's header. */
+/** The page at the top of the screen: the first whose foot is still below the reader's toolbar. */
 function pageInView(container: HTMLElement): number {
   const pages = container.children;
-  for (let i = 0; i < pages.length; i++) if (pages[i]!.getBoundingClientRect().bottom > 72) return i + 1;
+  const edge = (document.querySelector('.reader-bar')?.getBoundingClientRect().bottom ?? 72) + 8;
+  for (let i = 0; i < pages.length; i++) if (pages[i]!.getBoundingClientRect().bottom > edge) return i + 1;
   return pages.length || 1;
 }
 
@@ -136,6 +145,8 @@ export default function Read({ loaderData }: Route.ComponentProps) {
   // Where the reader is, so drawing the pages again (straightened or not) keeps the place, and where it opened.
   const current = useRef<number | null>(pageAsked ? page : null);
   const [resumedAt, setResumedAt] = useState<number | null>(null);
+  // The page at the top of the screen, for the toolbar's count.
+  const [at, setAt] = useState(pageAsked ? page : 1);
   const moved = useRef(false);
 
   // A pinch zooms the page (reader/pdfPageZoom.ts), not the whole site: native pinch zoom is off while reading.
@@ -150,8 +161,9 @@ export default function Read({ loaderData }: Route.ComponentProps) {
 
   const goTo = (n: number) => {
     const box = pages.current?.children[n - 1];
-    if (box) box.scrollIntoView({ block: 'start' });
+    if (box) window.scrollTo(0, window.scrollY + box.getBoundingClientRect().top - (document.querySelector('.reader-bar')?.getBoundingClientRect().bottom ?? 0) - 12);
     current.current = n;
+    setAt(n);
   };
 
   useEffect(() => {
@@ -223,10 +235,17 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     const record = (flush: boolean) => {
       const at = pageInView(container);
       current.current = at;
+      setAt(at);
       recordPlace({ kind: 'read', key: src, title: title || src, sub, href: readHref({ url: src, title, sub }, lang), place: { page: at, pages: total } }, { sync: Boolean(account), flush });
     };
+    let frame = 0;
     const onScroll = () => {
       moved.current = true;
+      if (!frame)
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          setAt(pageInView(container));
+        });
       if (timer) return;
       timer = setTimeout(() => {
         timer = null;
@@ -236,76 +255,107 @@ export default function Read({ loaderData }: Route.ComponentProps) {
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       window.removeEventListener('scroll', onScroll);
+      if (frame) cancelAnimationFrame(frame);
       if (timer) clearTimeout(timer);
       if (moved.current) record(true);
     };
   }, [total, src, title, sub, lang, account]);
 
+  const total_ = state.status === 'ready' ? state.pages : null;
   return (
-    <div className={['pdf-viewer-screen', zoomed && 'zoomed', colors === 'dark' && 'pdf-dark'].filter(Boolean).join(' ')} style={{ '--pdf-filter': pdfCssFilter(colors, look.contrast) } as CSSProperties}>
-      <header className="reader-head">
-        <button type="button" className="link-button" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}>
-          {lang === 'he' ? '→' : '←'} {t(lang, 'back')}
-        </button>
-        <h1>{title}</h1>
-        {sub ? <p className="subtitle">{sub}</p> : null}
-        <p className="reader-look row-sub">
-          <label>
-            {WORDS.pagesLook[lang]}{' '}
-            <select value={look.colors} onChange={(e) => setPdfLook({ colors: e.target.value as PdfColors })}>
-              {PDF_COLORS.map((c) => (
-                <option key={c} value={c}>
-                  {WORDS[c][lang]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <input type="checkbox" checked={look.contrast} onChange={(e) => setPdfLook({ contrast: e.target.checked })} /> {WORDS.contrast[lang]}
-          </label>
+    <div className={cx('pdf-viewer-screen', zoomed && 'zoomed', colors === 'dark' && 'pdf-dark')} style={{ '--pdf-filter': pdfCssFilter(colors, look.contrast) } as CSSProperties}>
+      <header className="reader-bar">
+        <div className="reader-bar-in">
+          <button type="button" className="btn ghost icon" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))} aria-label={t(lang, 'back')} title={t(lang, 'back')}>
+            <Icon name="back" className="flip-ltr" />
+          </button>
+          <div className="reader-titles">
+            <h1 className="reader-title">{title || t(lang, 'readScan')}</h1>
+            {sub ? <p className="reader-sub">{sub}</p> : null}
+          </div>
+          <span className="reader-count" aria-live="polite">
+            {total_ ? (
+              <>
+                {WORDS.page[lang]} <b>{at}</b> {WORDS.of[lang]} {total_}
+              </>
+            ) : null}
+          </span>
+          <a className="btn sm reader-file" href={src} target="_blank" rel="noreferrer" title={t(lang, 'openOriginal')}>
+            <Icon name="external" size={14} />
+            <span>{WORDS.original_file[lang]}</span>
+          </a>
+        </div>
+        <div className="reader-tools" role="toolbar" aria-label={WORDS.toolbar[lang]}>
+          <span className="reader-tools-label">{WORDS.pagesLook[lang]}</span>
+          <div className="segmented reader-colors" role="group" aria-label={WORDS.pagesLook[lang]}>
+            {PDF_COLORS.map((c) => (
+              <button key={c} type="button" aria-pressed={look.colors === c} onClick={() => setPdfLook({ colors: c as PdfColors })} title={c === 'auto' ? WORDS.autoHint[lang] : undefined}>
+                <i className={`paper ${c}`} aria-hidden="true" />
+                {WORDS[c][lang]}
+              </button>
+            ))}
+          </div>
+          <button type="button" className="btn sm toggle" aria-pressed={look.contrast} onClick={() => setPdfLook({ contrast: !look.contrast })} title={WORDS.contrastHint[lang]}>
+            <Icon name="sun" size={14} />
+            {WORDS.contrast[lang]}
+          </button>
           {fix ? (
-            <button type="button" className="link-button reader-straighten" aria-pressed={!straight} onClick={() => setStraight(!straight)}>
+            <button type="button" className="btn sm toggle reader-straighten" aria-pressed={!straight} onClick={() => setStraight(!straight)}>
+              <Icon name="scan" size={14} />
               {t(lang, straight ? 'showAsScanned' : 'showStraightened')}
             </button>
           ) : null}
-        </p>
-        {resumedAt && ready ? (
-          <p className="row-sub reader-resumed" role="status">
-            {WORDS.resumed[lang]} {resumedAt}
-            {WORDS.resumedTail[lang]}{' '}
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => {
-                window.scrollTo(0, 0);
-                current.current = 1;
-                setResumedAt(null);
-              }}
-            >
-              {WORDS.fromStart[lang]}
-            </button>
-          </p>
-        ) : null}
+        </div>
       </header>
+      {resumedAt && ready ? (
+        <div className="reader-note">
+          <p className="alert info reader-resumed" role="status">
+            <Icon name="history" />
+            <span>
+              {WORDS.resumed[lang]} {resumedAt}
+              {WORDS.resumedTail[lang]}{' '}
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  window.scrollTo(0, 0);
+                  current.current = 1;
+                  setAt(1);
+                  setResumedAt(null);
+                }}
+              >
+                {WORDS.fromStart[lang]}
+              </button>
+            </span>
+          </p>
+        </div>
+      ) : null}
       <div className="pdf-viewer-status">
         {state.status === 'loading' ? (
-          <p className="subtitle pdf-loading">
-            <Loader2 className="pdf-loading-spinner" size={16} aria-hidden="true" /> {t(lang, 'openingPdf')}
-            {state.percent != null ? ` ${state.percent}%` : ''}
-          </p>
+          <div className="pdf-loading" role="status">
+            <p>
+              <Icon name="loader" className="spin" /> {t(lang, 'openingPdf')}
+              {state.percent != null ? ` ${state.percent}%` : ''}
+            </p>
+            {state.percent != null ? <Bar value={state.percent} label={t(lang, 'openingPdf')} /> : null}
+          </div>
         ) : null}
         {state.status === 'error' ? (
-          <>
-            <p>{t(lang, 'readerFailed')}</p>
-            <a className="button" href={src} target="_blank" rel="noreferrer">
-              {t(lang, 'openOriginal')}
-            </a>
-          </>
+          <EmptyState
+            icon="warn"
+            title={t(lang, 'readerFailed')}
+            actions={
+              <a className="btn primary" href={src} target="_blank" rel="noreferrer">
+                <Icon name="external" />
+                {t(lang, 'openOriginal')}
+              </a>
+            }
+          />
         ) : null}
       </div>
       <div ref={pages} className="pdf-pages" />
       {state.status === 'ready' ? (
-        <p className="pdf-viewer-status row-sub">
+        <p className="pdf-viewer-foot">
           <a href={src} target="_blank" rel="noreferrer">
             {t(lang, 'openOriginal')}
           </a>{' '}

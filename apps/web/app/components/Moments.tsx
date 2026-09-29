@@ -4,6 +4,8 @@ import type { Lang } from '../lib/i18n.js';
 import { clockOf, tn } from '../lib/i18nNetwork.js';
 import { labelOf } from '../lib/labels.js';
 import { href, itemPath } from '../lib/links.js';
+import { Icon } from '../ui/Icon.js';
+import { MachineLabel } from '../ui/primitives.js';
 
 /**
  * Search hits that land on the moment: a line on a scan's page opens the
@@ -48,27 +50,41 @@ function where(moment: Moment, refs: Record<string, Entity>, lang: Lang): string
   return [name, recording ? labelOf(recording, lang) : null, moment.startMs !== null ? `${tn(lang, 'heardAt')}${clockOf(moment.startMs)}` : null].filter(Boolean).join(' · ');
 }
 
+/**
+ * Moments as rows in a box: the words found, set as the text is, and
+ * where they are. Machine output nobody checked carries its label.
+ */
 export function MomentRows({ moments, refs, lang }: { moments: readonly Moment[]; refs: Record<string, Entity>; lang: Lang }) {
   return (
-    <ol className="moments">
+    <ol className="box moments">
       {moments.map((m) => {
         const to = momentHref(m, refs, lang);
         const words = m.kind === 'scan-line' ? m.line.text : m.snippet;
         return (
-          <li key={m.id} className={m.machine ? 'moment machine' : 'moment'}>
-            <p className="moment-words" dir="auto">
-              {to ? (
-                <Link to={to}>
+          <li key={m.id} className={m.machine ? 'row moment machine-row' : 'row moment'}>
+            <Icon name={m.kind === 'scan-line' ? 'scan' : m.recording ? 'audio' : 'file'} className="subtle" />
+            <div className="row-main">
+              <p className="moment-words torah" dir="auto">
+                {to ? (
+                  <Link to={to}>
+                    <Marked text={words} hits={m.hits} />
+                  </Link>
+                ) : (
                   <Marked text={words} hits={m.hits} />
-                </Link>
-              ) : (
-                <Marked text={words} hits={m.hits} />
-              )}
-            </p>
-            <p className="row-sub">
-              {where(m, refs, lang)}
-              {m.machine ? <span className="unchecked"> · {tn(lang, m.kind === 'paragraph' && m.textKind === 'transcript' ? 'machineHeard' : 'machineRead')}</span> : null}
-            </p>
+                )}
+              </p>
+              <p className="row-sub">
+                {where(m, refs, lang)}
+                {m.machine ? (
+                  <>
+                    {' '}
+                    <MachineLabel lang={lang} size="sm">
+                      {tn(lang, m.kind === 'paragraph' && m.textKind === 'transcript' ? 'machineHeard' : 'machineRead')}
+                    </MachineLabel>
+                  </>
+                ) : null}
+              </p>
+            </div>
           </li>
         );
       })}
