@@ -38,7 +38,7 @@ describe('machine transcription and sync', () => {
     ]);
     expect(await readFile(join(dir, 'args'), 'utf8')).toBe('a.mp3 --language yi --model ivrit-ai/yi-whisper-large-v3-turbo-ct2');
     expect(localWhisper().version).toBe('ivrit-ai/yi-whisper-large-v3-turbo');
-    expect(localWhisper({ model: '/home/runner/models/rebbe-whisper-5742' }).version).toBe('rebbe-whisper-5742');
+    expect(localWhisper({ model: '/home/runner/models/rebbehub-whisper-v2' }).version).toBe('rebbehub-whisper-v2');
   });
 
   it("adds a served recording's transcript and its sync, once, as the bot, approved by a steward", async () => {

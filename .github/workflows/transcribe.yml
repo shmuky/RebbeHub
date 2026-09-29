@@ -27,10 +27,9 @@ name: Machine transcription
 # Workers AI). With R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY
 # (an R2 token that can read rebbehub-preservation), the local
 # engine uses the newest model fine-tuned on the Rebbe's voice, kept
-# private in R2 (models/rebbehub-whisper-v<N>/, else the first,
-# models/rebbe-whisper-5742/). Without one the run stops rather than
-# hear with ivrit.ai's far weaker model, unless started by hand with
-# base_model. See docs/deploy.md
+# private in R2 (models/rebbehub-whisper-v<N>/). Without one the run
+# stops rather than hear with ivrit.ai's far weaker model, unless started
+# by hand with base_model. See docs/deploy.md
 # and docs/transcription.md.
 on:
   schedule:
@@ -91,7 +90,7 @@ jobs:
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       # Used when R2 holds no rebbehub-whisper-v<N> yet.
-      REBBE_MODEL: models/rebbe-whisper-5742
+      REBBE_MODEL: models/rebbehub-whisper-v1
       # Only a person starting it by hand may pick the paid engine.
       ENGINE: ${{ github.event_name == 'workflow_dispatch' && inputs.engine || 'local' }}
     steps:
