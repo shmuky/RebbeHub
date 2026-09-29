@@ -135,6 +135,15 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Fixed
 
+- **A page is one Worker and one database connection.** The site's Worker
+  answers a page's reads of the API itself, with the API running inside
+  it over one connection to Postgres the page opens and closes, instead
+  of one Worker invocation and one connection for each of a page's dozen
+  or two reads. Signed-in reads, changes, search by meaning, the apps'
+  catalog and Drive files still go to the API's Worker. A page's
+  `Server-Timing` says how many of its calls were answered in the site's
+  Worker.
+
 - **Transcription runs work again.** PyAV 19, out on 2026-09-29, broke
   faster-whisper's audio reading, so every recording failed; the workflow
   now pins faster-whisper 1.2.1 and PyAV below 19.

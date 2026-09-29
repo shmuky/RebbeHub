@@ -20,10 +20,28 @@ mode = "smart"
 directory = "build/client"
 
 # The API, reached inside Cloudflare without a public round trip through this binding (API_URL is its
-# public address, used only when the binding is absent).
+# public address, used only when the binding is absent): for what a page cannot answer itself, and for
+# everything signed in.
 [[services]]
 binding = "API"
 service = "rebbehub-api"
+
+# A page's own reads are answered in this Worker by the API itself, over one connection to Postgres the page
+# opens and closes (server/worker.ts; `readerFor` in services/api/src/reads.ts), so a page is one Worker
+# invocation, not one and a dozen. Postgres on Neon through Hyperdrive: the same config as the API's.
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "a06ec525cf9442f484f60ce9d38f0d39"
+
+# The public bucket, for the status page's report and the texts of seforim (GET /v1/texts/<sha256>), and
+# Sichos-Kodesh's published archive a sefer's text is first copied from: the API Worker's, read here too.
+[[r2_buckets]]
+binding = "FILES_PUBLIC"
+bucket_name = "rebbehub-public"
+
+[[r2_buckets]]
+binding = "SK_ARCHIVE"
+bucket_name = "sichos-kodesh-archive"
 
 # Searches per address a minute on the site's own search (/search, and what the command palette asks):
 # the API sees the site's requests as the site's, so the site counts them itself.

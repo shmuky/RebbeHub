@@ -19,7 +19,8 @@ import { createSiteHandler } from '../server/handler.js';
 
 const webRoot = fileURLToPath(new URL('..', import.meta.url));
 const SITE = 'https://rebbehub.test';
-let handle: (request: Request) => Promise<Response>;
+let handle: ReturnType<typeof createSiteHandler>;
+let api: ReturnType<typeof createApp>;
 const ids: Record<string, EntityId> = {};
 
 beforeAll(async () => {
@@ -66,7 +67,7 @@ beforeAll(async () => {
 
   // The API as on Workers: its database counted, so each answer says what it cost.
   const db = measured(catalog.db);
-  const api = createApp({ catalog: new Catalog(db), cost: () => db.cost, reportSalt: 'test', filesBaseUrl: 'https://files.rebbehub.test' });
+  api = createApp({ catalog: new Catalog(db), cost: () => db.cost, reportSalt: 'test', filesBaseUrl: 'https://files.rebbehub.test' });
   handle = createSiteHandler(build, { apiUrl: 'http://api.test', siteUrl: SITE, fetch: (input, init) => Promise.resolve(api.request(input, init)) });
 }, 120_000);
 
@@ -275,6 +276,32 @@ describe('the public site', () => {
     expect(statements).toBeGreaterThan(calls);
     // A redirect asks nothing.
     expect((await handle(new Request(`${SITE}/sample/`))).headers.get('Server-Timing')).toMatch(/^api;dur=0\.0;desc="0 calls", db;dur=0\.0;desc="0 statements", total;dur=/);
+  });
+
+  it("makes a page through its own reader when the Worker has one, and counts what the reader's connection did, whole", async () => {
+    // As on Workers: the reader answers every read of /v1 as nobody on the page's own connection (its cost counted there), and would send the rest on.
+    const cost = { statements: 0, ms: 0 };
+    const answered: string[] = [];
+    const reader = {
+      answers: (input: string) => input.startsWith('http://api.test/v1/'),
+      answer: async (input: string, init?: RequestInit) => {
+        answered.push(input);
+        const response = await api.request(input, init);
+        cost.statements += 3;
+        cost.ms += 1.5;
+        return response;
+      },
+      cost,
+    };
+    const page = await handle(new Request(`${SITE}/sample`), reader);
+    expect(page.status).toBe(200);
+    const timing = page.headers.get('Server-Timing')!;
+    expect(timing).toMatch(/^api;dur=\d+(\.\d)?;desc="(\d+) calls, \2 answered here", db;dur=[\d.]+;desc="\d+ statements", total;dur=/);
+    const calls = Number(/"(\d+) calls/.exec(timing)![1]);
+    expect(answered).toHaveLength(calls);
+    // The statements are the reader's, whole: three a read here, not what each answer's own Server-Timing said.
+    expect(Number(/"(\d+) statements"/.exec(timing)![1])).toBe(calls * 3);
+    expect(timing).toContain(`db;dur=${(calls * 1.5).toFixed(1)}`);
   });
 
   it('tells browsers to keep to HTTPS and not guess types, and says where to report a security problem', async () => {

@@ -1,3 +1,4 @@
+import type { DbCost } from '@rebbehub/db';
 import { createRequestHandler, type ServerBuild } from 'react-router';
 import { RebbeHubApi } from '../app/lib/api.js';
 import { hasSession, withCachePolicy } from './cachePolicy.js';
@@ -9,6 +10,18 @@ export interface SiteOptions {
   siteUrl: string;
   /** How the site reaches the API; a Worker can pass a service binding's fetch. */
   fetch?: (input: string, init?: RequestInit) => Promise<Response>;
+}
+
+/**
+ * A page's own reader: the API answering the page's reads inside the
+ * site's Worker, on one connection (`readerFor` in @rebbehub/api). What it
+ * does not answer goes the way `fetch` goes; what it answered cost the
+ * database `cost`, counted whole.
+ */
+export interface PageReader {
+  answers(input: string, init?: RequestInit): boolean;
+  answer(input: string, init?: RequestInit): Promise<Response>;
+  readonly cost: DbCost;
 }
 
 /**
@@ -57,22 +70,37 @@ type Send = NonNullable<SiteOptions['fetch']>;
 class Meter {
   calls = 0;
   fromEdge = 0;
+  here = 0;
   apiMs = 0;
   statements = 0;
   dbMs = 0;
 
-  wrap(send: Send): Send {
+  /**
+   * The page's reads: what its own reader answers, counted as answered
+   * here (its cost is taken whole at the end, since each such answer's
+   * Server-Timing says what the page's connection has done so far), and
+   * the rest sent on, each answer saying what it cost.
+   */
+  wrap(send: Send, reader?: PageReader): Send {
     return async (input, init) => {
       this.calls++;
       const started = performance.now();
+      const own = reader?.answers(input, init) ?? false;
       try {
-        const response = await send(input, init);
-        this.read(response.headers);
+        const response = await (own ? reader!.answer(input, init) : send(input, init));
+        if (own) this.here++;
+        else this.read(response.headers);
         return response;
       } finally {
         this.apiMs += performance.now() - started;
       }
     };
+  }
+
+  /** What the page's own reader cost the database, once its reads are done. */
+  add(cost: DbCost): void {
+    this.statements += cost.statements;
+    this.dbMs += cost.ms;
   }
 
   private read(headers: Headers): void {
@@ -87,21 +115,25 @@ class Meter {
   }
 
   header(started: number): string {
-    const calls = `${this.calls} calls${this.fromEdge ? `, ${this.fromEdge} from the edge` : ''}`;
+    const calls = `${this.calls} calls${this.here ? `, ${this.here} answered here` : ''}${this.fromEdge ? `, ${this.fromEdge} from the edge` : ''}`;
     return `api;dur=${this.apiMs.toFixed(1)};desc="${calls}", db;dur=${this.dbMs.toFixed(1)};desc="${this.statements} statements", total;dur=${(performance.now() - started).toFixed(1)}`;
   }
 }
 
-/** The site as one fetch handler: the same on Node, on Workers and in tests. */
+/**
+ * The site as one fetch handler: the same on Node, on Workers and in tests.
+ * A page's `reader`, when the Worker has one, answers the page's reads
+ * itself (server/worker.ts); the rest go as `options.fetch` goes.
+ */
 export function createSiteHandler(build: ServerBuild, options: SiteOptions, mode: 'production' | 'development' = 'production') {
   const handle = createRequestHandler(build, mode);
   const base = options.apiUrl.replace(/\/$/, '');
   const reach: Send = options.fetch ?? ((input, init) => fetch(input, init));
-  return async (request: Request) => {
+  return async (request: Request, reader?: PageReader) => {
     const started = performance.now();
     // The request's own count of what it asks the API, so its answer can say what it cost.
     const meter = new Meter();
-    const send = meter.wrap(reach);
+    const send = meter.wrap(reach, reader);
     const api = new RebbeHubApi(base, send);
     // Someone signed in may have just changed what they are looking at: their pages ask the API past its edge cache.
     const fresh = new RebbeHubApi(base, (input, init) => {
@@ -110,6 +142,7 @@ export function createSiteHandler(build: ServerBuild, options: SiteOptions, mode
       return send(input, { ...init, headers });
     });
     const response = withoutTrailingSlash(request) ?? withCachePolicy(request, await handle(request, { site: { api: hasSession(request) ? fresh : api, siteUrl: options.siteUrl } }));
+    if (reader) meter.add(reader.cost);
     return secured(response, meter.header(started));
   };
 }
