@@ -291,7 +291,7 @@ export function ReviewCard({ row, person, lang, open, onDone, onDecidable }: { r
     if (!seen) return;
     let live = true;
     setLoadError(null);
-    call<ReviewDetail>(`/${row.id}?limit=${REVIEW_PAGE}`)
+    call<ReviewDetail>(`/${row.id}?limit=${REVIEW_PAGE}&summary=1`)
       .then((d) => {
         if (!live) return;
         setDetail(d);

@@ -659,8 +659,10 @@ export class RebbeHubApi {
   }
 
   /** One suggestion with a page of its changes (25 unless `limit` says), reviews and who wrote them; null when there is none. */
-  suggestion(id: number, options: { offset?: number; limit?: number } = {}) {
-    return this.maybe(this.get<SuggestionDetail>(`/v1/suggestions/${id}`, options));
+  /** A suggestion's review view, a page of items at a time; `summary` (every item grouped by how it changes) only when asked, since it reads them all. */
+  suggestion(id: number, options: { offset?: number; limit?: number; summary?: boolean } = {}) {
+    const { summary, ...rest } = options;
+    return this.maybe(this.get<SuggestionDetail>(`/v1/suggestions/${id}`, { ...rest, ...(summary ? { summary: '1' } : {}) }));
   }
 
   /** The commits after `since`, oldest first, each with the items it changed (as they became), or with `changes` only so many of them (`changed` and `types` count them all). */

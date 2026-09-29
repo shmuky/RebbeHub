@@ -74,6 +74,22 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Fixed
 
+- **A suggestion's page reads only its page of items.** `GET
+  /v1/suggestions/{id}` used to read and compare every item of a
+  suggestion for each page of it (a bot's import of 500 items, on every
+  view and for every item page that listed it); now it reads the page
+  asked for, and the summary of all the items only with `summary=1`, which
+  the review page asks for once. The conversation list (`state=`) now says
+  of each suggestion what kinds of items it changes (`types`) and its
+  first item (`first`), so an item's page labels and places the
+  suggestions about it without opening any; only the open ones are opened,
+  a few, a page of items each.
+- **The statement budget is a test.** `apps/web/tests/budget.test.ts`
+  renders each page over a small catalog with the shapes that matter and
+  fails when a page's database statements or API calls grow past its
+  ceiling, so a change that quietly makes a page expensive fails CI
+  instead of the site ([docs/operations.md](docs/operations.md), "The
+  statement budget").
 - **An item's page no longer opens the newest suggestions to find the
   ones about it.** It asks the API (`about=`), and opens only those, a
   page of items each. Before, every page view read the fifteen newest

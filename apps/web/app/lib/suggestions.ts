@@ -74,6 +74,13 @@ export function detailLabels(detail: Pick<SuggestionDetail, 'entries'>): string[
   return [...new Set(detail.entries.flatMap(entryLabels))];
 }
 
+/** A suggestion's labels from the kinds of items it changes alone, for a list that does not open it (the API's `types`). */
+export function typeLabels(types: readonly string[]): string[] {
+  const out = new Set<string>();
+  for (const t of types) out.add(t === 'publication' || t === 'scan' ? 'printing' : t === 'recording' ? 'audio' : t === 'alignment' ? 'sync' : t === 'text' || t === 'segment' ? 'text' : 'meta');
+  return [...out];
+}
+
 /** The first change of words in a suggestion, with the field it is in. */
 export function firstTextChange(detail: Pick<SuggestionDetail, 'entries'>): { entry: SuggestionEntry; path: string; before: string; after: string } | null {
   for (const entry of detail.entries)
