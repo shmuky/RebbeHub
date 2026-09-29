@@ -42,8 +42,10 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 sichos-kodesh-works, sichos-kodesh-occasions, otzros, hebrewbooks;
                                                 chabadlibrary (CHABADLIBRARY_TREE), jem (JEM_DB), sefaria (SEFARIA_DATA),
                                                 igros (IGROS_DATA), archive (SK_ARCHIVE_DB): see docs/importers.md
-  rebbehub crawl-library --from <Sichos-Kodesh checkout> --out <tree.json> [--minutes <n>]
-                                                chabadlibrary.org's contents, continuing an earlier crawl
+  rebbehub crawl-library --from <Sichos-Kodesh checkout> --out <tree.json> [--minutes <n>] [--texts] [--keep]
+                                                chabadlibrary.org's contents, continuing an earlier crawl; --texts
+                                                keeps each page's text beside the tree, --keep stores them in R2
+                                                (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
   rebbehub crawl-sefaria --from <Sichos-Kodesh checkout> --out <folder> [--cache <folder>] [--keep] [--only <title>]
                                                 Sefaria's Chabad books Sichos-Kodesh does not publish; --keep stores
                                                 their texts in R2 (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
@@ -148,6 +150,7 @@ const { values, positionals } = parseArgs({
     minutes: { type: 'string' },
     cache: { type: 'string' },
     keep: { type: 'boolean' },
+    texts: { type: 'boolean' },
     only: { type: 'string', multiple: true },
     db: { type: 'string' },
     'preservation-bucket': { type: 'string' },
@@ -185,7 +188,7 @@ try {
       await importCommand(ctx, { source: need(rest[0], 'source'), from: need(values.from, 'from'), approveAs: values['approve-as'], dryRun: values['dry-run'], chunkSize: number(values.chunk) });
       break;
     case 'crawl-library':
-      await crawlLibraryCommand(ctx, { from: need(values.from, 'from'), out: need(values.out, 'out'), minutes: number(values.minutes) });
+      await crawlLibraryCommand(ctx, { from: need(values.from, 'from'), out: need(values.out, 'out'), minutes: number(values.minutes), texts: values.texts, keep: values.keep, bucket: values.bucket });
       break;
     case 'crawl-sefaria':
       await crawlSefariaCommand(ctx, { from: need(values.from, 'from'), out: need(values.out, 'out'), cache: values.cache, keep: values.keep, only: values.only, bucket: values.bucket });

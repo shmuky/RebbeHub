@@ -21,7 +21,7 @@ workflow crawls what it can first ([deploy](deploy.md)).
 | `sichos-kodesh-occasions` | the checkout (`MAFTEIACH_DATA` optional) | farbrengens, recordings, hanachos |
 | `otzros` | the checkout | the Otzros scans |
 | `hebrewbooks` | the checkout (`HEBREWBOOKS_SHELF` optional) | HebrewBooks' Chabad shelf, link-only |
-| `chabadlibrary` | `CHABADLIBRARY_TREE` | a page per chapter of chabadlibrary.org, link-only |
+| `chabadlibrary` | `CHABADLIBRARY_TREE` | a page per chapter of chabadlibrary.org, with its words where `crawl-library --texts` kept them, credited to the library |
 | `jem` | `JEM_DB` | JEM's recordings |
 | `sefaria` | `SEFARIA_DATA` | Sefaria's Chabad books Sichos-Kodesh does not publish |
 | `igros` | `IGROS_DATA` | the letters' dates |

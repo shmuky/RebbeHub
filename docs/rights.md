@@ -22,7 +22,10 @@ decisions map one to one (`ship`→`open`, `ship-with-credit`→`credit`,
 
 - public domain, CC0, facts-and-links → `open`; CC BY and CC BY-NC (Sefaria) → `credit`;
 - free-to-read, site terms, unknown → `link`; commercial → `preserved`;
-- HebrewBooks and chabadlibrary.org → `link` whatever else is said;
+- HebrewBooks → `link` whatever else is said;
+- chabadlibrary.org's texts → `credit`: each page's words are kept and shown,
+  credited to the library, with a link to its page there (a steward's
+  decision, 2026-09-28);
 - the Igros app's files → `preserved` (Sichos-Kodesh decides its own apps);
 - hanachos and publisher scans → `link` (a copy preserved);
 - the old typewritten Sichos Kodesh hanachos (5710-5741) → `open`: the

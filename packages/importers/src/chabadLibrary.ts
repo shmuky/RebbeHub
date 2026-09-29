@@ -1,19 +1,25 @@
+import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { joinPath, orderKeys, type LocalName } from '@rebbehub/model';
+import { htmlToWikitext } from './htmlToWikitext.js';
 import { ref, type ImportRecord, type Importer } from './importer.js';
+import { textUrl } from './sichosKodeshTexts.js';
 import { workPath } from './sichosKodeshWorks.js';
 
 /**
  * The seforim of chabadlibrary.org (ספריית ליובאוויטש), a page on RebbeHub
- * for every chapter, letter and sicha, each linking to that exact page of
- * the library. Only the table of contents is kept - the titles and ids its
- * own API lists (`books/api/main?path=/<id>`), bibliographic facts - never
- * its text: Sichos-Kodesh's rights decision for the library is link-only.
+ * for every chapter, letter and sicha, with its words and a link to that
+ * exact page of the library. The table of contents is the titles and ids
+ * its own API lists (`books/api/main?path=/<id>`); a crawl with texts also
+ * keeps each page's text, credited to the library (a steward's decision,
+ * 2026-09-28: docs/rights.md), as `texts/<sha256>.html` beside the tree,
+ * and in RebbeHub's own storage like Sefaria's texts.
  *
  * The contents are crawled politely, a few requests at a time, into a
  * file that later runs continue from (.github/workflows/import.yml keeps
- * it between runs), since the whole library is tens of thousands of pages.
+ * it between runs), since the whole library is some 69,000 pages.
  * The works themselves are Sichos-Kodesh's (its registry names each one's
  * id in the library); a work Sichos-Kodesh already has chapters for keeps
  * those.
@@ -21,12 +27,19 @@ import { workPath } from './sichosKodeshWorks.js';
 
 export const CHABAD_LIBRARY = 'https://chabadlibrary.org/books';
 
+/** How a page's words are credited. */
+export const LIBRARY_CREDIT = 'ספריית ליובאוויטש (chabadlibrary.org)';
+
 export interface LibraryNode {
   heading: string;
   parent: number;
   /** A section lists pages or more sections; a page is one text. Unset until the crawl reaches it. */
   kind?: 'section' | 'page';
   children?: number[];
+  /** A page's text, kept as `texts/<sha256>.html` beside the tree; unset until a crawl with texts reads it. */
+  sha256?: string;
+  /** Whether that text is in RebbeHub's own storage (`texts/<sha256>`), so the page can link to its copy. */
+  kept?: boolean;
 }
 
 /** The crawled contents, by id. */
@@ -36,7 +49,56 @@ export interface LibraryTree {
 
 interface ApiContent {
   type: string;
-  data: Array<{ id: number; heading: string }> | unknown;
+  data: Array<{ id: number; heading: string }> | { text?: string; haoros?: string } | unknown;
+}
+
+const escapeHtml = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** Marks the library writes in square brackets, around words, that mean bold or small. */
+const PAIRS: Array<[RegExp, string]> = [
+  [/\[(cup|dibur_maschil|mudgash)\]([\s\S]*?)\[\/\1\]/g, '<b>$2</b>'],
+  [/\[headingintext_begin\]([\s\S]*?)\[headingintext_end\]/g, '<b>$1</b>'],
+  [/\[(small|smallitalic)_begin\]([\s\S]*?)\[\1_end\]/g, '<small>$2</small>'],
+];
+
+/**
+ * A page's text as the library stores it - HTML, or plain lines, with its
+ * own marks in square brackets (`[ftnref_3_1]` a note's number, `[cup]`
+ * an opening word, `[mafteach_gopage file="ls30" gopage="240"]` a page an
+ * index points to, `[oldpage_לח]` where a page of the printed edition
+ * begins) - as plain HTML. Marks it has no meaning for are
+ * dropped and their words kept; Hebrew in square brackets is the text's own.
+ */
+export function libraryHtml(text: string): string {
+  let html = text.replace(/<!--[\s\S]*?-->/g, '').replace(/<\?xml[^>]*>|<\/?(o|w|v):[^>]*>/gi, '');
+  for (const [pattern, to] of PAIRS) html = html.replace(pattern, to);
+  html = html
+    .replace(/\[(?:ftnref|ednref|ednrefm)_[^_\]]*_([^\]]*)\]/g, '<sup>$1</sup>')
+    .replace(/\[(?:ftn|edn)_[^_\]]*_([^\]]*)\]/g, '$1')
+    .replace(/\[mafteach_gopage [^\]]*gopage="([^"]*)"[^\]]*\]/g, "עמ' $1")
+    .replace(/\[mafteach_goterm [^\]]*goterm="([^"]*)"[^\]]*\]/g, '$1')
+    .replace(/\[mrzlg_([^\]]*)\]/g, '$1')
+    .replace(/\[oldpage_([^\]]*)\]/g, "<small>(עמ' $1)</small>")
+    .replace(/\[\/?[a-z][a-z0-9_]*(?:\s[^\]]*)?\]/gi, (mark) => (/[\u0590-\u05ff]/.test(mark) ? mark : ''));
+  // A text of plain lines: each line a paragraph.
+  if (!/<(p|div|br)\b/i.test(html)) {
+    html = html
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => (/^<(h[1-6]|p|div|table|ul|ol)\b/i.test(line) ? line : `<p>${line}</p>`))
+      .join('\n');
+  }
+  return html;
+}
+
+/** A page of the library as the one HTML file RebbeHub keeps: its heading, text, notes, and where it is from. */
+export function renderLibraryPage(page: { id: number; heading: string; text: string; haoros?: string }): string {
+  const url = `${CHABAD_LIBRARY}/${page.id}`;
+  const parts = [`<article lang="he" dir="rtl">`, `<h1>${escapeHtml(page.heading)}</h1>`, libraryHtml(page.text)];
+  if (page.haoros?.trim()) parts.push('<h3>הערות</h3>', libraryHtml(page.haoros));
+  parts.push(`<footer><span class="version">${escapeHtml(LIBRARY_CREDIT)}</span> <a href="${url}">${url}</a></footer>`, '</article>');
+  return parts.join('\n');
 }
 
 /**
@@ -47,7 +109,16 @@ interface ApiContent {
 export async function crawlChabadLibrary(
   roots: number[],
   tree: LibraryTree,
-  options: { fetch?: typeof fetch; concurrency?: number; pauseMs?: number; deadline?: number; log?: (line: string) => void; save?: (tree: LibraryTree) => Promise<void> } = {},
+  options: {
+    fetch?: typeof fetch;
+    concurrency?: number;
+    pauseMs?: number;
+    deadline?: number;
+    log?: (line: string) => void;
+    save?: (tree: LibraryTree) => Promise<void>;
+    /** Keeps each page's text too (`renderLibraryPage`), by its sha256; a page read before without it is read again. */
+    texts?: (sha256: string, html: string) => Promise<void>;
+  } = {},
 ): Promise<boolean> {
   const get = options.fetch ?? fetch;
   const read = async (id: number): Promise<ApiContent> => {
@@ -67,7 +138,7 @@ export async function crawlChabadLibrary(
   let complete = true;
   const visit = async (id: number) => {
     const node = tree.nodes[id];
-    if (node?.kind === 'page') return;
+    if (node?.kind === 'page' && (!options.texts || node.sha256)) return;
     if (node?.kind === 'section' && node.children) {
       queue.push(...node.children);
       return;
@@ -86,6 +157,14 @@ export async function crawlChabadLibrary(
       }
     } else {
       here.kind = 'page';
+      if (options.texts) {
+        const data = (content.data ?? {}) as { text?: string; haoros?: string };
+        const html = renderLibraryPage({ id, heading: here.heading, text: String(data.text ?? ''), haoros: data.haoros ? String(data.haoros) : undefined });
+        const sha256 = createHash('sha256').update(html, 'utf8').digest('hex');
+        await options.texts(sha256, html);
+        if (here.sha256 !== sha256) delete here.kept;
+        here.sha256 = sha256;
+      }
     }
     if (fetched % 500 === 0) {
       options.log?.(`${fetched} contents pages read, ${queue.length} to go`);
@@ -118,6 +197,10 @@ export interface ChabadLibraryInput {
   /** Works Sichos-Kodesh already has chapters for. */
   withContents: Set<string>;
   tree: LibraryTree;
+  /** A kept text by its sha256 (`texts/<sha256>.html` beside the tree); without it the pages carry no words. */
+  text?: (sha256: string) => Promise<string | null>;
+  /** The API that keeps the texts; each page links to its copy there. */
+  api?: string;
 }
 
 /** The works that are in the library, with their ids there. */
@@ -129,13 +212,18 @@ export function libraryWorks(index: WorksIndex, withContents: Set<string>): Arra
   });
 }
 
-/** Reads the registry from a Sichos-Kodesh checkout, and the crawled contents from `treeFile`. */
-export async function readChabadLibrary(root: string, treeFile: string): Promise<ChabadLibraryInput> {
+/** Reads the registry from a Sichos-Kodesh checkout, and the crawled contents from `treeFile` (its texts beside it). */
+export async function readChabadLibrary(root: string, treeFile: string, options: { api?: string } = {}): Promise<ChabadLibraryInput> {
   const dir = root.endsWith('works') ? root : join(root, 'apps/mobile/src/catalog/data/works');
   const index = JSON.parse(await readFile(join(dir, 'works.json'), 'utf8')) as WorksIndex;
   const withContents = new Set((await readdir(join(dir, 'contents'))).filter((n) => n.endsWith('.json')).map((n) => n.slice(0, -5)));
   const tree = JSON.parse(await readFile(treeFile, 'utf8')) as LibraryTree;
-  return { index, withContents, tree };
+  const texts = join(treeFile, '..', 'texts');
+  const text = async (sha256: string) => {
+    const file = join(texts, `${sha256}.html`);
+    return /^[0-9a-f]{64}$/.test(sha256) && existsSync(file) ? readFile(file, 'utf8') : null;
+  };
+  return { index, withContents, tree, text, api: options.api };
 }
 
 export function chabadLibraryImporter(input: ChabadLibraryInput | (() => Promise<ChabadLibraryInput>)): Importer {
@@ -143,7 +231,7 @@ export function chabadLibraryImporter(input: ChabadLibraryInput | (() => Promise
     id: 'chabadlibrary',
     bot: { id: 'bot:chabadlibrary', displayName: 'Chabad Library contents importer' },
     async *records(): AsyncIterable<ImportRecord> {
-      const { index, withContents, tree } = typeof input === 'function' ? await input() : input;
+      const { index, withContents, tree, text, api } = typeof input === 'function' ? await input() : input;
       for (const { work, root, licence } of libraryWorks(index, withContents)) {
         const placed: Array<{ id: number; position: Array<{ level: string; value: string; label?: LocalName }> }> = [];
         const walk = (id: number, trail: Array<{ level: string; value: string; label?: LocalName }>) => {
@@ -159,7 +247,27 @@ export function chabadLibraryImporter(input: ChabadLibraryInput | (() => Promise
         walk(root, []);
         const orders = orderKeys(placed.length);
         for (const [i, { id, position }] of placed.entries()) {
-          const heading = tree.nodes[id]!.heading || position.map((p) => p.value).join('.');
+          const node = tree.nodes[id]!;
+          const heading = node.heading || position.map((p) => p.value).join('.');
+          const url = `${CHABAD_LIBRARY}/${id}`;
+          // The page's words, where the crawl kept them.
+          const html = node.sha256 && text ? await text(node.sha256) : null;
+          const words = html ? htmlToWikitext(html) : '';
+          const body = words
+            ? {
+                body: words,
+                bodySource: {
+                  source: 'chabadlibrary',
+                  via: 'chabadlibrary',
+                  sourceId: String(id),
+                  url,
+                  ...(node.kept ? { copy: textUrl(node.sha256!, api) } : {}),
+                  licence,
+                  credit: LIBRARY_CREDIT,
+                  rights: 'credit',
+                },
+              }
+            : {};
           yield {
             key: `chabadlibrary-unit:${id}`,
             type: 'unit',
@@ -170,7 +278,8 @@ export function chabadLibraryImporter(input: ChabadLibraryInput | (() => Promise
               order: orders[i]!,
               label: { he: heading.slice(0, 500) },
               externalIds: { chabadlibrary: String(id) },
-              editions: [{ source: 'chabadlibrary', sourceId: String(id), kind: 'text', licence, url: `${CHABAD_LIBRARY}/${id}` }],
+              ...body,
+              editions: [{ source: 'chabadlibrary', sourceId: String(id), kind: 'text', licence, url, ...(words ? { credit: LIBRARY_CREDIT } : {}) }],
             },
           };
         }
