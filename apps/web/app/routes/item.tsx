@@ -10,14 +10,15 @@ import { UploadForm } from '../components/UploadForm.js';
 import { ItemBelowStart, ItemPage, ItemSideEnd } from '../views/ItemPage.js';
 import { ItemSlots } from '../ui/ItemShell.js';
 import { Icon } from '../ui/Icon.js';
-import { ApiError } from '../lib/api.js';
+import { ApiError, type Entity } from '../lib/api.js';
 import { siteOf } from '../lib/context.server.js';
 import { dateKeyToGregorian } from '@rebbehub/hebrew';
-import { langFrom } from '../lib/i18n.js';
+import type { LocalName } from '@rebbehub/model';
+import { langFrom, nameOf, t } from '../lib/i18n.js';
 import { loadItemView } from '../lib/itemData.server.js';
 import { describe, labelOf } from '../lib/labels.js';
 import { href, itemPath } from '../lib/links.js';
-import { pageMeta } from '../lib/seo.js';
+import { breadcrumbs, pageMeta, type PageMeta } from '../lib/seo.js';
 
 /**
  * Every item's page. A readable path (`/likkutei-sichos/12/3`) is resolved
@@ -80,42 +81,149 @@ export async function action({ request, context }: Route.ActionArgs): Promise<Re
   }
 }
 
-/** schema.org data, so search engines know a sefer from a farbrengen. */
-function jsonLd(loaderData: Route.ComponentProps['loaderData'], url: string): Record<string, unknown> {
+type ItemData = Route.ComponentProps['loaderData'];
+
+/** A recording's length as schema.org writes it (ISO 8601: PT1H2M3S). */
+const isoDuration = (ms: number) => {
+  const h = Math.floor(ms / 3_600_000);
+  return `PT${h ? `${h}H` : ''}${Math.floor((ms % 3_600_000) / 60_000)}M${Math.round((ms % 60_000) / 1000)}S`;
+};
+
+/** The picture a page shows when shared: its sefer's shaar, drawn from the title page, where there is one. */
+function coverOf({ entity, view }: ItemData): { url: string; width: number; height: number } | null {
+  const d = entity.data as { work?: string };
+  if (entity.type === 'work') return view.workCover?.cover?.image ?? null;
+  if ((entity.type === 'unit' || entity.type === 'publication') && typeof d.work === 'string') return view.covers[d.work]?.image ?? null;
+  return null;
+}
+
+/** The way to an item, as its page's crumbs show it: the library and its shelf and the sefer, or the farbrengens and the year. */
+function trail(loaderData: ItemData): Array<{ name: string; path: string }> {
   const { entity, view, lang } = loaderData;
-  const d = entity.data as Record<string, unknown>;
-  const name = labelOf(entity, lang);
-  const authors = ((d.authors as string[] | undefined) ?? []).map((id) => view.refs[id]).filter(Boolean).map((a) => ({ '@type': 'Person', name: labelOf(a!, lang) }));
-  const civil = typeof d.date === 'string' ? dateKeyToGregorian(d.date) : null;
+  const d = entity.data as { work?: string; sets?: string[]; event?: string; date?: string };
+  const ref = (id: unknown) => (typeof id === 'string' ? view.refs[id] : undefined);
+  const step = (e: Entity | undefined) => (e ? [{ name: labelOf(e, lang), path: itemPath(e) }] : []);
+  const library = { name: t(lang, 'tabLibrary'), path: '/sets' };
+  const farbrengens = { name: t(lang, 'tabFarbrengens'), path: '/calendar' };
+  const year = (date: unknown) => (typeof date === 'string' && /^[0-9]{4}/.test(date) ? [{ name: date.slice(0, 4), path: `/calendar/${date.slice(0, 4)}` }] : []);
+  const self = step(entity as Entity);
   switch (entity.type) {
-    case 'work':
-      return { '@type': 'Book', name, url, author: authors, inLanguage: 'he' };
-    case 'publication':
-      return { '@type': 'Book', name, url, publisher: d.publisher, ...(d.gregorianYear ? { datePublished: String(d.gregorianYear) } : {}), inLanguage: 'he' };
+    case 'unit':
+    case 'publication': {
+      const work = ref(d.work);
+      return [library, ...step(ref((work?.data as { sets?: string[] } | undefined)?.sets?.[0])), ...step(work), ...self];
+    }
     case 'event':
-      return { '@type': 'Event', name, url, ...(civil ? { startDate: civil } : {}), eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode' };
-    case 'recording':
-      return { '@type': 'AudioObject', name, url };
-    case 'author':
-    case 'person':
-      return { '@type': 'Person', name, url };
+      return [farbrengens, ...year(d.date), ...self];
+    case 'recording': {
+      const event = ref(d.event);
+      return [farbrengens, ...year((event?.data as { date?: string } | undefined)?.date), ...step(event), ...self];
+    }
     default:
-      return { '@type': 'CreativeWork', name, url, ...(civil ? { dateCreated: civil } : {}) };
+      return [library, ...step(ref(d.sets?.[0])), ...self];
   }
 }
+
+/** schema.org data, so search engines know a sefer from a farbrengen, and the way to each. */
+function jsonLd(loaderData: ItemData, siteUrl: string): Array<Record<string, unknown>> {
+  const { entity, view, lang } = loaderData;
+  const base = siteUrl.replace(/\/$/, '');
+  const at = (e: { id: string; path: string | null }) => `${base}${itemPath(e)}`;
+  const url = at(entity);
+  const d = entity.data as Record<string, unknown>;
+  const name = labelOf(entity, lang);
+  const description = nameOf(d.description as LocalName | undefined, lang) || undefined;
+  const inLanguage = typeof d.language === 'string' ? d.language : 'he';
+  const authors = ((d.authors as string[] | undefined) ?? []).map((id) => view.refs[id] as Entity | undefined).filter((a): a is Entity => Boolean(a)).map((a) => ({ '@type': 'Person', name: labelOf(a, lang), url: at(a) }));
+  const civil = typeof d.date === 'string' ? dateKeyToGregorian(d.date) : null;
+  const cover = coverOf(loaderData);
+  const image = cover ? { image: cover.url } : {};
+  const work = typeof d.work === 'string' ? view.refs[d.work] : undefined;
+  const partOf = work ? { isPartOf: { '@type': 'Book', name: labelOf(work, lang), url: at(work) } } : {};
+  const audio = (r: Entity) => {
+    const file = view.files[r.id];
+    const durationMs = (r.data as { durationMs?: number }).durationMs;
+    return {
+      '@type': 'AudioObject',
+      name: labelOf(r, lang),
+      url: at(r),
+      ...(file?.url ? { contentUrl: file.url, encodingFormat: file.mime } : {}),
+      ...(durationMs ? { duration: isoDuration(durationMs) } : {}),
+    };
+  };
+  let thing: Record<string, unknown>;
+  switch (entity.type) {
+    case 'work':
+      thing = { '@type': 'Book', name, url, author: authors, inLanguage, ...image, ...(description ? { description } : {}) };
+      break;
+    case 'unit':
+      thing = { '@type': 'CreativeWork', name, url, inLanguage, ...partOf, ...image, ...(civil ? { dateCreated: civil } : {}) };
+      break;
+    case 'publication':
+      thing = {
+        '@type': 'Book',
+        name,
+        url,
+        ...(typeof d.publisher === 'string' ? { publisher: { '@type': 'Organization', name: d.publisher } } : {}),
+        ...(d.gregorianYear ? { datePublished: String(d.gregorianYear) } : {}),
+        inLanguage,
+        ...partOf,
+        ...image,
+      };
+      break;
+    case 'event': {
+      const recordings = view.lists.recordings ?? [];
+      const place = typeof d.place === 'string' ? view.refs[d.place] : undefined;
+      thing = {
+        '@type': 'Event',
+        name,
+        url,
+        ...(civil ? { startDate: civil } : {}),
+        eventStatus: 'https://schema.org/EventScheduled',
+        eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+        ...(place ? { location: { '@type': 'Place', name: labelOf(place, lang) } } : {}),
+        ...(recordings.length ? { recordedIn: recordings.map(audio) } : {}),
+      };
+      break;
+    }
+    case 'recording': {
+      const event = typeof d.event === 'string' ? view.refs[d.event] : undefined;
+      thing = { ...audio(entity as Entity), ...(event ? { isPartOf: { '@type': 'Event', name: labelOf(event, lang), url: at(event) } } : {}) };
+      break;
+    }
+    case 'author':
+    case 'person':
+      thing = { '@type': 'Person', name, url, ...(description ? { description } : {}) };
+      break;
+    case 'set':
+      thing = { '@type': 'Collection', name, url, ...(description ? { description } : {}) };
+      break;
+    default:
+      thing = { '@type': 'CreativeWork', name, url, ...(civil ? { dateCreated: civil } : {}) };
+  }
+  return [thing, breadcrumbs(base, trail(loaderData))];
+}
+
+/** What kind of page it is, for link previews. */
+const OG_TYPE: Record<string, PageMeta['type']> = { work: 'book', publication: 'book', unit: 'article', recording: 'music.song', author: 'profile', person: 'profile' };
+
+/** The catalog's own schemas, and the parts of a page (a paragraph, a page of OCR, a sync span), are found through the page they belong to. */
+const NOT_INDEXED = new Set(['schema', 'segment', 'text-page', 'text-layer', 'alignment', 'alignment-span', 'contents-map', 'relation']);
 
 export function meta({ loaderData }: Route.MetaArgs) {
   if (!loaderData) return [{ title: 'RebbeHub' }];
   const { entity, lang, siteUrl } = loaderData;
-  const path = itemPath(entity);
+  const cover = coverOf(loaderData);
   return pageMeta({
     title: labelOf(entity, lang),
     description: describe(entity, lang),
-    path,
+    path: itemPath(entity),
     lang,
     siteUrl,
-    jsonLd: jsonLd(loaderData, `${siteUrl.replace(/\/$/, '')}${path}`),
-    noindex: entity.type === 'schema',
+    type: OG_TYPE[entity.type] ?? 'website',
+    image: cover ? { ...cover, alt: labelOf(entity, lang) } : null,
+    jsonLd: jsonLd(loaderData, siteUrl),
+    noindex: NOT_INDEXED.has(entity.type),
   });
 }
 
