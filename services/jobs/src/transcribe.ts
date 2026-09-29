@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { alignAroundLocks, alignParagraphs, alignWords, hanachaOf, heardWords, recordingTranscript, type Catalog, type HeardWord, type Json } from '@rebbehub/core';
@@ -93,7 +93,8 @@ export function localWhisper(input: { model?: string; python?: string; script?: 
   const script = input.script ?? fileURLToPath(new URL('../whisper/transcribe.py', import.meta.url));
   return {
     name: 'whisper-local',
-    version: model.replace(/-ct2$/, ''),
+    // A model kept on disk (rebbe-whisper, fetched from R2) is named by its folder.
+    version: (isAbsolute(model) ? basename(model) : model).replace(/-ct2$/, ''),
     async transcribe(audio, language) {
       const { stdout } = await run(input.python ?? 'python3', [script, audio, '--language', language, '--model', model], { maxBuffer: 1 << 28 });
       return stdout

@@ -155,6 +155,13 @@ npm run rebbehub -- import sichos-kodesh-occasions --from ../Sichos-Kodesh --app
   - `CLOUDFLARE_AI_TOKEN`: a Cloudflare API token with **Workers AI:
     Read** and **Workers AI: Edit** only.
 
+  The local engine hears best with rebbe-whisper, the model fine-tuned on
+  the Rebbe's voice, kept private in `rebbehub-preservation` under
+  `models/rebbe-whisper-5742/`. To let the workflow fetch it, add
+  `CLOUDFLARE_ACCOUNT_ID` and an R2 API token that can only read that
+  bucket, as `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`. Without them it
+  uses ivrit.ai's model.
+
   Its **align** box then runs `rebbehub align` too, with the same keys:
   word timings for transcripts that have none (made before word timings,
   or corrected since) and the farbrengen's hanacha synced paragraph by
