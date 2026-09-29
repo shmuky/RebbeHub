@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { isPageText, type LocalName } from '@rebbehub/model';
 import { AudioPlayer } from '../components/AudioPlayer.js';
@@ -440,11 +441,14 @@ function RecordingPage({ entity, view, lang }: { entity: Entity; view: ItemView;
   const d = entity.data as D;
   const event = d.event ? view.refs[d.event] : undefined;
   const parts = (view.lists.parts ?? []).filter((x) => x.id !== entity.id);
-  const texts = view.lists.texts ?? [];
   const videos = (d.videos ?? []) as Array<{ provider: string; url: string }>;
   const file = view.files[entity.id];
   // Its own transcript, heard and checked here as on its farbrengen's page, with its own talk and history tabs.
   const tracks = tracksOf(event ?? { id: entity.id, path: entity.path, data: { title: d.title } }, [entity], lang, { [entity.id]: file?.url ?? null }, view.apiBase);
+  // Its transcript is read in the player above; the other texts (hanachos, translations) are listed below it.
+  const texts = (view.lists.texts ?? []).filter((x) => !tracks.length || (x.data as D).kind !== 'transcript');
+  // How many transcripts it has, once the browser has asked: null until then.
+  const [transcripts, setTranscripts] = useState<number | null>(null);
   return (
     <ItemShell
       lang={lang}
@@ -486,8 +490,14 @@ function RecordingPage({ entity, view, lang }: { entity: Entity; view: ItemView;
       }
     >
       <div className="stack-lg">
-        <AudioPlayer recordings={[entity]} sources={{ [entity.id]: file?.url ?? null }} />
-        {tracks.length ? <Transcripts tracks={tracks} lang={lang} /> : null}
+        {/*
+          One player on the page. With a transcript it is the words, synced, with Edit on top; the plain player only
+          stands in where there is nothing to read along with (or while the transcript is still on its way, as a
+          quiet box of the same height, so the page does not jump).
+        */}
+        {!tracks.length || transcripts === 0 ? <AudioPlayer recordings={[entity]} sources={{ [entity.id]: file?.url ?? null }} /> : null}
+        {tracks.length && transcripts === null ? <div className="lyrics-wait" aria-hidden /> : null}
+        {tracks.length ? <Transcripts tracks={tracks} lang={lang} onLoaded={setTranscripts} /> : null}
         {texts.length ? (
           <section className="stack">
             <h2 className="h-sec">{ps(lang, 'transcripts')}</h2>

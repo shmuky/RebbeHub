@@ -613,6 +613,25 @@ button.part.on:hover {
   background: transparent;
 }
 
+.lyrics-edit {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font: 600 14px var(--ui);
+  cursor: pointer;
+}
+
+.lyrics-edit:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 .lyrics-parts {
   display: flex;
   gap: 6px;
@@ -822,17 +841,7 @@ button.part.on:hover {
 }
 
 .lyrics-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px 16px;
-  margin-top: 12px;
-}
-
-.lyrics-foot .row-sub {
-  flex: 1 1 260px;
-  margin: 0;
+  margin: 10px 4px 0;
 }
 
 .review-head {
@@ -1219,4 +1228,12 @@ button.part.on:hover {
 .part-page:hover {
   background: var(--canvas);
   color: var(--accent);
+}
+
+/* Where the synced player will be, while the browser asks for its transcript: the same deep blue, the same height. */
+.lyrics-wait {
+  height: calc(min(62vh, 560px) + 190px);
+  border-radius: 14px;
+  background: linear-gradient(170deg, #2c4378 0%, #1c2a52 48%, #121a35 100%);
+  opacity: 0.35;
 }
