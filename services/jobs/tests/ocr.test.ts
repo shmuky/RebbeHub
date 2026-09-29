@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { EntityId } from '@rebbehub/model';
+import type { EntityId, TextLine } from '@rebbehub/model';
 import { registerFile } from '@rebbehub/core';
 import { linesFromTsv, readScans, scansToRead, type OcrEngine } from '../src/ocr.js';
 import { add, freshCatalog } from '../../../packages/core/tests/helpers.js';
@@ -113,5 +113,93 @@ describe('fix this line', () => {
     ]);
     expect((await catalog.list({ type: 'text-layer' })).length).toBe(2);
     expect(await readScans(catalog, { approveAs: 'shmuly', engine: better, reread: true, fetchFile: async () => new Uint8Array([1]) })).toEqual([]);
+  });
+});
+
+describe('the Kraken reader of index books', () => {
+  /** A stand-in for `kraken` (no Python in tests): reads index books only, taking over Tesseract's layer. */
+  const indexReader = (lines: TextLine[]): OcrEngine => ({
+    name: 'kraken-index',
+    version: async () => 'rebbehub-kraken-v1 kraken-7.1.1',
+    pages: async () => ['p1.png'],
+    lines: async () => lines,
+    replaces: ['tesseract-heb'],
+    indexBooksOnly: true,
+  });
+  const tesseractLike = (lines: TextLine[]): OcrEngine => ({ name: 'tesseract-heb', version: async () => '5.3.4', pages: async () => ['p1.png'], lines: async () => lines });
+  const fetchFile = async () => new Uint8Array([1]);
+
+  async function books() {
+    const { catalog, set } = await freshCatalog();
+    const sha = (n: string) => n.repeat(64);
+    const scan = async (file: string, title: string, work?: EntityId) => {
+      await registerFile(catalog.db, { sha256: file, bytes: 10, mime: 'application/pdf', source: 'contribution', licence: 'cc0', held: true });
+      const publication = await add(catalog, 'mendy', 'keeper', 'publication', { kind: 'book-volume', title: { he: title }, ...(work ? { work } : {}), sets: [set] });
+      return add(catalog, 'mendy', 'keeper', 'scan', { publication, file, completeness: 'complete', sets: [set] });
+    };
+    const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'מפתחות ללקוטי שיחות' }, slug: 'maftechos', authors: [], genre: 'sichos', levels: ['volume'], sets: [set] });
+    const volume = await scan(sha('a'), 'לקוטי שיחות חלק כה');
+    const index = await scan(sha('b'), 'מפתח ענינים ללקוטי שיחות חלקים א-ט');
+    const byWork = await scan(sha('c'), 'חלק כ-כד', work);
+    return { catalog, volume, index, byWork };
+  }
+
+  it('picks only index books: מפתח in the publication’s title or its work’s', async () => {
+    const { catalog, volume, index, byWork } = await books();
+    expect((await scansToRead(catalog, { indexBooks: true })).map((s) => s.id).sort()).toEqual([index, byWork].sort());
+    expect((await scansToRead(catalog)).map((s) => s.id).sort()).toEqual([volume, index, byWork].sort());
+    // A scan a person names is read as asked.
+    expect((await scansToRead(catalog, { indexBooks: true, scan: volume })).map((s) => s.id)).toEqual([volume]);
+  });
+
+  it('reads index books nobody read, and leaves the queue and every other scan to Tesseract', async () => {
+    const { catalog, index, byWork } = await books();
+    const kraken = indexReader([{ id: 'l1', text: 'גאולה:', box: [0.5, 0.1, 0.3, 0.02] }]);
+    expect(await readScans(catalog, { approveAs: 'shmuly', engine: kraken, requestedOnly: true, fetchFile })).toEqual([]);
+    const done = await readScans(catalog, { approveAs: 'shmuly', engine: kraken, fetchFile });
+    expect(done.map((d) => d.scan).sort()).toEqual([index, byWork].sort());
+    const machine = (await catalog.list({ type: 'text-layer' })).filter((l) => (l.data as { kind: string }).kind === 'machine-ocr');
+    expect(machine.map((l) => (l.data as { engine: { name: string } }).engine.name)).toEqual(['kraken-index', 'kraken-index']);
+    // Tesseract reads what is left, and does not read the index books again.
+    expect((await readScans(catalog, { approveAs: 'shmuly', engine: tesseractLike([]), fetchFile })).length).toBe(1);
+    expect(await readScans(catalog, { approveAs: 'shmuly', engine: kraken, fetchFile })).toEqual([]);
+  });
+
+  it("takes over Tesseract's reading of an index book in the same layer, keeping every line a person checked", async () => {
+    const { catalog, volume, index, byWork } = await books();
+    const { fixLine, scanText } = await import('@rebbehub/core');
+    await readScans(catalog, {
+      approveAs: 'shmuly',
+      engine: tesseractLike([
+        { id: 'l1', text: 'גאולח:', box: [0.5, 0.1, 0.3, 0.02] },
+        { id: 'l2', text: 'א 5 (בזמנה)', box: [0.5, 0.13, 0.3, 0.02] },
+      ]),
+      fetchFile,
+    });
+    const fix = await fixLine(catalog, 'chaim', { scan: index, page: 1, line: 'l1', text: 'גאולה:' });
+    await catalog.merge(fix.id, 'keeper');
+
+    const kraken = indexReader([
+      { id: 'l1', text: 'גאולה', box: [0.5, 0.1, 0.3, 0.02] },
+      { id: 'l2', text: 'א 35 (בזמנה לא תתמהמה)', box: [0.5, 0.13, 0.3, 0.02] },
+    ]);
+    expect((await readScans(catalog, { approveAs: 'shmuly', engine: kraken, fetchFile })).map((d) => d.scan).sort()).toEqual([index, byWork].sort());
+    const page = (await scanText(catalog, index, 1))!;
+    expect(page.engine).toEqual({ name: 'kraken-index', version: 'rebbehub-kraken-v1 kraken-7.1.1' });
+    expect(page.lines.map((l) => [l.text, l.level])).toEqual([
+      ['גאולה:', 1],
+      ['א 35 (בזמנה לא תתמהמה)', 0],
+    ]);
+    // Still one machine layer (and one community layer) for the scan; the other book keeps Tesseract's.
+    expect(page.layers.map((l) => [l.kind, l.engine?.name ?? null])).toEqual(expect.arrayContaining([['machine-ocr', 'kraken-index'], ['community', null]]));
+    expect(page.layers.length).toBe(2);
+    expect((await scanText(catalog, volume, 1))!.engine?.name).toBe('tesseract-heb');
+    // Tesseract's own re-reading never takes the layer back.
+    const newer = { ...tesseractLike([]), version: async () => '6.0' };
+    expect((await readScans(catalog, { approveAs: 'shmuly', engine: newer, reread: true, fetchFile })).map((d) => d.scan)).toEqual([volume]);
+    expect((await scanText(catalog, index, 1))!.engine?.name).toBe('kraken-index');
+    // A newer model reads it again with --reread.
+    const v2 = { ...kraken, version: async () => 'rebbehub-kraken-v2 kraken-7.1.1' };
+    expect((await readScans(catalog, { approveAs: 'shmuly', engine: v2, reread: true, fetchFile })).map((d) => d.scan).sort()).toEqual([index, byWork].sort());
   });
 });

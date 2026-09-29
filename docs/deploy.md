@@ -143,7 +143,20 @@ npm run rebbehub -- import sichos-kodesh-occasions --from ../Sichos-Kodesh --app
 - **Machine OCR** runs every night by itself (the *Machine OCR* workflow):
   first the scans people asked for, then the newest served scans that
   have no text yet, with Tesseract; it needs only `DATABASE_URL`. **Run
-  workflow** reads more at once.
+  workflow** reads more at once. Then its second job reads the index
+  books (a publication or work whose Hebrew title has מפתח) with
+  RebbeHub's own Kraken model, `rebbehub-kraken-v1` (on a Likkutei Sichos
+  index it never trained on, 610 of 615 page references right, against
+  Tesseract's 593), one book a night (**index_limit**; a book takes about
+  an hour on the runner's CPU). Kraken's reading takes the place of
+  Tesseract's in the scan's one machine layer, and every line people
+  checked is kept. The model is kept private in `rebbehub-preservation`
+  under `models/rebbehub-kraken-v1/`, `-v2/` and on, and the job takes the
+  highest version, with the same three R2 secrets as the transcription
+  below; without them it is skipped with a notice. By hand:
+  `rebbehub ocr --engine kraken-index --model <file.safetensors>`
+  (`pip install kraken`; `--reread` reads again the index books an older
+  model read).
 - **Machine transcription** transcribes recordings with Whisper. Every
   night it takes the recordings people asked for, then the newest with no
   transcript, `TRANSCRIBE_NIGHTLY` in all (a repository *variable*, 1

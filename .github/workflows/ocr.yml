@@ -9,6 +9,15 @@ name: Machine OCR
 # has GITHUB_DISPATCH_TOKEN, someone asking starts it at once for what was
 # asked (requested: true). Free: Tesseract on the runner's CPU. Needs the
 # DATABASE_URL repository secret, as the import does (docs/deploy.md).
+#
+# Then the index books (a title with מפתח) are read again with RebbeHub's
+# own Kraken model, which reads their two columns of page references far
+# better; its reading takes the place of Tesseract's, keeping every line
+# people checked (`rebbehub ocr --engine kraken-index`). The model is kept
+# private in R2 (models/rebbehub-kraken-v<N>/, the newest is used), so that
+# job needs R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY, as the
+# transcription does; without them it is skipped with a notice. It is not
+# run for a request alone: requests are Tesseract's.
 on:
   schedule:
     - cron: "17 2 * * *"
@@ -25,6 +34,10 @@ on:
       limit:
         description: How many scans to read this run
         default: "5"
+        required: true
+      index_limit:
+        description: How many index books Kraken reads this run (a book takes about an hour)
+        default: "1"
         required: true
 
 permissions:
@@ -71,3 +84,102 @@ jobs:
           args=(--approve-as "$STEWARD" --limit "$LIMIT")
           if [ "$REQUESTED" = "true" ]; then args+=(--requested-only); fi
           npm run rebbehub -- ocr "${args[@]}"
+
+  index:
+    name: Read index books with Kraken
+    needs: ocr
+    # After Tesseract, even when one of its scans failed; not for a request alone.
+    if: ${{ !cancelled() && inputs.requested != true }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 240
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - name: Check it is configured
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "::error::Add the DATABASE_URL repository secret (see docs/deploy.md)."; exit 1; fi
+          if [ -z "$R2_ENDPOINT" ] || [ -z "$R2_ACCESS_KEY_ID" ] || [ -z "$R2_SECRET_ACCESS_KEY" ]; then
+            echo "::notice::Index books were not read with Kraken: its model is kept in R2, so add R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY (docs/deploy.md)."
+            echo "SKIP=1" >> "$GITHUB_ENV"
+          fi
+      - name: Pick the newest Kraken model in R2
+        if: env.SKIP != '1'
+        run: |
+          # models/rebbehub-kraken-v1/, -v2/, …: the highest version that has its model file.
+          export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" AWS_DEFAULT_REGION=auto
+          for v in $(aws s3 ls "s3://rebbehub-preservation/models/" --endpoint-url "$R2_ENDPOINT" | grep -oE 'rebbehub-kraken-v[0-9]+' | sed 's/.*-v//' | sort -rn | uniq); do
+            if aws s3 ls "s3://rebbehub-preservation/models/rebbehub-kraken-v$v/rebbehub-kraken-v$v.safetensors" --endpoint-url "$R2_ENDPOINT" >/dev/null; then
+              echo "KRAKEN_DIR=models/rebbehub-kraken-v$v" >> "$GITHUB_ENV"
+              echo "Reading with rebbehub-kraken-v$v."
+              break
+            fi
+          done
+      - name: Keep the Kraken model between runs
+        if: env.SKIP != '1' && env.KRAKEN_DIR != ''
+        uses: actions/cache@v4
+        with:
+          path: ~/${{ env.KRAKEN_DIR }}
+          key: ${{ env.KRAKEN_DIR }}
+      - name: Fetch the Kraken model from R2
+        if: env.SKIP != '1'
+        run: |
+          if [ -z "$KRAKEN_DIR" ]; then
+            echo "::notice::R2 holds no rebbehub-kraken-v<N> model yet; index books were not read with Kraken."
+            echo "SKIP=1" >> "$GITHUB_ENV"; exit 0
+          fi
+          dir="$HOME/$KRAKEN_DIR"
+          file="$dir/$(basename "$KRAKEN_DIR").safetensors"
+          if [ ! -s "$file" ]; then
+            AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" AWS_DEFAULT_REGION=auto \
+              aws s3 sync "s3://rebbehub-preservation/$KRAKEN_DIR/" "$dir" --endpoint-url "$R2_ENDPOINT"
+          fi
+          echo "KRAKEN_MODEL=$file" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v7
+        if: env.SKIP != '1'
+      - uses: actions/setup-node@v7
+        if: env.SKIP != '1'
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Tesseract and Poppler
+        if: env.SKIP != '1'
+        run: sudo apt-get update -q && sudo apt-get install -y -q tesseract-ocr tesseract-ocr-heb poppler-utils
+      - name: Keep Tesseract's best models between runs
+        if: env.SKIP != '1'
+        uses: actions/cache@v4
+        with:
+          path: ~/tessdata-best
+          key: tessdata-best-heb-eng
+      - name: Fetch Tesseract's best models
+        if: env.SKIP != '1'
+        run: |
+          # Tesseract finds the lines Kraken reads, with the models the Kraken model was trained beside.
+          mkdir -p ~/tessdata-best
+          for lang in heb eng; do
+            if [ ! -s ~/tessdata-best/$lang.traineddata ]; then
+              curl -fsSL -o ~/tessdata-best/$lang.traineddata "https://github.com/tesseract-ocr/tessdata_best/raw/main/$lang.traineddata"
+            fi
+          done
+          echo "KRAKEN_TESSDATA=$HOME/tessdata-best" >> "$GITHUB_ENV"
+      - name: Install Kraken (CPU)
+        if: env.SKIP != '1'
+        run: |
+          # torch's CPU wheels first: a fraction of the size of the CUDA ones from PyPI.
+          python3 -m pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
+          python3 -m pip install "kraken~=7.1"
+      - name: Install
+        if: env.SKIP != '1'
+        run: npm ci
+      - name: Build
+        if: env.SKIP != '1'
+        run: npm run build
+      - name: Read index books
+        if: env.SKIP != '1'
+        env:
+          STEWARD: ${{ inputs.steward || 'shmuly' }}
+          LIMIT: ${{ inputs.index_limit || '1' }}
+        run: npm run rebbehub -- ocr --engine kraken-index --model "$KRAKEN_MODEL" --approve-as "$STEWARD" --limit "$LIMIT"

@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { pageLevel, reseedLines, type Catalog, type Json } from '@rebbehub/core';
 import type { EntityId, TextLine } from '@rebbehub/model';
@@ -21,6 +22,12 @@ import { failIfAny, machineRun } from './machineQueue.js';
  * human-checked lines"): the machine layer gets the new reading, and the
  * community pages seeded from it take the new lines everywhere except
  * where a person checked a line.
+ *
+ * A second engine, `kraken` (RebbeHub's own Kraken model), reads only the
+ * index books (מפתח ענינים), which it reads far better than Tesseract.
+ * Where Tesseract read one first, Kraken's reading takes the place of
+ * Tesseract's in the same machine layer, the way a newer version's
+ * reading does (see readScans).
  */
 
 const run = promisify(execFile);
@@ -34,6 +41,15 @@ export interface OcrEngine {
   /** Renders a PDF to page images, in page order. */
   pages(pdf: string, dir: string): Promise<string[]>;
   lines(image: string): Promise<TextLine[]>;
+  /**
+   * Other engines whose machine layer this one takes over when it reads a
+   * scan they read: it reads the scans it is for so much better that its
+   * reading should be the one people proofread. Their reading stays in the
+   * layer's history.
+   */
+  replaces?: string[];
+  /** Reads only index books (indexBooks), the pages it was trained on. */
+  indexBooksOnly?: boolean;
 }
 
 /**
@@ -93,24 +109,88 @@ export const tesseract: OcrEngine = {
   },
 };
 
-/** Served scans that have no machine layer yet, the newest first (a scan just added is read the next night); with `reread`, those this engine read in another version. */
-export async function scansToRead(catalog: Catalog, options: { scan?: EntityId; limit?: number; reread?: { name: string; version: string } } = {}): Promise<Array<{ id: EntityId; file: string; sets: EntityId[] }>> {
+/**
+ * RebbeHub's Kraken model for the two-column subject indexes (מפתח ענינים)
+ * of Likkutei Sichos (services/jobs/kraken/lines.py): on a volume it never
+ * trained on it read 610 of 615 page references right, against
+ * Tesseract's 593. `model` is the model file, kept private in R2 at
+ * models/rebbehub-kraken-v<N>/; the layer names the model by that folder,
+ * with the kraken package's version, so a newer model re-reads with
+ * `reread`. Needs `pip install kraken` and Tesseract, which finds the lines
+ * Kraken reads (`tessdata`: another folder of Tesseract models).
+ */
+export function kraken(input: { model: string; python?: string; script?: string; tessdata?: string }): OcrEngine {
+  const script = input.script ?? fileURLToPath(new URL('../kraken/lines.py', import.meta.url));
+  const python = input.python ?? 'python3';
+  const folder = basename(dirname(input.model));
+  const model = /^rebbehub-kraken-v\d+$/.test(folder) ? folder : basename(input.model).replace(/\.[^.]+$/, '');
+  return {
+    name: 'kraken-index',
+    replaces: [tesseract.name],
+    indexBooksOnly: true,
+    async version() {
+      const { stdout } = await run(python, ['-c', "import importlib.metadata as m; print(m.version('kraken'))"]);
+      return `${model} kraken-${stdout.trim()}`;
+    },
+    async pages(pdf, dir) {
+      // Grey at 300 dpi, as the model was trained.
+      await run('pdftoppm', ['-r', '300', '-gray', '-png', pdf, join(dir, 'page')], { maxBuffer: 1 << 26 });
+      return pageImages(dir);
+    },
+    async lines(image) {
+      const { stdout } = await run(python, [script, '--model', input.model, ...(input.tessdata ? ['--tessdata', input.tessdata] : []), image], { maxBuffer: 1 << 26 });
+      return JSON.parse(stdout.trim().split('\n').at(-1) || '[]') as TextLine[];
+    },
+  };
+}
+
+/** The page images pdftoppm made in `dir`, in page order. */
+async function pageImages(dir: string): Promise<string[]> {
+  return (await readdir(dir))
+    .filter((f) => f.startsWith('page') && f.endsWith('.png'))
+    .sort((a, b) => Number(/(\d+)\.png$/.exec(a)![1]) - Number(/(\d+)\.png$/.exec(b)![1]))
+    .map((f) => join(dir, f));
+}
+
+/** What marks an index book in its publication's or work's Hebrew title: מפתח, and so מפתחות. */
+export const INDEX_TITLE = 'מפתח';
+
+/**
+ * Served scans that have no machine layer yet, the newest first (a scan
+ * just added is read the next night); with `replaces`, also those these
+ * other engines read; with `reread`, those this engine read in another
+ * version. `indexBooks`: only scans of index books, whose publication's or
+ * work's Hebrew title has מפתח in it (a scan named by `scan` is taken as
+ * it is, since a person chose it).
+ */
+export async function scansToRead(
+  catalog: Catalog,
+  options: { scan?: EntityId; limit?: number; reread?: { name: string; version: string }; replaces?: string[]; indexBooks?: boolean } = {},
+): Promise<Array<{ id: EntityId; file: string; sets: EntityId[] }>> {
   const params: unknown[] = [];
   const only = options.scan ? `AND e.id = $${params.push(options.scan)}` : '';
+  const machineLayer = (engine: string) => `EXISTS (
+         SELECT 1 FROM entity_ref x JOIN entity l ON l.id = x.from_id AND l.type = 'text-layer' AND NOT l.deleted
+         JOIN revision lr ON lr.id = l.main_rev
+         WHERE x.to_id = e.id AND x.field = 'scan' AND lr.data->>'kind' = 'machine-ocr'${engine})`;
   const which = options.reread
-    ? `AND EXISTS (
-         SELECT 1 FROM entity_ref x JOIN entity l ON l.id = x.from_id AND l.type = 'text-layer' AND NOT l.deleted
-         JOIN revision lr ON lr.id = l.main_rev
-         WHERE x.to_id = e.id AND x.field = 'scan' AND lr.data->>'kind' = 'machine-ocr'
-           AND lr.data->'engine'->>'name' = $${params.push(options.reread.name)} AND lr.data->'engine'->>'version' <> $${params.push(options.reread.version)})`
-    : `AND NOT EXISTS (
-         SELECT 1 FROM entity_ref x JOIN entity l ON l.id = x.from_id AND l.type = 'text-layer' AND NOT l.deleted
-         JOIN revision lr ON lr.id = l.main_rev
-         WHERE x.to_id = e.id AND x.field = 'scan' AND lr.data->>'kind' = 'machine-ocr')`;
+    ? `AND ${machineLayer(` AND lr.data->'engine'->>'name' = $${params.push(options.reread.name)} AND lr.data->'engine'->>'version' <> $${params.push(options.reread.version)}`)}`
+    : options.replaces?.length
+      ? `AND (NOT ${machineLayer('')} OR ${machineLayer(` AND lr.data->'engine'->>'name' = ANY($${params.push(options.replaces)}::text[])`)})`
+      : `AND NOT ${machineLayer('')}`;
+  // Two joins by id, only when asked: the publication, and the work it is.
+  const index =
+    options.indexBooks && !options.scan
+      ? {
+          join: `JOIN entity p ON p.id = r.data->>'publication' JOIN revision pr ON pr.id = p.main_rev
+     LEFT JOIN entity w ON w.id = pr.data->>'work' LEFT JOIN revision wr ON wr.id = w.main_rev`,
+          where: `AND (pr.data->'title'->>'he' LIKE $${params.push(`%${INDEX_TITLE}%`)} OR wr.data->'title'->>'he' LIKE $${params.length})`,
+        }
+      : { join: '', where: '' };
   const { rows } = await catalog.db.query<{ id: EntityId; file: string; sets: EntityId[] | null }>(
     `SELECT e.id, r.data->>'file' AS file, ARRAY(SELECT jsonb_array_elements_text(coalesce(r.data->'sets', '[]'::jsonb))) AS sets
-     FROM entity e JOIN revision r ON r.id = e.main_rev JOIN file f ON f.sha256 = r.data->>'file'
-     WHERE e.type = 'scan' AND NOT e.deleted AND f.storage_tier = 'public' AND f.rights_state IN ('open', 'credit') ${only}
+     FROM entity e JOIN revision r ON r.id = e.main_rev JOIN file f ON f.sha256 = r.data->>'file' ${index.join}
+     WHERE e.type = 'scan' AND NOT e.deleted AND f.storage_tier = 'public' AND f.rights_state IN ('open', 'credit') ${only} ${index.where}
        ${which}
      ORDER BY e.created_at DESC, e.id LIMIT ${Math.min(options.limit ?? 10, 1000)}`,
     params,
@@ -122,6 +202,24 @@ export async function scansToRead(catalog: Catalog, options: { scan?: EntityId; 
  * Reads the scans and adds each one's machine layer as a suggestion by
  * the OCR bot, approved by `approveAs` (a steward). `fetchFile` gets a
  * file's bytes by sha256 (from the API's /objects/, in production).
+ *
+ * An engine for index books only (`kraken`) makes its own pass, as
+ * `reread` does, and leaves the queue of scans people asked for to the
+ * engine that reads every scan: a request it took for a scan that is not
+ * an index book would be settled as one the machine cannot read. Its pass
+ * takes the index books nobody has read, and those Tesseract read, newest
+ * first.
+ *
+ * Where it replaces another engine's reading, there is still one machine
+ * layer, not two: it takes over the layer Tesseract made, with its own
+ * name and version, as a newer version of Tesseract would. That keeps
+ * every page to one machine reading for readers, search and proofreading,
+ * and Tesseract's reading stays in the layer's history. The community
+ * pages seeded from that layer take the new lines, except every line a
+ * person checked, which is kept as they left it (reseedLines). A
+ * community text keepers seeded from another layer (an uploaded OCR) is
+ * left alone. Tesseract never takes a layer back: its passes look only
+ * for scans with no machine layer, or with its own in an older version.
  */
 export async function readScans(
   catalog: Catalog,
@@ -142,9 +240,27 @@ export async function readScans(
   await catalog.createAccount({ id: OCR_BOT, displayName: 'Machine OCR', isBot: true });
   const version = await engine.version();
   const done: Array<{ scan: EntityId; pages: number; lines: number }> = [];
-  if (input.reread) {
-    // Re-reading is its own pass over what an older version read; requests are for scans never read.
-    for (const scan of await scansToRead(catalog, { scan: input.scan, limit: input.limit, reread: { name: engine.name, version } })) await readOne(scan);
+  if (input.reread || engine.indexBooksOnly) {
+    // Re-reading is its own pass over what an older version read, and an index-books engine's is over index
+    // books (see above); requests are for scans never read, and wait for the engine that reads every scan.
+    if (!input.reread && input.requestedOnly) return done;
+    const scans = await scansToRead(catalog, {
+      scan: input.scan,
+      limit: input.limit,
+      indexBooks: engine.indexBooksOnly,
+      ...(input.reread ? { reread: { name: engine.name, version } } : { replaces: engine.replaces }),
+    });
+    const failed: Array<{ item: EntityId; error: string }> = [];
+    for (const scan of scans) {
+      try {
+        await readOne(scan);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log(`${scan.id}: failed: ${message}`);
+        failed.push({ item: scan.id, error: message });
+      }
+    }
+    failIfAny(failed);
     return done;
   }
   const { failed } = await machineRun(catalog, 'ocr', {
@@ -152,7 +268,7 @@ export async function readScans(
     limit: input.limit ?? 10,
     sweep: !input.requestedOnly,
     log,
-    find: ({ item, limit }) => scansToRead(catalog, { scan: item, limit }),
+    find: ({ item, limit }) => scansToRead(catalog, { scan: item, limit, replaces: engine.replaces }),
     work: readOne,
   });
   failIfAny(failed);
@@ -165,14 +281,15 @@ export async function readScans(
       await writeFile(pdf, await input.fetchFile(scan.file));
       const images = await engine.pages(pdf, dir);
       const suggestion = await catalog.createChangeset(OCR_BOT, { title: `Machine OCR of ${scan.id} (${engine.name} ${version})` });
-      const before = input.reread ? await layersOfScan(catalog, scan.id) : null;
-      const old = before?.find((l) => l.kind === 'machine-ocr' && l.engine?.name === engine.name);
+      const before = await layersOfScan(catalog, scan.id);
+      // The machine layer this reading goes into: its own from an older version, or one it replaces.
+      const old = before.find((l) => l.kind === 'machine-ocr' && l.engine && (l.engine.name === engine.name || engine.replaces?.includes(l.engine.name)));
       const layer = await catalog.putRevision(suggestion.id, OCR_BOT, {
         ...(old ? { id: old.id } : {}),
         type: 'text-layer',
         data: { scan: scan.id, kind: 'machine-ocr', engine: { name: engine.name, version }, language: 'he' } as Json,
       });
-      const community = before?.find((l) => l.kind === 'community');
+      const community = before.find((l) => l.kind === 'community');
       // The community layer beside it, seeded from it: people's line fixes go there, never into the machine's reading.
       if (!community) await catalog.putRevision(suggestion.id, OCR_BOT, { type: 'text-layer', data: { scan: scan.id, kind: 'community', seededFrom: layer, language: 'he' } as Json });
       // Re-reading: the community pages seeded from this layer take the new lines, except where a person checked one.

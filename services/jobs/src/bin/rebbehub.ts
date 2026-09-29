@@ -70,12 +70,16 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 and sha256 checked (docs/mirrors.md)
   rebbehub keygen --out <key.json>
   rebbehub ocr --approve-as <steward> [--scan <id>] [--limit <n>] [--files <url>] [--reread] [--requested-only]
+                  [--engine tesseract-heb|kraken-index] [--model <file>]
                                                 machine OCR: the scans people asked for first, then the
                                                 newest served scans that have none yet (--requested-only:
                                                 only those asked for);
                                                 files from <url>/objects/<sha256> (default the live API);
                                                 --reread: scans read by an older engine, read again
-                                                (lines people checked are kept)
+                                                (lines people checked are kept);
+                                                --engine kraken-index: index books (מפתח) only, with
+                                                RebbeHub's Kraken model (--model or KRAKEN_MODEL;
+                                                pip install kraken), taking over Tesseract's reading
   rebbehub transcribe --approve-as <steward> [--recording <id>] [--limit <n>] [--linked] [--files <url>]
                   [--engine workers-ai|local] [--requested-only]
                                                 machine transcripts, with sync: the recordings people asked
@@ -133,6 +137,7 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     engine: { type: 'string' },
+    model: { type: 'string' },
     database: { type: 'string' },
     id: { type: 'string' },
     name: { type: 'string' },
@@ -227,7 +232,7 @@ try {
       await archiveGapsCommand(ctx, { db: need(values.db, 'db') });
       break;
     case 'ocr':
-      await ocrCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), scan: values.scan, limit: number(values.limit), files: values.files, reread: values.reread, requestedOnly: values['requested-only'] });
+      await ocrCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), scan: values.scan, limit: number(values.limit), files: values.files, reread: values.reread, requestedOnly: values['requested-only'], engine: values.engine, model: values.model });
       break;
     case 'align':
       await alignCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files, engine: values.engine });

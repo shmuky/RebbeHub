@@ -12,6 +12,17 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Index books read by RebbeHub's own OCR model.** The scans of index
+  books (מפתח ענינים, a title with מפתח) are read a second time with
+  `rebbehub-kraken-v1`, a Kraken model trained on the two-column subject
+  indexes of Likkutei Sichos, which read 610 of 615 page references right
+  on a volume it never saw, against Tesseract's 593. Its reading takes the
+  place of Tesseract's in the scan's machine layer (the layer's `engine`
+  becomes `kraken-index`, its version the model's), every line people
+  checked is kept, and it stays marked as machine reading until people
+  check it. `rebbehub ocr --engine kraken-index --model <file>`; the
+  nightly *Machine OCR* workflow reads one index book a night.
+
 - **A status page.** `/status` (linked in every page's foot) says whether
   the site, the API, the MCP server, the database, today's allowance of
   database queries and the scheduled jobs are working, with ninety days

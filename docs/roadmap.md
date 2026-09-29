@@ -103,7 +103,9 @@ inside talk pages' wiki text, and a steward's page to edit labels.
   *Machine OCR* workflow read served scans with Tesseract (Hebrew) into a
   machine layer; `/text/<scan>` shows it page by page, marked as machine
   reading, and a signed-in reader fixes a line into the community layer,
-  reviewed like any suggestion.
+  reviewed like any suggestion. Index books (מפתח) are then read again
+  with RebbeHub's own Kraken model (`--engine kraken-index`), which takes
+  over Tesseract's reading and keeps every line people checked.
 - **Transcription and sync** ✅: `rebbehub transcribe` and the *Machine
   transcription* workflow (ivrit.ai's Yiddish Whisper on the
   runner's CPU, or Whisper on Workers AI; [transcription](transcription.md)) turn a
