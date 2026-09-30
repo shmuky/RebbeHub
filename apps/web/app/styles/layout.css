@@ -398,6 +398,20 @@ main#main {
   margin: 8px 16px;
 }
 
+/* The theme switch fills the sheet's width, never wider. */
+.sheet-theme {
+  padding: 4px 16px 12px;
+}
+
+.sheet-theme .segmented > button {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 6px;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -1310,4 +1324,81 @@ body.embedded {
   width: 20px;
   height: 20px;
   font-size: 12px;
+}
+
+/* The phone's tabs: the main sections along the bottom, and the menu. */
+.mtabs {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  :root {
+    --tabs-h: calc(58px + env(safe-area-inset-bottom, 0px));
+  }
+  .mtabs {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 48;
+    height: var(--tabs-h);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    display: flex;
+    border-top: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .mtabs a,
+  .mtabs button {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px 2px;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .mtabs span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mtabs [aria-current='page'] {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  /* Nothing at the page's end (the footer) is left under the tabs. */
+  body {
+    padding-bottom: var(--tabs-h);
+  }
+  /* The player and the toasts sit just above the tabs. */
+  .player-bar {
+    bottom: var(--tabs-h);
+  }
+  /* A bar kept at the screen's foot (the transcript's fixes) stays above them too. */
+  body .txf-bar {
+    bottom: calc(var(--tabs-h) + var(--player-h, 0px));
+  }
+  body .toasts {
+    bottom: calc(20px + var(--player-h, 0px) + var(--tabs-h));
+  }
+  /* The menu opens from its tab; the top bar keeps back, the title, search and the bell. */
+  .mtop .msheet > summary {
+    display: none;
+  }
+  .mtop .icon-link {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    position: relative;
+    flex: none;
+  }
 }
