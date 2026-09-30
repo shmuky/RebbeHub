@@ -1,5 +1,5 @@
 import { one } from '@rebbehub/db';
-import type { EntityId } from '@rebbehub/model';
+import { carryWordTimes, type EntityId } from '@rebbehub/model';
 import type { Catalog, ChangesetRow, NewRevision } from './catalog.js';
 import { invalid, notFound } from './errors.js';
 import type { Json } from './merge.js';
@@ -262,7 +262,7 @@ interface SpanData {
   endMs: number;
   words?: WordTiming[];
   locked?: boolean;
-  origin?: { by: string; checked?: boolean };
+  origin?: { by: string; checked?: boolean; edited?: boolean };
 }
 
 /** A recording's transcript with its sync, paragraph by paragraph; null when it has none. */
@@ -324,11 +324,12 @@ export async function recordingTranscript(catalog: Catalog, recording: EntityId)
  * person heard them, marked checked. A person who fixed only some words
  * (`complete: false`) leaves the paragraph machine hearing, marked
  * `edited`: the fix is on the site, but the paragraph stays labelled and
- * is no training clip until someone checks the whole of it. When the words changed, their word
- * timings no longer fit, so they are let go (the paragraph keeps where it
- * is heard) until the next alignment run times the new words; words
- * checked unchanged keep theirs, and are training clips at once
- * (trainingClips.ts).
+ * is no training clip until someone checks the whole of it. When the words
+ * changed, the words left as they were keep their timings and the words
+ * changed are timed between them (model/timing.ts), so the player still
+ * lights the paragraph word by word; the next alignment run times them all
+ * from the audio again. Words checked unchanged keep theirs, and are
+ * training clips at once (trainingClips.ts).
  */
 export async function fixParagraph(catalog: Catalog, by: string, input: { segment: EntityId; content: string; complete?: boolean }): Promise<ChangesetRow> {
   const content = input.content.replace(/\s+/g, ' ').trim();
@@ -350,8 +351,12 @@ export async function fixParagraph(catalog: Catalog, by: string, input: { segmen
     const span = await catalog.get(s.from);
     const sd = span?.data as unknown as SpanData | undefined;
     if (!span || !sd?.words) continue;
-    const { words: _dropped, ...rest } = sd;
-    revisions.push({ id: span.id, type: 'alignment-span', data: rest as unknown as Json });
+    // The words left as they were keep their times, and the words changed take the time between them; only when nothing is left to go by are they let go.
+    const { words: old, ...rest } = sd;
+    const words = carryWordTimes(String(data.content ?? ''), old, content);
+    // Marked `edited` until the next alignment run times them from the audio again (it looks for these), and no training clip is cut by them meanwhile.
+    const origin = words && rest.origin ? { origin: { ...rest.origin, edited: true } } : {};
+    revisions.push({ id: span.id, type: 'alignment-span', data: (words ? { ...rest, words, ...origin } : rest) as unknown as Json });
   }
   // A listener's fixes of one transcript go into one suggestion while nobody has reviewed it yet: every word they fix joins it.
   const open = await one<{ id: number }>(

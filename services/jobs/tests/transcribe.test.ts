@@ -153,7 +153,7 @@ describe('word-level sync', () => {
     expect(view.paragraphs.map((p) => p.words?.map((w) => w.startMs))).toEqual([[0, 1000], [5000, 6000]]);
     expect(await recordingsToAlign(catalog)).toEqual([]);
 
-    // A person corrects the second paragraph and fixes where the first is heard: its word times go, and it is locked.
+    // A person corrects the second paragraph (its word times are carried over, marked for the align run) and fixes where the first is heard, which locks it.
     await catalog.merge((await fixParagraph(catalog, 'chaim', { segment: view.paragraphs[1]!.id, content: 'שטייט דאך אין' })).id, 'keeper');
     await catalog.merge((await anchorSync(catalog, 'chaim', { recording, segment: view.paragraphs[0]!.id, atMs: 500 })).id, 'keeper');
     expect((await recordingsToAlign(catalog)).map((r) => r.id)).toEqual([recording]);

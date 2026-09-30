@@ -98,10 +98,10 @@ export const within = (nowMs: number, p: { startMs: number | null; endMs: number
 
 /**
  * A paragraph's words, each with when it is said. Where the machine timed
- * them, its timings; where it has not (yet), as after a fix, whose words
- * are timed again only by the next nightly run, each word's moment is
- * estimated from where the paragraph starts and ends, by its letters, so
- * the words still light up as they are heard.
+ * them, its timings (a fix keeps them for the words it left:
+ * model/timing.ts); where there are none at all, as for a paragraph fixed
+ * before fixes kept them, each word's moment is estimated from where the
+ * paragraph starts and ends, by its letters, so the words still light up.
  */
 export function timedWords(p: Paragraph): Word[] | null {
   if (p.words?.length) return p.words;
