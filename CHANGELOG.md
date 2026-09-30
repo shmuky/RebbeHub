@@ -12,6 +12,10 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **A few words into many pages through the MCP server.** `add_segments`
+  adds or replaces segments in the words of up to 200 pages a call, as
+  one suggestion, sending only the new segments and where each goes (at
+  the start, the end, or before a given segment), not each page whole.
 - **Every sefer has a shaar, its README.** One file per sefer, written
   the same way for every sefer ([the shaar](docs/shaar.md)): a header of
   fixed fields (its name, subtitle, authors, the author as the title
@@ -61,10 +65,15 @@ any time. `@rebbehub/client` carries the API's version.
   book's head: the weekday, the day and the year (5703 or 5704) in one
   bold row, and the day's shiurim under "שיעורים." (Chumash with its
   portion, Tehillim, Elul's added chapters and Yom Kippur's by their
-  times, and the Tanya chapter), then the words justified between heavy
-  rules, on the daily page and each day's own page. The weekday, year,
-  Chumash and Tehillim are worked out from the calendar of 5703 and match
-  the print on every day read from its scan. Names brought from
+  times, and the Tanya chapter), then the words justified, on the daily
+  page and each day's own page. A day's notices (a Shabbos Mevarchim, a
+  fast, the Seder) stand above its shiurim on the 29 days the book puts
+  them there. A day's text can also carry what the book prints beyond
+  its words: the letter before the first day, a Shabbos's haftorah, the
+  Tanya line's first and last words, and the blessing after the last
+  day, marked as machine-read until a person checks them. The weekday,
+  year, Chumash and Tehillim are worked out from the calendar of 5703 and
+  match the print on every day read from its scan. Names brought from
   chabadlibrary.org no longer show their tags (`<h3>ד שבט</h3>`).
 - **Word by word again after a fix.** Fixing a paragraph's words used to
   throw away all its word timings until the audio was timed again, which

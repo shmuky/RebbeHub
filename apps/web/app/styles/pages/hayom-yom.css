@@ -2,19 +2,17 @@
  * A day of Hayom Yom as the book prints it (components/HayomYomDay.tsx):
  * the weekday at the start, the day in the middle and the year at the end,
  * all bold; "שיעורים." with Chumash, Tehillim and Tanya one under another,
- * their names in a column; the words justified; heavy rules between days.
- * All in the Torah face.
+ * their names in a column, the day's notices above them; the words
+ * justified. All in the Torah face.
  */
 
 .hy-day {
   font-family: var(--torah);
   color: var(--text);
-  padding-block: 12px 14px;
-  border-block: 3px solid var(--text);
 }
 
 .hy-day + .hy-day {
-  border-top: 0;
+  margin-top: 36px;
 }
 
 .hy-head {
@@ -64,6 +62,66 @@
 
 .hy-shiurim > span:not(.hy-shiurim-title, .hy-shiur-name) {
   grid-column: 3;
+}
+
+/* Lines set apart from the words: each on a line of its own. */
+.hy-line-part {
+  display: block;
+}
+
+.hy-line.machine {
+  text-decoration: underline dotted var(--subtle);
+  text-underline-offset: 4px;
+}
+
+/* The day's notices (מברכים, a fast, the haftorah), between its head and its shiurim. */
+.hy-pre {
+  margin: 0 0 10px;
+  font-size: 18px;
+  line-height: 1.55;
+}
+
+/* Above the first day: the letter the book opens with, its heading spaced out. */
+.hy-lead {
+  margin-bottom: 20px;
+  font-size: 19px;
+  line-height: 1.7;
+  text-align: justify;
+}
+
+.hy-lead .hy-line + .hy-line {
+  margin-top: 0.6em;
+}
+
+.hy-line-heading {
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.3em;
+}
+
+/* After the last day: the blessing the book ends with, large and centred under a star. */
+.hy-close {
+  margin-top: 18px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 1.5;
+}
+
+/* "——— * ———" as the book sets it above the blessing. */
+.hy-close-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 18px;
+}
+
+.hy-close-mark::before,
+.hy-close-mark::after {
+  content: '';
+  width: 64px;
+  border-top: 1px solid currentColor;
 }
 
 /* The words: no paragraph numbers in the margin, set justified as the book is. */

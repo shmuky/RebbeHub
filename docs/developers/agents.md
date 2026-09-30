@@ -44,6 +44,7 @@ stream. It has one address, `https://api.rebbehub.org/mcp`:
 | `get_shaar` | a sefer's shaar file, the README of a sefer ([the shaar](../shaar.md)); one the catalog made is marked `[machine]` |
 | `suggest_shaar` | a sefer's whole shaar file, changed, as a suggestion for review; a file that cannot be read is refused line by line (`write`) |
 | `suggest_items` | add new items, or change or delete many, as one suggestion; 200 items a call, added to the same draft over several calls (`write`) |
+| `add_segments` | add or replace a few segments in many pages' words (a line a source left out, a machine's reading of a scan) without sending the rest of each page; 200 pages a call, one suggestion (`write`) |
 | `approve_suggestion` | approve a suggestion sent for review, when you may: its sets' keepers, or a steward ; `clashes` (`keep_live` or `take_suggestion`) settles every clash with a later change at once (`write`) |
 | `close_suggestion` | close (withdraw) a suggestion without merging it: your own, or any as a steward (`write`) |
 | `reopen_suggestion` | open a closed suggestion for review again; its checks run again (`write`) |

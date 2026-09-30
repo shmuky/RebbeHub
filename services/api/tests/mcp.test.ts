@@ -33,6 +33,10 @@ const rpc = async (method: string, params?: unknown, options: { token?: string; 
   return { status: response.status, body: text ? (JSON.parse(text) as any) : null };
 };
 const tool = async (name: string, args: Record<string, unknown>, token?: string) => (await rpc('tools/call', { name, arguments: args }, { token })).body.result;
+const writeToken = async (who: string) => {
+  const made = await app.request('/v1/tokens', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Test-Account': who }, body: JSON.stringify({ name: 'agent', scopes: ['read', 'write'] }) });
+  return ((await made.json()) as { token: string }).token;
+};
 
 describe('the MCP server', () => {
   it('shakes hands, lists its tools, and answers notifications with nothing', async () => {
@@ -53,6 +57,7 @@ describe('the MCP server', () => {
       'list_issues',
       'open_issue',
       'suggest_items',
+      'add_segments',
       'approve_suggestion',
       'close_suggestion',
       'reopen_suggestion',
@@ -236,6 +241,26 @@ describe('the MCP server', () => {
     expect((await tool('reopen_suggestion', { suggestion: stale }, stewardToken)).isError).toBe(false);
     expect((await tool('approve_suggestion', { suggestion: stale, clashes: 'keep_live' }, stewardToken)).isError).toBe(false);
     expect((await catalog.get(workId))!.data).toMatchObject({ title: { he: 'מפתח השיחות' } });
+  });
+
+  it('adds a few segments to many pages, sending only the new words', async () => {
+    const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'היום יום' }, slug: 'hy', authors: [], genre: 'sichos', levels: ['day'], sets: [set] }, '/hy');
+    const words = (...ids: string[]) => ({ profile: 'chabad-library', versions: [{ id: 'he', language: 'he', segments: ids.map((s) => ({ id: s, kind: 'paragraph', text: [{ text: s }] })) }] });
+    const day = await add(catalog, 'mendy', 'keeper', 'unit', { work, position: [{ level: 'day', value: '1' }], order: '1', label: { he: 'יט כסלו' }, body: words('p1', 'p2') }, '/hy/1');
+    const token = await writeToken((await createPerson(catalog.db, 'Reader')).id);
+    const line = (s: string) => ({ id: s, kind: 'paragraph', text: [{ text: s }], origin: { by: 'ocr:test' } });
+    const made = await tool('add_segments', { items: [{ id: day, segments: [{ segment: line('lead-1'), at: 'start' }, { segment: line('pre-1'), at: 1 }, { segment: line('close-1') }] }], title: 'The print' }, token);
+    expect(made.isError).toBe(false);
+    expect(made.structuredContent).toMatchObject({ status: 'open', items: [day] });
+    const [proposal] = await catalog.proposals(made.structuredContent.suggestion);
+    const ids = (data: any) => data.body.versions[0].segments.map((s: { id: string }) => s.id);
+    expect(ids(proposal!.rev.data)).toEqual(['lead-1', 'p1', 'pre-1', 'p2', 'close-1']);
+    expect((proposal!.rev.data as any).label).toEqual({ he: 'יט כסלו' });
+    // A segment already there is replaced where it stands.
+    const again = await tool('add_segments', { items: [{ id: day, segments: [{ segment: { ...line('p1'), text: [{ text: 'new' }] }, at: 'end' }] }] }, token);
+    const [second] = await catalog.proposals(again.structuredContent.suggestion);
+    expect(ids(second!.rev.data)).toEqual(['p1', 'p2']);
+    expect((await tool('add_segments', { items: [{ id: work, segments: [{ segment: line('x') }] }] }, token)).content[0].text).toMatch(/has no words/);
   });
 
   it('shows the tree and organizes it as suggestions, with a write token', async () => {
