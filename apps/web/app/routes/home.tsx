@@ -268,6 +268,8 @@ const W = {
   projects: { he: 'פרויקטים פעילים', en: 'Active projects' },
   noProjects: { he: 'אין כרגע פרויקט פתוח.', en: 'No project is open just now.' },
   nextShabbos: { he: 'שבת הבאה', en: 'This Shabbos' },
+  daily: { he: 'לימוד יומי: תניא · היום יום', en: 'Daily learning: Tanya · Hayom Yom' },
+  dailyShort: { he: 'לימוד יומי', en: 'Daily learning' },
   parsha: { he: 'פרשת', en: 'Parshas' },
   farbrengen: { he: 'התוועדות', en: 'Farbrengen' },
   parts: { he: 'חלקים', en: 'parts' },
@@ -294,6 +296,12 @@ function DayStrip({ lang, week, civil, weekday, year, yearCount }: { lang: Lang;
           {lang === 'he' ? `יום ${WEEKDAYS_HE[weekday]}, ` : `${WEEKDAYS_EN[weekday]}, `}
           <b>{week.todayLabel}</b>
           {civilShort ? ` · ${civilShort}` : ''}
+        </span>
+        <span className="sep" />
+        <span>
+          <Link to={href('/daily', lang)}>
+            <b>{w(lang, 'daily')}</b>
+          </Link>
         </span>
         {week.holidays.length ? (
           <>
@@ -637,6 +645,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 <span className="num">{l.volumes > 1 ? `${num(l.volumes, lang)} ${w(lang, 'volumes')}` : num(l.units, lang)}</span>
               </Link>
             ))}
+            <Link className="row" to={href('/daily', lang)}>
+              <Icon name="cal" />
+              <span className="he torah">{w(lang, 'dailyShort')}</span>
+              <span className="num">{lang === 'he' ? 'תניא · היום יום' : 'Tanya · Hayom Yom'}</span>
+            </Link>
             <Link className="row" to={href('/calendar', lang)}>
               <Icon name="audio" />
               <span className="he torah">{w(lang, 'recorded')}</span>

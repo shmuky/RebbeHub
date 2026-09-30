@@ -202,6 +202,7 @@ export function CommandPalette({ lang, account, open, onClose, initial = '' }: {
       ['/', 'home', tu(lang, 'navHome'), 'home בית'],
       ['/sets', 'book', tu(lang, 'navLibrary'), 'library sets ספרייה'],
       ['/calendar', 'cal', tu(lang, 'navFarbrengens'), 'farbrengens calendar התוועדויות לוח'],
+      ['/daily', 'book', lang === 'he' ? 'לימוד יומי' : 'Daily learning', 'daily learning chitas tanya hayom yom לימוד יומי חת״ת חתת תניא היום יום'],
       ['/review', 'suggest', tu(lang, 'navSuggestions'), 'suggestions review הצעות'],
       ['/reports', 'report', tu(lang, 'navReports'), 'reports issues דיווחים'],
       ['/projects', 'target', tu(lang, 'navProjects'), 'projects פרויקטים'],

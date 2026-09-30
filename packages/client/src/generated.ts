@@ -870,6 +870,20 @@ export interface Operations {
     };
     output: Record<string, unknown>;
   };
+  /** A day's learning: Chitas' Tanya (the day's portion, each chapter it touches cut to it) and Hayom Yom */
+  dailyLearning: {
+    input: {
+      /** The civil day */
+      date: string;
+    };
+    output: {
+      date: string;
+      /** Its Hebrew date key (5787-01-19) */
+      hebrew: string;
+      tanya: Array<Item>;
+      hayomYom: Array<Item>;
+    };
+  };
   /** Keep some transcript fixes and remove others in one go: kept ones are approved; removed ones are withdrawn if they are yours, else sent back with the note */
   decideTranscriptFixes: {
     input: {
@@ -2609,6 +2623,7 @@ export const OPERATIONS = {
   createProject: {"method":"POST","path":"/v1/projects","pathParams":[],"query":[],"body":"json","answer":"json"},
   createSuggestion: {"method":"POST","path":"/v1/suggestions","pathParams":[],"query":[],"body":"json","answer":"json"},
   createWebhook: {"method":"POST","path":"/v1/webhooks","pathParams":[],"query":[],"body":"json","answer":"json"},
+  dailyLearning: {"method":"GET","path":"/v1/daily","pathParams":[],"query":["date"],"body":null,"answer":"json"},
   decideTranscriptFixes: {"method":"POST","path":"/v1/transcripts/fixes/decide","pathParams":[],"query":[],"body":"json","answer":"json"},
   deleteWebhook: {"method":"DELETE","path":"/v1/webhooks/{id}","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   driveFile: {"method":"GET","path":"/v1/drive/{id}","pathParams":["id"],"query":[],"body":null,"answer":"raw"},
@@ -2909,6 +2924,11 @@ export abstract class GeneratedMethods {
   /** Add a webhook (up to five); its signing secret is shown this once (POST /v1/webhooks) */
   createWebhook(input: Operations['createWebhook']['input']): Promise<Operations['createWebhook']['output']> {
     return this.call('createWebhook', input ?? {} as Operations['createWebhook']['input']);
+  }
+
+  /** A day's learning: Chitas' Tanya (the day's portion, each chapter it touches cut to it) and Hayom Yom (GET /v1/daily) */
+  dailyLearning(input: Operations['dailyLearning']['input']): Promise<Operations['dailyLearning']['output']> {
+    return this.call('dailyLearning', input ?? {} as Operations['dailyLearning']['input']);
   }
 
   /** Keep some transcript fixes and remove others in one go: kept ones are approved; removed ones are withdrawn if they are yours, else sent back with the note (POST /v1/transcripts/fixes/decide) */

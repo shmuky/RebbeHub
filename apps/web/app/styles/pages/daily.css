@@ -1,0 +1,51 @@
+/*
+ * The day's learning (/daily): the day and its neighbours in the head, then
+ * Tanya and Hayom Yom, each a column of the text at reading width.
+ */
+
+.daily-page .lede svg {
+  vertical-align: -2px;
+}
+
+.daily-body {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 860px;
+  padding-block: 20px 48px;
+}
+
+.daily-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.daily-part {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 8px);
+  background: var(--bg);
+}
+
+.daily-part-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.daily-part-head h3 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+@media (max-width: 640px) {
+  .daily-part {
+    padding: 12px;
+  }
+}

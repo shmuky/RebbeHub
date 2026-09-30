@@ -28,6 +28,11 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **The day's learning.** `/daily` shows today's Tanya (the Chitas
+  portion by the yearly cycle from 19 Kislev, each chapter it touches cut
+  to the day's part, Hebrew and English) and Hayom Yom, with the day
+  before and after; `/daily/2026-09-30` is any day. `GET
+  /v1/daily?date=YYYY-MM-DD` gives the same in one read.
 - **A printing's PDF on Drive is read like a scan.** A printing whose
   source is a PDF on Google Drive (the Otzros library's copies, added as
   printings of the sefer they copy, so a sefer is on one page) opens in
