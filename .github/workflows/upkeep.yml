@@ -14,7 +14,10 @@ name: Upkeep (manual)
 #   relink-drive    links older imports stored on Sichos-Kodesh's media
 #                   proxy, as the files' own Google Drive links: one bot
 #                   suggestion of up to 500 items at a time, for review;
-#   relink-drive-dry-run  only counts what relink-drive would change.
+#   relink-drive-dry-run  only counts what relink-drive would change;
+#   relink-jem      links to JEM's player in the older form, as the public
+#                   Ashreinu app's own links to each recording, the same way;
+#   relink-jem-dry-run  only counts what relink-jem would change.
 #
 # Needs the DATABASE_URL repository secret, as the import does; covers and
 # page-images also CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (a token
@@ -25,10 +28,10 @@ on:
       job:
         description: Which job to run
         type: choice
-        options: [convert-bodies, covers, page-images, relink-drive, relink-drive-dry-run]
+        options: [convert-bodies, covers, page-images, relink-drive, relink-drive-dry-run, relink-jem, relink-jem-dry-run]
         default: covers
       limit:
-        description: How many sefarim or scans this run (covers, page-images), or items per suggestion (relink-drive); empty for the command's own default
+        description: How many sefarim or scans this run (covers, page-images), or items per suggestion (relink-drive, relink-jem); empty for the command's own default
         required: false
 
 permissions:
@@ -58,7 +61,7 @@ jobs:
       - name: Check it is configured
         run: |
           if [ -z "$DATABASE_URL" ]; then echo "::error::Add the DATABASE_URL repository secret (see docs/deploy.md)."; exit 1; fi
-          if [ "$JOB" != "convert-bodies" ] && [ "${JOB#relink-drive}" = "$JOB" ] && { [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$CLOUDFLARE_API_TOKEN" ]; }; then
+          if [ "$JOB" != "convert-bodies" ] && [ "${JOB#relink-}" = "$JOB" ] && { [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$CLOUDFLARE_API_TOKEN" ]; }; then
             echo "::error::Add the CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN repository secrets (a token with Workers R2 Storage: Edit; see docs/deploy.md)."; exit 1
           fi
           if [ -n "$LIMIT" ] && ! [[ "$LIMIT" =~ ^[0-9]+$ ]]; then echo "::error::limit is a whole number, or empty."; exit 1; fi
@@ -79,12 +82,12 @@ jobs:
               # Goes through every page still in markup; it takes no limit.
               npm run rebbehub -- convert-bodies
               ;;
-            relink-drive|relink-drive-dry-run)
+            relink-drive|relink-drive-dry-run|relink-jem|relink-jem-dry-run)
               # Sends all that is still on the proxy, a suggestion per <limit> items (500); what already waits in one is left to it.
               args=()
               if [ -n "$LIMIT" ]; then args+=(--chunk "$LIMIT"); fi
-              if [ "$JOB" = "relink-drive-dry-run" ]; then args+=(--dry-run); fi
-              npm run rebbehub -- relink-drive "${args[@]}"
+              if [ "${JOB%-dry-run}" != "$JOB" ]; then args+=(--dry-run); fi
+              npm run rebbehub -- "${JOB%-dry-run}" "${args[@]}"
               ;;
             covers|page-images)
               if [ -n "$LIMIT" ]; then npm run rebbehub -- "$JOB" --limit "$LIMIT"; else npm run rebbehub -- "$JOB"; fi

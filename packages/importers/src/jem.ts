@@ -17,8 +17,8 @@ import { audioUrl, FARBRENGENS_SET, occasionDate, SICHOS_KODESH_MEDIA_PROXY, typ
  * still lacks; one that shares a recording with it is the same farbrengen
  * for certain, and otherwise a JEM farbrengen is the one on its date when
  * each has one. Every other JEM event gets a page of its own. Each
- * recording keeps its link to JEM's own player, and is heard through
- * Sichos-Kodesh's media proxy as its app hears them. The crawl is made at
+ * recording links to the recording in the Ashreinu app, and is heard
+ * through Sichos-Kodesh's media proxy as its app hears them. The crawl is made at
  * import time (.github/workflows/import.yml); RebbeHub keeps no copy.
  */
 
@@ -91,8 +91,11 @@ export function jemDate(year: number | null, month: number | null, day: number |
   return isValidDateKey(String(year)) ? String(year) : null;
 }
 
-/** JEM's player at one event of a tree. */
-export const jemPlayerUrl = (root: number, event: number) => `${ASHREINU}/player?parentEvent=${root}&event=${event}`;
+/** JEM's player at one event of a tree, as the Ashreinu app itself links it (`https://ashreinu.app/#/player/parentEvent~1_event~2`). */
+export const jemPlayerUrl = (root: number, event: number) => `${ASHREINU}/#/player/parentEvent~${root}_event~${event}`;
+
+/** Older imports' form of that link (`https://ashreinu.app/player?parentEvent=1&event=2`), not the one the app's own share links use. */
+const OLD_PLAYER = /^https:\/\/ashreinu\.app\/player\?parentEvent=(\d+)&event=(\d+)$/;
 
 /** A recording's file name on JEM's CDN (`JEMSK0001.mp3`): the same name Sichos-Kodesh's catalog plays. */
 export const jemFilename = (url: string) => decodeURIComponent(url.split('?')[0]!.split('/').pop() ?? '');
@@ -266,4 +269,30 @@ export function jemImporter(input: JemInput | (() => Promise<JemInput>), options
       }
     },
   };
+}
+
+type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+
+/**
+ * An item's data with every link to JEM's player in the older form
+ * replaced by the Ashreinu app's own; everything else (the audio, still
+ * heard through the media proxy) as it was. Null when nothing in it needs
+ * it. `rebbehub relink-jem` (services/jobs) sends these.
+ */
+export function relinkJem(data: Json): { data: Json; links: number } | null {
+  let links = 0;
+  const convert = (value: Json): Json => {
+    if (typeof value === 'string') {
+      const player = OLD_PLAYER.exec(value);
+      const url = player ? jemPlayerUrl(Number(player[1]), Number(player[2])) : null;
+      if (!url) return value;
+      links++;
+      return url;
+    }
+    if (Array.isArray(value)) return value.map(convert);
+    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, convert(v)]));
+    return value;
+  };
+  const out = convert(data);
+  return links ? { data: out, links } : null;
 }
