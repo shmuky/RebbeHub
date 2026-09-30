@@ -1,4 +1,4 @@
-import { DAILY_WORKS, hayomYomShiurimOf, type HayomYomShiurim } from '@rebbehub/core';
+import { DAILY_WORKS, hayomYomShiurimOf, type HayomYomShiurim } from '@rebbehub/hebrew';
 import { threadsAbout, type AboutThread } from './about.server.js';
 import { workToc, type WorkToc } from './workView.server.js';
 import { eventView, type EventView } from './eventView.server.js';

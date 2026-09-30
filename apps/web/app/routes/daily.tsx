@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { data, Link, useNavigate } from 'react-router';
 import type { Route } from './+types/daily';
-import { hayomYomShiurimOf } from '@rebbehub/core';
+import { hayomYomShiurimOf } from '@rebbehub/hebrew';
 import { HayomYomDay } from '../components/HayomYomDay.js';
 import { PageWords } from '../components/PageWords.js';
 import { isPageText } from '@rebbehub/model';

@@ -260,5 +260,4 @@ export { CLIP_MAX_SECONDS, HELD_OUT_AUDIO, TRAINING_GOAL, piecesOf, splitOf, sum
 export { machineToCheck, type MachineToCheck, type PageToCheck, type ScanToCheck, type TranscriptToCheck } from './toCheck.js';
 export { openTranscriptFixes, TRANSCRIPT_FIXES_MAX, type TranscriptFix, type TranscriptFixChange } from './transcriptFixes.js';
 export { DAILY_WORKS, dailyLearning, tanyaStart, type DailyLearning, type DailyTanyaPart } from './daily.js';
-export { hayomYomShiurim, hayomYomShiurimOf, tanyaChapter, type HayomYomShiurim } from './hayomYom.js';
 export { combineSuggestions } from './combine.js';

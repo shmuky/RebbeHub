@@ -1,8 +1,6 @@
-import { dateKeyFromGregorian } from '@rebbehub/hebrew';
+import { DAILY_WORKS, TANYA_YOMI, dateKeyFromGregorian, dayOfLabel, monthOfLabel } from '@rebbehub/hebrew';
 import { isPageText, type EntityId, type PageInline, type PageSegment, type PageText } from '@rebbehub/model';
 import type { Catalog, EntityView } from './catalog.js';
-import { dayOfLabel, monthOfLabel } from './hayomYom.js';
-import { TANYA_YOMI } from './tanyaYomi.js';
 
 /**
  * The daily learning (Chitas' Tanya, and Hayom Yom) for a civil day, from
@@ -35,8 +33,7 @@ export interface DailyLearning {
   hayomYom: EntityView[];
 }
 
-/** Where the catalog keeps them: their readable paths. */
-export const DAILY_WORKS = { tanya: '/tanya', hayomYom: '/hayom-yom' } as const;
+export { DAILY_WORKS };
 
 const dayAfter = (iso: string): string => {
   const [y, m, d] = iso.split('-').map(Number);

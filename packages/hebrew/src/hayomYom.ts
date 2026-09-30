@@ -1,4 +1,7 @@
-import { MONTHS as MONTH_NAMES, dateKeyToGregorian, normalizeSearchText, parseHebrewNumeral, toHebrewNumeral } from '@rebbehub/hebrew';
+import { dateKeyToGregorian } from './dateKey.js';
+import { MONTHS as MONTH_NAMES } from './months.js';
+import { normalizeSearchText } from './normalize.js';
+import { parseHebrewNumeral, toHebrewNumeral } from './numerals.js';
 import { TANYA_YOMI } from './tanyaYomi.js';
 
 /**
@@ -19,6 +22,9 @@ import { TANYA_YOMI } from './tanyaYomi.js';
  *
  * A schedule, not a text: nothing here is the book's words.
  */
+
+/** Where the catalog keeps Tanya and Hayom Yom: their readable paths. */
+export const DAILY_WORKS = { tanya: '/tanya', hayomYom: '/hayom-yom' } as const;
 
 export interface HayomYomShiurim {
   /** `5703-05-04`: the day in the year the book was written for. */

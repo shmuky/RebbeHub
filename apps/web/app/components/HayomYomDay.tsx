@@ -1,4 +1,4 @@
-import type { HayomYomShiurim } from '@rebbehub/core';
+import type { HayomYomShiurim } from '@rebbehub/hebrew';
 import { isPageText, type PageSegment, type PageText } from '@rebbehub/model';
 import type { ReactNode } from 'react';
 import type { Lang } from '../lib/i18n.js';
@@ -10,7 +10,7 @@ import '../styles/pages/hayom-yom.css';
  * the day (as the entry is titled) and the year; the day's shiurim, Chumash,
  * Tehillim and Tanya, under "שיעורים."; then its words, justified, and a
  * rule under the day. The weekday, the year and the shiurim are worked out
- * from the calendar of 5703 (core/hayomYom.ts), and the Tanya line names
+ * from the calendar of 5703 (@rebbehub/hebrew's hayomYom.ts), and the Tanya line names
  * the day's chapter, as the book's own first and last words of it are not
  * in the catalog yet.
  */

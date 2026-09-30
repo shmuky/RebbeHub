@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hayomYomShiurim, hayomYomShiurimOf, tanyaChapter } from '@rebbehub/core';
+import { hayomYomShiurim, hayomYomShiurimOf, tanyaChapter } from '@rebbehub/hebrew';
 
 /**
  * The head of each day of Hayom Yom as the book prints it, checked against
