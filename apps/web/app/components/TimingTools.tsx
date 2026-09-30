@@ -5,34 +5,21 @@ import type { Lang } from '../lib/i18n.js';
 import { clockOf } from '../lib/i18nNetwork.js';
 import { href } from '../lib/links.js';
 import { postJson } from '../lib/post.js';
-import type { Span, Transcript } from '../lib/transcript.js';
 
 /**
- * The timing tools while listening. "Timing" takes the moment a paragraph
- * is tapped as where it starts (what follows moves with it, core/sync.ts
- * anchorSync), and asks once before it is sent, so a stray tap never moves
- * the sync. There is no "Exact timing" button under a paragraph in the
- * editor: Shmuly had it removed. A listener's taps on one recording
- * are one suggestion, each going on from the last, so they never clash.
- * "The sync is right" marks the whole recording's sync checked. And words
- * nobody is sure of (`[words?]`) can be talked over on the recording's
- * talk page, with the words and where they are heard.
+ * Tools while listening. Nobody moves the sync by hand here: Shmuly had
+ * the "Timing" and "Exact timing" buttons taken out, as the model's sync
+ * is already good and taps made clashing suggestions. "The sync is right"
+ * marks the whole recording's sync checked. And words nobody is sure of
+ * (`[words?]`) can be talked over on the recording's talk page, with the
+ * words and where they are heard.
  */
 
 const W = {
-  saidNow: { he: 'תזמון', en: 'Timing' },
-  startsAt: { he: 'הפסקה תתחיל ב־{at}', en: 'The paragraph will start at {at}' },
-  confirm: { he: 'לאשר', en: 'Confirm' },
   cancel: { he: 'ביטול', en: 'Cancel' },
-  syncFixed: { he: 'התזמון תוקן מכאן. נשלח לאישור.', en: 'Timing fixed from here. Sent for approval.' },
   syncRight: { he: 'הסנכרון של כל ההקלטה נכון', en: 'The sync of the whole recording is right' },
   syncRightHint: { he: 'אחרי שהאזנתם ובדקתם שהסימון תואם לשמע.', en: 'After listening and seeing the highlight follows the audio.' },
   syncRightSent: { he: 'נשלח לאישור.', en: 'Sent for approval.' },
-  timingMode: { he: 'תזמון', en: 'Timing' },
-  timingModeHint: {
-    he: 'מצב תזמון: לחצו על פסקה בדיוק כשהרבי מתחיל אותה, ואשרו.',
-    en: 'Timing mode: tap a paragraph just as the Rebbe starts it, then confirm.',
-  },
   discuss: { he: 'לפתוח דיון', en: 'Discuss' },
   discussTitle: { he: 'דיון על מילים לא ברורות', en: 'Talk about unclear words' },
   discussPlaceholder: { he: 'מה נשמע לך כאן? (לא חובה)', en: 'What do you hear here? (optional)' },
@@ -42,52 +29,6 @@ const W = {
   unclearAt: { he: 'לא ברור ({at}): «{words}»', en: 'Unclear ({at}): "{words}"' },
 } as const;
 const w = (lang: Lang, key: keyof typeof W) => W[key][lang] as string;
-
-/** A recording's sync as the API answered it, applied to what is on screen at once. */
-export function withSpans(transcripts: Transcript[], recording: string, spans: Span[]): Transcript[] {
-  const bySegment = new Map(spans.map((s) => [s.segment, s]));
-  return transcripts.map((tr) =>
-    tr.recording !== recording
-      ? tr
-      : { ...tr, paragraphs: tr.paragraphs.map((p) => (bySegment.has(p.id) ? { ...p, ...bySegment.get(p.id)!, syncChecked: bySegment.get(p.id)!.locked || p.syncChecked } : p)) },
-  );
-}
-
-/** A moment taken, waiting for Confirm; then sent. */
-export function ConfirmTiming({ recording, segment, atMs, lang, onDone, onCancel }: { recording: string; segment: string; atMs: number; lang: Lang; onDone: (spans: Span[]) => void; onCancel: () => void }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <div className="tx-timing" role="group" aria-label={w(lang, 'saidNow')}>
-      <span>{w(lang, 'startsAt').replace('{at}', clockOf(atMs))}</span>
-      <button
-        type="button"
-        className="btn sm primary"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          setError(null);
-          try {
-            const fix = await postJson<{ spans: Span[] }>(`recordings/${recording}/sync/anchor`, { segment, atMs });
-            onDone(fix.spans);
-          } catch (e) {
-            setError(e instanceof Error ? e.message : String(e));
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        {w(lang, 'confirm')}
-      </button>
-      <button type="button" className="btn sm" onClick={onCancel}>
-        {w(lang, 'cancel')}
-      </button>
-      {error ? <span role="alert">{error}</span> : null}
-    </div>
-  );
-}
-
-export const timingWords = { timingMode: W.timingMode, timingModeHint: W.timingModeHint, syncFixed: W.syncFixed };
 
 /** "The sync of the whole recording is right". */
 export function ConfirmSync({ recording, lang }: { recording: string; lang: Lang }) {
