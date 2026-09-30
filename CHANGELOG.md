@@ -449,6 +449,22 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Changed
 
+- **Timing tools are back, in the editor and while listening.** Under a
+  paragraph, **תזמון מדוייק** takes the moment of the tap as where it
+  starts, and asks once before sending, so a stray tap never moves the
+  sync; **the sync of the whole recording is right** marks it checked.
+  While listening, **Timing** turns a tap on a paragraph into the same.
+  A listener's timing taps on one recording are one suggestion, each
+  going on from the last, so they never clash.
+- **Talk over unclear words.** Tapping words marked unclear (`[words?]`)
+  while listening, or **Discuss** under the paragraph in the editor,
+  starts a conversation on the recording's talk page with the words and
+  where they are heard.
+- **The transcript editor looks as it did before.** Each waiting fix has
+  its own box again, and the history shows every change with who made it
+  and its suggestion. What kept fixes from clashing stays: a listener goes
+  on from their own waiting fix, so their fixes of a transcript stay one
+  suggestion, and Edit is there even while a fix waits.
 - **One suggestion per listener per transcript.** Fixing word after word
   in a transcript adds to the suggestion you already sent for it, while
   nobody has reviewed it yet, instead of making one per word (which
