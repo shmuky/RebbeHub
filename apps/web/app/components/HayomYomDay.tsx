@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { Lang } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
+import { sefariaUrl } from '../lib/sefaria.js';
 import { PageWords } from './PageWords.js';
 import '../styles/pages/hayom-yom.css';
 
@@ -96,7 +97,7 @@ export function HayomYomDay({ title, body, shiurim, lang, actions }: { title: st
  * Chumash (with Rashi) and Tehillim on Sefaria until RebbeHub has their
  * words; `Exodus 10:1-11` is Sefaria's `Exodus.10.1-11`.
  */
-const sefaria = (ref: string, rashi: boolean) => `https://www.sefaria.org/${ref.replace(/[ :]/g, '.')}?lang=he${rashi ? '&with=Rashi' : ''}`;
+const sefaria = (ref: string, rashi: boolean) => sefariaUrl(ref, { rashi });
 
 /** The Tanya line, to where the day's Tanya starts on its chapter's page. */
 function TanyaLink({ shiurim, lang, children }: { shiurim: HayomYomShiurim; lang: Lang; children: ReactNode }) {

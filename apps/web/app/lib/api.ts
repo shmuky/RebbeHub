@@ -530,9 +530,9 @@ export class RebbeHubApi {
     return (await this.get<{ counts: Record<string, number> }>('/v1/refcounts', { field, type })).counts;
   }
 
-  /** A day's learning (Chitas' Tanya, cut to the day's portion, and Hayom Yom), for a civil day: one read. */
+  /** A day's learning (Chitas: Tanya cut to the day's portion, Chumash and Tehillim; Hayom Yom; the Rambam's three tracks), for a civil day: one read. */
   daily(date: string) {
-    return this.get<{ date: string; hebrew: string; tanya: Array<Entity & { from: string; to: string | null }>; hayomYom: Entity[] }>('/v1/daily', { date });
+    return this.get<DailyLearning>('/v1/daily', { date });
   }
 
   /** A work's volumes, with how many units each holds. */
@@ -830,4 +830,22 @@ export interface MirrorsInfo {
     notes: string | null;
     dumps: { files: Array<{ name: string; bytes: number; sha256: string; url: string }>; manifest: string; sha256sums: string; signature: { alg: string; keyId: string } | null } | null;
   }>;
+}
+
+/** One of the day's shiurim that the API names rather than gives: in Hebrew, and by Sefaria's references. */
+export interface RambamShiur {
+  label: string;
+  refs: string[];
+  /** Each reference's page on RebbeHub, once the catalog has it. */
+  paths?: Array<string | null>;
+}
+
+export interface DailyLearning {
+  date: string;
+  hebrew: string;
+  tanya: Array<Entity & { from: string; to: string | null }>;
+  hayomYom: Entity[];
+  chumash?: { label: string; ref: string; path?: string | null; rashi?: string | null } | null;
+  tehillim?: Array<{ text: string; ref: string | null; path?: string | null }>;
+  rambam?: { three: RambamShiur; one: RambamShiur; mitzvos: RambamShiur | null };
 }

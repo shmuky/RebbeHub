@@ -12,12 +12,36 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **The day's shiurim, Chitas and Rambam, on the daily page.** `/daily`
+  opens with the day's shiurim at a glance: Chumash with Rashi (the
+  week's parsha, an aliyah a day), Tehillim (the monthly cycle, with
+  Elul's three more), Tanya, and the Rambam's three tracks (three
+  chapters, one chapter, Sefer HaMitzvos), each a link to its words, with
+  a box to tick once learned and a count of days in a row (kept in the
+  browser only). Each goes to its page on RebbeHub once the catalog has
+  it (below), to Sefaria until then. API: `/v1/daily` also names
+  `chumash`, `tehillim` and `rambam`, in Hebrew, by Sefaria's references
+  and by their pages here (`path`, `paths`, null until imported).
 - **Hayom Yom's shiurim go to their words.** Each day's Chumash (with
   Rashi) and Tehillim line opens that day's portion on Sefaria, and its
   Tanya line opens its chapter on RebbeHub where the day starts. A day's
   notices the book prints right after the shiurim are set there, all
   notices in italics, and each paragraph's first line is indented, as
   in the book.
+- **Chitas and the Rambam, with their words.** The catalog import now
+  also brings from Sefaria the Chumash with Rashi, Tehillim, every book
+  of the Mishneh Torah and the Sefer HaMitzvot, a page per chapter, in a
+  Set of their own, "חת״ת ורמב״ם / Chitas and Rambam"
+  (`/sets/chitas-rambam`): `/chumash/genesis`, `/chumash/rashi-genesis`,
+  `/tehillim`, `/rambam/<book>`, `/sefer-hamitzvos`. Their Hebrew is a
+  public-domain version asked for by name (the Tanach with Ta'amei
+  Hamikra, Rosenbaum and Silbermann's Rashi, Torat Emet's Mishneh
+  Torah, the Warsaw 1883 Sefer HaMitzvot), since Sefaria's first Hebrew
+  Tanach is CC BY-SA and could be only a link; the English is kept where
+  its licence lets it be. A verse is a segment numbered as Sefaria
+  numbers it, so `#s-5` is verse 5; Rashi has a section for each verse
+  (`#s-5`) with its comments under it (`#s-5.1`). `rebbehub
+  crawl-sefaria --daily` ([importers](docs/importers.md#sefaria)).
 - **A few words into many pages through the MCP server.** `add_segments`
   adds or replaces segments in the words of up to 200 pages a call, as
   one suggestion, sending only the new segments and where each goes (at

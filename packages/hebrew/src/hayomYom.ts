@@ -175,22 +175,7 @@ export function hayomYomShiurim(month: string, day: number): HayomYomShiurim | n
   const portion = key === '01-23' ? chumashPortion('Vezot Haberakhah', 6, 7) : key === '01-24' ? chumashPortion('Bereshit', 1, 7) : chumashPortion(PARSHA[parsha]!, weekday + 1);
 
   // The month's day, the 29th of a short month to the book's end; Elul and the ten days add three a day.
-  const cycle = TEHILLIM[day - 1]!;
-  const monthly = typeof cycle === 'string' ? cycle : range(day === 29 && at.length === 29 ? [140, 150] : cycle);
-  const extra = month === '12' ? day : month === '01' && day < 10 ? 29 + day : 0;
-  const monthlyRef = typeof cycle === 'string' ? (day === 25 ? 'Psalms 119:1-96' : 'Psalms 119:97-176') : psalms(day === 29 && at.length === 29 ? [140, 150] : cycle);
-  const tehillimParts =
-    month === '01' && day === 10
-      ? [
-          { text: `${monthly}.`, ref: monthlyRef },
-          ...([['קודם כל נדרי', 115, 123], ['קודם השינה', 124, 132], ['אחר מוסף', 133, 141], ['אחר נעילה', 142, 150]] as const).map(([when, a, b]) => ({ text: `${when}: ${range([a, b])}.`, ref: psalms([a, b]) })),
-        ]
-      : extra
-        ? [
-            { text: `${monthly}.`, ref: monthlyRef },
-            { text: `${range([extra * 3 - 2, extra * 3])}.`, ref: psalms([extra * 3 - 2, extra * 3]) },
-          ]
-        : [{ text: `${monthly}.`, ref: monthlyRef }];
+  const tehillimParts = dailyTehillim(month, day, at.length);
   const tehillim = tehillimParts.map((p) => p.text).join(' ');
 
   // Tanya by the cycle of a leap year, as 5703 was.
@@ -204,6 +189,32 @@ export function hayomYomShiurim(month: string, day: number): HayomYomShiurim | n
     : null;
 
   return { hebrew, weekday: WEEKDAYS[weekday]!, year: at.year === 5703 ? 'ה׳תש״ג' : 'ה׳תש״ד', chumash, chumashRef: portion?.ref ?? null, tehillim, tehillimParts, tanya, before: BEFORE[key] ?? 0, after: AFTER[key] ?? 0 };
+}
+
+/**
+ * Chitas' Tehillim for a day of a Hebrew month (a month token and its
+ * length): the monthly cycle, the 29th of a short month to the book's end;
+ * Elul and the ten days of repentance add three chapters a day; Yom Kippur
+ * says the rest by its times. Each range with its Sefaria reference.
+ */
+export function dailyTehillim(month: string, day: number, length: number): Array<{ text: string; ref: string | null }> {
+  const cycle = TEHILLIM[day - 1];
+  if (!cycle) return [];
+  const last = day === 29 && length === 29;
+  const monthly = typeof cycle === 'string' ? cycle : range(last ? [140, 150] : cycle);
+  const monthlyRef = typeof cycle === 'string' ? (day === 25 ? 'Psalms 119:1-96' : 'Psalms 119:97-176') : psalms(last ? [140, 150] : cycle);
+  const extra = month === '12' ? day : month === '01' && day < 10 ? 29 + day : 0;
+  if (month === '01' && day === 10)
+    return [
+      { text: `${monthly}.`, ref: monthlyRef },
+      ...([['קודם כל נדרי', 115, 123], ['קודם השינה', 124, 132], ['אחר מוסף', 133, 141], ['אחר נעילה', 142, 150]] as const).map(([when, a, b]) => ({ text: `${when}: ${range([a, b])}.`, ref: psalms([a, b]) })),
+    ];
+  if (extra)
+    return [
+      { text: `${monthly}.`, ref: monthlyRef },
+      { text: `${range([extra * 3 - 2, extra * 3])}.`, ref: psalms([extra * 3 - 2, extra * 3]) },
+    ];
+  return [{ text: `${monthly}.`, ref: monthlyRef }];
 }
 
 /** The next day's `MM-DD` in the book's year. */

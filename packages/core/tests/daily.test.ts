@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { dailyLearning, tanyaStart, type Catalog, type Json } from '@rebbehub/core';
+import { dailyLearning, dailyPathOf, tanyaStart, type Catalog, type Json } from '@rebbehub/core';
 import type { EntityId, PageText } from '@rebbehub/model';
 import { add, freshCatalog } from './helpers.js';
 
@@ -102,5 +102,37 @@ describe("the day's learning", () => {
     expect(day.tanya).toEqual([]);
     expect(day.hayomYom).toEqual([]);
     expect(await dailyLearning(catalog, 'yesterday')).toBeNull();
+  });
+
+  it("names the day's Chumash, Tehillim and the Rambam's three tracks", async () => {
+    // 19 Tishrei 5787 is in Sukkos: V'zos Habracha's fourth (a Wednesday); Tehillim 90-96.
+    const day = (await dailyLearning(catalog, '2026-09-30'))!;
+    // The catalog here has none of their works, so no pages on RebbeHub yet.
+    expect(day.chumash).toEqual({ label: 'וזאת הברכה, רביעי עם פירש״י', ref: 'Deuteronomy 33:18-21', path: null, rashi: null });
+    expect(day.tehillim).toEqual([{ text: 'צ-צו.', ref: 'Psalms 90-96', path: null }]);
+    expect(day.rambam).toEqual({
+      three: { label: 'הלכות מקואות פרקים ה-ז', refs: ['Mishneh Torah, Immersion Pools 5', 'Mishneh Torah, Immersion Pools 6', 'Mishneh Torah, Immersion Pools 7'], paths: [null, null, null] },
+      one: { label: 'הלכות גירושין פרק ט', refs: ['Mishneh Torah, Divorce 9'], paths: [null] },
+      mitzvos: { label: 'מצות עשה קט', refs: ['Sefer HaMitzvot, Positive Commandments 109'], paths: [null] },
+    });
+    // The day after Simchas Torah learns Bereishis from its start; Elul adds three chapters.
+    expect((await dailyLearning(catalog, '2026-10-05'))!.chumash).toMatchObject({ label: 'בראשית, עד שני עם פירש״י', ref: 'Genesis 1:1-2:19' });
+    expect((await dailyLearning(catalog, '2026-08-16'))!.tehillim.map((t) => t.ref)).toEqual(['Psalms 18-22', 'Psalms 7-9']);
+  });
+
+  it('places a shiur on the pages the Sefaria importer gives Chitas and the Rambam', () => {
+    expect(dailyPathOf('Exodus 10:1-11')).toEqual({ work: '/chumash/exodus', page: '/chumash/exodus/10' });
+    expect(dailyPathOf('Exodus 10:12-23', { rashi: true })).toEqual({ work: '/chumash/rashi-exodus', page: '/chumash/rashi-exodus/10#s-12' });
+    expect(dailyPathOf('Psalms 119:97-176')?.page).toBe('/tehillim/119#s-97');
+    expect(dailyPathOf('Mishneh Torah, Vessels of the Sanctuary and Those who Serve Therein 9')?.page).toBe('/rambam/vessels-of-the-sanctuary-and-those-who-serve-therein/9');
+    expect(dailyPathOf('Sefer HaMitzvot, Positive Commandments 109')).toBeNull();
+  });
+
+  it('links a shiur to its page once the catalog has it', async () => {
+    const work = await add(catalog, 'shmuly', 'shmuly', 'work', { title: { he: 'תהלים', en: 'Psalms' }, slug: 'tehillim', authors: [], genre: 'chassidus', levels: ['chapter'] }, '/tehillim');
+    await add(catalog, 'shmuly', 'shmuly', 'unit', { work, position: [{ level: 'chapter', value: '90' }], order: '090', label: { he: 'צ', en: '90' } } as unknown as Json, '/tehillim/90');
+    const day = (await dailyLearning(catalog, '2026-09-30'))!;
+    expect(day.tehillim[0]!.path).toBe('/tehillim/90');
+    expect(day.chumash!.path).toBeNull();
   });
 });

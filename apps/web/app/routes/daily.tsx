@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { data, Link, useNavigate } from 'react-router';
 import type { Route } from './+types/daily';
 import { hayomYomShiurimOf } from '@rebbehub/hebrew';
+import { DailyShiurim } from '../components/DailyShiurim.js';
 import { HayomYomDay } from '../components/HayomYomDay.js';
 import { PageWords } from '../components/PageWords.js';
 import { isPageText } from '@rebbehub/model';
@@ -17,9 +18,10 @@ import { EmptyState } from '../ui/primitives.js';
 import '../styles/pages/daily.css';
 
 /**
- * The day's learning: Chitas' Tanya (the day's portion by the yearly cycle
- * from 19 Kislev) and Hayom Yom, from the catalog's own texts, with the day
- * before and after. A day is the civil day it is learned on, and its page
+ * The day's learning: its shiurim at a glance (Chitas and the Rambam's
+ * three tracks, components/DailyShiurim.tsx), then Chitas' Tanya (the day's
+ * portion by the yearly cycle from 19 Kislev) and Hayom Yom, from the
+ * catalog's own texts, with the day before and after. A day is the civil day it is learned on, and its page
  * is `/daily/2026-09-30`; `/daily` is today, as New York has it when the
  * page is made (pages are the same for everyone and kept at the edge), and
  * the browser moves on to its own today when that is another day. One read
@@ -28,7 +30,7 @@ import '../styles/pages/daily.css';
 
 const W = {
   title: { he: 'לימוד יומי', en: 'Daily learning' },
-  lede: { he: 'שיעור התניא היומי (חת״ת) והיום יום של היום.', en: 'Today’s Tanya (Chitas) and Hayom Yom.' },
+  lede: { he: 'חת״ת, רמב״ם והיום יום של היום.', en: 'Today’s Chitas, Rambam and Hayom Yom.' },
   tanya: { he: 'תניא', en: 'Tanya' },
   hayomYom: { he: 'היום יום', en: 'Hayom Yom' },
   prev: { he: 'היום הקודם', en: 'Previous day' },
@@ -66,7 +68,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const day = await api.daily(date);
   // Each Hayom Yom entry with the head the book prints over it: weekday, year and shiurim.
   const hayomYom = day.hayomYom.map((entry) => ({ entry, shiurim: hayomYomShiurimOf(entry.data) }));
-  return { lang, siteUrl, date, asked: asked !== null, hebrew: day.hebrew, tanya: day.tanya, hayomYom };
+  return { lang, siteUrl, date, asked: asked !== null, day, hebrew: day.hebrew, tanya: day.tanya, hayomYom };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -84,7 +86,7 @@ function Words({ item, lang }: { item: Entity; lang: Lang }) {
 }
 
 export default function Daily({ loaderData }: Route.ComponentProps) {
-  const { lang, date, asked, hebrew, tanya, hayomYom } = loaderData;
+  const { lang, date, asked, day, hebrew, tanya, hayomYom } = loaderData;
   const navigate = useNavigate();
   // `/daily` was made for New York's today: a reader whose own today is another day goes on to it.
   useEffect(() => {
@@ -128,6 +130,8 @@ export default function Daily({ loaderData }: Route.ComponentProps) {
 
       <div className="wrap daily-body">
         {!tanya.length && !hayomYom.length ? <EmptyState icon="book" title={w(lang, 'none')} /> : null}
+
+        <DailyShiurim day={day} lang={lang} />
 
         <section className="daily-section" aria-labelledby="daily-tanya">
           <h2 className="h-sec" id="daily-tanya">

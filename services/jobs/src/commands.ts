@@ -319,7 +319,8 @@ export const IMPORTERS: Record<string, (from: string) => Importer> = {
     const db = need('JEM_DB', 'a crawl of JEM by Sichos-Kodesh\'s packages/jem-index (jem.db)');
     return jemImporter(async () => ({ jem: await readJemIndex(db), occasions: await farbrengens(from) }));
   },
-  // With SEFARIA_DATA (what `rebbehub crawl-sefaria` read), Sefaria's Chabad books that Sichos-Kodesh does not publish.
+  // With SEFARIA_DATA (what `rebbehub crawl-sefaria` read), Sefaria's Chabad books that Sichos-Kodesh does not publish,
+  // and with a crawl made `--daily`, the texts of Chitas and the Rambam in their own Set.
   sefaria: (from) => {
     const dir = need('SEFARIA_DATA', 'the folder `rebbehub crawl-sefaria` wrote');
     return sefariaImporter(async () => ({ ...(await readSefariaCrawl(dir)), authors: await skAuthors(from), api: process.env.REBBEHUB_API_URL }));
@@ -362,14 +363,16 @@ async function farbrengens(from: string) {
 
 /**
  * Reads Sefaria's Chabad books that Sichos-Kodesh does not publish into
- * `out`, asking Sefaria only for what `cache` does not have; with `keep`,
- * puts each text with a licence that lets it be kept on RebbeHub's own
- * storage (`texts/<sha256>` in rebbehub-public), once.
+ * `out`, asking Sefaria only for what `cache` does not have; with `daily`
+ * (or SEFARIA_DAILY=1), the texts of Chitas and the Rambam too; with
+ * `keep`, puts each text with a licence that lets it be kept on RebbeHub's
+ * own storage (`texts/<sha256>` in rebbehub-public), once.
  */
-export async function crawlSefariaCommand(ctx: Context, input: { from: string; out: string; cache?: string; keep?: boolean; only?: string[]; bucket?: string }): Promise<void> {
+export async function crawlSefariaCommand(ctx: Context, input: { from: string; out: string; cache?: string; keep?: boolean; only?: string[]; daily?: boolean; bucket?: string }): Promise<void> {
   const exclude = await sichosKodeshSefariaTitles(input.from);
   const client = sefariaClient({ cacheDir: input.cache });
-  const crawl = await crawlSefaria({ out: input.out, exclude, client, only: input.only, log: ctx.log });
+  const daily = input.daily || process.env.SEFARIA_DAILY === '1' || process.env.SEFARIA_DAILY === 'true';
+  const crawl = await crawlSefaria({ out: input.out, exclude, client, only: input.only, daily, log: ctx.log });
   if (!input.keep) return;
   const kept = await keepSefariaTexts(crawl, input.out, r2(input.bucket ?? 'rebbehub-public'), ctx.log);
   await writeFile(join(input.out, 'crawl.json'), JSON.stringify(crawl));

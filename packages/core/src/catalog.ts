@@ -379,6 +379,13 @@ export class Catalog {
     return moved ? { id: moved.id, redirected: true, path: moved.path } : null;
   }
 
+  /** Which of these paths are items on main, in one statement (no redirects followed): what a page links to only when it is there. */
+  async livePaths(paths: readonly string[]): Promise<Set<string>> {
+    if (!paths.length) return new Set();
+    const { rows } = await this.db.query<{ path: string }>('SELECT path FROM entity WHERE path = ANY($1) AND NOT deleted AND main_rev IS NOT NULL', [[...new Set(paths.map((p) => p.toLowerCase()))]]);
+    return new Set(rows.map((r) => r.path));
+  }
+
   /** Items of a type on main, optionally in a set, in path order, a page at a time. */
   async list(options: { type?: EntityType; set?: EntityId; limit?: number; after?: string }): Promise<EntityView[]> {
     const params: unknown[] = [];
