@@ -1,3 +1,4 @@
+import { DAILY_WORKS, hayomYomShiurimOf, type HayomYomShiurim } from '@rebbehub/core';
 import { threadsAbout, type AboutThread } from './about.server.js';
 import { workToc, type WorkToc } from './workView.server.js';
 import { eventView, type EventView } from './eventView.server.js';
@@ -51,6 +52,8 @@ export interface ItemView {
   talk: number;
   /** A farbrengen's: what was said there, and its words synced to its recordings. */
   event?: EventView;
+  /** A day of Hayom Yom's: the head the book prints over it (weekday, year, shiurim), to set it as printed. */
+  hayomYom?: HayomYomShiurim | null;
 }
 
 /** A text's paragraphs, all of them, a page at a time (a hanacha may have up to 2,000; a sefer's text more). */
@@ -246,6 +249,7 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
   view.refs = { ...view.refs, ...Object.fromEntries(refs) };
   // Keepers of its set, by name.
   const workOf = typeof d.work === 'string' ? view.refs[d.work] : undefined;
+  if (entity.type === 'unit' && workOf?.path === DAILY_WORKS.hayomYom) view.hayomYom = hayomYomShiurimOf(entity.data);
   const setWanted = entity.type === 'set' ? entity.id : (ids(d.sets)[0] ?? ids((workOf?.data as Record<string, unknown> | undefined)?.sets)[0]);
   const setOf = entity.type === 'set' ? entity : setWanted ? (view.refs[setWanted] ?? (await orNone(api.entity(setWanted), null)) ?? undefined) : undefined;
   if (setOf && !view.refs[setOf.id]) view.refs[setOf.id] = setOf;

@@ -1,6 +1,7 @@
-import { MONTHS, dateKeyFromGregorian, normalizeSearchText, parseHebrewNumeral } from '@rebbehub/hebrew';
+import { dateKeyFromGregorian } from '@rebbehub/hebrew';
 import { isPageText, type EntityId, type PageInline, type PageSegment, type PageText } from '@rebbehub/model';
 import type { Catalog, EntityView } from './catalog.js';
+import { dayOfLabel, monthOfLabel } from './hayomYom.js';
 import { TANYA_YOMI } from './tanyaYomi.js';
 
 /**
@@ -84,20 +85,6 @@ function cut(body: PageText, from: string | null, to: string | null): PageText {
   };
 }
 
-/** A Hayom Yom month's name as its section is titled (`<h2>מנחם אב</h2>`), as a month token. */
-function monthOfLabel(label: unknown): string | null {
-  const he = typeof label === 'object' && label ? String((label as { he?: string }).he ?? '') : '';
-  const text = normalizeSearchText(he.replace(/<[^>]*>/g, ''));
-  const month = MONTHS.find((m) => [m.he, ...m.aliases].some((name) => normalizeSearchText(name) === text));
-  return month?.token ?? null;
-}
-
-/** The day of the month a Hayom Yom entry is for, from its title (`<h3>א טבת ר"ח, ו' דחנוכה</h3>` is 1). */
-function dayOfLabel(unit: EntityView): number | null {
-  const he = String(((unit.data as { label?: { he?: string } }).label ?? {}).he ?? '').replace(/<[^>]*>/g, '').trim();
-  return parseHebrewNumeral(he.split(/\s+/)[0] ?? '');
-}
-
 export async function dailyLearning(catalog: Catalog, date: string): Promise<DailyLearning | null> {
   const hebrew = dateKeyFromGregorian(date);
   if (!hebrew) return null;
@@ -134,7 +121,7 @@ export async function dailyLearning(catalog: Catalog, date: string): Promise<Dai
     const units = await Promise.all(sections.map((s) => catalog.workPart(hayomYomWork.id, s.part)));
     for (const m of months) {
       const inMonth = units.filter((_, i) => sections[i]!.month === m).flat();
-      const found = inMonth.find((u) => dayOfLabel(u) === day) ?? (day === 30 ? inMonth.find((u) => dayOfLabel(u) === 29) : undefined);
+      const found = inMonth.find((u) => dayOfLabel(u.data) === day) ?? (day === 30 ? inMonth.find((u) => dayOfLabel(u.data) === 29) : undefined);
       if (found) hayomYomIds.push(found.id);
     }
   }

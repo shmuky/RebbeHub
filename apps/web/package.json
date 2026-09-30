@@ -25,6 +25,7 @@
     "@hono/node-server": "^2.1.1",
     "@react-router/node": "^7.18.3",
     "@rebbehub/api": "^0.1.0",
+    "@rebbehub/core": "^0.1.0",
     "@rebbehub/db": "^0.1.0",
     "@rebbehub/hebrew": "^0.1.0",
     "@rebbehub/model": "^0.1.0",

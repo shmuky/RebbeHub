@@ -1,0 +1,103 @@
+/*
+ * A day of Hayom Yom as the book prints it (components/HayomYomDay.tsx):
+ * the weekday at the start, the day in the middle and the year at the end,
+ * all bold; "שיעורים." with Chumash, Tehillim and Tanya one under another,
+ * their names in a column; the words justified; heavy rules between days.
+ * All in the Torah face.
+ */
+
+.hy-day {
+  font-family: var(--torah);
+  color: var(--text);
+  padding-block: 12px 14px;
+  border-block: 3px solid var(--text);
+}
+
+.hy-day + .hy-day {
+  border-top: 0;
+}
+
+.hy-head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.hy-weekday {
+  text-align: start;
+}
+
+.hy-date {
+  margin: 0;
+  font: inherit;
+  text-align: center;
+}
+
+.hy-year {
+  text-align: end;
+}
+
+/* "שיעורים." beside its three lines, the names of the shiurim in their own column. */
+.hy-shiurim {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  column-gap: 0.6em;
+  margin: 0 0 12px;
+  padding-inline-start: 1.2em;
+  font-size: 18px;
+  line-height: 1.55;
+}
+
+.hy-shiurim-title {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.hy-shiur-name {
+  grid-column: 2;
+}
+
+.hy-shiurim > span:not(.hy-shiurim-title, .hy-shiur-name) {
+  grid-column: 3;
+}
+
+/* The words: no paragraph numbers in the margin, set justified as the book is. */
+.hy-day .words {
+  font-size: 20px;
+}
+
+.hy-day .words-p {
+  padding-inline-start: 0;
+  text-align: justify;
+}
+
+.hy-day .words-anchor {
+  display: none;
+}
+
+.hy-actions {
+  display: flex;
+  justify-content: flex-end;
+  font-family: var(--ui);
+}
+
+@media (max-width: 640px) {
+  .hy-head {
+    font-size: 17px;
+    gap: 8px;
+  }
+
+  .hy-shiurim {
+    padding-inline-start: 0;
+    font-size: 16px;
+  }
+
+  .hy-day .words {
+    font-size: 18px;
+  }
+}

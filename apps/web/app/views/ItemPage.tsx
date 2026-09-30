@@ -6,6 +6,7 @@ import { EventPage } from './EventPage.js';
 import { AuthorPage, SetPage, WorkPage } from './LibraryPages.js';
 import { ItemLink, ItemList } from '../components/ItemLink.js';
 import { Linked, Sources } from '../components/Linked.js';
+import { HayomYomDay } from '../components/HayomYomDay.js';
 import { PageBody } from '../components/PageBody.js';
 import { Relations } from '../components/Relations.js';
 import { Printings } from '../components/Printings.js';
@@ -259,8 +260,12 @@ function UnitBody({ entity, view, lang }: { entity: Entity; view: ItemView; lang
           <EmptyState icon="file" title={w(lang, 'noText')} actions={<Link className="btn sm" to={href('/add', lang, { what: 'hanacha', for: entity.id })}>{ps(lang, 'addHanacha')}</Link>} />
         </div>
       )}
-      {/* The chapter's own words come first; where they and other copies are from, after. */}
-      <PageBody entity={entity} lang={lang} />
+      {/* The chapter's own words come first; where they and other copies are from, after. A day of Hayom Yom is set as the book prints it. */}
+      {view.hayomYom !== undefined && hasWords ? (
+        <HayomYomDay title={labelOf(entity, 'he')} body={body} shiurim={view.hayomYom} lang={lang} />
+      ) : (
+        <PageBody entity={entity} lang={lang} />
+      )}
     </>
   );
 }
