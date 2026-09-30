@@ -12,6 +12,11 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **The day's learning.** `/daily` shows today's Tanya (the Chitas
+  portion by the yearly cycle from 19 Kislev, each chapter it touches cut
+  to the day's part, Hebrew and English) and Hayom Yom, with the day
+  before and after; `/daily/2026-09-30` is any day. `GET
+  /v1/daily?date=YYYY-MM-DD` gives the same in one read.
 - **Fixes waiting for approval show in the transcript.** `GET
   /v1/recordings/{id}/transcript` gives `pending`: each paragraph fix not
   yet approved, as the paragraph would be, with who sent it and its
