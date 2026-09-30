@@ -109,6 +109,11 @@ any time. `@rebbehub/client` carries the API's version.
   since the machine heard them. Words marked unclear (`[words?]`) are
   all marked, not only the middle ones, and a fix no longer marks the
   word after it.
+- **Previous and Next stay in their place.** The buttons above a sicha's
+  text stuck to the top of the screen and covered the words as you
+  scrolled, because they shared the site header's class name. They now
+  sit above and below the text only, each takes half the row, and a long
+  sicha name wraps to two lines instead of being cut.
 - **The synced player has its look back.** A stylesheet merged without
   one closing brace, so the lyrics player and the rest of the farbrengen
   page lost all their styling. A test now checks every stylesheet closes
