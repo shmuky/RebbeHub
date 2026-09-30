@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { parseHebrewNumeral, toHebrewNumeral } from '@rebbehub/hebrew';
 import { joinPath, orderKeys, type LocalName, type PageText } from '@rebbehub/model';
 import { htmlToPageVersion } from './htmlToPageText.js';
 import { ref, type ImportRecord, type Importer } from './importer.js';
@@ -317,6 +318,35 @@ export async function readChabadLibrary(root: string, treeFile: string, options:
   return { index, withContents, tree, text, api: options.api };
 }
 
+/**
+ * A work's volumes by the number they print, not their place in the list:
+ * the library holds Likkutei Sichos from כרך ל, and its first volume there
+ * is volume 30, not 1. Only when every volume is named "כרך …" or "חלק …"
+ * with a number, each a different one; otherwise they keep their places.
+ */
+function volumeNumbers(children: number[], tree: LibraryTree): Map<number, number> | null {
+  const numbers = new Map<number, number>();
+  for (const id of children) {
+    const node = tree.nodes[id];
+    if (!node?.kind) continue;
+    const m = /^(?:כרך|חלק)\s+([א-ת"'׳״]+)$/.exec(node.heading.trim());
+    const n = m && node.kind === 'section' ? volumeNumber(m[1]!) : null;
+    if (!n) return null;
+    numbers.set(id, n);
+  }
+  return numbers.size > 0 && new Set(numbers.values()).size === numbers.size ? numbers : null;
+}
+
+const ORDINALS: Record<string, number> = { ראשון: 1, שני: 2, שלישי: 3, רביעי: 4, חמישי: 5, שישי: 6, שביעי: 7, שמיני: 8, תשיעי: 9, עשירי: 10 };
+const bare = (text: string) => text.replace(/["'׳״]/g, '');
+
+/** ל → 30, ל"ב → 32, שני → 2; a word that only looks like letters (ראשון) is not a number. */
+function volumeNumber(text: string): number | null {
+  if (ORDINALS[text] !== undefined) return ORDINALS[text]!;
+  const n = parseHebrewNumeral(text);
+  return n && bare(toHebrewNumeral(n)) === bare(text) ? n : null;
+}
+
 export function chabadLibraryImporter(input: ChabadLibraryInput | (() => Promise<ChabadLibraryInput>)): Importer {
   return {
     id: 'chabadlibrary',
@@ -327,11 +357,12 @@ export function chabadLibraryImporter(input: ChabadLibraryInput | (() => Promise
         const placed: Array<{ id: number; position: Array<{ level: string; value: string; label?: LocalName }> }> = [];
         const walk = (id: number, trail: Array<{ level: string; value: string; label?: LocalName }>) => {
           const node = tree.nodes[id];
+          const numbers = trail.length === 0 ? volumeNumbers(node?.children ?? [], tree) : null;
           node?.children?.forEach((childId, i) => {
             const child = tree.nodes[childId];
             if (!child?.kind) return; // not crawled yet
             const level = work.levels[trail.length] ?? (child.kind === 'section' ? 'part' : 'unit');
-            if (child.kind === 'section') walk(childId, [...trail, { level, value: String(i + 1), label: { he: child.heading.slice(0, 500) } }]);
+            if (child.kind === 'section') walk(childId, [...trail, { level, value: String(numbers?.get(childId) ?? i + 1), label: { he: child.heading.slice(0, 500) } }]);
             else placed.push({ id: childId, position: [...trail, { level, value: String(i + 1) }] });
           });
         };
