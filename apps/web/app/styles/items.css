@@ -992,6 +992,8 @@ pre.shaar-text {
   display: block;
   margin: 2px 0 0;
   color: var(--muted);
+}
+
 /*
  * A sicha's back and forth, above its text and below it: the one before at
  * the line's start (the right, in Hebrew), the one after at its end.
