@@ -452,6 +452,101 @@ function tools(siteUrl: string): Tool[] {
       },
     },
     {
+      name: 'add_segments',
+      title: 'Add segments to many pages',
+      description:
+        "Add or replace a few segments in the words of many items at once, as one suggestion: a line a source left out, a heading, a machine's reading of a scan. Each item names its id and the segments (as get_item shows them in data.body: id, kind, text runs, origin for a machine's reading), and where each goes: at 'start', 'end', or a number (before that many of the version's segments). A segment whose id is already there is replaced where it stands. The rest of each item is left as it is, so only the new words are sent. Up to 200 items a call, kept in one suggestion like suggest_items. Needs a RebbeHub API token with the write scope.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 200,
+            items: {
+              type: 'object',
+              properties: {
+                id: ID,
+                version: { type: 'string', description: "The version of the words to change (its id); left out, the first" },
+                segments: {
+                  type: 'array',
+                  minItems: 1,
+                  items: {
+                    type: 'object',
+                    properties: {
+                      segment: { type: 'object', additionalProperties: true, description: 'The segment: id, kind, text, origin' },
+                      at: { oneOf: [{ enum: ['start', 'end'] }, { type: 'integer', minimum: 0 }], default: 'end' },
+                    },
+                    required: ['segment'],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ['id', 'segments'],
+              additionalProperties: false,
+            },
+          },
+          suggestion: { type: 'integer', description: 'A suggestion made by an earlier call, still a draft, to add these items to' },
+          submit: { type: 'boolean', default: true, description: 'Send it for review after these items; false keeps it a draft to add more' },
+          ...SUGGESTION_WORDS,
+        },
+        required: ['items'],
+        additionalProperties: false,
+      },
+      annotations: WRITE,
+      async run(args, call) {
+        if (!Array.isArray(args.items) || args.items.length === 0) throw new ToolError('give items: a list of { id, segments }');
+        if (args.items.length > 200) throw new ToolError('at most 200 items a call; keep adding to the same suggestion');
+        const changed: { type: string; id: string; data: Record<string, unknown> }[] = [];
+        for (const [i, item] of (args.items as any[]).entries()) {
+          if (!item || typeof item.id !== 'string' || !Array.isArray(item.segments)) throw new ToolError(`item ${i + 1}: give id and segments`);
+          const live = await need(call, 'GET', `/v1/entities/${encodeURIComponent(item.id)}`);
+          if (live.withheld) throw new ToolError(`${live.id} is withheld for its rights; suggest on the site`);
+          const data = structuredClone(live.data ?? {});
+          const versions: any[] | undefined = data.body?.versions;
+          const version = versions?.find((v) => item.version === undefined || v.id === item.version);
+          if (!version || !Array.isArray(version.segments)) throw new ToolError(`item ${i + 1} (${item.id}): it has no words${item.version ? ` in version ${item.version}` : ''} to add to`);
+          const segments: any[] = version.segments;
+          const added = new Set<string>(item.segments.map((s: any) => s?.segment?.id));
+          const kept = segments.filter((s) => !added.has(s.id));
+          // A segment already there is replaced where it stands; a new one goes where `at` says, counted among the segments that were there.
+          const out = [...kept];
+          const ends: any[] = [];
+          const starts: any[] = [];
+          const placed: { at: number; segment: any }[] = [];
+          for (const [n, s] of item.segments.entries()) {
+            if (!s?.segment || typeof s.segment.id !== 'string') throw new ToolError(`item ${i + 1}, segment ${n + 1}: give segment with an id`);
+            const standing = segments.findIndex((x) => x.id === s.segment.id);
+            if (standing >= 0) placed.push({ at: kept.filter((x) => segments.indexOf(x) < standing).length, segment: s.segment });
+            else if (s.at === 'start') starts.push(s.segment);
+            else if (typeof s.at === 'number') placed.push({ at: Math.min(s.at, kept.length), segment: s.segment });
+            else ends.push(s.segment);
+          }
+          for (const p of placed.reverse()) out.splice(p.at, 0, p.segment);
+          version.segments = [...starts, ...out, ...ends];
+          changed.push({ type: live.type, id: live.id, data });
+        }
+        let suggestion = typeof args.suggestion === 'number' ? args.suggestion : null;
+        if (suggestion === null) {
+          const title = typeof args.title === 'string' && args.title.trim() ? args.title.trim() : `Add words to ${changed.length} page${changed.length === 1 ? '' : 's'}`;
+          suggestion = (await need(call, 'POST', '/v1/suggestions', { title, description: typeof args.note === 'string' ? args.note : undefined })).id as number;
+        }
+        for (const [i, item] of changed.entries()) {
+          const answer = await call('PUT', `/v1/suggestions/${suggestion}/items`, item);
+          if (answer.status >= 400) throw new ToolError(`item ${i + 1}: ${answer.body?.message ?? `the API answered ${answer.status}`} (suggestion ${suggestion} keeps the ${i} before it; fix it and call again with suggestion ${suggestion})`);
+        }
+        const url = `${site}/review?s=${suggestion}`;
+        if (args.submit === false) return { text: `Suggestion ${suggestion}: ${changed.length} page${changed.length === 1 ? '' : 's'} changed, still a draft. ${url}`, structured: { suggestion, status: 'draft', items: changed.map((c) => c.id), url } };
+        const sent = await need(call, 'POST', `/v1/suggestions/${suggestion}/submit`);
+        const failed = (sent.checks ?? []).filter((c: any) => c.status === 'fail');
+        const status = sent.status === 'merged' ? 'merged at once (the set lets your changes go live; it will still be reviewed after)' : `sent for review (${sent.status})`;
+        return {
+          text: [`Suggestion ${suggestion}: ${status}; ${changed.length} page${changed.length === 1 ? '' : 's'} in this call. ${url}`, ...failed.map((c: any) => `Failed check: ${c.message}`)].join('\n'),
+          structured: { suggestion, status: sent.status, items: changed.map((c) => c.id), checks: sent.checks ?? [], url },
+        };
+      },
+    },
+    {
       name: 'approve_suggestion',
       title: 'Approve a suggestion',
       description:

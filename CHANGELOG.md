@@ -12,6 +12,10 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **A few words into many pages through the MCP server.** `add_segments`
+  adds or replaces segments in the words of up to 200 pages a call, as
+  one suggestion, sending only the new segments and where each goes (at
+  the start, the end, or before a given segment), not each page whole.
 - **Every sefer has a shaar, its README.** One file per sefer, written
   the same way for every sefer ([the shaar](docs/shaar.md)): a header of
   fixed fields (its name, subtitle, authors, the author as the title
