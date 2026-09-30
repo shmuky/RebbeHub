@@ -1,4 +1,4 @@
-export { EMBEDDED_TYPES, entityFile, shardOf, syncFile, textFile } from './layout.js';
+export { EMBEDDED_TYPES, entityFile, shaarFile, shardOf, syncFile, textFile } from './layout.js';
 export { parseTextSegments, renderAlignment, renderEntity, renderText, stableJson, type ParsedSegment } from './render.js';
 export { ExportGate } from '@rebbehub/core';
 export { clearMirror, directorySink, exportCommits, exportSnapshot, memorySink, type ExportedCommit, type ExportStats, type FileSink } from './export.js';

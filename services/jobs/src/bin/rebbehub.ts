@@ -9,6 +9,7 @@ import { coversCommand, fingerprintsCommand, pageImagesCommand } from '../scanPa
 import {
   accountCommand,
   convertBodiesCommand,
+  shaarsCommand,
   archiveGapsCommand,
   crawlLibraryCommand,
   crawlSefariaCommand,
@@ -39,6 +40,9 @@ const HELP = `rebbehub - RebbeHub's command line
   rebbehub convert-bodies [--chunk <n>]         pages whose words are still wiki markup, as structured
                                                 words (system changes of <n> pages; run once after
                                                 deploying built-in schemas version 5)
+  rebbehub shaars [--chunk <n>] [--dry-run]     every sefer without a shaar gets the one the catalog
+                                                makes from its data (docs/shaar.md), as system
+                                                changes of <n> sefarim; --dry-run only counts them
   rebbehub rebuildable [--guard]                prints rebuildable when importers made everything;
                                                 --guard prints SQL that fails otherwise
   rebbehub rebuildable --mark | --guard-mark <mark>
@@ -221,6 +225,9 @@ try {
       break;
     case 'convert-bodies':
       await convertBodiesCommand(ctx, { chunk: number(values.chunk) });
+      break;
+    case 'shaars':
+      await shaarsCommand(ctx, { chunk: number(values.chunk), dryRun: values['dry-run'] });
       break;
     case 'relink-drive':
       await relinkDriveCommand(ctx, { chunk: number(values.chunk), dryRun: values['dry-run'] });

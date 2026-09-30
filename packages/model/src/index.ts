@@ -47,3 +47,25 @@ export {
 } from './fingerprints.js';
 export { itemsIn, mentionsIn, referencesIn, tokenize, type Token } from './mentions.js';
 export { HOUSE_SPELLING_HEBREW_AFTER, HOUSE_SPELLING_PARTS, HOUSE_SPELLING_WORDS, spellingHints, toHouseSpelling } from './spelling.js';
+export {
+  SHAAR_SECTIONS,
+  SHAAR_SECTION_MAX,
+  SHAAR_VERSION,
+  applyShaar,
+  hasShaar,
+  readShaar,
+  shaarBlocks,
+  shaarFromCatalog,
+  shaarIsEmpty,
+  shaarRuns,
+  structureSentence,
+  tidySection,
+  writeShaar,
+  type ShaarBlock,
+  type ShaarFields,
+  type ShaarProblem,
+  type ShaarReading,
+  type ShaarRun,
+  type ShaarSectionKey,
+  type WorkShaar,
+} from './shaar.js';

@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono';
 import type { DbCost } from '@rebbehub/db';
-import { Catalog, CatalogError, combineSuggestions, ExportGate, openTranscriptFixes, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, getDerivations, getDerivationsOf, getFile, getFiles, getPageFix, getPageFixes, hanachaSyncs, itemsUsingFile, listWebhooks, pageImageCounts, printingsOf, projectTodo, recordingTranscript, transcriptHistory, transcriptPending, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type FileRow, type Mailer, type PageFixRow, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
+import { Catalog, CatalogError, combineSuggestions, ExportGate, openTranscriptFixes, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, shaarFile, suggestShaar, getDerivations, getDerivationsOf, getFile, getFiles, getPageFix, getPageFixes, hanachaSyncs, itemsUsingFile, listWebhooks, pageImageCounts, printingsOf, projectTodo, recordingTranscript, transcriptHistory, transcriptPending, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type FileRow, type Mailer, type PageFixRow, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
 import { dailyLearning, peopleOf } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType, type Language, type PageInline, type PageSegmentKind } from '@rebbehub/model';
@@ -730,6 +730,17 @@ export function createApp(options: ApiOptions): Hono {
     return c.json({ history: withheld ? history.map((h) => ({ ...h, changes: [] })) : history });
   });
 
+  /**
+   * A sefer's shaar file (docs/shaar.md), the README of a sefer: as JSON
+   * with whether the catalog made it (no person read it yet), or the file
+   * itself with `?format=text`.
+   */
+  app.get('/v1/entities/:id/shaar', async (c) => {
+    const file = await shaarFile(catalog, entityId(c.req.param('id')));
+    if (c.req.query('format') === 'text') return c.body(file.text, 200, { 'Content-Type': 'text/markdown; charset=utf-8', 'X-Content-Type-Options': 'nosniff' });
+    return c.json(file);
+  });
+
   // The page's talk page: the conversation about it, open to read; writing needs a signed-in account.
   app.get('/v1/entities/:id/talk', async (c) => c.json({ talk: await catalog.talk({ kind: 'entity', id: entityId(c.req.param('id')) }) }));
 
@@ -1048,6 +1059,23 @@ export function createApp(options: ApiOptions): Hono {
         title: input.title,
         note: input.note,
       }),
+      201,
+    );
+  });
+
+  /**
+   * A sefer's shaar, the whole file, sent for review as a suggestion of
+   * its own. A file the catalog cannot read is refused with every line
+   * that is wrong (`detail.problems`); `before` is the file as the person
+   * opened it, so a change made since is never overwritten.
+   */
+  app.post('/v1/suggestions/shaar', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ entityId?: string; text?: unknown; before?: unknown; title?: string; note?: string }>(c);
+    if (!input.entityId || !isEntityId(input.entityId)) throw new HttpError(400, 'say which sefer this shaar is of (entityId)');
+    if (typeof input.text !== 'string') throw new HttpError(400, 'give the shaar file (text)');
+    return c.json(
+      await suggestShaar(catalog, by, { entity: input.entityId as EntityId, text: input.text, before: typeof input.before === 'string' ? input.before : undefined, title: input.title, note: input.note }),
       201,
     );
   });

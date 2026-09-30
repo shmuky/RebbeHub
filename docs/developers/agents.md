@@ -23,7 +23,7 @@ JSON-RPC message, get JSON back. It keeps no sessions and opens no event
 stream. It has one address, `https://api.rebbehub.org/mcp`:
 
 - **Reading needs no account.** `search`, `get_item`, `list_children`,
-  `get_text` and `list_issues` answer anyone.
+  `get_text`, `get_shaar` and `list_issues` answer anyone.
 - **Writing asks for you when it is needed.** A tool that writes
   (`suggest_fix`, `open_issue`, `ask_machine`…) called without sign-in answers HTTP
   `401` with `WWW-Authenticate: Bearer resource_metadata="https://api.rebbehub.org/.well-known/oauth-protected-resource/mcp", scope="read write"`,
@@ -41,6 +41,8 @@ stream. It has one address, `https://api.rebbehub.org/mcp`:
 | `list_children` | what an item holds, in order: a sefer's sichos, a text's paragraphs, a farbrengen's recordings, a set's items; a page at a time |
 | `get_text` | the words of a sicha, a scan's page or a recording's transcript; machine words marked `[machine]` |
 | `suggest_fix` | a correction to one item, as a suggestion for review, under your name (`write`) |
+| `get_shaar` | a sefer's shaar file, the README of a sefer ([the shaar](../shaar.md)); one the catalog made is marked `[machine]` |
+| `suggest_shaar` | a sefer's whole shaar file, changed, as a suggestion for review; a file that cannot be read is refused line by line (`write`) |
 | `suggest_items` | add new items, or change or delete many, as one suggestion; 200 items a call, added to the same draft over several calls (`write`) |
 | `approve_suggestion` | approve a suggestion sent for review, when you may: its sets' keepers, or a steward ; `clashes` (`keep_live` or `take_suggestion`) settles every clash with a later change at once (`write`) |
 | `close_suggestion` | close (withdraw) a suggestion without merging it: your own, or any as a steward (`write`) |

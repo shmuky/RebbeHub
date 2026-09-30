@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Catalog, convertLegacyBodies } from '@rebbehub/core';
+import { Catalog, convertLegacyBodies, fillShaars } from '@rebbehub/core';
 import { connectPostgres, one, type Db } from '@rebbehub/db';
 import { openPGlite } from '@rebbehub/db/pglite';
 import {
@@ -251,6 +251,14 @@ export async function convertBodiesCommand(ctx: Context, input: { chunk?: number
   await withCatalog(ctx, async (catalog) => {
     const done = await convertLegacyBodies(catalog, { batch: input.chunk, log: ctx.log });
     ctx.log(done ? `${done} pages' words turned into structured words` : 'every page already has structured words');
+  });
+}
+
+/** Every sefer without a shaar gets the one the catalog makes from its data (docs/shaar.md), as system changes of `chunk` sefarim; `dryRun` only counts them. */
+export async function shaarsCommand(ctx: Context, input: { chunk?: number; dryRun?: boolean } = {}): Promise<void> {
+  await withCatalog(ctx, async (catalog) => {
+    const done = await fillShaars(catalog, { batch: input.chunk, dryRun: input.dryRun, log: ctx.log });
+    ctx.log(done ? `${done} sefarim ${input.dryRun ? 'would get' : 'now have'} a shaar made from the catalog` : 'every sefer already has a shaar');
   });
 }
 

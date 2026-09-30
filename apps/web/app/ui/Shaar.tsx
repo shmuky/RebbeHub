@@ -13,6 +13,7 @@ export function Shaar({
   title,
   kind,
   part,
+  subtitle,
   by,
   publisher,
   place,
@@ -26,6 +27,8 @@ export function Shaar({
   title: string;
   kind?: string;
   part?: string;
+  /** The title page's second line, from the sefer's shaar file. */
+  subtitle?: string;
   by?: ReactNode;
   publisher?: string;
   place?: string;
@@ -42,6 +45,7 @@ export function Shaar({
     <span className="shaar-frame">
       {kind && !size ? <span className="shaar-kind">{kind}</span> : null}
       <span className="shaar-title">{title}</span>
+      {subtitle && !size ? <span className="shaar-part">{subtitle}</span> : null}
       {part && size !== 'sm' ? <span className="shaar-part">{part}</span> : null}
       {!size ? (
         <>

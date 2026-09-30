@@ -38,6 +38,7 @@ stands. ✅ built and tested · 🟡 partly · ⬜ not yet.
 | Installable app (PWA): manifest, icons, a service worker that keeps the app and every page read for offline use | ✅ | `public/manifest.webmanifest`, `public/sw.js`, `lib/pwa.ts` |
 | SEO: canonical and hreflang links, schema.org data, sitemaps, robots.txt | ✅ | `apps/web/app/lib/seo.ts`, `/sitemap.xml` |
 | Report a problem on every page (no account, works without JavaScript) | ✅ | `ReportForm.tsx` |
+| Every sefer's shaar, its README: one fixed format, read strictly, shown under its contents and on its title page, edited at `/shaar/<id>`; one made from the catalog for a sefer no person wrote one for | ✅ | `packages/model/src/shaar.ts`, `components/ShaarFile.tsx`, `routes/shaar.tsx` - [the shaar](shaar.md) |
 
 ## Phase 2 - Contribute
 

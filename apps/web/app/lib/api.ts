@@ -595,6 +595,11 @@ export class RebbeHubApi {
     return this.maybe(this.get<WorkCover>(`/v1/works/${encodeURIComponent(id)}/cover`));
   }
 
+  /** A sefer's shaar file (docs/shaar.md), and whether the catalog made it. */
+  shaar(id: string) {
+    return this.maybe(this.get<{ text: string; machine: boolean }>(`/v1/entities/${encodeURIComponent(id)}/shaar`));
+  }
+
   /** A file's own page. */
   fileAbout(sha256: string, limit?: number) {
     return this.maybe(this.get<FileAbout>(`/v1/files/${encodeURIComponent(sha256)}/about`, { limit }));

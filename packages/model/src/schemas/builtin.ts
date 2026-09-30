@@ -1,5 +1,6 @@
 import { EVENT_LINK_KINDS, type EntityType, type LocalName } from '../entities.js';
 import { PAGE_HREF_PATTERN, PAGE_ID_PATTERN, PAGE_MARKS, PAGE_SEGMENT_KINDS, TEXT_PROFILES } from '../pageText.js';
+import { SHAAR_SECTIONS, SHAAR_SECTION_MAX } from '../shaar.js';
 import { EDITION_KINDS, GENRES, LICENCES, SOURCE_IDS } from '../works.js';
 
 /**
@@ -245,8 +246,9 @@ const fractionalOrder = str({ pattern: '^[0-9A-Za-z]+$', maxLength: 64 });
  * 9: a machine origin's `edited`, words a person fixed in part and still the machine's.
  * 10: a page segment's `printed`, where it stands on its version's scan (PR #83 added it
  * to the schema without this, so live catalogs kept refusing it).
+ * 11: a sefer's `shaar` (shaar.ts), its title page's words and its sections, read and written as one file.
  */
-export const BUILTIN_SCHEMA_VERSION = 10;
+export const BUILTIN_SCHEMA_VERSION = 11;
 
 export const BUILTIN_SCHEMAS: Record<EntityType, JsonSchema> = {
   set: entitySchema(
@@ -294,6 +296,20 @@ export const BUILTIN_SCHEMAS: Record<EntityType, JsonSchema> = {
         additionalProperties: false,
       },
       order: fractionalOrder,
+      shaar: {
+        type: 'object',
+        properties: {
+          subtitle: ref('localName'),
+          byLine: ref('localName'),
+          sections: {
+            type: 'object',
+            properties: Object.fromEntries(SHAAR_SECTIONS.map((x) => [x.key, str({ minLength: 1, maxLength: SHAAR_SECTION_MAX })])),
+            additionalProperties: false,
+          },
+          origin: ref('machineOrigin'),
+        },
+        additionalProperties: false,
+      },
     },
     ['title', 'slug', 'authors', 'genre', 'levels'],
   ),

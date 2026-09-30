@@ -27,6 +27,18 @@ is still rebuildable, re-running `sichos-kodesh-works`,
 `sichos-kodesh-occasions` and `sefaria` gives the fullest structure
 (footnotes, the English beside the Hebrew), which markup had lost.
 
+Every sefer without a shaar ([the shaar](shaar.md)) gets the one the
+catalog makes from its data, labelled as the catalog's until a person
+reads it:
+
+```sh
+rebbehub shaars [--chunk 500] [--dry-run]   # system changes of --chunk sefarim; --dry-run only counts
+```
+
+It can be stopped and run again, and takes up only the sefarim still
+without one. Like every bulk write to the live catalog, run it when no
+import is running (an import aborts if the catalog changes under it).
+
 Production is Postgres on Neon. The revision table is partitioned by time;
 `ensureRevisionPartitions(db, [2026, 2027])` (in `@rebbehub/db`) adds
 yearly partitions ahead of time.

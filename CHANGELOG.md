@@ -10,6 +10,22 @@ any time. `@rebbehub/client` carries the API's version.
 
 ## Unreleased
 
+### Added
+
+- **Every sefer has a shaar, its README.** One file per sefer, written
+  the same way for every sefer ([the shaar](docs/shaar.md)): a header of
+  fixed fields (its name, subtitle, authors, the author as the title
+  page names him, its kind), then its sections under fixed headings
+  (About, Structure, Printings, Sources, Notes). It shows under the
+  sefer's contents as a README does under a repository's files, and its
+  lines on the title page at the top. `/shaar/<id>` shows the file and
+  edits it, naming every line the catalog cannot read as it is typed.
+  A sefer no person wrote one for shows the one the catalog makes from
+  its data, marked as such. API: `GET /v1/entities/{id}/shaar`,
+  `POST /v1/suggestions/shaar`; MCP: `get_shaar`, `suggest_shaar`; the
+  git mirror writes `shaars/<shard>/<id>.md`; `rebbehub shaars` gives
+  every sefer without one the catalog's. Built-in schemas version 11.
+
 ### Fixed
 
 - **Each volume's printings are on one page.** A sefer's volume page

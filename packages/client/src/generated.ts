@@ -1164,6 +1164,18 @@ export interface Operations {
     };
     output: Record<string, unknown>;
   };
+  /** A sefer's shaar file, the README of a sefer, in its fixed form (docs/shaar.md) */
+  getShaar: {
+    input: {
+      id: string;
+      /** text: the file itself, as text/markdown */
+      format?: "json" | "text";
+    };
+    output: {
+      text: string;
+      machine: boolean;
+    };
+  };
   /** A text of a sefer as its source gave it (one chapter or letter, an HTML article) */
   getSourceText: {
     input: {
@@ -2351,6 +2363,22 @@ export interface Operations {
       subscribed?: boolean;
     };
   };
+  /** A sefer's shaar, the whole file, sent for review; a file the catalog cannot read is refused with each line that is wrong (`detail.problems`) */
+  suggestShaar: {
+    input: {
+      body: {
+        /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+        entityId: string;
+        /** The whole shaar file */
+        text: string;
+        /** The file as the person opened it; a change since answers 409 */
+        before?: string;
+        title?: string;
+        note?: string;
+      };
+    };
+    output: Record<string, unknown>;
+  };
   /** A page's words fixed segment by segment: one segment's new words, a segment added after it or taken out, a page's first words, or a machine's segment checked as right (`check`), sent for review */
   suggestWords: {
     input: {
@@ -2652,6 +2680,7 @@ export const OPERATIONS = {
   getProfile: {"method":"GET","path":"/v1/people/{username}","pathParams":["username"],"query":["limit"],"body":null,"answer":"json"},
   getProject: {"method":"GET","path":"/v1/projects/{slug}","pathParams":["slug"],"query":[],"body":null,"answer":"json"},
   getRevision: {"method":"GET","path":"/v1/revisions/{rev}","pathParams":["rev"],"query":[],"body":null,"answer":"json"},
+  getShaar: {"method":"GET","path":"/v1/entities/{id}/shaar","pathParams":["id"],"query":["format"],"body":null,"answer":"json"},
   getSourceText: {"method":"GET","path":"/v1/texts/{sha256}","pathParams":["sha256"],"query":[],"body":null,"answer":"text"},
   getSuggestion: {"method":"GET","path":"/v1/suggestions/{id}","pathParams":["id"],"query":["offset","limit","summary","brief"],"body":null,"answer":"json"},
   health: {"method":"GET","path":"/v1/health","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
@@ -2745,6 +2774,7 @@ export const OPERATIONS = {
   submitSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/submit","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   suggestFix: {"method":"POST","path":"/v1/suggestions/quick","pathParams":[],"query":[],"body":"json","answer":"json"},
   suggestionConversation: {"method":"GET","path":"/v1/suggestions/{id}/conversation","pathParams":["id"],"query":[],"body":null,"answer":"json"},
+  suggestShaar: {"method":"POST","path":"/v1/suggestions/shaar","pathParams":[],"query":[],"body":"json","answer":"json"},
   suggestWords: {"method":"POST","path":"/v1/suggestions/words","pathParams":[],"query":[],"body":"json","answer":"json"},
   textsProgress: {"method":"GET","path":"/v1/texts/batch/progress","pathParams":[],"query":["ids"],"body":null,"answer":"json"},
   threadByNumber: {"method":"GET","path":"/v1/threads/{number}","pathParams":["number"],"query":[],"body":null,"answer":"json"},
@@ -3069,6 +3099,11 @@ export abstract class GeneratedMethods {
   /** One stored version of an item (GET /v1/revisions/{rev}) */
   getRevision(input: Operations['getRevision']['input']): Promise<Operations['getRevision']['output']> {
     return this.call('getRevision', input ?? {} as Operations['getRevision']['input']);
+  }
+
+  /** A sefer's shaar file, the README of a sefer, in its fixed form (docs/shaar.md) (GET /v1/entities/{id}/shaar) */
+  getShaar(input: Operations['getShaar']['input']): Promise<Operations['getShaar']['output']> {
+    return this.call('getShaar', input ?? {} as Operations['getShaar']['input']);
   }
 
   /** A text of a sefer as its source gave it (one chapter or letter, an HTML article) (GET /v1/texts/{sha256}) */
@@ -3534,6 +3569,11 @@ export abstract class GeneratedMethods {
   /** A suggestion's timeline (comments, reviews, events), the reviewers asked, and the issues it closes (GET /v1/suggestions/{id}/conversation) */
   suggestionConversation(input: Operations['suggestionConversation']['input']): Promise<Operations['suggestionConversation']['output']> {
     return this.call('suggestionConversation', input ?? {} as Operations['suggestionConversation']['input']);
+  }
+
+  /** A sefer's shaar, the whole file, sent for review; a file the catalog cannot read is refused with each line that is wrong (`detail.problems`) (POST /v1/suggestions/shaar) */
+  suggestShaar(input: Operations['suggestShaar']['input']): Promise<Operations['suggestShaar']['output']> {
+    return this.call('suggestShaar', input ?? {} as Operations['suggestShaar']['input']);
   }
 
   /** A page's words fixed segment by segment: one segment's new words, a segment added after it or taken out, a page's first words, or a machine's segment checked as right (`check`), sent for review (POST /v1/suggestions/words) */

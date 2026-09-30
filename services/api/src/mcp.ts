@@ -309,6 +309,42 @@ function tools(siteUrl: string): Tool[] {
       },
     },
     {
+      name: 'get_shaar',
+      title: "Get a sefer's shaar",
+      description:
+        "A sefer's shaar file, the README of a sefer: a header of fixed fields between --- lines (shaar: 1, title, title-en, subtitle, subtitle-en, by: rh-… one line an author, by-line, by-line-en, genre), then sections under fixed headings (## על הספר | About, ## סדר הספר | Structure, ## הדפסות | Printings, ## מקורות | Sources, ## הערות | Notes). For a sefer no person has written one for, the one the catalog makes from its data, marked as the machine's.",
+      inputSchema: { type: 'object', properties: { id: ID }, required: ['id'], additionalProperties: false },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      async run(args, call) {
+        const file = await need(call, 'GET', `/v1/entities/${encodeURIComponent(String(args.id ?? ''))}/shaar`);
+        return { text: `${file.machine ? '[machine] Made from the catalog; no person has read it yet.\n' : ''}${file.text}`, structured: file };
+      },
+    },
+    {
+      name: 'suggest_shaar',
+      title: "Suggest a sefer's shaar",
+      description:
+        "Send a sefer's whole shaar file (as get_shaar gives it, changed) for review. The file is read strictly: one that cannot be read is refused with each line that is wrong and why. Setting the title, authors or genre here changes the sefer's own. Needs your RebbeHub account with the write scope.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: ID,
+          text: { type: 'string', maxLength: 120000, description: 'The whole shaar file' },
+          before: { type: 'string', description: 'The file as get_shaar gave it, so a change made since is not overwritten' },
+          title: { type: 'string', maxLength: 200, description: 'What the change is, in a few words' },
+          note: { type: 'string', maxLength: 2000, description: 'Why, and the source for it' },
+        },
+        required: ['id', 'text'],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      async run(args, call) {
+        const made = await need(call, 'POST', '/v1/suggestions/shaar', { entityId: args.id, text: args.text, before: args.before, title: args.title, note: args.note });
+        const status = made.status === 'merged' ? 'merged at once (the set lets your fixes go live; it will still be reviewed after)' : `sent for review (${made.status})`;
+        return { text: `Suggestion ${made.id} for the shaar: ${status}. ${site}/review?s=${made.id}`, structured: { suggestion: made.id, status: made.status, checks: made.checks, url: `${site}/review?s=${made.id}` } };
+      },
+    },
+    {
       name: 'list_issues',
       title: 'List issues',
       description:
