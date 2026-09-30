@@ -191,4 +191,29 @@ describe("transcript fixes, all together", () => {
       ).status,
     ).toBe(401);
   });
+
+  it("combines one person's fixes into one suggestion, keeping every word each changed", async () => {
+    // As the old editor sent them: each word its own suggestion, from the same paragraph.
+    const send = async (content: string) => {
+      const cs = await catalog.createChangeset("chaim", { title: "תיקון תמלול" });
+      const data = (await catalog.get(segments[1]!))!.data as Record<string, Json>;
+      await catalog.putRevision(cs.id, "chaim", { id: segments[1]!, type: "segment", data: { ...data, content } });
+      return (await catalog.submit(cs.id, "chaim")).id;
+    };
+    const first = await send("עס שטייט אין פסוקים");
+    const second = await send("דאס שטייט אין פסוק");
+
+    expect((await call("POST", "/v1/suggestions/combine", { as: "mendy", body: { suggestions: [first, second] } })).status).toBe(403);
+    const made = await call("POST", "/v1/suggestions/combine", { as: "chaim", body: { suggestions: [first, second] } });
+    expect(made.status).toBe(201);
+    expect(made.body).toMatchObject({ status: "open", title: "תיקון תמלול" });
+    expect((await catalog.changeset(first)).status).toBe("withdrawn");
+    expect((await catalog.changeset(second)).status).toBe("withdrawn");
+
+    const fixes = (await call("GET", "/v1/transcripts/fixes", { as: "keeper" })).body.fixes;
+    expect(fixes.map((f: any) => [f.id, f.changes.map((c: any) => c.after)])).toEqual([[made.body.id, ["דאס שטייט אין פסוקים"]]]);
+    // Approved at once, with nothing to settle.
+    await catalog.merge(made.body.id, "keeper");
+    expect(((await catalog.get(segments[1]!))!.data as { content: string }).content).toBe("דאס שטייט אין פסוקים");
+  });
 });

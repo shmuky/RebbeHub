@@ -21,7 +21,11 @@ import { EmptyState, Skeleton } from "../ui/primitives.js";
  * decides them all in one call: kept ones are approved, removed ones are
  * withdrawn when they are yours, else sent back. Timing changes made with
  * the editor's old timing tool (removed: it moved the sync where people
- * meant to confirm it) start marked Remove.
+ * meant to confirm it) start marked Remove. Where one person's own fixes
+ * of a farbrengen are in several suggestions (the old editor sent one per
+ * word), Combine makes them one (POST /v1/suggestions/combine), as a pull
+ * request holds many commits, so they are approved at once and never
+ * clash with each other.
  */
 
 type Kind = "words" | "check" | "timing" | "new";
@@ -101,6 +105,15 @@ const W = {
   sent_back: { he: "הוחזר לכותב", en: "Sent back" },
   failed: { he: "לא בוצע", en: "Not done" },
   play: { he: "להשמיע מכאן", en: "Play from here" },
+  combine: {
+    he: "לאחד את {n} ההצעות שלי להצעה אחת",
+    en: "Combine my {n} suggestions into one",
+  },
+  combining: { he: "מאחד…", en: "Combining…" },
+  combineWhy: {
+    he: "כל התיקונים שלך בהתוועדות הזו יהיו בהצעה אחת, שמאשרים בבת אחת ובלי התנגשויות. שינויים במילים שונות נשמרים כולם.",
+    en: "All your fixes of this farbrengen in one suggestion, approved at once with nothing clashing. Changes to different words are all kept.",
+  },
 } as const;
 const w = (lang: Lang, key: keyof typeof W) => W[key][lang] as string;
 
@@ -130,6 +143,7 @@ export function TranscriptFixes({
   const [choice, setChoice] = useState<Record<number, Choice>>({});
   const [results, setResults] = useState<Record<number, Result>>({});
   const [busy, setBusy] = useState(false);
+  const [combining, setCombining] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -220,6 +234,32 @@ export function TranscriptFixes({
     }
   }
 
+  async function combine(key: string, ids: number[]) {
+    setCombining(key);
+    setError(null);
+    try {
+      const response = await fetch("/_/steward/suggestions/combine", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          accept: "application/json",
+        },
+        body: JSON.stringify({ suggestions: ids }),
+      });
+      const json = (await response.json().catch(() => ({}))) as {
+        message?: string;
+      };
+      if (!response.ok) throw new Error(json.message ?? response.statusText);
+      await load();
+      onDone?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCombining(null);
+    }
+  }
+
   async function hear(f: Fix, ms: number | null) {
     if (!f.event || ms === null) return;
     const tracks = await tracksOfEvent(f.event, lang);
@@ -279,6 +319,9 @@ export function TranscriptFixes({
             ? dateLabel(first.date, lang, { civil: false })
             : first.recording);
         const part = nameOf(first.recordingTitle , lang);
+        const mine = g.fixes
+          .filter((f) => f.mine && !results[f.id]?.done)
+          .map((f) => f.id);
         return (
           <section key={g.key} className="txf-group box">
             <header className="txf-gh">
@@ -299,6 +342,23 @@ export function TranscriptFixes({
                 {w(lang, "open")}
               </Link>
             </header>
+            {mine.length > 1 ? (
+              <div className="txf-combine">
+                <button
+                  type="button"
+                  className="btn sm"
+                  disabled={combining !== null}
+                  title={w(lang, "combineWhy")}
+                  onClick={() => void combine(g.key, mine)}
+                >
+                  <Icon name="layers" size={14} />
+                  {combining === g.key
+                    ? w(lang, "combining")
+                    : w(lang, "combine").replace("{n}", num(mine.length, lang))}
+                </button>
+                <span className="subtle">{w(lang, "combineWhy")}</span>
+              </div>
+            ) : null}
             <ul className="txf-list">
               {g.fixes.map((f) => {
                 const c = choice[f.id];

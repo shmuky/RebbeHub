@@ -451,6 +451,19 @@ function tools(siteUrl: string): Tool[] {
       },
     },
     {
+      name: 'combine_suggestions',
+      title: 'Combine suggestions into one',
+      description:
+        'Combine several of your own suggestions not yet approved into one, as a pull request holds many commits, so they are reviewed and approved at once and never clash with each other. Their changes are applied in the order they were made: changes to different words of one text are all kept, and where a later one rewrites an earlier one the later stands. The ones combined are closed, pointing to the new one.',
+      inputSchema: { type: 'object', properties: { suggestions: { type: 'array', items: { type: 'integer' }, minItems: 2, maxItems: 100 }, title: { type: 'string', maxLength: 200 } }, required: ['suggestions'], additionalProperties: false },
+      annotations: WRITE,
+      async run(args, call) {
+        const made = await need(call, 'POST', '/v1/suggestions/combine', { suggestions: (args.suggestions as unknown[]).map(Number), title: typeof args.title === 'string' ? args.title : undefined });
+        const url = `${site}/review?s=${made.id}`;
+        return { text: `Combined ${(args.suggestions as unknown[]).length} suggestions into suggestion ${made.id} (${made.status}). ${url}`, structured: { suggestion: made.id, number: made.number ?? null, status: made.status, url } };
+      },
+    },
+    {
       name: 'send_back_suggestion',
       title: 'Send a suggestion back',
       description: 'Send a suggestion back to its author without approving it, saying what should change (keepers of its sets, stewards).',
@@ -759,7 +772,7 @@ export function mcpRoutes(app: Hono, options: { siteUrl: string; version: string
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: MCP_SERVER_NAME, title: 'RebbeHub', version: options.version, websiteUrl: `${options.siteUrl.replace(/\/+$/, '')}/developers` },
           instructions:
-            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix (write scope; you will be asked to connect your RebbeHub account) makes a suggestion under the connected person\'s account that people review before anything changes; suggest_items (write scope) adds, changes or deletes many items in one suggestion, and approve_suggestion approves one when you may; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into. ask_machine (write scope) asks for a scan to be read by OCR or a recording transcribed; machine_queue shows where those requests stand, machine_to_check what the machines wrote that nobody checked yet, and training_data how much training data people\'s checking has made for the next transcription model. To organize the catalog, get_tree shows it; move_items, move_up, rename_item, reorder_children, create_set, delete_set, merge_items and organize (write scope) each make one suggestion that people review; preview_organize shows the change first.',
+            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix (write scope; you will be asked to connect your RebbeHub account) makes a suggestion under the connected person\'s account that people review before anything changes; suggest_items (write scope) adds, changes or deletes many items in one suggestion, approve_suggestion approves one when you may, and combine_suggestions makes several of your own into one; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into. ask_machine (write scope) asks for a scan to be read by OCR or a recording transcribed; machine_queue shows where those requests stand, machine_to_check what the machines wrote that nobody checked yet, and training_data how much training data people\'s checking has made for the next transcription model. To organize the catalog, get_tree shows it; move_items, move_up, rename_item, reorder_children, create_set, delete_set, merge_items and organize (write scope) each make one suggestion that people review; preview_organize shows the change first.',
         };
       }
       case 'ping':
