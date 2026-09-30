@@ -2,6 +2,7 @@ import type { DateKey } from '@rebbehub/hebrew';
 import type { RightsState } from './rights.js';
 import type { EntityId } from './ids.js';
 import type { PageText } from './pageText.js';
+import type { WorkShaar } from './shaar.js';
 import type { EditionKind, Genre, Licence, SourceId } from './works.js';
 
 /**
@@ -252,6 +253,12 @@ export interface WorkData extends CommonFields {
    * choice wins.
    */
   cover?: CoverChoice;
+  /**
+   * Its shaar, the README of a sefer (shaar.ts, docs/shaar.md): what its
+   * title page says beyond its title and authors, and its sections about
+   * it. Read and written as one file in fixed form.
+   */
+  shaar?: WorkShaar;
   /** A fractional sort key among the sefarim of its sets (order.ts), when someone has put them in order. */
   order?: string;
 }

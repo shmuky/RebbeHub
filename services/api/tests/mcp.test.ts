@@ -48,6 +48,8 @@ describe('the MCP server', () => {
       'list_children',
       'get_text',
       'suggest_fix',
+      'get_shaar',
+      'suggest_shaar',
       'list_issues',
       'open_issue',
       'suggest_items',
@@ -166,6 +168,26 @@ describe('the MCP server', () => {
     expect(suggestion.author).toBe(me);
     // Nothing changed on main until a keeper approves.
     expect((await catalog.get(event))!.data).toMatchObject({ title: { en: 'Yud Shvat 5742' } });
+  });
+
+  it("reads a sefer's shaar, and sends a changed one for review, refusing a file it cannot read", async () => {
+    const sefer = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'ליקוטי שיחות' }, slug: 'likkutei-sichos', authors: [], genre: 'sichos', levels: ['volume', 'sicha'], sets: [set] });
+    const got = await tool('get_shaar', { id: sefer });
+    expect(got.structuredContent.machine).toBe(true);
+    expect(got.content[0].text).toMatch(/^\[machine\][^\n]*\n---\nshaar: 1\ntitle: ליקוטי שיחות\ngenre: sichos\n---\n\n## סדר הספר \| Structure/);
+    const text = await (await app.request(`/v1/entities/${sefer}/shaar?format=text`)).text();
+    expect(text).toBe(got.structuredContent.text);
+
+    const me = (await createPerson(catalog.db, 'Shaar writer')).id;
+    const made = await app.request('/v1/tokens', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Test-Account': me }, body: JSON.stringify({ name: 'agent', scopes: ['read', 'write'] }) });
+    const { token } = (await made.json()) as { token: string };
+    const bad = await tool('suggest_shaar', { id: sefer, text: text.replace('genre: sichos', 'kind: sichos') }, token);
+    expect(bad.isError).toBe(true);
+    expect(bad.content[0].text).toContain('line 4');
+    const sent = await tool('suggest_shaar', { id: sefer, text: `${text}\n## הערות | Notes\n\nנבדק.\n`, before: text, title: 'A note in the shaar' }, token);
+    expect(sent.isError).toBe(false);
+    const suggestion = await catalog.changeset(sent.structuredContent.suggestion);
+    expect(suggestion.author).toBe(me);
   });
 
   it('adds many items in one suggestion, over several calls, and a steward approves it', async () => {

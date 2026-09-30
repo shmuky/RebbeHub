@@ -261,3 +261,4 @@ export { machineToCheck, type MachineToCheck, type PageToCheck, type ScanToCheck
 export { openTranscriptFixes, TRANSCRIPT_FIXES_MAX, type TranscriptFix, type TranscriptFixChange } from './transcriptFixes.js';
 export { DAILY_WORKS, dailyLearning, tanyaStart, type DailyLearning, type DailyTanyaPart } from './daily.js';
 export { combineSuggestions } from './combine.js';
+export { fillShaars, shaarFile, suggestShaar, type ShaarFile, type ShaarInput } from './shaar.js';

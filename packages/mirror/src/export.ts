@@ -1,8 +1,8 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { ExportGate, type Catalog, type EntityView } from '@rebbehub/core';
-import type { AlignmentData, EntityId, SegmentData, TextData } from '@rebbehub/model';
-import { EMBEDDED_TYPES, entityFile, syncFile, textFile } from './layout.js';
+import { writeShaar, type AlignmentData, type EntityId, type LocalName, type SegmentData, type TextData, type WorkData } from '@rebbehub/model';
+import { EMBEDDED_TYPES, entityFile, shaarFile, syncFile, textFile } from './layout.js';
 import { renderAlignment, renderEntity, renderText, stableJson } from './render.js';
 
 /** Where exported files go: a directory on disk, or anything else that can hold files. */
@@ -55,6 +55,9 @@ merge. Clone it, diff it, fork it: it belongs to the community.
 - \`texts/<shard>/<id>.md\` - a text with its segments; each segment is
   anchored by its permanent id (\`#rh-…\`), so citations never break.
 - \`sync/<shard>/<id>.vtt\` - a recording synced to a text, as WebVTT.
+- \`shaars/<shard>/<id>.md\` - a sefer's shaar, its README, written the same
+  way for every sefer (https://github.com/shmuky/RebbeHub/blob/main/docs/shaar.md).
+  One the catalog made from its data says so in its item's \`shaar.origin\`.
 - \`COMMIT\` - the last RebbeHub commit this export includes.
 
 Machine-made text and sync are labelled (\`machine=…\`) until a person has
@@ -98,6 +101,23 @@ class Exporter {
     this.stats.entities++;
     if (view.type === 'text') await this.writeText(view);
     if (view.type === 'alignment') await this.writeAlignment(view);
+    if (view.type === 'work') await this.writeShaar(view);
+  }
+
+  /** A sefer's shaar file, when it has one, with its authors' names after their ids. */
+  async writeShaar(work: EntityView): Promise<void> {
+    const data = work.data as unknown as WorkData;
+    if (!data.shaar) {
+      await this.sink.remove(shaarFile(work.id));
+      return;
+    }
+    const names: Record<string, string> = {};
+    for (const id of data.authors) {
+      const author = await this.catalog.get(id as EntityId, { at: this.at });
+      const name = (author?.data as { name?: LocalName } | null)?.name?.he;
+      if (name) names[id] = name;
+    }
+    await this.sink.write(shaarFile(work.id), writeShaar(data, names));
   }
 
   async writeText(text: EntityView): Promise<void> {
@@ -145,7 +165,7 @@ export async function exportSnapshot(catalog: Catalog, sink: FileSink, at: numbe
 
 /** Removes everything an export writes, keeping the rest (`.git`). */
 export async function clearMirror(root: string): Promise<void> {
-  for (const dir of ['entities', 'texts', 'sync']) await rm(join(root, dir), { recursive: true, force: true });
+  for (const dir of ['entities', 'texts', 'sync', 'shaars']) await rm(join(root, dir), { recursive: true, force: true });
 }
 
 export interface ExportedCommit {
@@ -173,6 +193,7 @@ export async function exportCommits(catalog: Catalog, sink: FileSink, since: num
         await sink.remove(entityFile(change.type, change.id));
         if (change.type === 'text') await sink.remove(textFile(change.id));
         if (change.type === 'alignment') await sink.remove(syncFile(change.id));
+        if (change.type === 'work') await sink.remove(shaarFile(change.id));
       } else {
         await exporter.writeEntity({ id: change.id, type: change.type, path: change.path, rev: change.rev, data: change.data });
       }

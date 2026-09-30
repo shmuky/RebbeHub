@@ -230,6 +230,10 @@ the second waits):
    and `CLOUDFLARE_API_TOKEN` (a token with **Workers R2 Storage: Edit**,
    as for the import's stored texts) besides `DATABASE_URL`; without them
    the run stops at once and says which secret to add.
+3. **`shaars`** (or `shaars-dry-run` to count first): every sefer
+   without a shaar gets the one the catalog makes from its data
+   ([the shaar](shaar.md)), as system changes of `limit` sefarim (500).
+   It needs only `DATABASE_URL`.
 
 ## A domain of your own
 

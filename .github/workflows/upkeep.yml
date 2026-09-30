@@ -18,6 +18,10 @@ name: Upkeep (manual)
 #   relink-jem      links to JEM's player in the older form, as the public
 #                   Ashreinu app's own links to each recording, the same way;
 #   relink-jem-dry-run  only counts what relink-jem would change;
+#   shaars          every sefer without a shaar gets the one the catalog
+#                   makes from its data (docs/shaar.md), labelled as the
+#                   catalog's, as system changes of <limit> sefarim (500);
+#   shaars-dry-run  only counts what shaars would change;
 #   restore-word-times  word timings back for transcript paragraphs fixed
 #                   before fixes kept them, from their history, as machine
 #                   sync approved by shmuly (one suggestion per recording;
@@ -33,10 +37,10 @@ on:
       job:
         description: Which job to run
         type: choice
-        options: [convert-bodies, covers, page-images, relink-drive, relink-drive-dry-run, relink-jem, relink-jem-dry-run, restore-word-times, restore-word-times-dry-run]
+        options: [convert-bodies, covers, page-images, relink-drive, relink-drive-dry-run, relink-jem, relink-jem-dry-run, restore-word-times, restore-word-times-dry-run, shaars, shaars-dry-run]
         default: covers
       limit:
-        description: How many sefarim or scans this run (covers, page-images), or items per suggestion (relink-drive, relink-jem), or recordings (restore-word-times); empty for the command's own default
+        description: How many sefarim or scans this run (covers, page-images), or items per suggestion (relink-drive, relink-jem, shaars), or recordings (restore-word-times); empty for the command's own default
         required: false
 
 permissions:
@@ -66,7 +70,7 @@ jobs:
       - name: Check it is configured
         run: |
           if [ -z "$DATABASE_URL" ]; then echo "::error::Add the DATABASE_URL repository secret (see docs/deploy.md)."; exit 1; fi
-          if [ "$JOB" != "convert-bodies" ] && [ "${JOB#relink-}" = "$JOB" ] && [ "${JOB#restore-}" = "$JOB" ] && { [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$CLOUDFLARE_API_TOKEN" ]; }; then
+          if [ "$JOB" != "convert-bodies" ] && [ "${JOB#relink-}" = "$JOB" ] && [ "${JOB#restore-}" = "$JOB" ] && [ "${JOB#shaars}" = "$JOB" ] && { [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$CLOUDFLARE_API_TOKEN" ]; }; then
             echo "::error::Add the CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN repository secrets (a token with Workers R2 Storage: Edit; see docs/deploy.md)."; exit 1
           fi
           if [ -n "$LIMIT" ] && ! [[ "$LIMIT" =~ ^[0-9]+$ ]]; then echo "::error::limit is a whole number, or empty."; exit 1; fi
@@ -87,7 +91,7 @@ jobs:
               # Goes through every page still in markup; it takes no limit.
               npm run rebbehub -- convert-bodies
               ;;
-            relink-drive|relink-drive-dry-run|relink-jem|relink-jem-dry-run)
+            relink-drive|relink-drive-dry-run|relink-jem|relink-jem-dry-run|shaars|shaars-dry-run)
               # Sends all that is still on the proxy, a suggestion per <limit> items (500); what already waits in one is left to it.
               args=()
               if [ -n "$LIMIT" ]; then args+=(--chunk "$LIMIT"); fi

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Form, Link, useSearchParams } from 'react-router';
-import type { LocalName } from '@rebbehub/model';
+import { hasShaar, type LocalName, type WorkData } from '@rebbehub/model';
 import { CoverChoice } from '../components/CoverChoice.js';
 import { EditActions, RowEdit } from '../components/EditSheet.js';
 import { ItemList } from '../components/ItemLink.js';
 import { Books, RebbePortrait } from '../components/Library.js';
 import { SeeAll } from '../components/Linked.js';
 import { Printings } from '../components/Printings.js';
+import { ShaarFile, shaarOf } from '../components/ShaarFile.js';
 import type { Entity } from '../lib/api.js';
 import { dateLabel } from '../lib/dates.js';
 import { languageName, nameOf, t, type Lang } from '../lib/i18n.js';
@@ -327,6 +328,8 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
   const sets = ((d.sets ?? []) as string[]).map((id) => view.refs[id]).filter((s): s is Entity => Boolean(s));
   const volumeIndex = openPart && outline.length > 1 ? outline.indexOf(openPart) + 1 : 0;
   const readTo = toc?.read.scanUrl ? null : toc?.read.unit ? href(toc.read.unit, lang) : null;
+  // Its shaar, the README of a sefer (components/ShaarFile): what its title page says, and its sections under the contents.
+  const shaar = shaarOf(d as WorkData);
 
   const facts = [
     first ? { icon: 'cal' as const, children: <>{w(lang, 'firstPrinted')} <b>{[fd.publisher, firstYear].filter(Boolean).join(', ')}</b></> } : null,
@@ -347,7 +350,8 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
             kind={lang === 'he' ? 'ספר' : 'Sefer'}
             title={title}
             part={partLabel ?? undefined}
-            by={authors.map((a) => nameOf((a.data as D).name, lang)).join(', ') || undefined}
+            subtitle={partLabel ? undefined : nameOf(shaar.subtitle, lang) || undefined}
+            by={nameOf(shaar.byLine, lang) || authors.map((a) => nameOf((a.data as D).name, lang)).join(', ') || undefined}
             publisher={fd.publisher}
             place={fd.placePrinted}
             year={firstYear ?? undefined}
@@ -508,6 +512,7 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
           </p>
         </div>
       ) : null}
+      {tab === 'contents' && !part && hasShaar(d as WorkData) ? <ShaarFile work={entity} lang={lang} /> : null}
       <HelpNote lang={lang} title={w(lang, 'knowPrinting')} to={href('/add', lang, { what: 'sefer', for: entity.id })} action={w(lang, 'addIt')} />
     </ItemShell>
   );
