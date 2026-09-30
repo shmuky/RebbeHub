@@ -38,6 +38,8 @@ const STRINGS = {
   position: { he: 'מיקום בהקלטה', en: 'Position' },
   parts: { he: 'חלקים', en: 'Parts' },
   closePlayer: { he: 'סגירת הנגן', en: 'Close the player' },
+  hearAgain: { he: 'לשמוע שוב (5 שניות אחורה)', en: 'Hear again (5 seconds back)' },
+  speed: { he: 'מהירות', en: 'Speed' },
   parshas: { he: 'פרשת', en: 'Parshas' },
   thisWeekIn: { he: 'השבוע בשנת', en: 'This week in' },
   kviusNote: { he: 'שנה באותה קביעות כמו השנה: הימים והפרשיות חלים כמו השבוע', en: 'A year whose calendar falls like this one: the same days and parshiyos as this week' },
