@@ -5,7 +5,7 @@ import { unclearRanges } from '@rebbehub/model';
 import { t, type Lang } from '../lib/i18n.js';
 import { clockOf, tn } from '../lib/i18nNetwork.js';
 import { href } from '../lib/links.js';
-import { get, pendingRanges, within, type Span, type Transcript, type Word } from '../lib/transcript.js';
+import { get, pendingRanges, timedWords, within, type Span, type Transcript, type Word } from '../lib/transcript.js';
 import { useAccount } from '../lib/useAccount.js';
 import { clock, usePlayer, type Track } from '../player/PlayerProvider.js';
 import { MachineLabel } from '../ui/primitives.js';
@@ -446,7 +446,7 @@ function Lyrics({
                 playFrom(at ? Number(at) : (p.startMs ?? 0));
               }}
             >
-              {now && p.words?.length ? <Spoken content={p.content} words={p.words} nowMs={nowMs} lang={lang} pending={waiting} /> : <Plain content={p.content} lang={lang} pending={waiting} />}
+              {now && timedWords(p) ? <Spoken content={p.content} words={timedWords(p)!} nowMs={nowMs} lang={lang} pending={waiting} /> : <Plain content={p.content} lang={lang} pending={waiting} />}
             </button>
           );
         })}

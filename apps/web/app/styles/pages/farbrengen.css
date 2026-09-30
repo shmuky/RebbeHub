@@ -1041,8 +1041,8 @@ button.part.on:hover {
 }
 
 .tx-text .word.w-now {
-  background: var(--mark);
-  color: var(--text);
+  background: var(--accent-soft);
+  color: var(--accent-strong, var(--text));
 }
 
 .tx-text .word.w-picked {
@@ -1345,4 +1345,65 @@ button.part.on:hover {
 
 .w-unclear[data-u] {
   cursor: help;
+}
+
+/* Simpler on a phone: one quiet line saying the text is the machine's, the help and the changelog as small links, big buttons. */
+.tx-machine-line {
+  margin: 0;
+}
+
+.tx-how,
+.tx-all {
+  border: 0;
+  background: none;
+}
+
+.tx-how > summary,
+.tx-all > summary {
+  padding: 4px 0;
+  font-weight: 500;
+  font-size: var(--fs-sm, 13.5px);
+  color: var(--accent);
+}
+
+.tx-how[open],
+.tx-all[open] {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+}
+
+.tx-how[open] > summary,
+.tx-all[open] > summary {
+  padding: 10px 14px;
+}
+
+.tx-how .training-goal,
+.tx-how > div {
+  margin: 10px 14px 12px;
+}
+
+.lyrics .machine-label {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+@media (max-width: 640px) {
+  .tx-para {
+    padding: 10px 12px 12px;
+  }
+  .tx-tools {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .tx-tool {
+    justify-content: center;
+    height: 44px;
+    border-radius: 12px;
+    font-size: 15px;
+  }
+  .tx-text {
+    font-size: 20px;
+  }
 }

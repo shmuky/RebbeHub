@@ -97,12 +97,31 @@ export async function get<T>(path: string): Promise<T> {
 export const within = (nowMs: number, p: { startMs: number | null; endMs: number | null }) => p.startMs !== null && p.endMs !== null && nowMs >= p.startMs && nowMs < p.endMs;
 
 /**
- * A paragraph's words with where each sits in its text, and when it is
- * said where the sync is word by word. Without word timings, the words are
- * found by their spaces, and know no moment of their own.
+ * A paragraph's words, each with when it is said. Where the machine timed
+ * them, its timings; where it has not (yet), as after a fix, whose words
+ * are timed again only by the next nightly run, each word's moment is
+ * estimated from where the paragraph starts and ends, by its letters, so
+ * the words still light up as they are heard.
  */
+export function timedWords(p: Paragraph): Word[] | null {
+  if (p.words?.length) return p.words;
+  if (p.startMs === null || p.endMs === null || p.endMs <= p.startMs) return null;
+  const found = [...p.content.matchAll(/\S+/g)];
+  const letters = found.reduce((n, m) => n + m[0].length, 0);
+  if (!letters) return null;
+  const span = p.endMs - p.startMs;
+  let done = 0;
+  return found.map((m) => {
+    const startMs = p.startMs! + Math.round((done / letters) * span);
+    done += m[0].length;
+    return { from: m.index!, to: m.index! + m[0].length, startMs, endMs: p.startMs! + Math.round((done / letters) * span) };
+  });
+}
+
+/** A paragraph's words with where each sits in its text, and when it is said (timedWords); without any sync, found by their spaces. */
 export function tokensOf(p: Paragraph): Array<{ from: number; to: number; ms: number | null }> {
-  if (p.words?.length) return p.words.map((w) => ({ from: w.from, to: w.to, ms: w.startMs }));
+  const words = timedWords(p);
+  if (words) return words.map((w) => ({ from: w.from, to: w.to, ms: w.startMs }));
   return [...p.content.matchAll(/\S+/g)].map((m) => ({ from: m.index!, to: m.index! + m[0].length, ms: null }));
 }
 
