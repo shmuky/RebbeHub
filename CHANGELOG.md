@@ -12,6 +12,14 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **The day's shiurim, Chitas and Rambam, on the daily page.** `/daily`
+  opens with the day's shiurim at a glance: Chumash with Rashi (the
+  week's parsha, an aliyah a day), Tehillim (the monthly cycle, with
+  Elul's three more), Tanya, and the Rambam's three tracks (three
+  chapters, one chapter, Sefer HaMitzvos), each a link to its words, with
+  a box to tick once learned and a count of days in a row (kept in the
+  browser only). API: `/v1/daily` also names `chumash`, `tehillim` and
+  `rambam`, in Hebrew and by Sefaria's references.
 - **Hayom Yom's shiurim go to their words.** Each day's Chumash (with
   Rashi) and Tehillim line opens that day's portion on Sefaria, and its
   Tanya line opens its chapter on RebbeHub where the day starts. A day's

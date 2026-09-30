@@ -1,10 +1,13 @@
-import { DAILY_WORKS, TANYA_YOMI, dateKeyFromGregorian, dayOfLabel, monthOfLabel } from '@rebbehub/hebrew';
+import { HDate } from '@hebcal/core';
+import { DAILY_WORKS, TANYA_YOMI, chitasChumash, dailyTehillim, dateKeyFromGregorian, dayOfLabel, monthOfLabel } from '@rebbehub/hebrew';
 import { isPageText, type EntityId, type PageInline, type PageSegment, type PageText } from '@rebbehub/model';
 import type { Catalog, EntityView } from './catalog.js';
+import { dailyRambam, type DailyRambam } from './rambam.js';
 
 /**
- * The daily learning (Chitas' Tanya, and Hayom Yom) for a civil day, from
- * the catalog's own Tanya and Hayom Yom:
+ * The daily learning for a civil day: Chitas (Chumash with Rashi, Tehillim
+ * and Tanya), Hayom Yom, and the Rambam's three tracks. Tanya and Hayom
+ * Yom come with their words, from the catalog's own:
  *
  * - Tanya: the day's portion by the yearly cycle that begins on 19 Kislev,
  *   as Sefaria's Tanya Yomi gives it (tanyaYomi.ts): each day starts at a
@@ -14,6 +17,10 @@ import type { Catalog, EntityView } from './catalog.js';
  *   written for 5703, a leap year: in a plain year Adar has both Adars'
  *   entries, and a 30th it has none for (Cheshvan, Kislev, Adar II) reads
  *   the 29th's.
+ *
+ * Chumash (the week's parsha, an aliyah a day), Tehillim (the monthly
+ * cycle) and the Rambam come as what to learn, named in Hebrew and by
+ * Sefaria's references (chitas.ts, rambam.ts).
  *
  * The day is the civil day it is learned on (Tanya of 19 Kislev is learned
  * in the daytime of 19 Kislev), so a page asks by `YYYY-MM-DD`.
@@ -31,6 +38,11 @@ export interface DailyLearning {
   hebrew: string;
   tanya: DailyTanyaPart[];
   hayomYom: EntityView[];
+  /** The day's Chumash with Rashi: `בא, ראשון עם פירש״י` and `Exodus 10:1-11`. */
+  chumash: { label: string; ref: string } | null;
+  /** The day's Tehillim, each range with its reference. */
+  tehillim: Array<{ text: string; ref: string | null }>;
+  rambam: DailyRambam;
 }
 
 export { DAILY_WORKS };
@@ -133,5 +145,18 @@ export async function dailyLearning(catalog: Catalog, date: string): Promise<Dai
     const data = isPageText(body) ? { ...(unit.data as object), body: cut(body, r.from, r.to) } : unit.data;
     tanya.push({ ...unit, data: data as EntityView['data'], from: r.from ?? '1', to: r.to });
   }
-  return { date, hebrew, tanya, hayomYom: hayomYomIds.map((id) => whole.get(id)).filter((v): v is EntityView => v !== undefined) };
+  // Chumash and Tehillim by the Hebrew day; the Rambam by its own cycles.
+  const [y, m, d] = date.split('-').map(Number);
+  const day = new HDate(new Date(y!, m! - 1, d!));
+  const chumash = chitasChumash(day);
+  const tehillim = dailyTehillim(hebrew.slice(5, hebrew.lastIndexOf('-')), day.getDate(), HDate.daysInMonth(day.getMonth(), day.getFullYear()));
+  return {
+    date,
+    hebrew,
+    tanya,
+    hayomYom: hayomYomIds.map((id) => whole.get(id)).filter((v): v is EntityView => v !== undefined),
+    chumash: chumash ? { label: chumash.label, ref: chumash.ref } : null,
+    tehillim,
+    rambam: dailyRambam(date),
+  };
 }

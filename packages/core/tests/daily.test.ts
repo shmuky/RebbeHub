@@ -103,4 +103,19 @@ describe("the day's learning", () => {
     expect(day.hayomYom).toEqual([]);
     expect(await dailyLearning(catalog, 'yesterday')).toBeNull();
   });
+
+  it("names the day's Chumash, Tehillim and the Rambam's three tracks", async () => {
+    // 19 Tishrei 5787 is in Sukkos: V'zos Habracha's fourth (a Wednesday); Tehillim 90-96.
+    const day = (await dailyLearning(catalog, '2026-09-30'))!;
+    expect(day.chumash).toEqual({ label: 'וזאת הברכה, רביעי עם פירש״י', ref: 'Deuteronomy 33:18-21' });
+    expect(day.tehillim).toEqual([{ text: 'צ-צו.', ref: 'Psalms 90-96' }]);
+    expect(day.rambam).toEqual({
+      three: { label: 'הלכות מקואות פרקים ה-ז', refs: ['Mishneh Torah, Immersion Pools 5', 'Mishneh Torah, Immersion Pools 6', 'Mishneh Torah, Immersion Pools 7'] },
+      one: { label: 'הלכות גירושין פרק ט', refs: ['Mishneh Torah, Divorce 9'] },
+      mitzvos: { label: 'מצות עשה קט', refs: ['Sefer HaMitzvot, Positive Commandments 109'] },
+    });
+    // The day after Simchas Torah learns Bereishis from its start; Elul adds three chapters.
+    expect((await dailyLearning(catalog, '2026-10-05'))!.chumash).toEqual({ label: 'בראשית, עד שני עם פירש״י', ref: 'Genesis 1:1-2:19' });
+    expect((await dailyLearning(catalog, '2026-08-16'))!.tehillim.map((t) => t.ref)).toEqual(['Psalms 18-22', 'Psalms 7-9']);
+  });
 });

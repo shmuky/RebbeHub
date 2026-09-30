@@ -21,5 +21,5 @@ export {
 } from './dateKey.js';
 export { parseDateText, type ParsedDate } from './parseDate.js';
 export { TANYA_YOMI } from './tanyaYomi.js';
-export { DAILY_WORKS, dayOfLabel, hayomYomShiurim, hayomYomShiurimOf, monthOfLabel, tanyaChapter, tanyaPath, type HayomYomShiurim } from './hayomYom.js';
-export { chumashPortion, type ChumashPortion } from './chitas.js';
+export { DAILY_WORKS, dayOfLabel, hayomYomShiurim, hayomYomShiurimOf, monthOfLabel, dailyTehillim, tanyaChapter, tanyaPath, type HayomYomShiurim } from './hayomYom.js';
+export { chitasChumash, chumashPortion, type ChitasChumash, type ChumashPortion } from './chitas.js';

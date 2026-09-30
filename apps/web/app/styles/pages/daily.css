@@ -49,3 +49,83 @@
     padding: 12px;
   }
 }
+
+/* The day's shiurim at a glance: a row each, a box to tick, its name, what to learn. */
+.daily-shiurim {
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 8px);
+  background: var(--bg);
+}
+
+.daily-shiurim-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.daily-shiurim-count {
+  color: var(--subtle);
+  font-size: 0.9rem;
+}
+
+.daily-shiurim-list {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: baseline;
+  gap: 8px 12px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.daily-shiurim-list li {
+  display: contents;
+}
+
+.daily-shiur-name {
+  color: var(--subtle);
+  white-space: nowrap;
+}
+
+.daily-shiur-what {
+  font-size: 1.05rem;
+}
+
+.daily-shiur-what a {
+  color: inherit;
+  text-decoration: underline dotted var(--subtle);
+  text-underline-offset: 4px;
+}
+
+.daily-shiurim-list li.done .daily-shiur-what {
+  color: var(--subtle);
+}
+
+.daily-shiur-tick input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent, currentColor);
+}
+
+@media (max-width: 640px) {
+  .daily-shiurim {
+    padding: 12px;
+  }
+
+  .daily-shiurim-list {
+    grid-template-columns: auto 1fr;
+  }
+
+  .daily-shiur-name {
+    grid-column: 2;
+  }
+
+  .daily-shiur-what {
+    grid-column: 2;
+    margin-top: -6px;
+  }
+}

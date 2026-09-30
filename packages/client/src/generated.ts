@@ -870,7 +870,7 @@ export interface Operations {
     };
     output: Record<string, unknown>;
   };
-  /** A day's learning: Chitas' Tanya (the day's portion, each chapter it touches cut to it) and Hayom Yom */
+  /** A day's learning: Chitas (Tanya, the day's portion, each chapter it touches cut to it; Chumash with Rashi; Tehillim), Hayom Yom, and the Rambam's three tracks */
   dailyLearning: {
     input: {
       /** The civil day */
@@ -882,6 +882,28 @@ export interface Operations {
       hebrew: string;
       tanya: Array<Item>;
       hayomYom: Array<Item>;
+      chumash: {
+        label: string;
+        ref: string;
+      } | null;
+      tehillim: Array<{
+        text: string;
+        ref: string | null;
+      }>;
+      rambam: {
+        three: {
+          label: string;
+          refs: Array<string>;
+        };
+        one: {
+          label: string;
+          refs: Array<string>;
+        };
+        mitzvos: {
+          label: string;
+          refs: Array<string>;
+        } | null;
+      };
     };
   };
   /** Keep some transcript fixes and remove others in one go: kept ones are approved; removed ones are withdrawn if they are yours, else sent back with the note */
@@ -2967,7 +2989,7 @@ export abstract class GeneratedMethods {
     return this.call('createWebhook', input ?? {} as Operations['createWebhook']['input']);
   }
 
-  /** A day's learning: Chitas' Tanya (the day's portion, each chapter it touches cut to it) and Hayom Yom (GET /v1/daily) */
+  /** A day's learning: Chitas (Tanya, the day's portion, each chapter it touches cut to it; Chumash with Rashi; Tehillim), Hayom Yom, and the Rambam's three tracks (GET /v1/daily) */
   dailyLearning(input: Operations['dailyLearning']['input']): Promise<Operations['dailyLearning']['output']> {
     return this.call('dailyLearning', input ?? {} as Operations['dailyLearning']['input']);
   }

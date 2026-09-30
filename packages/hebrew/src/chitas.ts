@@ -1,3 +1,5 @@
+import { HDate, getSedra } from '@hebcal/core';
+
 /**
  * Chitas' Chumash: each parsha's seven aliyos, as read on Shabbos, which
  * the week learns one a day from Sunday (with Rashi). Taken once from
@@ -89,4 +91,76 @@ export function chumashPortion(parsha: string, first: number, last = first): Chu
   const to = verse(ranges[last - 1]!.split('-')[1]!);
   const ref = `${found[0]} ${from.join(':')}-${from[0] === to[0] ? to[1] : to.join(':')}`;
   return { book: found[0], from, to, ref };
+}
+
+// ---------------------------------------------------------------- the day's Chitas
+
+/** Hebcal's parsha names in Hebrew, for the day's Chumash line. */
+const PARSHA_HE: Record<string, string> = {
+  Bereshit: 'בראשית', Noach: 'נח', 'Lech-Lecha': 'לך לך', Vayera: 'וירא', 'Chayei Sara': 'חיי שרה', Toldot: 'תולדות', Vayetzei: 'ויצא',
+  Vayishlach: 'וישלח', Vayeshev: 'וישב', Miketz: 'מקץ', Vayigash: 'ויגש', Vayechi: 'ויחי', Shemot: 'שמות', Vaera: 'וארא', Bo: 'בא',
+  Beshalach: 'בשלח', Yitro: 'יתרו', Mishpatim: 'משפטים', Terumah: 'תרומה', Tetzaveh: 'תצוה', 'Ki Tisa': 'כי תשא', Vayakhel: 'ויקהל',
+  Pekudei: 'פקודי', Vayikra: 'ויקרא', Tzav: 'צו', Shmini: 'שמיני', Tazria: 'תזריע', Metzora: 'מצורע', 'Achrei Mot': 'אחרי מות',
+  Kedoshim: 'קדושים', Emor: 'אמור', Behar: 'בהר', Bechukotai: 'בחוקותי', Bamidbar: 'במדבר', Nasso: 'נשא', "Beha'alotcha": 'בהעלותך',
+  "Sh'lach": 'שלח', Korach: 'קרח', Chukat: 'חוקת', Balak: 'בלק', Pinchas: 'פנחס', Matot: 'מטות', Masei: 'מסעי', Devarim: 'דברים',
+  Vaetchanan: 'ואתחנן', Eikev: 'עקב', "Re'eh": 'ראה', Shoftim: 'שופטים', 'Ki Teitzei': 'תצא', 'Ki Tavo': 'תבוא', Nitzavim: 'נצבים',
+  Vayeilech: 'וילך', "Ha'azinu": 'האזינו', 'Vezot Haberakhah': 'וזאת הברכה',
+};
+
+const ALIYAH_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'ששי', 'שביעי'];
+
+export interface ChitasChumash extends ChumashPortion {
+  /** Hebcal's name for the parsha (`Bo`, `Matot-Masei`). */
+  parsha: string;
+  /** The aliyos learned, 1 to 7. */
+  aliyos: readonly [number, number];
+  /** `בא, ראשון עם פירש״י` */
+  label: string;
+}
+
+/**
+ * The day's Chumash of Chitas, outside the Land of Israel: the parsha read
+ * on the Shabbos that ends the week, one aliyah a day from Sunday; a week
+ * whose Shabbos is a festival learns the next parsha to be read. From the
+ * Shabbos of Haazinu to Simchas Torah is V'zos Habracha (its sixth and
+ * seventh on Simchas Torah itself); the week after Simchas Torah learns
+ * Bereishis from its start up to the day's aliyah.
+ */
+export function chitasChumash(date: HDate): ChitasChumash | null {
+  const weekday = date.getDay();
+  const year = date.getFullYear();
+  const sedra = getSedra(year, false);
+  const month = date.getMonth();
+  const day = date.getDate();
+  const TISHREI = 7;
+  let parts: string[];
+  let aliyos: [number, number] = [weekday + 1, weekday + 1];
+  // Simchas Torah, and the days after it that week.
+  const simchasTorah = new HDate(23, TISHREI, year);
+  if (month === TISHREI && day === 23) {
+    parts = ['Vezot Haberakhah'];
+    aliyos = [6, 7];
+  } else if (month === TISHREI && day > 23 && date.abs() - simchasTorah.abs() <= 6 - simchasTorah.getDay()) {
+    parts = ['Bereshit'];
+    aliyos = [1, weekday + 1];
+  } else {
+    let shabbos = date.onOrAfter(6);
+    let found = sedra.lookup(shabbos);
+    // Haazinu's Shabbos is past (and it is not yet Simchas Torah): V'zos Habracha.
+    const haazinu = sedra.find("Ha'azinu");
+    if (month === TISHREI && haazinu && date.abs() > haazinu.abs() && day < 23) parts = ['Vezot Haberakhah'];
+    else {
+      while (found.chag) {
+        shabbos = new HDate(shabbos.abs() + 7);
+        found = getSedra(shabbos.getFullYear(), false).lookup(shabbos);
+      }
+      parts = found.parsha;
+    }
+  }
+  const parsha = parts.join('-');
+  const portion = chumashPortion(parsha, aliyos[0], aliyos[1]);
+  if (!portion) return null;
+  const name = parts.map((p) => PARSHA_HE[p] ?? p).join('-');
+  const which = aliyos[0] === aliyos[1] ? ALIYAH_HE[aliyos[0] - 1] : aliyos[0] === 1 ? `עד ${ALIYAH_HE[aliyos[1] - 1]}` : `${ALIYAH_HE[aliyos[0] - 1]} ו${ALIYAH_HE[aliyos[1] - 1]}`;
+  return { ...portion, parsha, aliyos, label: `${name}, ${which} עם פירש״י` };
 }
