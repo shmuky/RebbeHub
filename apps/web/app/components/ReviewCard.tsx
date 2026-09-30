@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode, type Ref, type RefObject }
 import { Clamp } from '../ui/Clamp.js';
 import { Link } from 'react-router';
 import { ChangeDiff } from './ChangeDiff.js';
-import { onlyInfo } from './ChangeTable.js';
+import { fieldName, isInfoOnly, onlyInfo } from './ChangeTable.js';
 import { PlainWords } from './PlainWords.js';
 import type { ChangeGroup, SuggestionDetail } from '../lib/api.js';
 import { t, typeName, type Lang } from '../lib/i18n.js';
@@ -68,8 +68,8 @@ export interface ReviewDetail {
   advice: { summary: string; model: string; at: string; machine: true } | null;
 }
 
-/** Items read at a time. */
-export const REVIEW_PAGE = 25;
+/** Items read at a time: a few to look at, the rest on "Show more" (a phone drew 25 of a bot's items at once and stopped). */
+export const REVIEW_PAGE = 10;
 
 const W = {
   suggested: { he: 'הציע', en: 'suggested' },
@@ -91,6 +91,13 @@ const W = {
     en: 'Items grouped by their change: the same fields, changed the same way. Look at a few examples; approving approves them all.',
   },
   examples: { he: 'דוגמאות', en: 'Examples' },
+  example: { he: 'דוגמה', en: 'Example' },
+  words: { he: 'הטקסט', en: 'The words' },
+  changes: { he: 'משתנה', en: 'changed' },
+  added: { he: 'נוסף', en: 'added' },
+  removed: { he: 'נמחק', en: 'removed' },
+  moreFields: { he: 'שדות נוספים', en: 'more' },
+  moreWays: { he: 'ועוד סוגי שינויים', en: 'more kinds of change' },
   new: { he: 'חדשים', en: 'new' },
   deleted: { he: 'נמחקים', en: 'deleted' },
   all: { he: 'הכול', en: 'all' },
@@ -288,8 +295,60 @@ function Advice({ advice, lang }: { advice: NonNullable<ReviewDetail['advice']>;
   );
 }
 
-/** Every item, grouped by how it changes: "500 × unit · /links: links to the proxy → links to Drive", with a few examples each. */
+/** At most this many kinds of change, and fields in each, on the card: a phone draws a few lines, not a bot's every field (Shmuly, 30 Tishrei). */
+const SUMMARY_GROUPS = 5;
+const SUMMARY_FIELDS = 3;
+
+/** A field in the summary as people say it, and what became of it, when that says something. */
+export interface SummaryLine {
+  name: string;
+  before?: string;
+  after?: string;
+  /** Only `added`, `removed` or `changes`, when the kinds say nothing ("a list → a list"). */
+  what?: 'added' | 'removed' | 'changes';
+}
+
+/**
+ * A group's fields as a reader takes them in: a page's words (every
+ * segment, printed line and note under /body) are one line, "The words
+ * changes"; a sync's timings and a machine's details are left out (they
+ * are not the words or the file); a field by its name, not its path; links
+ * by the sites they point to; anything else only as added, removed or
+ * changed. At most `limit` lines; `more` counts the rest.
+ */
+export function summaryLines(fields: ChangeGroup['fields'], lang: Lang, limit = SUMMARY_FIELDS): { lines: SummaryLine[]; more: number } {
+  const byName = new Map<string, SummaryLine>();
+  for (const f of fields) {
+    if (isInfoOnly(f.path)) continue;
+    const words = f.path.startsWith('/body');
+    const name = words ? W.words[lang] : fieldName(f.path.replace(/\/\*(?=\/|$)/g, ''), lang) || W.all[lang];
+    const links = f.before.startsWith('link:') || f.after.startsWith('link:');
+    const line: SummaryLine =
+      !words && links
+        ? { name, before: valueWords(f.before, lang), after: valueWords(f.after, lang) }
+        : { name, what: words ? 'changes' : f.before === 'none' ? 'added' : f.after === 'none' ? 'removed' : 'changes' };
+    const had = byName.get(name);
+    if (!had) byName.set(name, line);
+    else if (had.what !== line.what || had.before !== line.before || had.after !== line.after) byName.set(name, { name, what: 'changes' });
+  }
+  const lines = [...byName.values()];
+  return { lines: lines.slice(0, limit), more: Math.max(0, lines.length - limit) };
+}
+
+/** Every item, grouped by how it changes: "500 × farbrengen · Links: links to the proxy → links to Drive", with a few examples each. */
 export function ChangeSummary({ groups, total, lang }: { groups: ChangeGroup[]; total: number; lang: Lang }) {
+  // Groups the API kept apart (their words changed in different segments) read the same here: one line for them all.
+  const alike = new Map<string, { group: ChangeGroup; summary: ReturnType<typeof summaryLines> }>();
+  for (const g of groups) {
+    const summary = summaryLines(g.fields, lang);
+    const key = JSON.stringify([g.type, g.kind, summary]);
+    const had = alike.get(key);
+    if (had) had.group = { ...had.group, count: had.group.count + g.count, examples: [...had.group.examples, ...g.examples].slice(0, 3) };
+    else alike.set(key, { group: g, summary });
+  }
+  const merged = [...alike.values()].sort((a, b) => b.group.count - a.group.count);
+  const shown = merged.slice(0, SUMMARY_GROUPS);
+  const rest = merged.slice(SUMMARY_GROUPS).reduce((n, g) => n + g.group.count, 0);
   return (
     <section className="rq-summary" aria-label={W.summary[lang]}>
       <header>
@@ -300,33 +359,55 @@ export function ChangeSummary({ groups, total, lang }: { groups: ChangeGroup[]; 
         </span>
       </header>
       <ul>
-        {groups.map((g, i) => (
-          <li key={i}>
-            <span className="rq-summary-n num">{num(g.count, lang)}</span>
-            <span className="rq-summary-what">
-              <b>{typeName(g.type, lang)}</b>
-              {g.kind !== 'changed' ? <span className="subtle"> · {W[g.kind][lang]}</span> : null}
-              {g.fields.map((f) => (
-                <span key={f.path} className="rq-summary-field">
-                  <code dir="ltr">{f.path.replace(/^\//, '') || W.all[lang]}</code> <del>{valueWords(f.before, lang)}</del>
-                  <Icon name="arrow" size={12} className="flip" />
-                  <ins>{valueWords(f.after, lang)}</ins>
-                </span>
-              ))}
-              <span className="rq-summary-ex subtle">
-                {W.examples[lang]}:{' '}
-                {g.examples.map((id, j) => (
-                  <span key={id}>
-                    {j > 0 ? ', ' : ''}
-                    <Link to={href(`/${id}`, lang)} className="num" dir="ltr">
-                      {id}
-                    </Link>
+        {shown.map(({ group: g, summary: { lines, more } }, i) => {
+          return (
+            <li key={i}>
+              <span className="rq-summary-n num">{num(g.count, lang)}</span>
+              <span className="rq-summary-what">
+                <b>
+                  {typeName(g.type, lang)}
+                  {g.kind !== 'changed' ? <span className="subtle"> · {W[g.kind][lang]}</span> : null}
+                </b>
+                {lines.map((l) => (
+                  <span key={l.name} className="rq-summary-field">
+                    <span>{l.name}</span>
+                    {l.what ? (
+                      <span className="subtle">{W[l.what][lang]}</span>
+                    ) : (
+                      <>
+                        <del>{l.before}</del>
+                        <Icon name="arrow" size={12} className="flip" />
+                        <ins>{l.after}</ins>
+                      </>
+                    )}
                   </span>
                 ))}
+                {more ? (
+                  <span className="subtle">
+                    +{num(more, lang)} {W.moreFields[lang]}
+                  </span>
+                ) : null}
+                {/* An item to look at, by its place in the list: its id says nothing to a reader. */}
+                <span className="rq-summary-ex subtle">
+                  {g.examples.map((id, j) => (
+                    <span key={id}>
+                      {j > 0 ? ' · ' : ''}
+                      <Link to={href(`/${id}`, lang)}>
+                        {W.example[lang]} {num(j + 1, lang)}
+                      </Link>
+                    </span>
+                  ))}
+                </span>
               </span>
-            </span>
+            </li>
+          );
+        })}
+        {rest ? (
+          <li>
+            <span className="rq-summary-n num">{num(rest, lang)}</span>
+            <span className="rq-summary-what subtle">{W.moreWays[lang]}</span>
           </li>
-        ))}
+        ) : null}
       </ul>
       <footer>{W.summaryNote[lang]}</footer>
     </section>

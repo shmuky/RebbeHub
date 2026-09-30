@@ -122,6 +122,16 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Fixed
 
+- **A large Suggestion reads in a few lines.** Its summary named every
+  field it touches by its path (`body/versions/he/segments/t1/printed`,
+  hundreds of them), which said nothing and stopped phones. Now a page's
+  words are one line, "The words changed"; timings and machine details
+  are left out; a field goes by its name; each kind of change shows at
+  most three lines, at most five kinds are shown, and kinds that read
+  the same are one. Examples are "Example 1, 2, 3", not ids. The queue
+  reads 10 items at a time, not 25, and each item shows at most six
+  changes, the rest counted.
+
 - **Approve answers at once.** Pressing Approve in the review queue now
   says "Merging…" (ממזג…) and turns every button off until the API
   answers; then the card shows the suggestion merged, its buttons gone,
