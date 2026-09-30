@@ -18,6 +18,7 @@ import {
   igrosImporter,
   jemImporter,
   libraryWorks,
+  likkuteiSichosImporter,
   listDriveFolder,
   mayKeepText,
   readArchiveIndex,
@@ -25,6 +26,7 @@ import {
   readHebrewBooks,
   readIgrosBuild,
   readJemIndex,
+  readLikkuteiSichos,
   readMafteiachCrawl,
   readSefariaCrawl,
   readSichosKodeshOccasions,
@@ -297,6 +299,8 @@ export const IMPORTERS: Record<string, (from: string) => Importer> = {
     if (!process.env.CHABADLIBRARY_TREE) throw new Error('CHABADLIBRARY_TREE is not set: run rebbehub crawl-library first');
     return chabadLibraryImporter(() => readChabadLibrary(from, process.env.CHABADLIBRARY_TREE!, { api: process.env.REBBEHUB_API_URL }));
   },
+  // Every Likkutei Sichos sicha the Chabad Library has not typed, a page each with its PDF, from Sichos-Kodesh's library list.
+  'likkutei-sichos': (from) => likkuteiSichosImporter(() => readLikkuteiSichos(from)),
   'sichos-kodesh-occasions': (from) =>
     sichosKodeshOccasionsImporter(() => readSichosKodeshOccasions(from), { mafteiach: process.env.MAFTEIACH_DATA && existsSync(process.env.MAFTEIACH_DATA) ? () => readMafteiachCrawl(process.env.MAFTEIACH_DATA!) : undefined }),
   // The Chabad shelf of HebrewBooks, link-only: the one Sichos-Kodesh's works catalog carries, or with HEBREWBOOKS_SHELF

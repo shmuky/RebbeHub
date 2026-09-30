@@ -24,7 +24,7 @@ live=$DATABASE_URL
 rebbehub() { npm run --silent rebbehub -- "$@"; }
 import_into() {
   DATABASE_URL=$1 rebbehub account --id "$steward" --name "$steward_name" --steward
-  importers="rebbehub-sets sichos-kodesh-works sichos-kodesh-occasions otzros hebrewbooks"
+  importers="rebbehub-sets sichos-kodesh-works likkutei-sichos sichos-kodesh-occasions otzros hebrewbooks"
   # A page per chapter of the Chabad Library, once its contents are crawled (import.yml).
   if [ -n "${CHABADLIBRARY_TREE:-}" ] && [ -f "$CHABADLIBRARY_TREE" ]; then importers="$importers chabadlibrary"; fi
   # JEM's recordings, once its catalog is crawled (import.yml), after the farbrengens they join.
