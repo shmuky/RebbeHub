@@ -1,7 +1,6 @@
 export * from './works.js';
 export * from './entities.js';
 export * from './pageText.js';
-export { JEM_AUDIO_CDN, jemAudioFile, jemAudioUrl, relinkedJemAudio } from './jemAudio.js';
 export { UNCLEAR_MARK, hasUnclear, markUnclear, unclearRanges } from './unclear.js';
 export { canonicalJson, contentHash, sha256Hex, toHex } from './canonical.js';
 export { idFromSeed, isEntityId, newId, readId, type EntityId } from './ids.js';

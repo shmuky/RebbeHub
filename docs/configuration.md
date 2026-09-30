@@ -88,19 +88,13 @@ A few public addresses belong to others, not to a deployment:
   player (`GET /v1/drive/<id>`, `services/api/src/drive.ts`): only files an
   item links to, with CORS and Range, a whole file kept at Cloudflare's
   edge for a week, up to `DRIVE_MAX_MB`, counted by `RATE_LIMIT_DRIVE`.
-- `https://dtgj2yu3gmlic.cloudfront.net`: JEM's own CDN, the files
-  ashreinu.app plays and lets people download. JEM's recordings are heard
-  from there (`JEM_AUDIO_CDN` in `packages/model/src/jemAudio.ts`): the
-  site's player, the transcription and alignment jobs and the training
-  clips all read the file at that address.
 - `https://sichos-kodesh-media-proxy.shmuky.workers.dev`: Sichos-Kodesh's
-  media proxy (`SICHOS_KODESH_MEDIA_PROXY` in `packages/importers`).
-  Nothing is read through it now. Imports before stored Drive PDFs on it
-  (`/drive/<id>`) and JEM's recordings (`/jem-audio/<file>`);
-  `rebbehub relink-drive` and `rebbehub relink-jem`
-  ([operations](operations.md#drive-links)) suggest the files' own
-  addresses instead, and until then the site reads the Drive ones through
-  `GET /v1/drive/<id>` and the jobs read the JEM ones as the same file.
+  media proxy. JEM's recordings still play through it (`/jem-audio/<file>`,
+  `SICHOS_KODESH_MEDIA_PROXY` in `packages/importers`): they are JEM's, on
+  its own servers, not on Drive. Imports before stored Drive PDFs on it
+  too; `rebbehub relink-drive` ([operations](operations.md#drive-links))
+  suggests their Drive links instead, and until then the site reads those
+  through `GET /v1/drive/<id>` as well.
 - The `sichos-kodesh-archive` R2 bucket: Sichos-Kodesh's archive, which
   `rebbehub reading-copies make` copies scans from, and whose own
   `objects.json` lists them (`--archive` names another list).

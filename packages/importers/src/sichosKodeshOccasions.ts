@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isValidDateKey } from '@rebbehub/hebrew';
-import { jemAudioUrl, type EventLink, type EventLinkKind, type LocalName } from '@rebbehub/model';
+import type { EventLink, EventLinkKind, LocalName } from '@rebbehub/model';
 import { ref, type ImportRecord, type Importer } from './importer.js';
 import { SICHOS_KODESH_MEDIA_PROXY } from './driveLinks.js';
 import { mafteiachBody, mafteiachLinks, type MafteiachRecord } from './mafteiachIndex.js';
@@ -16,8 +16,8 @@ export { SICHOS_KODESH_MEDIA_PROXY };
  * RebbeHub keeps no copy - and turned into events, one recording per part,
  * and links to the PDFs. The audio and the PDFs stay where they are: each
  * PDF is linked at its own address on Google Drive (driveLinks.ts), which
- * the site reads through RebbeHub's API; the recordings play from JEM's
- * own CDN, the files ashreinu.app plays.
+ * the site reads through RebbeHub's API; the recordings play through
+ * Sichos-Kodesh's media proxy, as its app plays them.
  */
 
 /** Sichos-Kodesh's catalog schema 1 (its packages/catalog/src/types.ts), as far as this reads it. */
@@ -76,8 +76,7 @@ export function occasionDate(hebrewDate: string): { date: string; order: number;
 export const driveOrigin = (pdf: Pick<CatalogPdf, 'driveFileId' | 'resourceKey'>) =>
   `https://drive.google.com/file/d/${encodeURIComponent(pdf.driveFileId)}/view${pdf.resourceKey ? `?resourcekey=${encodeURIComponent(pdf.resourceKey)}` : ''}`;
 
-/** A JEM recording's address: the file on Ashreinu's CDN, where JEM serves it (model's jemAudio.ts). */
-export const audioUrl = (file: string) => jemAudioUrl(file);
+export const audioUrl = (file: string, proxy = SICHOS_KODESH_MEDIA_PROXY) => `${proxy}/jem-audio/${encodeURIComponent(file)}`;
 
 /** A PDF's address on the media proxy, as imports before stored it (`rebbehub relink-drive` replaces these with `driveOrigin`). */
 export const pdfUrl = (pdf: Pick<CatalogPdf, 'driveFileId' | 'resourceKey'>, proxy = SICHOS_KODESH_MEDIA_PROXY) =>
@@ -105,8 +104,9 @@ export async function readSichosKodeshOccasions(root: string): Promise<CatalogEn
  */
 export function sichosKodeshOccasionsImporter(
   input: CatalogEntry[] | (() => Promise<CatalogEntry[]>),
-  options: { mafteiach?: MafteiachRecord[] | (() => Promise<MafteiachRecord[]>) } = {},
+  options: { proxy?: string; mafteiach?: MafteiachRecord[] | (() => Promise<MafteiachRecord[]>) } = {},
 ): Importer {
+  const proxy = options.proxy ?? SICHOS_KODESH_MEDIA_PROXY;
   return {
     id: 'sichos-kodesh-occasions',
     bot: { id: 'bot:sichos-kodesh-occasions', displayName: 'Sichos-Kodesh farbrengens importer' },
@@ -155,7 +155,7 @@ export function sichosKodeshOccasionsImporter(
             data: {
               event: ref(key),
               title: localName(he, audio.chapterName),
-              url: audioUrl(audio.workerFilename),
+              url: audioUrl(audio.workerFilename, proxy),
               durationMs: audio.durationMs,
               part: i + 1,
               // A shiur or chazara is someone else's voice; without `kind` it is the Rebbe's own.

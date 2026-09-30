@@ -48,8 +48,8 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 Google Drive links: one reviewed bot suggestion per <n>
                                                 items (500); --dry-run only counts them
   rebbehub relink-jem [--chunk <n>] [--dry-run]
-                                                JEM recordings on the media proxy as the files on
-                                                Ashreinu's own CDN, the same way
+                                                links to JEM's player in the older form as the
+                                                Ashreinu app's own, the same way
   rebbehub account --id <id> --name <name> [--steward] [--bot]
   rebbehub import <importer> --from <Sichos-Kodesh checkout> [--approve-as <steward>] [--dry-run] [--chunk <n>]
                                                 sichos-kodesh-works, sichos-kodesh-occasions, otzros, hebrewbooks;

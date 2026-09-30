@@ -257,7 +257,7 @@ export async function relinkDriveCommand(ctx: Context, input: { chunk?: number; 
   await relinkCommand(ctx, relinkDriveLinks, input);
 }
 
-/** JEM recordings on the media proxy become Ashreinu's own files, as reviewed bot Suggestions of `chunk` items; `dryRun` only counts them. */
+/** Links to JEM's player in the older form become the Ashreinu app's own, as reviewed bot Suggestions of `chunk` items; `dryRun` only counts them. */
 export async function relinkJemCommand(ctx: Context, input: { chunk?: number; dryRun?: boolean } = {}): Promise<void> {
   await relinkCommand(ctx, relinkJemLinks, input);
 }
@@ -266,7 +266,7 @@ async function relinkCommand(ctx: Context, relink: typeof relinkDriveLinks, inpu
   await withCatalog(ctx, async (catalog) => {
     const result = await relink(catalog, { batch: input.chunk, dryRun: input.dryRun, log: ctx.log });
     const types = Object.entries(result.byType).map(([type, n]) => `${n} ${type}`).join(', ');
-    if (!result.items) ctx.log('no links on the media proxy left to relink');
+    if (!result.items) ctx.log('no links left to relink');
     else if (input.dryRun) ctx.log(`would relink ${result.links} links in ${result.items} items (${types}), in ${Math.ceil(result.items / (input.chunk ?? 500))} suggestions`);
     else ctx.log(`${result.links} links in ${result.items} items (${types}) sent for review in ${result.suggestions.length} suggestions`);
   });

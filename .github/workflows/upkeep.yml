@@ -15,8 +15,8 @@ name: Upkeep (manual)
 #                   proxy, as the files' own Google Drive links: one bot
 #                   suggestion of up to 500 items at a time, for review;
 #   relink-drive-dry-run  only counts what relink-drive would change;
-#   relink-jem      JEM recordings older imports pointed at the media proxy,
-#                   as the files on Ashreinu's own CDN, the same way;
+#   relink-jem      links to JEM's player in the older form, as the public
+#                   Ashreinu app's own links to each recording, the same way;
 #   relink-jem-dry-run  only counts what relink-jem would change.
 #
 # Needs the DATABASE_URL repository secret, as the import does; covers and

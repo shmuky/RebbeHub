@@ -93,8 +93,8 @@ Run it after `sichos-kodesh-occasions`. A JEM event that is a farbrengen
 already imported (the same file, or the same day with as many farbrengens
 on each side) gets only the recordings it lacks, added as further parts.
 Every other event becomes a JEM event of its own, in the JEM Set. Each
-recording links to JEM's player on Ashreinu, and plays the file from
-JEM's own CDN, the one ashreinu.app plays. jem-index keeps no video links yet, so none
+recording links to JEM's player on Ashreinu, and plays through
+Sichos-Kodesh's media proxy. jem-index keeps no video links yet, so none
 are imported.
 
 ## sefaria

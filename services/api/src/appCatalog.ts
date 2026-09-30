@@ -1,7 +1,7 @@
 import type { Context, Hono } from 'hono';
 import { CatalogError, type Catalog } from '@rebbehub/core';
 import { parseDateKey } from '@rebbehub/hebrew';
-import { defaultRightsState, jemAudioFile, decisionFromRightsState, type CatalogSourceId, type EditionData, type EventData, type Licence, type LocalName, type RecordingData, type RightsState, type UnitData, type WorkData } from '@rebbehub/model';
+import { defaultRightsState, decisionFromRightsState, type CatalogSourceId, type EditionData, type EventData, type Licence, type LocalName, type RecordingData, type RightsState, type UnitData, type WorkData } from '@rebbehub/model';
 
 /**
  * The Sichos Kodesh apps' catalog, served from RebbeHub (docs/sichos-kodesh.md,
@@ -197,10 +197,10 @@ export function occasionDateKey(path: string | null, data: Pick<EventData, 'date
   return `${parts.year}-${parts.month}-${day}${letter}`;
 }
 
-/** The JEM file a recording plays: its file on Ashreinu's CDN (or the old media proxy), or its JEM source id. */
+/** The JEM file a recording plays: the media proxy's `/jem-audio/<file>`, or its JEM source id. */
 function workerFilenameOf(data: RecordingData): string | null {
-  const file = jemAudioFile(data.url);
-  if (file) return file;
+  const m = data.url ? /\/jem-audio\/([^/?#]+)$/.exec(data.url) : null;
+  if (m) return decodeURIComponent(m[1]!);
   return data.sources?.find((s) => s.source === 'jem')?.sourceId ?? null;
 }
 

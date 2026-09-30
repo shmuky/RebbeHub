@@ -15,9 +15,9 @@ import type { EntityId, EntityType } from '@rebbehub/model';
  * what is still on the proxy and not already waiting in one of its
  * Suggestions, so it can be run until nothing is left.
  *
- * `rebbehub relink-jem` does the same for JEM's recordings: a recording
- * heard through the proxy (`/jem-audio/<file>`) is heard from the file on
- * Ashreinu's CDN, where JEM serves it (model's jemAudio.ts).
+ * `rebbehub relink-jem` does the same for links to JEM's player: the
+ * older form (`ashreinu.app/player?…`) becomes the Ashreinu app's own
+ * (`ashreinu.app/#/player/…`). The audio stays on the proxy.
  */
 
 export const RELINK_BOT = { id: 'bot:relink-drive', displayName: 'Drive links (relink bot)' };
@@ -25,8 +25,8 @@ export const RELINK_JEM_BOT = { id: 'bot:relink-jem', displayName: 'JEM audio li
 
 interface Relink {
   bot: { id: string; displayName: string };
-  /** What an item's data holds while it still needs relinking. */
-  prefix: string;
+  /** What an item's data holds while it still needs relinking (any of them). */
+  prefixes: string[];
   relink: (data: Json) => { data: Json; links: number } | null;
   title: string;
   description: string;
@@ -34,7 +34,7 @@ interface Relink {
 
 const DRIVE: Relink = {
   bot: RELINK_BOT,
-  prefix: `${SICHOS_KODESH_MEDIA_PROXY}/drive/`,
+  prefixes: [`${SICHOS_KODESH_MEDIA_PROXY}/drive/`],
   relink: (data) => relinkDrive(data as never) as { data: Json; links: number } | null,
   title: 'Drive links in place of the media proxy',
   description:
@@ -43,11 +43,11 @@ const DRIVE: Relink = {
 
 const JEM: Relink = {
   bot: RELINK_JEM_BOT,
-  prefix: `${SICHOS_KODESH_MEDIA_PROXY}/jem-audio/`,
+  prefixes: ['https://ashreinu.app/player?'],
   relink: (data) => relinkJem(data as never) as { data: Json; links: number } | null,
-  title: "JEM recordings from Ashreinu's own files",
+  title: 'JEM links open the Ashreinu app',
   description:
-    "Recordings older imports pointed at Sichos-Kodesh's media proxy (sichos-kodesh-media-proxy.shmuky.workers.dev/jem-audio/…) are heard from the same file on JEM's own CDN, the one ashreinu.app plays. Everything else stays as it is.",
+    "Links to JEM's player in the form older imports stored (ashreinu.app/player?…) become the Ashreinu app's own link to the recording (ashreinu.app/#/player/…). The audio, heard through Sichos-Kodesh's media proxy, and everything else stay as they are.",
 };
 
 export interface RelinkResult {
@@ -75,11 +75,11 @@ async function relinkLinks(catalog: Catalog, spec: Relink, options: RelinkOption
     const { rows } = await catalog.db.query<{ id: EntityId; type: EntityType; data: Json }>(
       // What main holds now, in id order; an item already in a relink Suggestion waiting for review is left to it.
       `SELECT e.id, e.type, r.data FROM entity e JOIN revision r ON r.id = e.main_rev
-       WHERE NOT e.deleted AND e.id > $1 AND r.data::text LIKE $2
+       WHERE NOT e.deleted AND e.id > $1 AND r.data::text LIKE ANY($2)
          AND NOT EXISTS (SELECT 1 FROM revision p JOIN changeset c ON c.id = p.changeset_id
                          WHERE p.entity_id = e.id AND c.author = $3 AND c.status IN ('draft', 'open', 'sent_back'))
        ORDER BY e.id LIMIT ${batch}`,
-      [after, `%${spec.prefix.replace(/[%_\\]/g, (ch) => `\\${ch}`)}%`, spec.bot.id],
+      [after, spec.prefixes.map((prefix) => `%${prefix.replace(/[%_\\]/g, (ch) => `\\${ch}`)}%`), spec.bot.id],
     );
     if (!rows.length) break;
     after = rows[rows.length - 1]!.id;

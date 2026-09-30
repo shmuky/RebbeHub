@@ -14,7 +14,6 @@ import {
   type ImportRecord,
   type Importer,
 } from '@rebbehub/importers';
-import { jemAudioFile } from '@rebbehub/model';
 import { RELINK_BOT, RELINK_JEM_BOT, relinkDriveLinks, relinkJemLinks } from '../src/relinkDrive.js';
 import { freshCatalog } from '../../../packages/core/tests/helpers.js';
 
@@ -44,21 +43,17 @@ const library: DriveFolder = {
   folders: [{ id: 'lks-folder-1', title: 'לקוטי שיחות', files: [{ id: 'otzrosfile01', title: '01.pdf' }, { id: 'otzrosfile02', title: '02.pdf' }], folders: [] }],
 };
 
-const PROXY_JEM = 'https://sichos-kodesh-media-proxy.shmuky.workers.dev/jem-audio/';
-
-/** What the importers stored before: every Drive PDF and JEM recording on the media proxy (an Otzros page also kept its Drive copy). */
+/** What the importers stored before: every Drive PDF on the media proxy (an Otzros page also kept its Drive copy). */
 function legacy(importer: Importer): Importer {
   const proxied = (url: string) => {
     const m = /\/file\/d\/([\w-]+)\/view(?:\?resourcekey=([\w-]+))?$/.exec(url);
-    const jem = jemAudioFile(url);
-    return m ? pdfUrl({ driveFileId: m[1]!, resourceKey: m[2] }) : jem ? `${PROXY_JEM}${encodeURIComponent(jem)}` : url;
+    return m ? pdfUrl({ driveFileId: m[1]!, resourceKey: m[2] }) : url;
   };
   return {
     ...importer,
     async *records() {
       for await (const record of importer.records() as AsyncIterable<ImportRecord>) {
-        const data = structuredClone(record.data) as { url?: string; links?: Array<{ url: string }>; editions?: Array<{ url: string; label?: string }> };
-        if (data.url) data.url = proxied(data.url);
+        const data = structuredClone(record.data) as { links?: Array<{ url: string }>; editions?: Array<{ url: string; label?: string }> };
         for (const link of data.links ?? []) link.url = proxied(link.url);
         if (data.editions) data.editions = [...data.editions.map((e) => ({ ...e, label: 'reader', url: proxied(e.url) })), ...data.editions];
         yield { ...record, data };
@@ -133,9 +128,9 @@ describe('rebbehub relink-drive', () => {
     const recording = await catalog.get(await idForKey('mafteiach-recording:11113014/1'));
     expect((recording!.data as { url: string }).url).toContain('/jem-audio/');
 
-    // Nothing is left, and the importers, run again as they are now, find nothing to change but the recording (relink-jem's).
+    // Nothing is left, and the importers, run again as they are now, find nothing to change.
     expect((await relinkDriveLinks(catalog)).items).toBe(0);
-    expect(await runImport(catalog, sichosKodeshOccasionsImporter(entries()), { dryRun: true })).toMatchObject({ created: 0, updated: 1 });
+    expect(await runImport(catalog, sichosKodeshOccasionsImporter(entries()), { dryRun: true })).toMatchObject({ created: 0, updated: 0 });
     expect(await runImport(catalog, driveLibraryImporter(library), { dryRun: true })).toMatchObject({ created: 0, updated: 0 });
   });
 
@@ -157,28 +152,33 @@ describe('rebbehub relink-drive', () => {
   });
 });
 
+const OLD_PLAYER = 'https://ashreinu.app/player?parentEvent=75&event=76';
+const APP_PLAYER = 'https://ashreinu.app/#/player/parentEvent~75_event~76';
+
 describe('relinkJem', () => {
-  it("turns the proxy's JEM addresses into Ashreinu's files and leaves the rest", () => {
-    const out = relinkJem({ url: `${PROXY_JEM}JEMSK%202957.mp3`, links: [{ url: 'https://sichos-kodesh-media-proxy.shmuky.workers.dev/drive/1tk7tznpZCW0cyFVuNPcwYZMaqzSIC9oO' }] });
-    expect(out).toEqual({ links: 1, data: { url: 'https://dtgj2yu3gmlic.cloudfront.net/JEMSK%202957.mp3', links: [{ url: 'https://sichos-kodesh-media-proxy.shmuky.workers.dev/drive/1tk7tznpZCW0cyFVuNPcwYZMaqzSIC9oO' }] } });
-    expect(relinkJem({ url: 'https://dtgj2yu3gmlic.cloudfront.net/JEMSK0001.mp3' })).toBeNull();
+  it("turns the older links to JEM's player into the Ashreinu app's own, and leaves the audio on the proxy", () => {
+    const audio = 'https://sichos-kodesh-media-proxy.shmuky.workers.dev/jem-audio/AR1.mp3';
+    expect(relinkJem({ url: audio, sources: [{ source: 'jem', url: OLD_PLAYER }] })).toEqual({ links: 1, data: { url: audio, sources: [{ source: 'jem', url: APP_PLAYER }] } });
+    expect(relinkJem({ url: audio, sources: [{ source: 'jem', url: APP_PLAYER }] })).toBeNull();
   });
 });
 
 describe('rebbehub relink-jem', () => {
-  it("points the recordings at Ashreinu's files, for review, and the importer then agrees", async () => {
+  it('sends the older player links for review, once', async () => {
+    const id = await idForKey('mafteiach-recording:11113014/1');
+    const before = (await catalog.get(id))!.data as { url: string };
+    const cs = await catalog.createChangeset('shmuly', { title: 'older JEM link' });
+    await catalog.putRevision(cs.id, 'shmuly', { id, type: 'recording', data: { ...before, sources: [{ source: 'jem', sourceId: 'AR0016657.mp3', url: OLD_PLAYER }] } });
+    await catalog.submit(cs.id, 'shmuly');
+    await catalog.merge(cs.id, 'shmuly');
+
     expect(await relinkJemLinks(catalog, { dryRun: true })).toMatchObject({ items: 1, links: 1, byType: { recording: 1 }, suggestions: [] });
     const result = await relinkJemLinks(catalog);
-    expect(result.suggestions).toHaveLength(1);
     expect(await catalog.changeset(result.suggestions[0]!)).toMatchObject({ author: RELINK_JEM_BOT.id, status: 'open', kind: 'import' });
     expect((await relinkJemLinks(catalog)).items).toBe(0);
     await approveAll(result.suggestions);
-    const recording = await catalog.get(await idForKey('mafteiach-recording:11113014/1'));
-    expect((recording!.data as { url: string }).url).toBe('https://dtgj2yu3gmlic.cloudfront.net/AR0016657.mp3');
-    // The Drive links are relink-drive's, still on the proxy.
-    const event = await catalog.get(await idForKey('mafteiach-occasion:11113014'));
-    expect(JSON.stringify(event!.data)).toContain('/drive/');
-    await approveAll((await relinkDriveLinks(catalog)).suggestions);
-    expect(await runImport(catalog, sichosKodeshOccasionsImporter(entries()), { dryRun: true })).toMatchObject({ created: 0, updated: 0 });
+    const after = (await catalog.get(id))!.data as { url: string; sources: Array<{ url: string }> };
+    expect(after.sources[0]!.url).toBe(APP_PLAYER);
+    expect(after.url).toBe(before.url); // still heard through the proxy
   });
 });
