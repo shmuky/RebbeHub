@@ -20,6 +20,7 @@ workflow crawls what it can first ([deploy](deploy.md)).
 | Importer | Needs | Makes |
 | --- | --- | --- |
 | `sichos-kodesh-works` | the checkout | the works and their units |
+| `likkutei-sichos` | the checkout | a page per Likkutei Sichos sicha the Chabad Library has not typed (vols 1–29), at `/likkutei-sichos/<volume>/<printed page>`, with its PDF and its Hebrew translation's; the words come later from OCR |
 | `sichos-kodesh-occasions` | the checkout (`MAFTEIACH_DATA` optional) | farbrengens, recordings, hanachos |
 | `otzros` | Drive, listed at run time | Otzros HaRebbe's library: a sefer per folder of PDFs, a page per PDF, and its folders as a tree of Sets |
 | `hebrewbooks` | the checkout (`HEBREWBOOKS_SHELF` optional) | HebrewBooks' Chabad shelf, link-only |
