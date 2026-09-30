@@ -3,7 +3,7 @@ import type { Lang } from '../lib/i18n.js';
 import { wordDiff } from '../lib/wordDiff.js';
 import { DiffBox, DiffSegment, DiffStat, FieldDiff } from '../ui/Diff.js';
 import type { IconName } from '../ui/Icon.js';
-import { fieldName, valueText } from './ChangeTable.js';
+import { fieldName, foldChanges, foldedName, infoChanges, moreChanges, valueText } from './ChangeTable.js';
 
 /**
  * A change to one item as a reviewer reads it (the review queue, an item's
@@ -29,15 +29,18 @@ function segmentOf(path: string, lang: Lang): string {
 }
 
 export function ChangeRows({ changes, lang }: { changes: Change[]; lang: Lang }) {
+  const folded = foldChanges(changes);
   return (
     <>
-      {changes.map((c) =>
+      {folded.rows.map((c) =>
         isWords(c.path) ? (
           <DiffSegment key={c.path} n={segmentOf(c.path, lang)} before={valueText(c.path, c.before, lang).replace(/^—$/, '')} after={valueText(c.path, c.after, lang).replace(/^—$/, '')} />
         ) : (
-          <FieldDiff key={c.path} name={fieldName(c.path, lang)} before={valueText(c.path, c.before, lang)} after={valueText(c.path, c.after, lang)} />
+          <FieldDiff key={c.path} name={foldedName(c, lang)} before={valueText(c.path, c.before, lang)} after={valueText(c.path, c.after, lang)} />
         ),
       )}
+      {folded.hidden ? <p className="subtle small pad">{moreChanges(folded.hidden, lang)}</p> : null}
+      {folded.info ? <p className="subtle small pad">{infoChanges(folded.info, lang)}</p> : null}
     </>
   );
 }

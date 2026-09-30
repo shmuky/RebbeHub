@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono';
 import type { DbCost } from '@rebbehub/db';
-import { Catalog, CatalogError, ExportGate, openTranscriptFixes, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, getDerivations, getDerivationsOf, getFile, getFiles, getPageFix, getPageFixes, hanachaSyncs, itemsUsingFile, listWebhooks, pageImageCounts, printingsOf, projectTodo, recordingTranscript, transcriptHistory, transcriptPending, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type FileRow, type Mailer, type PageFixRow, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
+import { Catalog, CatalogError, combineSuggestions, ExportGate, openTranscriptFixes, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, getDerivations, getDerivationsOf, getFile, getFiles, getPageFix, getPageFixes, hanachaSyncs, itemsUsingFile, listWebhooks, pageImageCounts, printingsOf, projectTodo, recordingTranscript, transcriptHistory, transcriptPending, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type FileRow, type Mailer, type PageFixRow, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
 import { dailyLearning, peopleOf } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType, type Language, type PageInline, type PageSegmentKind } from '@rebbehub/model';
@@ -1050,6 +1050,18 @@ export function createApp(options: ApiOptions): Hono {
       }),
       201,
     );
+  });
+
+  /**
+   * Several of one's own suggestions made into one, as a pull request holds
+   * many commits (core/combine.ts): reviewed and approved at once, never
+   * clashing with each other. The ones combined are withdrawn.
+   */
+  app.post('/v1/suggestions/combine', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ suggestions?: unknown; title?: string }>(c);
+    if (!Array.isArray(input.suggestions) || !input.suggestions.every((n) => Number.isInteger(n) && (n as number) > 0)) throw new HttpError(400, 'say which suggestions to combine (suggestions: their ids)');
+    return c.json(await combineSuggestions(catalog, by, { suggestions: input.suggestions as number[], title: input.title }), 201);
   });
 
   app.post('/v1/suggestions', async (c) => {

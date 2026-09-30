@@ -10,6 +10,22 @@ any time. `@rebbehub/client` carries the API's version.
 
 ## Unreleased
 
+### Fixed
+
+- **A bot's suggestion of thousands of alike changes opens.** A sync
+  bot's change of every word timing in a recording was a row for each
+  (thousands) and stopped phones. Changes that differ only by their place
+  in a list are now one row, with how many there are, the first as the
+  example, and by how much they all moved when they moved alike; at most
+  12 rows an item, the rest counted. Timings and machine details (where
+  each word is heard, which engine, how sure) are no longer shown as
+  changes: one line counts them. A long value or description shows its
+  beginning, with Show all. A suggestion's page reads 40 items,
+  and no longer a second full copy of 200 in the browser. In a
+  suggestion that changes real words, an item whose only change is
+  re-timing, a date or a machine mark (a small text fix re-syncs the
+  words around it) is left out, so only the real edit shows.
+
 ### Added
 
 - **The day's learning.** `/daily` shows today's Tanya (the Chitas
@@ -17,6 +33,22 @@ any time. `@rebbehub/client` carries the API's version.
   to the day's part, Hebrew and English) and Hayom Yom, with the day
   before and after; `/daily/2026-09-30` is any day. `GET
   /v1/daily?date=YYYY-MM-DD` gives the same in one read.
+- **A printing's PDF on Drive is read like a scan.** A printing whose
+  source is a PDF on Google Drive (the Otzros library's copies, added as
+  printings of the sefer they copy, so a sefer is on one page) opens in
+  the site's reader from its page, and the sefer's printings list says
+  "PDF copy" with a link to read it instead of "no scan yet".
+- **Combine suggestions into one, like commits in one pull request.**
+  `POST /v1/suggestions/combine` (and the `combine_suggestions` MCP tool)
+  makes several of your own suggestions not yet approved into one, their
+  changes applied in the order they were made; the ones combined are
+  withdrawn. The transcript fixes page offers it for a farbrengen where
+  your fixes are in several suggestions.
+- **Changes to different words of one text no longer clash.** When two
+  suggestions change the same paragraph (or a site change comes between),
+  the three-way merge now merges its words: changes to different words are
+  all kept, and only a change to the same words is left for a person to
+  settle.
 - **Fixes waiting for approval show in the transcript.** `GET
   /v1/recordings/{id}/transcript` gives `pending`: each paragraph fix not
   yet approved, as the paragraph would be, with who sent it and its
@@ -416,6 +448,14 @@ any time. `@rebbehub/client` carries the API's version.
   developer docs.
 
 ### Changed
+
+- **One suggestion per listener per transcript.** Fixing word after word
+  in a transcript adds to the suggestion you already sent for it, while
+  nobody has reviewed it yet, instead of making one per word (which
+  clashed with each other). The editor goes on from your own waiting
+  fix, shows each paragraph's waiting fixes as one, and its history as
+  one change per paragraph: the machine's words beside today's, and who
+  changed and checked them.
 
 - **A list answers with each item's facts, not its words.** `body` (the
   words a page keeps in itself, kilobytes for each sicha or letter) is

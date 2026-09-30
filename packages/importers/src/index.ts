@@ -19,7 +19,7 @@ export { CHABAD_LIBRARY, LIBRARY_CREDIT, chabadLibraryImporter, crawlChabadLibra
 export { OTZROS_FOLDER, OTZROS_SET, driveLibraryImporter, otzrosFolderSetKey, driveViewUrl, listDriveFolder, parseFolderView, type DriveFolder } from './driveLibrary.js';
 export { HEBREWBOOKS, HEBREWBOOKS_SET, genreOfTitle, hebrewBooksImporter, placeLikeCommitted, printedAt, readHebrewBooks, type HebrewBooksInput, type HebrewBooksShelf } from './hebrewBooks.js';
 export { IGROS_WORK, igrosImporter, letterDate, letterKey, readIgrosBuild, type IgrosLetterRecord } from './igros.js';
-export { ASHREINU, JEM_SET, jemDate, jemFilename, jemImporter, jemKind, jemPlayerUrl, matchFarbrengens, partName, readJemIndex, type JemIndex, type JemInput, type JemNode, type JemRecording } from './jem.js';
+export { ASHREINU, JEM_SET, jemDate, jemFilename, jemImporter, jemKind, jemPlayerUrl, matchFarbrengens, partName, readJemIndex, relinkJem, type JemIndex, type JemInput, type JemNode, type JemRecording } from './jem.js';
 export {
   SEFARIA,
   SEFARIA_SET,

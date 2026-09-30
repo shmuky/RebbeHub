@@ -711,6 +711,17 @@ export interface Operations {
       ok: true;
     };
   };
+  /** Combine several of your own suggestions into one, as a pull request holds many commits */
+  combineSuggestions: {
+    input: {
+      body: {
+        /** Their ids (2 to 100), all yours and not yet approved */
+        suggestions: Array<number>;
+        title?: string;
+      };
+    };
+    output: Suggestion;
+  };
   /** Comment on an issue, or answer a comment */
   commentOnIssue: {
     input: {
@@ -2599,6 +2610,7 @@ export const OPERATIONS = {
   claimNext: {"method":"POST","path":"/v1/projects/{slug}/next","pathParams":["slug"],"query":[],"body":null,"answer":"json"},
   closeProject: {"method":"POST","path":"/v1/projects/{slug}/close","pathParams":["slug"],"query":[],"body":null,"answer":"json"},
   closeReport: {"method":"POST","path":"/v1/reports/{id}/close","pathParams":["id"],"query":[],"body":"json","answer":"json"},
+  combineSuggestions: {"method":"POST","path":"/v1/suggestions/combine","pathParams":[],"query":[],"body":"json","answer":"json"},
   commentOnIssue: {"method":"POST","path":"/v1/issues/{number}/comments","pathParams":["number"],"query":[],"body":"json","answer":"json"},
   commentOnItem: {"method":"POST","path":"/v1/entities/{id}/talk","pathParams":["id"],"query":[],"body":"json","answer":"json"},
   commentOnSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/comments","pathParams":["id"],"query":[],"body":"json","answer":"json"},
@@ -2847,6 +2859,11 @@ export abstract class GeneratedMethods {
   /** Resolve or dismiss a report (keepers) (POST /v1/reports/{id}/close) */
   closeReport(input: Operations['closeReport']['input']): Promise<Operations['closeReport']['output']> {
     return this.call('closeReport', input ?? {} as Operations['closeReport']['input']);
+  }
+
+  /** Combine several of your own suggestions into one, as a pull request holds many commits (POST /v1/suggestions/combine) */
+  combineSuggestions(input: Operations['combineSuggestions']['input']): Promise<Operations['combineSuggestions']['output']> {
+    return this.call('combineSuggestions', input ?? {} as Operations['combineSuggestions']['input']);
   }
 
   /** Comment on an issue, or answer a comment (POST /v1/issues/{number}/comments) */

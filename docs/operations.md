@@ -240,6 +240,14 @@ the proxy and not already waiting in one of its Suggestions; once all are
 approved it finds nothing. JEM's recordings (`/jem-audio/<file>`) are not
 on Drive and stay on the proxy.
 
+Each JEM recording also links to itself in the public Ashreinu app, which
+the site shows beside the play button (`https://ashreinu.app/#/player/parentEvent~…_event~…`,
+the app's own share link). Imports before stored the older form
+(`https://ashreinu.app/player?parentEvent=…&event=…`); `rebbehub relink-jem`
+(or the workflow's `relink-jem-dry-run` and `relink-jem`) turns those into
+the app's link, as the relink bot `bot:relink-jem`, a Suggestion per 500
+items for review. The audio itself stays on the proxy.
+
 On the catalog as the Sichos-Kodesh checkout builds it, that is about
 3,300 farbrengens (some 14,000 hanacha links, more with the mafteiach
 index's own Drive links) and about 5,400 Otzros pages: some 18

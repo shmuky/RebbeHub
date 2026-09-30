@@ -1,5 +1,5 @@
 import type { LocalName } from '@rebbehub/model';
-import { fieldName, valueText } from '../components/ChangeTable.js';
+import { foldChanges, foldedName, infoChanges, moreChanges, onlyInfo, valueText } from '../components/ChangeTable.js';
 import type { Entity, RebbeHubApi, SuggestionDetail } from './api.js';
 import { nameOf, typeName, type Lang } from './i18n.js';
 import { labelOf } from './labels.js';
@@ -47,7 +47,8 @@ export interface EntryView {
   removed: boolean;
   /** A paragraph's words, with the paragraphs before and after it. */
   segment: { n: string; before: string; after: string; prev: { n: string; content: string } | null; next: { n: string; content: string } | null } | null;
-  fields: Array<{ path: string; name: string; before: string; after: string }>;
+  /** Its fields that changed, alike ones folded into one row (`count` of them), so a bot's thousands are a few rows. */
+  fields: Array<{ path: string; name: string; before: string; after: string; count: number }>;
   scan: ScanContext | null;
   withheld: string | null;
 }
@@ -160,6 +161,8 @@ export async function suggestionView(api: RebbeHubApi, detail: SuggestionDetail,
   const targets = await describeTargets(api, entries, lang).catch(() => new Map());
 
   const views: EntryView[] = [];
+  // Items whose only change is their details are left out, unless that is all the suggestion is (a sync run).
+  const anyReal = entries.some((e) => e.before === null || e.after === null || e.withheld || !onlyInfo(e.changes));
   for (const e of entries) {
     const target = targets.get(e.entityId);
     const data = (e.after ?? e.before ?? {}) as D;
@@ -184,9 +187,13 @@ export async function suggestionView(api: RebbeHubApi, detail: SuggestionDetail,
       segment = { n, before, after, prev, next };
       if (before !== after) scan = await scanOf(api, data, before, after, lang).catch(() => null);
     }
-    const fields = e.changes
-      .filter((c) => !(segment && (c.path === '/content' || c.path === 'content')))
-      .map((c) => ({ path: c.path, name: fieldName(c.path, lang), before: valueText(c.path, c.before, lang), after: valueText(c.path, c.after, lang) }));
+    // An item whose only change is its details (a paragraph re-timed because its words were fixed) is not a change to show.
+    if (anyReal && e.before !== null && e.after !== null && !e.withheld && !(segment && segment.before !== segment.after) && onlyInfo(e.changes.filter((c) => !(segment && (c.path === '/content' || c.path === 'content'))))) continue;
+    const folded = foldChanges(e.changes.filter((c) => !(segment && (c.path === '/content' || c.path === 'content'))));
+    const fields = folded.rows.map((c) => ({ path: c.path, name: foldedName(c, lang), before: valueText(c.path, c.before, lang), after: valueText(c.path, c.after, lang), count: c.count }));
+    if (folded.hidden) fields.push({ path: '/…', name: moreChanges(folded.hidden, lang), before: '', after: '', count: folded.hidden });
+    // Timings and machine details are counted, not shown, and are not changes to count on the tab.
+    if (folded.info) fields.push({ path: '/…info', name: infoChanges(folded.info, lang), before: '', after: '', count: 0 });
     views.push({
       entityId: e.entityId,
       type: e.type,

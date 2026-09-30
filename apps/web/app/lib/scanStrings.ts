@@ -18,6 +18,7 @@ const SCAN_STRINGS = {
   reprintOf: { he: 'הדפסה חוזרת של', en: 'Reprints' },
   scansCount: { he: 'סריקות', en: 'scans' },
   noScanYet: { he: 'אין סריקה עדיין', en: 'no scan yet' },
+  pdfCopy: { he: 'עותק PDF', en: 'PDF copy' },
   printingNo: { he: 'דפוס', en: 'printing' },
   // What an upload is
   checking: { he: 'בודקים אם הקובץ כבר אצלנו…', en: 'Checking whether we have this already…' },
