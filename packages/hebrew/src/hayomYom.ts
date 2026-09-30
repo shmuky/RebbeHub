@@ -39,6 +39,8 @@ export interface HayomYomShiurim {
   tehillim: string;
   /** Where the day's Tanya starts (the unit by its Sefaria reference, and the segment), and where the next day starts. */
   tanya: { unit: string; segment: string; next: { unit: string; segment: string } | null; label: string } | null;
+  /** How many of the day's first paragraphs the print sets above the shiurim (a Shabbos Mevarchim's "מברכים", a fast's "תענית"). */
+  before: number;
 }
 
 const WEEKDAYS = ['יום ראשון', 'יום שני', 'יום שלישי', 'יום רביעי', 'יום חמישי', 'יום ששי', 'שבת'];
@@ -80,6 +82,19 @@ const CHUMASH_DAYS: Record<string, string> = {
   // Simchas Torah finishes V'zos Habracha; Shabbos Bereishis learns all of Bereishis.
   '01-23': 'ברכה, ששי ושביעי עם פירש״י.',
   '01-24': 'בראשית, כל הסדרה עם פירש״י.',
+};
+
+/**
+ * The days whose first paragraphs the print sets between the day's head and
+ * its shiurim, and how many: the day's notices (מברכים החודש, a fast,
+ * תחנון, what is said at the Seder), where the words of the day follow the
+ * shiurim. Found by reading the scan's order against the catalog's
+ * paragraphs, day by day; counts, not words.
+ */
+const BEFORE: Record<string, number> = {
+  '03-26': 1, '04-10': 1, '04-25': 1, '05-15': 1, '06A-14': 1, '06B-13': 1, '06B-14': 3, '07-01': 2, '07-15': 1, '07-16': 1, '07-19': 2,
+  '07-26': 2, '08-24': 1, '09-06': 1, '10-17': 1, '11-09': 1, '11-13': 1, '11-15': 1, '11-27': 1, '11-30': 1, '12-18': 1, '12-25': 3,
+  '12-29': 1, '01-02': 1, '01-03': 1, '01-04': 1, '01-16': 1, '01-17': 3, '01-23': 1,
 };
 
 /** Tehillim's monthly cycle: the chapters of each day of the month (119 in two halves, on the 25th and 26th). */
@@ -149,7 +164,7 @@ export function hayomYomShiurim(month: string, day: number): HayomYomShiurim | n
     ? { unit: `Tanya, ${start[0]}`, segment: start[1], next: next ? { unit: `Tanya, ${next[0]}`, segment: next[1] } : null, label: [tanyaChapter(start[0]), ends ? tanyaChapter(ends) : null].filter(Boolean).join(' – ') }
     : null;
 
-  return { hebrew, weekday: WEEKDAYS[weekday]!, year: at.year === 5703 ? 'ה׳תש״ג' : 'ה׳תש״ד', chumash, tehillim, tanya };
+  return { hebrew, weekday: WEEKDAYS[weekday]!, year: at.year === 5703 ? 'ה׳תש״ג' : 'ה׳תש״ד', chumash, tehillim, tanya, before: BEFORE[key] ?? 0 };
 }
 
 /** The next day's `MM-DD` in the book's year. */

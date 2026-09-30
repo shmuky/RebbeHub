@@ -16,7 +16,11 @@ describe('Hayom Yom as printed', () => {
       chumash: 'בא, פרשה ראשונה עם פירש״י.',
       tehillim: 'כג-כח.',
       tanya: { unit: 'Tanya, Part I; Likkutei Amarim 17', segment: '1', next: { unit: 'Tanya, Part I; Likkutei Amarim 17', segment: '4' }, label: 'פרק יז' },
+      before: 0,
     });
+    // Shabbos Mevarchim Teves: "מברכים ר״ח טבת" above the shiurim; Purim's three notices.
+    expect(hayomYomShiurim('03', 26)?.before).toBe(1);
+    expect(hayomYomShiurim('06B', 14)?.before).toBe(3);
     expect(hayomYomShiurim('05', 10)).toMatchObject({ weekday: 'שבת', chumash: 'בא, שביעי עם פירש״י.', tehillim: 'נה-נט.' });
     // The first day, 19 Kislev 5703, a Shabbos; the last, 18 Kislev 5704.
     expect(hayomYomShiurim('03', 19)).toMatchObject({ weekday: 'שבת', year: 'ה׳תש״ג', chumash: 'וישלח, שביעי עם פירש״י.', tehillim: 'צ-צו.' });
