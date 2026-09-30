@@ -5,7 +5,7 @@ import { unclearRanges } from '@rebbehub/model';
 import { t, type Lang } from '../lib/i18n.js';
 import { clockOf, tn } from '../lib/i18nNetwork.js';
 import { href } from '../lib/links.js';
-import { get, within, type Transcript, type Word } from '../lib/transcript.js';
+import { get, pendingRanges, within, type Transcript, type Word } from '../lib/transcript.js';
 import { useAccount } from '../lib/useAccount.js';
 import { clock, usePlayer, type Track } from '../player/PlayerProvider.js';
 import { MachineLabel } from '../ui/primitives.js';
@@ -59,25 +59,35 @@ function useNowMs(playing: boolean): number {
 
 /** A paragraph's words, the one being said marked, the ones already said set apart; each knows when it is said, so a tap can play from it. */
 /** A paragraph's words with the ones a listener marked unclear (`[words?]`) shown as such. */
-function Plain({ content, lang }: { content: string; lang: Lang }) {
+function Plain({ content, lang, pending = [] }: { content: string; lang: Lang; pending?: Array<{ from: number; to: number }> }) {
   const marks = unclearRanges(content);
-  if (!marks.length) return <>{content}</>;
+  if (!marks.length && !pending.length) return <>{content}</>;
+  // Word by word, so a word a waiting fix changes is marked as well as an unclear one.
   const out: React.ReactNode[] = [];
   let at = 0;
-  for (const m of marks) {
-    if (m.from > at) out.push(content.slice(at, m.from));
-    out.push(
-      <span key={m.from} className="w-unclear" title={t(lang, 'unclearWords')}>
-        {content.slice(m.from, m.to)}
-      </span>,
-    );
-    at = m.to;
+  for (const m of content.matchAll(/\S+/g)) {
+    const from = m.index ?? 0;
+    const to = from + m[0].length;
+    if (from > at) out.push(content.slice(at, from));
+    out.push(<Marked key={from} text={m[0]} unclear={marks.some((x) => from < x.to && to > x.from)} waiting={pending.some((x) => from < x.to && to > x.from)} lang={lang} />);
+    at = to;
   }
   if (at < content.length) out.push(content.slice(at));
   return <>{out}</>;
 }
 
-function Spoken({ content, words, nowMs, lang }: { content: string; words: Word[]; nowMs: number; lang: Lang }) {
+/** A word as a reader sees it, marked when a listener was unsure of it, or a fix of it waits for approval. */
+function Marked({ text, unclear, waiting, lang, className, ms }: { text: string; unclear: boolean; waiting: boolean; lang: Lang; className?: string; ms?: number }) {
+  const classes = [className, unclear ? 'w-unclear' : '', waiting ? 'w-pending' : ''].filter(Boolean).join(' ');
+  if (!classes) return <>{text}</>;
+  return (
+    <span className={classes} data-ms={ms} title={[unclear ? t(lang, 'unclearWords') : '', waiting ? t(lang, 'pendingFix') : ''].filter(Boolean).join(' · ') || undefined}>
+      {text}
+    </span>
+  );
+}
+
+function Spoken({ content, words, nowMs, lang, pending = [] }: { content: string; words: Word[]; nowMs: number; lang: Lang; pending?: Array<{ from: number; to: number }> }) {
   const out: React.ReactNode[] = [];
   const marks = unclearRanges(content);
   let at = 0;
@@ -85,12 +95,8 @@ function Spoken({ content, words, nowMs, lang }: { content: string; words: Word[
     if (w.from > at) out.push(content.slice(at, w.from));
     // Not `said`: that is the farbrengen page's "what was said" list, whose phone rule pulls it out to the screen's edges.
     const state = nowMs >= w.startMs && nowMs < Math.max(w.endMs, w.startMs + 1) ? 'w-now' : nowMs >= w.endMs ? 'w-past' : '';
-    const unclear = marks.some((m) => w.from < m.to && w.to > m.from);
-    out.push(
-      <span key={i} className={['word', state, unclear ? 'w-unclear' : ''].filter(Boolean).join(' ')} data-ms={w.startMs} title={unclear ? t(lang, 'unclearWords') : undefined}>
-        {content.slice(w.from, w.to)}
-      </span>,
-    );
+    const hits = (list: Array<{ from: number; to: number }>) => list.some((m) => w.from < m.to && w.to > m.from);
+    out.push(<Marked key={i} text={content.slice(w.from, w.to)} className={['word', state].filter(Boolean).join(' ')} ms={w.startMs} unclear={hits(marks)} waiting={hits(pending)} lang={lang} />);
     at = w.to;
   }
   if (at < content.length) out.push(content.slice(at));
@@ -365,6 +371,7 @@ function Lyrics({ transcripts, tracks, lang, nowMs, found, machine, onEdit }: { 
           const now = active?.id === p.id;
           const past = playing && !now && p.endMs !== null && nowMs >= p.endMs;
           const classes = ['lyrics-line', now ? 'now' : past ? 'past' : '', p.id === found ? 'found' : ''].filter(Boolean).join(' ');
+          const waiting = (shown.pending ?? []).filter((x) => x.segment === p.id).flatMap((x) => pendingRanges(p.content, x.content));
           return (
             <button
               key={p.id}
@@ -378,7 +385,7 @@ function Lyrics({ transcripts, tracks, lang, nowMs, found, machine, onEdit }: { 
                 playFrom(at ? Number(at) : (p.startMs ?? 0));
               }}
             >
-              {now && p.words?.length ? <Spoken content={p.content} words={p.words} nowMs={nowMs} lang={lang} /> : <Plain content={p.content} lang={lang} />}
+              {now && p.words?.length ? <Spoken content={p.content} words={p.words} nowMs={nowMs} lang={lang} pending={waiting} /> : <Plain content={p.content} lang={lang} pending={waiting} />}
             </button>
           );
         })}

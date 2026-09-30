@@ -436,6 +436,19 @@ export type Transcript = {
     edited?: boolean;
     syncChecked?: boolean;
   }>;
+  /** Fixes of the words waiting for approval, a suggestion's together in the transcript's order */
+  pending?: Array<{
+    /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+    segment: string;
+    /** The paragraph as the fix would make it */
+    content: string;
+    /** The person checked all of it */
+    complete: boolean;
+    author: string;
+    authorName?: string | null;
+    at: string;
+    suggestion: number | null;
+  }>;
 };
 
 export type File = {
