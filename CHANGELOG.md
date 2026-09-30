@@ -444,6 +444,11 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Changed
 
+- **The transcript editor looks as it did before.** Each waiting fix has
+  its own box again, and the history shows every change with who made it
+  and its suggestion. What kept fixes from clashing stays: a listener goes
+  on from their own waiting fix, so their fixes of a transcript stay one
+  suggestion, and Edit is there even while a fix waits.
 - **One suggestion per listener per transcript.** Fixing word after word
   in a transcript adds to the suggestion you already sent for it, while
   nobody has reviewed it yet, instead of making one per word (which

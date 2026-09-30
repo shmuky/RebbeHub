@@ -54,10 +54,7 @@ const W = {
   sent: { he: 'נשלח. יופיע באתר אחרי אישור.', en: 'Sent. It shows on the site once approved.' },
   saved: { he: 'נשמר.', en: 'Saved.' },
   yourFix: { he: 'התיקון שלך, מחכה לאישור', en: 'Your fix, waiting for approval' },
-  waitingBy: { he: 'מחכה לאישור · {names}', en: 'Waiting for approval · {names}' },
-  you: { he: 'את/ה', en: 'you' },
-  changedBy: { he: 'שונה בידי {names}', en: 'Changed by {names}' },
-  checkedBy: { he: 'נבדק בידי {names}', en: 'Checked by {names}' },
+  theirFix: { he: 'תיקון של {name}, מחכה לאישור', en: "{name}'s fix, waiting for approval" },
   waitingTitle: { he: 'מחכים לאישור', en: 'Waiting for approval' },
   reviewAll: { he: 'לעבור על כל התיקונים', en: 'Go through all the fixes' },
   waitingCount: { he: '{n} תיקונים כאן מחכים לאישור, מסומנים בקו מקווקו', en: '{n} fixes here wait for approval, marked with a dashed line' },
@@ -190,67 +187,40 @@ function keep(key: string, value: unknown) {
 }
 
 /** One commit's changes, told in words. */
-/** Everything that happened to one paragraph, as one change: the words as the machine heard them beside the words now, and who changed or checked them. */
-interface ParaStory {
-  segment: string;
-  before: string;
-  after: string;
-  changedBy: string[];
-  checkedBy: string[];
-  at: string;
-  suggestions: number[];
-}
-
-function storiesOf(commits: TranscriptCommit[], only?: string): ParaStory[] {
-  const bySegment = new Map<string, ParaStory>();
-  // Oldest first, so the first words are the machine's and the last are today's.
-  for (const commit of [...commits].sort((a, b) => a.commit - b.commit)) {
-    const who = commit.authorIsBot ? null : (commit.authorName ?? commit.author);
-    for (const c of commit.changes) {
-      if (c.kind === 'made' || c.kind === 'sync' || (only && c.segment !== only)) continue;
-      let story = bySegment.get(c.segment);
-      if (!story) {
-        story = { segment: c.segment, before: c.before ?? '', after: c.before ?? '', changedBy: [], checkedBy: [], at: commit.at, suggestions: [] };
-        bySegment.set(c.segment, story);
-      }
-      if (c.kind === 'words') {
-        story.after = c.after ?? story.after;
-        if (who && !story.changedBy.includes(who)) story.changedBy.push(who);
-      }
-      if ((c.kind === 'checked' || c.complete) && who && !story.checkedBy.includes(who)) story.checkedBy.push(who);
-      story.at = commit.at;
-      if (commit.suggestion && !story.suggestions.includes(commit.suggestion)) story.suggestions.push(commit.suggestion);
-    }
-  }
-  return [...bySegment.values()].sort((a, b) => b.at.localeCompare(a.at));
-}
-
-function StoryRow({ story, lang, numberOf, only }: { story: ParaStory; lang: Lang; numberOf: (segment: string) => number; only?: boolean }) {
-  const names = (list: string[]) => list.join(', ');
+function ChangeRow({ commit, lang, numberOf, only }: { commit: TranscriptCommit; lang: Lang; numberOf: (segment: string) => number; only?: string }) {
+  const changes = only ? commit.changes.filter((c) => c.segment === only) : commit.changes;
+  if (!changes.length) return null;
+  const made = changes.filter((c) => c.kind === 'made');
+  const who = commit.authorIsBot ? null : (commit.authorName ?? commit.author);
   return (
     <li className="tx-change">
       <div className="tx-change-head">
-        {!only ? (
-          <a href={`#p-${story.segment}`}>
-            <b>
-              {w(lang, 'para')} {numberOf(story.segment)}
-            </b>
-          </a>
-        ) : null}
-        <RelativeTime at={story.at} lang={lang} className="row-sub" />
-        {story.suggestions.map((n) => (
-          <Link key={n} className="row-sub" to={href(`/suggestions/${n}`, lang)}>
-            #{n}
+        {who ? <b>{who}</b> : <MachineLabel lang={lang} size="sm" />}
+        <RelativeTime at={commit.at} lang={lang} className="row-sub" />
+        {commit.suggestion ? (
+          <Link className="row-sub" to={href(`/suggestions/${commit.suggestion}`, lang)}>
+            {w(lang, 'suggestion')} #{commit.suggestion}
           </Link>
-        ))}
+        ) : null}
       </div>
-      {story.changedBy.length ? <p className="row-sub">{w(lang, 'changedBy').replace('{names}', names(story.changedBy))}</p> : null}
-      {story.checkedBy.length ? <p className="row-sub">{w(lang, 'checkedBy').replace('{names}', names(story.checkedBy))}</p> : null}
-      {story.before !== story.after ? (
-        <p className="tx-diff" dir="auto">
-          <InlineDiff parts={wordDiff(story.before, story.after)} />
-        </p>
-      ) : null}
+      {made.length ? <p className="row-sub">{made.length === 1 && only ? w(lang, 'madeOne') : w(lang, 'made').replace('{n}', made.length.toLocaleString(lang))}</p> : null}
+      {changes
+        .filter((c) => c.kind !== 'made')
+        .map((c, i) => (
+          <div key={i} className="tx-change-item">
+            {!only ? (
+              <a className="row-sub" href={`#p-${c.segment}`}>
+                {w(lang, 'para')} {numberOf(c.segment)}
+              </a>
+            ) : null}{' '}
+            <span className="row-sub">{c.kind === 'checked' ? w(lang, 'wasChecked') : c.kind === 'sync' ? w(lang, 'movedSync') : w(lang, c.complete ? 'fixedAll' : 'fixedSome')}</span>
+            {c.kind === 'words' ? (
+              <p className="tx-diff" dir="auto">
+                <InlineDiff parts={wordDiff(c.before ?? '', c.after ?? '')} />
+              </p>
+            ) : null}
+          </div>
+        ))}
     </li>
   );
 }
@@ -361,14 +331,15 @@ function Para({
 
 
   const pending = sent && !sent.merged ? sent : null;
-  // This listener's own fix that still waits: they go on from it, so it is never typed twice, and every word they fix joins it.
+  // This listener's own fix that still waits: they go on from it, so it is never typed twice and a new fix never undoes their last.
   const mine = pending ?? [...waiting].reverse().find((x) => x.author === me) ?? null;
   const base = mine?.content ?? paragraph.content;
   const shown = base === paragraph.content ? paragraph : { ...paragraph, content: base, words: null };
   const tokens = tokensOf(shown);
   const marks = unclearRanges(base);
-  // Words a fix waiting for approval changes: this listener's own in their words, or others' in the words on the site.
-  const changing = mine ? pendingRanges(base, paragraph.content) : waiting.flatMap((x) => pendingRanges(paragraph.content, x.content));
+  // Fixes already sent by others, or by this listener before, and not yet approved: their words are shown as they will be, below.
+  const others = waiting.filter((x) => x.content !== sent?.content);
+  const changing = mine ? pendingRanges(base, paragraph.content) : others.flatMap((x) => pendingRanges(paragraph.content, x.content));
   const text: React.ReactNode[] = [];
   let at = 0;
   for (const [i, tk] of tokens.entries()) {
@@ -388,11 +359,6 @@ function Para({
   }
   if (at < base.length) text.push(base.slice(at));
 
-  // Every fix of this paragraph that waits, as one: the words on the site beside the words they will be, and who sent them.
-  const waitingFor = [...(pending && !waiting.some((x) => x.author === me) ? [{ author: me ?? '', authorName: null, suggestion: null as number | null }] : []), ...waiting];
-  const waitingNames = [...new Set(waitingFor.map((x) => (x.author === me ? w(lang, 'you') : (x.authorName ?? x.author))))];
-  const waitingNumbers = [...new Set(waitingFor.map((x) => x.suggestion).filter((x): x is number => x !== null))];
-  const waitingWords = mine?.content ?? waiting.at(-1)?.content ?? null;
   const status = paragraph.checked ? 'checked' : paragraph.edited ? 'partly' : 'machine';
   const classes = ['tx-para', open ? 'open' : '', active ? 'active' : '', found ? 'found' : '', `is-${status}`].filter(Boolean).join(' ');
 
@@ -432,19 +398,28 @@ function Para({
         {text}
       </div>
 
-      {waitingWords !== null && waitingWords !== paragraph.content ? (
-        <div className="tx-pending">
+      {others.map((x) => (
+        <div key={`${x.suggestion}:${x.at}`} className="tx-pending">
           <span className="row-sub">
-            {w(lang, 'waitingBy').replace('{names}', waitingNames.join(', '))}
-            {waitingNumbers.map((n) => (
-              <span key={n}>
+            {x.author === me ? w(lang, 'yourFix') : w(lang, 'theirFix').replace('{name}', x.authorName ?? x.author)}
+            {x.suggestion !== null ? (
+              <>
                 {' · '}
-                <Link to={href(`/suggestions/${n}`, lang)}>#{n}</Link>
-              </span>
-            ))}
+                <Link to={href(`/suggestions/${x.suggestion}`, lang)}>#{x.suggestion}</Link>
+              </>
+            ) : null}
           </span>
           <p className="tx-diff" dir="auto">
-            <InlineDiff parts={wordDiff(paragraph.content, waitingWords)} />
+            <InlineDiff parts={wordDiff(paragraph.content, x.content)} />
+          </p>
+        </div>
+      ))}
+
+      {pending ? (
+        <div className="tx-pending">
+          <span className="row-sub">{w(lang, 'yourFix')}</span>
+          <p className="tx-diff" dir="auto">
+            <InlineDiff parts={wordDiff(paragraph.content, pending.content)} />
           </p>
         </div>
       ) : null}
@@ -527,8 +502,8 @@ function Para({
             <p className="row-sub">…</p>
           ) : (
             <ul>
-              {storiesOf(history, paragraph.id).map((story) => (
-                <StoryRow key={story.segment} story={story} lang={lang} numberOf={numberOf} only />
+              {history.map((c) => (
+                <ChangeRow key={c.commit} commit={c} lang={lang} numberOf={numberOf} only={paragraph.id} />
               ))}
             </ul>
           )}
@@ -702,8 +677,8 @@ export function TranscriptEditor({
               <p className="row-sub">…</p>
             ) : commits.some((c) => c.changes.some((x) => x.kind !== 'made')) ? (
               <ul>
-                {storiesOf(commits).map((story) => (
-                  <StoryRow key={story.segment} story={story} lang={lang} numberOf={numberOf} />
+                {commits.map((c) => (
+                  <ChangeRow key={c.commit} commit={c} lang={lang} numberOf={numberOf} />
                 ))}
               </ul>
             ) : (
