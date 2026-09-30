@@ -64,16 +64,16 @@
   grid-column: 3;
 }
 
-/* Each shiur goes to its words: the print's look, underlined only under the pointer. */
+/* Each shiur goes to its words: dotted underneath, as the Tanya line is, solid under the pointer. */
 .hy-shiur-link {
   color: inherit;
-  text-decoration: none;
+  text-decoration: underline dotted var(--subtle);
+  text-underline-offset: 4px;
 }
 
 .hy-shiur-link:hover,
 .hy-shiur-link:focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 4px;
+  text-decoration-style: solid;
 }
 
 /* Lines set apart from the words: each on a line of its own. */
