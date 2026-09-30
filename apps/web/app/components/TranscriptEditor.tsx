@@ -362,7 +362,7 @@ function Para({
   if (at < base.length) text.push(base.slice(at));
 
   const status = paragraph.checked ? 'checked' : paragraph.edited ? 'partly' : 'machine';
-  const classes = ['tx-para', open ? 'open' : '', active ? 'active' : '', found ? 'found' : '', `is-${status}`].filter(Boolean).join(' ');
+  const classes = ['tx-para', open ? 'open' : '', active ? 'active' : '', found && !resumed ? 'found' : '', `is-${status}`].filter(Boolean).join(' ');
 
   return (
     <li ref={ref} id={`p-${paragraph.id}`} className={classes}>
@@ -380,10 +380,7 @@ function Para({
           </span>
         ) : status === 'partly' ? (
           <span className="tx-state partly">{w(lang, 'partly')}</span>
-        ) : (
-          <MachineLabel lang={lang} size="sm" />
-        )}
-        {resumed ? <span className="tx-state resumed">{w(lang, 'continueHere')}</span> : null}
+        ) : null}
       </div>
 
       <div
@@ -632,6 +629,7 @@ export function TranscriptEditor({
           <span className="row-sub">{w(lang, 'progress').replace('{n}', checked.toLocaleString(lang)).replace('{of}', all.length.toLocaleString(lang))}</span>
           <Bar value={checked} max={all.length || 1} tone="open" />
         </div>
+        <p className="row-sub tx-machine-line">{t(lang, 'lyricsMachineHint')}</p>
         <details className="tx-how">
           <summary>
             <CircleHelp size={15} aria-hidden />
@@ -646,8 +644,8 @@ export function TranscriptEditor({
             <li>{w(lang, 'howPause')}</li>
             <li>{w(lang, 'howHistory')}</li>
           </ul>
+          {canFix && checked < all.length ? <TrainingGoalBar lang={lang} /> : null}
         </details>
-        <p className="note machine-note">{t(lang, 'lyricsMachineHint')}</p>
         {waitingAll.length ? (
           <p className="row-sub tx-waiting-note">
             {w(lang, 'waitingCount').replace('{n}', waitingAll.length.toLocaleString(lang))}
@@ -655,7 +653,6 @@ export function TranscriptEditor({
             <Link to={href('/review', lang, { view: 'transcripts' })}>{w(lang, 'reviewAll')}</Link>
           </p>
         ) : null}
-        {canFix && checked < all.length ? <TrainingGoalBar lang={lang} /> : null}
         {!canFix ? (
           <p className="row-sub">
             {w(lang, 'signIn')} <Link to={href('/signin', lang)}>{t(lang, 'signIn')}</Link>
