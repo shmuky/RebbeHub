@@ -78,6 +78,9 @@ const W = {
   suggestion: { he: 'הצעה', en: 'Suggestion' },
   fullHistory: { he: 'דף ההיסטוריה המלא', en: 'Full history page' },
   sinceMachine: { he: 'מה שתוקן מאז שהמחשב שמע', en: 'Fixed since the machine heard it' },
+  hiddenChecked: { he: '{n} פסקאות שכבר נבדקו מוסתרות', en: '{n} paragraphs already checked are hidden' },
+  showChecked: { he: 'להציג את כולן', en: 'Show them all' },
+  hideChecked: { he: 'להציג רק מה שנשאר לבדוק', en: 'Show only what is left to check' },
   signIn: { he: 'כדי לתקן צריך להיכנס. ההאזנה והלחיצה על מילים פתוחות לכולם.', en: 'Sign in to fix. Listening and tapping words are open to all.' },
 } as const;
 const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
@@ -145,7 +148,7 @@ export function TrainingGoalBar({ lang }: { lang: Lang }) {
           <ul>
             {goal.next.map((f) => (
               <li key={f.event}>
-                {f.path ? <Link to={`${href(f.path, lang, { review: '1' })}#transcript`}>{f.title?.[lang === 'en' ? 'en' : 'he'] ?? f.title?.he ?? f.event}</Link> : (f.title?.he ?? f.event)}{' '}
+                {f.path ? <Link to={href(f.path, lang, { tab: 'text' })}>{f.title?.[lang === 'en' ? 'en' : 'he'] ?? f.title?.he ?? f.event}</Link> : (f.title?.he ?? f.event)}{' '}
                 <span className="row-sub">
                   {f.checked.toLocaleString(lang)}/{f.paragraphs.toLocaleString(lang)}
                   {f.mostWanted ? ` · ${t(lang, 'mostWanted')}` : ''}
@@ -478,7 +481,7 @@ function Para({
       ) : null}
 
       {editing?.kind === 'words' ? (
-        <div className="tx-edit">
+        <div className="tx-edit words">
           <label className="row-sub" htmlFor={`fix-${paragraph.id}`}>
             {w(lang, 'fixWords')}
           </label>
@@ -507,7 +510,7 @@ function Para({
       ) : null}
 
       {editing?.kind === 'all' ? (
-        <div className="tx-edit">
+        <div className="tx-edit all">
           <textarea value={editing.value} onChange={(e) => setEditing({ ...editing, value: e.target.value })} rows={6} dir="auto" autoFocus />
           <SpellingHints text={editing.value} lang={lang} />
           <label className="tx-complete">
@@ -586,7 +589,8 @@ export function TranscriptEditor({
   nowMs: number;
   found: string | null;
   account: unknown;
-  onBack: () => void;
+  /** Back to the listening view, where there is one; on the page's Text tab its own tabs lead back. */
+  onBack?: () => void;
   onFixed: (recording: string, segment: string, content: string, complete: boolean) => void;
 }) {
   const player = usePlayer();
@@ -628,6 +632,9 @@ export function TranscriptEditor({
   const [offer, setOffer] = useState<{ segment: string; from: number; to: number; words: string } | null>(null);
   const [history, setHistory] = useState<Record<string, TranscriptCommit[]>>({});
   const [showAll, setShowAll] = useState(false);
+  // Paragraphs checked before this visit, with no unclear words, are left out so what is left to check comes first; checked here, they stay until the next visit.
+  const [done] = useState(() => new Set(transcripts.flatMap((tr) => tr.paragraphs.filter((p) => p.checked && !unclearRanges(p.content).length && !(tr.pending ?? []).some((x) => x.segment === p.id)).map((p) => p.id))));
+  const [showDone, setShowDone] = useState(false);
   const canFix = Boolean(account);
   const me = useAccount()?.person.id ?? null;
   const waitingAll = transcripts.flatMap((tr) => tr.pending ?? []);
@@ -682,10 +689,12 @@ export function TranscriptEditor({
     <>
       <div className="review-head">
         <h2 className="section-header">{w(lang, 'title')}</h2>
-        <button type="button" className="btn" onClick={onBack}>
-          <Undo2 size={16} aria-hidden />
-          {w(lang, 'back')}
-        </button>
+        {onBack ? (
+          <button type="button" className="btn" onClick={onBack}>
+            <Undo2 size={16} aria-hidden />
+            {w(lang, 'back')}
+          </button>
+        ) : null}
       </div>
 
       <div className="tx-top">
@@ -769,6 +778,15 @@ export function TranscriptEditor({
         </details>
       </div>
 
+      {done.size && done.size < all.length ? (
+        <p className="row-sub tx-done-note">
+          {showDone ? null : `${w(lang, 'hiddenChecked').replace('{n}', done.size.toLocaleString(lang))} · `}
+          <button type="button" className="link-button" onClick={() => setShowDone((s) => !s)}>
+            {w(lang, showDone ? 'hideChecked' : 'showChecked')}
+          </button>
+        </p>
+      ) : null}
+
       {transcripts.map((tr) => {
         const index = tracks.findIndex((track) => track.id === tr.recording);
         const playing = player.current?.id === tr.recording;
@@ -777,7 +795,7 @@ export function TranscriptEditor({
           <div key={tr.recording}>
             {transcripts.length > 1 ? <h3>{tracks[index]?.title}</h3> : null}
             <ol className="tx-list">
-              {tr.paragraphs.map((p) => (
+              {tr.paragraphs.filter((p) => showDone || done.size === all.length || !done.has(p.id) || p.id === found).map((p) => (
                 <Para
                   key={p.id}
                   n={numberOf(p.id)}

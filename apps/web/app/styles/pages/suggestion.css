@@ -198,3 +198,21 @@
     flex-direction: column;
   }
 }
+
+/* A transcript paragraph's talk about its unclear words, under its change on a suggestion. */
+.unclear-talk {
+  border-top: 1px solid var(--border-muted);
+  font-size: var(--fs-md);
+}
+
+.unclear-talk ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.unclear-talk li.reply {
+  padding-inline-start: 16px;
+}

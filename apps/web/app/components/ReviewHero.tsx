@@ -14,7 +14,7 @@ import { Bar } from '../ui/primitives.js';
  * farbrengens the transcription machine heard that no person has checked,
  * how many pages OCR read (a subject index read from its scan), how near
  * the next model is, and what to open next, each straight into its editor
- * (a farbrengen's `?review=1#transcript`, a page's edit page with the scan
+ * (a farbrengen's Text tab, `?tab=text`, a page's edit page with the scan
  * beside it). The list comes with the page (one read, GET
  * /v1/machine/to-check); the training goal is asked for by the browser, so
  * the page costs no more to draw. The bar moves with every paragraph
@@ -61,7 +61,7 @@ const W = {
 } as const;
 const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
 
-const reviewHref = (row: Row, lang: Lang) => `${href(row.path ?? `/${row.event}`, lang, { review: '1' })}#transcript`;
+const reviewHref = (row: Row, lang: Lang) => href(row.path ?? `/${row.event}`, lang, { tab: 'text' });
 const pageHref = (page: Page, lang: Lang) => href(`/edit/${page.entity}`, lang);
 export const pageTitle = (page: Page, lang: Lang) => [nameOf(page.title ?? undefined, lang), nameOf(page.label ?? undefined, lang)].filter(Boolean).join(' · ') || page.path || page.entity;
 

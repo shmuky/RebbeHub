@@ -1,6 +1,6 @@
-import type { LocalName } from '@rebbehub/model';
+import { unclearRanges, type LocalName } from '@rebbehub/model';
 import { foldChanges, foldedName, infoChanges, moreChanges, onlyInfo, valueText } from '../components/ChangeTable.js';
-import type { Entity, RebbeHubApi, SuggestionDetail } from './api.js';
+import type { Entity, RebbeHubApi, SuggestionDetail, TalkComment } from './api.js';
 import { nameOf, typeName, type Lang } from './i18n.js';
 import { labelOf } from './labels.js';
 import { itemPath } from './links.js';
@@ -51,6 +51,13 @@ export interface EntryView {
   fields: Array<{ path: string; name: string; before: string; after: string; count: number }>;
   scan: ScanContext | null;
   withheld: string | null;
+  /**
+   * A paragraph of a recording's transcript: which recording, whether the
+   * suggester found it all exact (`reported`) and whether it is checked on
+   * the site now, so a reviewer can mark it so from here, and the talk
+   * about its unclear words.
+   */
+  transcript: { recording: string; reported: boolean; checked: boolean; talk: TalkComment[] } | null;
 }
 
 export interface CheckLine {
@@ -161,6 +168,11 @@ export async function suggestionView(api: RebbeHubApi, detail: SuggestionDetail,
   const targets = await describeTargets(api, entries, lang).catch(() => new Map());
 
   const views: EntryView[] = [];
+  // Each transcript's recording, and the talk on it, read once for all its paragraphs.
+  const texts = new Map<string, Promise<Entity | null>>();
+  const talks = new Map<string, Promise<TalkComment[]>>();
+  const textOf = (id: string) => texts.get(id) ?? (texts.set(id, api.entity(id).catch(() => null)), texts.get(id)!);
+  const talkOf = (id: string) => talks.get(id) ?? (talks.set(id, api.talk(id).then((r) => r.talk.filter((c) => !c.hidden)).catch(() => [])), talks.get(id)!);
   // Items whose only change is their details are left out, unless that is all the suggestion is (a sync run).
   const anyReal = entries.some((e) => e.before === null || e.after === null || e.withheld || !onlyInfo(e.changes));
   for (const e of entries) {
@@ -168,6 +180,27 @@ export async function suggestionView(api: RebbeHubApi, detail: SuggestionDetail,
     const data = (e.after ?? e.before ?? {}) as D;
     let segment: EntryView['segment'] = null;
     let scan: ScanContext | null = null;
+    let transcript: EntryView['transcript'] = null;
+    if (e.type === 'segment' && !e.withheld && typeof data.text === 'string') {
+      const text = await textOf(data.text);
+      const td = (text?.data ?? {}) as D;
+      if (td.kind === 'transcript' && typeof td.recording === 'string') {
+        const content = String(data.content ?? '');
+        // The talk that starts from its unclear words (TimingTools' DiscussUnclear quotes them), with the replies.
+        const words = unclearRanges(content).map((r) => content.slice(r.from, r.to).replace(/^\[|\?\]$/g, ''));
+        const all = words.length ? await talkOf(td.recording) : [];
+        const heads = new Set(all.filter((c) => c.body && words.some((x) => c.body!.includes(`[${x}?]`) || c.body!.includes(`«${x}»`))).map((c) => c.id));
+        const isChecked = (d: unknown) => Number((d as D | null)?.proofread ?? 0) > 0 || Boolean(((d as D | null)?.origin as { checked?: boolean } | undefined)?.checked);
+        // Whether the suggester found it all exact, and whether it is checked on the site now (approved, or marked since).
+        const now = await api.entity(e.entityId).catch(() => null);
+        transcript = {
+          recording: td.recording,
+          reported: e.after !== null && isChecked(e.after),
+          checked: isChecked(now?.data),
+          talk: all.filter((c) => heads.has(c.id) || (c.parent !== null && heads.has(c.parent))),
+        };
+      }
+    }
     if (e.type === 'segment' && !e.withheld) {
       const before = String((e.before as D | null)?.content ?? '');
       const after = String((e.after as D | null)?.content ?? '');
@@ -207,6 +240,7 @@ export async function suggestionView(api: RebbeHubApi, detail: SuggestionDetail,
       fields,
       scan,
       withheld: e.withheld ?? null,
+      transcript,
     });
   }
 

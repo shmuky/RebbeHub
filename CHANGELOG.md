@@ -12,6 +12,21 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **A recording's words have their own tab.** A farbrengen or recording
+  with a transcript has a Text tab (`?tab=text`) where its words are
+  checked and fixed; the main tab only plays and follows them, and its
+  Edit button opens the Text tab. The editor is one view for everyone:
+  what a person may not do is simply not offered. Paragraphs checked all
+  exact, with no unclear words and no waiting fix, are hidden the next
+  time (a line says how many, with a link to show them). The words-fix
+  box floats at the foot of the screen, its input with it; the "All exact"
+  tools stay in place.
+- **Reviewers mark a paragraph all exact from its suggestion.** A
+  transcript fix its suggester found all exact says so, and its reviewer
+  approves it as all exact in one tap; a fix of only some words can be
+  approved and marked all exact together. The talk on the paragraph's
+  unclear words shows under it, with a link to the recording's talk page.
+
 - **A page number in a subject index names its sicha.** Hover a link that
   carries a title (the index's page numbers do: `ח"א ע' 119 (וארא)`) and
   the tooltip says which sicha it opens.

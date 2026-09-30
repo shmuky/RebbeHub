@@ -502,7 +502,7 @@ function Words({ texts, tracks, entity, lang, bare }: { texts: EventText[]; trac
  * (Transcripts), each a chip to choose. The transcript is read in its own
  * reader, the words lit as they are heard; it is found by the browser
  * after the page loads, so its chip appears then. A search hit in the
- * transcript (`?at=`) or a link to review it (`?review=1`) opens it.
+ * transcript (`?at=`) opens it; checking it is on the page's Text tab.
  */
 function TextSources({ texts, tracks, entity, lang }: { texts: EventText[]; tracks: Track[]; entity: Entity; lang: Lang }) {
   const [params] = useSearchParams();
@@ -559,10 +559,13 @@ function TextSources({ texts, tracks, entity, lang }: { texts: EventText[]; trac
 /* ------------------------------------------------------------ the page */
 
 export function EventPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang: Lang }) {
+  const [params] = useSearchParams();
   const d = entity.data as unknown as { title: LocalName; date?: string; kind?: string; place?: string; links?: EventLink[] };
   const recordings = view.lists.recordings ?? [];
   const sources = Object.fromEntries(recordings.map((r) => [r.id, view.files[r.id]?.url ?? null]));
   const tracks = tracksOf(entity, recordings, lang, sources, view.apiBase);
+  // The words heard in its recordings, read and checked on a tab of their own (older links say `?review=1`).
+  const textTab = tracks.length > 0 && (params.get('tab') === 'text' || params.get('review') === '1');
   const year = d.date ? Number(d.date.slice(0, 4)) : null;
   const monthToken = d.date ? d.date.split('-')[1] : undefined;
   const month = monthToken ? (monthByToken(monthToken) ?? monthByToken(monthToken.toUpperCase())) : undefined;
@@ -614,8 +617,12 @@ export function EventPage({ entity, view, lang }: { entity: Entity; view: ItemVi
         {parsha ? <Label color="var(--l-date)">{`${t(lang, 'parshas')} ${parsha}`}</Label> : null}
       </div>
     ),
-    tabs: [{ key: 'farbrengen', label: t(lang, 'farbrengen'), icon: 'audio', to: href(itemPath(entity), lang) }, ...commonTabs(entity, view, lang)],
-    tab: 'farbrengen',
+    tabs: [
+      { key: 'farbrengen', label: t(lang, 'farbrengen'), icon: 'audio', to: href(itemPath(entity), lang) },
+      ...(tracks.length ? [{ key: 'text', label: w(lang, 'text'), icon: 'file' as const, to: href(itemPath(entity), lang, { tab: 'text' }) }] : []),
+      ...commonTabs(entity, view, lang),
+    ],
+    tab: textTab ? 'text' : 'farbrengen',
   };
 
   const side = (
@@ -680,6 +687,13 @@ export function EventPage({ entity, view, lang }: { entity: Entity; view: ItemVi
       ) : null}
     </>
   );
+
+  if (textTab)
+    return (
+      <ItemShell head={head} lang={lang} side={side}>
+        <Transcripts tracks={tracks} lang={lang} view="text" />
+      </ItemShell>
+    );
 
   return (
     <ItemShell head={head} lang={lang} side={side}>

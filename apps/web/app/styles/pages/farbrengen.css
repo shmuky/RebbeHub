@@ -1110,9 +1110,9 @@ button.part.on:hover {
   gap: 8px;
 }
 
-/* The open paragraph's tools and the fixing box's Save float at the foot of the screen, above the player, however long the paragraph. */
-.tx-para.open .tx-tools,
-.tx-edit .actions {
+/* The box for fixing words floats at the foot of the screen, above the player, however long the paragraph (the paragraph's own tools stay under it); retyping a whole paragraph, its Save does. */
+.tx-edit.words,
+.tx-edit.all .actions {
   position: sticky;
   bottom: calc(var(--player-h, 0px) + 8px);
   z-index: 4;
@@ -1159,6 +1159,10 @@ button.part.on:hover {
 
 .tx-sent {
   margin: 8px 0 0;
+}
+
+.tx-done-note {
+  margin: 0 0 10px;
 }
 
 .tx-history {

@@ -1,6 +1,6 @@
 import { Maximize2, Minimize2, Pause, PenLine, Play, SkipBack, SkipForward, Undo2, LocateFixed, Loader2 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { unclearRanges } from '@rebbehub/model';
 import { t, type Lang } from '../lib/i18n.js';
 import { clockOf, tn } from '../lib/i18nNetwork.js';
@@ -30,9 +30,12 @@ import { TranscriptEditor } from './TranscriptEditor.js';
  *
  * Listening comes first: the words are shown as a music app shows lyrics,
  * large and calm, the word being said lit and kept in view as the
- * recording plays. The tools for checking the machine's words open only
- * on "Review machine text" (or `?review=1`, as /check links), so a
- * listener is not asked to judge every line.
+ * recording plays. The words to read and check have a tab of their own
+ * on the page (`?tab=text`, and `?review=1` as older links say): one
+ * view, the same for everyone, with the tools to fix and check for those
+ * signed in (Shmuly: one editor, not two modes; editing on its own tab).
+ * Edit on the player goes there, so a listener is not asked to judge
+ * every line.
  */
 
 /** Where the audio is, in milliseconds, updated many times a second while this recording plays, for word by word highlighting. */
@@ -107,17 +110,14 @@ function Spoken({ content, words, nowMs, lang, pending = [] }: { content: string
   return <>{out}</>;
 }
 
-export function Transcripts({ tracks, lang, onLoaded, only }: { tracks: Track[]; lang: Lang; onLoaded?: (transcripts: number) => void; only?: string }) {
+export function Transcripts({ tracks, lang, onLoaded, only, view = 'listen' }: { tracks: Track[]; lang: Lang; onLoaded?: (transcripts: number) => void; only?: string; view?: 'listen' | 'text' }) {
   // `tracks` is what plays, one part after the other; `only` narrows what is read here to one of them (a recording's own page).
   const heard = only ? tracks.filter((tr) => tr.id === only) : tracks;
   const player = usePlayer();
   const account = useAccount();
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const found = params.get('at');
-  const [reviewing, setReviewing] = useState(params.get('review') === '1');
-  useEffect(() => {
-    if (params.get('review') === '1') setReviewing(true);
-  }, [params]);
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [loaded, setLoaded] = useState(false);
   const section = useRef<HTMLElement>(null);
@@ -152,25 +152,13 @@ export function Transcripts({ tracks, lang, onLoaded, only }: { tracks: Track[];
     );
   }
 
-  // Checking is remembered in this browser until "Back to listening", so a reload opens the editor again.
-  const reviewKey = `rebbehub.review.on.${ids}`;
-  useEffect(() => {
-    try {
-      if (localStorage.getItem(reviewKey)) setReviewing(true);
-    } catch {
-      // No storage: the listening view, as always.
-    }
-  }, [reviewKey]);
-
-  function review(on: boolean) {
-    try {
-      if (on) localStorage.setItem(reviewKey, '1');
-      else localStorage.removeItem(reviewKey);
-    } catch {
-      // Not remembered.
-    }
-    setReviewing(on);
-    requestAnimationFrame(() => section.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  // Edit goes to the page's Text tab, where the words are read and checked.
+  function toText() {
+    const next = new URLSearchParams(params);
+    next.set('tab', 'text');
+    next.delete('review');
+    navigate({ search: `?${next}` });
+    requestAnimationFrame(() => window.scrollTo({ top: 0 }));
   }
 
   // Parts with no transcript yet: anyone signed in may ask the machine for one.
@@ -194,10 +182,10 @@ export function Transcripts({ tracks, lang, onLoaded, only }: { tracks: Track[];
   const unchecked = transcripts.some((tr) => tr.paragraphs.some((p) => !p.checked));
   const syncUnchecked = transcripts.some((tr) => tr.paragraphs.some((p) => p.syncChecked === false));
 
-  if (!reviewing)
+  if (view === 'listen')
     return (
       <section id="transcript" ref={section} className="transcripts">
-        <Lyrics transcripts={transcripts} tracks={tracks} lang={lang} nowMs={nowMs} found={found} machine={unchecked || syncUnchecked} signedIn={Boolean(account)} onEdit={() => review(true)} />
+        <Lyrics transcripts={transcripts} tracks={tracks} lang={lang} nowMs={nowMs} found={found} machine={unchecked || syncUnchecked} signedIn={Boolean(account)} onEdit={toText} />
         {unchecked || syncUnchecked ? <p className="lyrics-foot row-sub">{t(lang, 'lyricsMachineHint')}</p> : null}
         {ask}
       </section>
@@ -212,7 +200,6 @@ export function Transcripts({ tracks, lang, onLoaded, only }: { tracks: Track[];
         nowMs={nowMs}
         found={found}
         account={account}
-        onBack={() => review(false)}
         onFixed={fixed}
       />
       {ask}
