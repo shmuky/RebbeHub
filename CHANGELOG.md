@@ -12,6 +12,13 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Tanya as the book prints it.** Every page of Tanya, and the day's
+  Tanya on `/daily`, now opens "As printed": the title page centered in
+  its sizes, each approbation under its heading with the signature apart,
+  the compiler's foreword under its title, and each chapter one justified
+  block that opens with "פרק א" and its first word large, a new paragraph
+  only where the book starts one. Without nikud, as printed; a button puts
+  it back. Hebrew, English and side by side are still a tap away.
 - **A recording's words have their own tab.** A farbrengen or recording
   with a transcript has a Text tab (`?tab=text`) where its words are
   checked and fixed; the main tab only plays and follows them, and its
