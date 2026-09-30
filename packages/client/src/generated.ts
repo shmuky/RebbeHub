@@ -2479,6 +2479,16 @@ export interface Operations {
       }>;
     };
   };
+  /** The units just before and after a unit in its work's order, across volumes: a sicha's previous and next */
+  unitNeighbours: {
+    input: {
+      id: string;
+    };
+    output: {
+      previous: Item | null;
+      next: Item | null;
+    };
+  };
   /** The printings of a unit whose text the catalog has, to compare */
   unitPrintings: {
     input: {
@@ -2783,6 +2793,7 @@ export const OPERATIONS = {
   transcriptFixes: {"method":"GET","path":"/v1/transcripts/fixes","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
   transcriptHistory: {"method":"GET","path":"/v1/recordings/{id}/transcript/history","pathParams":["id"],"query":["limit"],"body":null,"answer":"json"},
   types: {"method":"GET","path":"/v1/types","pathParams":[],"query":[],"body":null,"answer":"json"},
+  unitNeighbours: {"method":"GET","path":"/v1/units/{id}/neighbours","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   unitPrintings: {"method":"GET","path":"/v1/units/{id}/printings","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   unsubscribe: {"method":"POST","path":"/v1/auth/email/unsubscribe","pathParams":[],"query":["token"],"body":"json","answer":"json"},
   upload: {"method":"POST","path":"/v1/uploads","pathParams":[],"query":["what","for","eventTitle","eventDate","kind","set","author","genre","unit","rights","as","title","publication","publisher","year","printing","families","simcha","date"],"body":"application/octet-stream","answer":"raw"},
@@ -3614,6 +3625,11 @@ export abstract class GeneratedMethods {
   /** Every kind of item and its JSON Schema (GET /v1/types) */
   types(): Promise<Operations['types']['output']> {
     return this.call('types', {} as Operations['types']['input']);
+  }
+
+  /** The units just before and after a unit in its work's order, across volumes: a sicha's previous and next (GET /v1/units/{id}/neighbours) */
+  unitNeighbours(input: Operations['unitNeighbours']['input']): Promise<Operations['unitNeighbours']['output']> {
+    return this.call('unitNeighbours', input ?? {} as Operations['unitNeighbours']['input']);
   }
 
   /** The printings of a unit whose text the catalog has, to compare (GET /v1/units/{id}/printings) */

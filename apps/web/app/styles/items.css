@@ -992,4 +992,61 @@ pre.shaar-text {
   display: block;
   margin: 2px 0 0;
   color: var(--muted);
+/*
+ * A sicha's back and forth, above its text and below it: the one before at
+ * the line's start (the right, in Hebrew), the one after at its end.
+ */
+.chapter-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.chapter-nav.top {
+  margin: 0 0 14px;
+}
+
+.chapter-nav.bottom {
+  margin: 18px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-muted);
+}
+
+.chapter-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 48%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.chapter-nav-link:hover {
+  background: var(--sunken);
+  border-color: var(--border-strong);
+}
+
+.chapter-nav-link.next {
+  text-align: end;
+}
+
+.chapter-nav-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.3;
+}
+
+.chapter-nav-name {
+  font-family: var(--torah);
+  font-size: var(--fs-md);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

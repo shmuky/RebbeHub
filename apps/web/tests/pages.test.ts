@@ -33,7 +33,7 @@ beforeAll(async () => {
   ids.scan = await add(catalog, 'mendy', 'keeper', 'scan', { publication: ids.pub, file: sha('a'), completeness: 'complete' });
   const picture = (c: string) => ({ sha256: sha(c), bytes: 5, width: 480, height: 672 });
   await recordCover(catalog.db, { entity: ids.work, src: sha('a'), page: 2, chosenBy: 'machine', score: 4, reasons: ['sparse'], image: picture('b'), thumb: picture('c') });
-  for (let i = 0; i < 3; i++) await add(catalog, 'mendy', 'keeper', 'unit', { work: ids.work, position: [{ level: 'sicha', value: String(i + 1) }], order: `a${i}`, label: { he: `שיחה ${i + 1}` } });
+  for (let i = 0; i < 3; i++) ids[`unit${i + 1}`] = await add(catalog, 'mendy', 'keeper', 'unit', { work: ids.work, position: [{ level: 'sicha', value: String(i + 1) }], order: `a${i}`, label: { he: `שיחה ${i + 1}` } });
 
   ids.event = await add(catalog, 'mendy', 'keeper', 'event', yudShvat(set), '/events/5742-05-10');
   await registerFile(catalog.db, { sha256: sha('d'), bytes: 900, mime: 'audio/mpeg', source: 'jem', licence: 'unknown', fileClass: 'recording', held: true });
@@ -63,6 +63,20 @@ describe("every item's own page", () => {
     const shelf = await get(new URL(moved.headers.get('location') ?? `/${ids.set}`, SITE).pathname);
     expect(shelf.status).toBe(200);
     expect(shelf.html).toContain(`https://files.rebbehub.test/objects/${sha('c')}`);
+  });
+
+  it("goes back and forth between a sefer's sichos, above the text and below it", async () => {
+    const around = (await get(`/${ids.unit2}`)).html;
+    // Hebrew first: "previous" at the line's start, the right, its chevron pointing there.
+    expect(around.match(/class="chapter-nav (top|bottom)"/g)).toEqual(['class="chapter-nav top"', 'class="chapter-nav bottom"']);
+    expect(around).toMatch(new RegExp(`rel="prev" href="/${ids.unit1}".*?הקודם.*?שיחה 1`));
+    expect(around).toMatch(new RegExp(`rel="next" href="/${ids.unit3}".*?הבא.*?שיחה 3`));
+    const english = (await get(`/${ids.unit2}?lang=en`)).html;
+    expect(english).toMatch(/rel="prev"[^>]*>.*?Previous/);
+    expect(english).toMatch(/rel="next"[^>]*>.*?Next/);
+    // The first has no previous, the last no next.
+    expect((await get(`/${ids.unit1}`)).html).not.toContain('rel="prev"');
+    expect((await get(`/${ids.unit3}`)).html).not.toContain('rel="next"');
   });
 
   it('counts all that belongs to an item, and lists it a page at a time', async () => {

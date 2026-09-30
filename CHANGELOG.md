@@ -25,6 +25,30 @@ any time. `@rebbehub/client` carries the API's version.
   `POST /v1/suggestions/shaar`; MCP: `get_shaar`, `suggest_shaar`; the
   git mirror writes `shaars/<shard>/<id>.md`; `rebbehub shaars` gives
   every sefer without one the catalog's. Built-in schemas version 11.
+- **Back and forth between a sefer's sichos.** A sicha's page has
+  Previous and Next (הקודם / הבא) above its text and below it, to the
+  sicha before and after it in the sefer's contents, across volumes (the
+  last of one volume leads to the first of the next, named with its
+  volume). In Hebrew "previous" is on the right. The page asks for both
+  in one request, the new `GET /v1/units/{id}/neighbours` (in
+  `@rebbehub/client` as `unitNeighbours`).
+
+### Changed
+
+- **The library by Rebbe.** The library page's shelves are now a shelf
+  for each Rebbe, from the Baal Shem Tov to the Rebbe, then history,
+  halacha, journals and the rest, in the order the catalog keeps them,
+  each with the sets inside it. "Every sefer" lists each sefer under its
+  shelf instead of by kind, and the sources the sefarim came from
+  (HebrewBooks, Otzros, Sefaria) are no longer shown as shelves.
+
+### Removed
+
+- **No timing button in the player.** The **תזמון** button, which let a
+  listener tap where a paragraph starts, is gone: the model's sync is
+  already good, and hand taps only moved it off. Words nobody is sure of
+  can still be talked over, and "the sync of the whole recording is
+  right" still marks it checked.
 
 ### Fixed
 
