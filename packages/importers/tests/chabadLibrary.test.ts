@@ -51,6 +51,47 @@ describe('chabadlibrary.org', () => {
     });
   });
 
+  it('numbers volumes as they are printed, so the library\'s first Likkutei Sichos volume is 30', async () => {
+    const tree: LibraryTree = {
+      nodes: {
+        1300000000: { heading: 'לקוטי שיחות', parent: 0, kind: 'section', children: [1, 2] },
+        1: { heading: 'כרך ל', parent: 1300000000, kind: 'section', children: [11] },
+        2: { heading: 'כרך לא', parent: 1300000000, kind: 'section', children: [21] },
+        11: { heading: '1', parent: 1, kind: 'page' },
+        21: { heading: '1', parent: 2, kind: 'page' },
+        500: { heading: 'המשך', parent: 0, kind: 'section', children: [501, 502] },
+        501: { heading: 'חלק ראשון', parent: 500, kind: 'section', children: [511] },
+        502: { heading: 'חלק שלישי', parent: 500, kind: 'section', children: [521] },
+        511: { heading: 'א', parent: 501, kind: 'page' },
+        521: { heading: 'א', parent: 502, kind: 'page' },
+        600: { heading: 'אגרות', parent: 0, kind: 'section', children: [601, 602] },
+        601: { heading: 'כרך א', parent: 600, kind: 'section', children: [611] },
+        602: { heading: 'מפתחות', parent: 600, kind: 'section', children: [621] },
+        611: { heading: 'א', parent: 601, kind: 'page' },
+        621: { heading: 'א', parent: 602, kind: 'page' },
+      },
+    };
+    const source = (sourceId: string) => [{ source: 'chabadlibrary', sourceId, licence: 'unknown', kind: 'text' }];
+    const index = {
+      works: [
+        { id: 'likkutei-sichos', levels: ['volume', 'sicha'], sources: source('1300000000') },
+        { id: 'hemshech', levels: ['chelek'], sources: source('500') },
+        { id: 'igros', levels: ['volume'], sources: source('600') },
+      ],
+    };
+    const records = [];
+    for await (const r of chabadLibraryImporter({ index, withContents: new Set(), tree }).records()) records.push(r);
+    expect(records.map((r) => r.path)).toEqual([
+      '/likkutei-sichos/30/1',
+      '/likkutei-sichos/31/1',
+      '/hemshech/1/1', // ראשון is a word, not the letters of 557
+      '/hemshech/3/1',
+      '/igros/1/1', // not every part is a numbered volume: they keep their places
+      '/igros/2/1',
+    ]);
+    expect(records[0]!.data).toMatchObject({ position: [{ level: 'volume', value: '30', label: { he: 'כרך ל' } }, { level: 'sicha', value: '1' }] });
+  });
+
   it('keeps each page\'s text with a crawl that asks for it, and puts it on the page with credit', async () => {
     const tree: LibraryTree = { nodes: {} };
     await crawlChabadLibrary([300000000], tree, { fetch: fakeFetch([]), pauseMs: 0 });
