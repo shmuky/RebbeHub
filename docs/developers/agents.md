@@ -45,6 +45,7 @@ stream. It has one address, `https://api.rebbehub.org/mcp`:
 | `approve_suggestion` | approve a suggestion sent for review, when you may: its sets' keepers, or a steward ; `clashes` (`keep_live` or `take_suggestion`) settles every clash with a later change at once (`write`) |
 | `close_suggestion` | close (withdraw) a suggestion without merging it: your own, or any as a steward (`write`) |
 | `reopen_suggestion` | open a closed suggestion for review again; its checks run again (`write`) |
+| `combine_suggestions` | make several of your own suggestions not yet approved into one, like commits in one pull request; the ones combined are closed (`write`) |
 | `send_back_suggestion` | send a suggestion back to its author with a note on what should change (`write`) |
 | `list_issues` | issues people opened, open ones first, or about one item |
 | `open_issue` | report a problem for people to look into, under your name (`write`) |
