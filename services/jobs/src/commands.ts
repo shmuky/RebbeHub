@@ -45,7 +45,7 @@ import { clearMirror, directorySink, exportCommits, exportSnapshot, generateKeyP
 import { BUILTIN_SCHEMAS, SchemaRegistry } from '@rebbehub/model';
 import { commitAll, git } from './git.js';
 import { pullMirror } from './mirrorPull.js';
-import { relinkDriveLinks } from './relinkDrive.js';
+import { relinkDriveLinks, relinkJemLinks } from './relinkDrive.js';
 import { collectPageFixes, loadPageFixes, makePageFixes, OTZROS_COLLECTION, otzrosPdfs, pageFixesKey, pageFixesUrl, registerPageFixes } from './pageFixes.js';
 import { archivePdfs, collectManifest, loadManifest, makeReadingCopies, MANIFEST_KEY, MANIFEST_URL, R2Store, registerReadingCopies, type ObjectStore, sichosKodeshScans } from './readingCopies.js';
 
@@ -254,8 +254,17 @@ export async function convertBodiesCommand(ctx: Context, input: { chunk?: number
 
 /** Media proxy links become Drive links, as reviewed bot Suggestions of `chunk` items (docs/operations.md); `dryRun` only counts them. */
 export async function relinkDriveCommand(ctx: Context, input: { chunk?: number; dryRun?: boolean } = {}): Promise<void> {
+  await relinkCommand(ctx, relinkDriveLinks, input);
+}
+
+/** JEM recordings on the media proxy become Ashreinu's own files, as reviewed bot Suggestions of `chunk` items; `dryRun` only counts them. */
+export async function relinkJemCommand(ctx: Context, input: { chunk?: number; dryRun?: boolean } = {}): Promise<void> {
+  await relinkCommand(ctx, relinkJemLinks, input);
+}
+
+async function relinkCommand(ctx: Context, relink: typeof relinkDriveLinks, input: { chunk?: number; dryRun?: boolean }): Promise<void> {
   await withCatalog(ctx, async (catalog) => {
-    const result = await relinkDriveLinks(catalog, { batch: input.chunk, dryRun: input.dryRun, log: ctx.log });
+    const result = await relink(catalog, { batch: input.chunk, dryRun: input.dryRun, log: ctx.log });
     const types = Object.entries(result.byType).map(([type, n]) => `${n} ${type}`).join(', ');
     if (!result.items) ctx.log('no links on the media proxy left to relink');
     else if (input.dryRun) ctx.log(`would relink ${result.links} links in ${result.items} items (${types}), in ${Math.ceil(result.items / (input.chunk ?? 500))} suggestions`);

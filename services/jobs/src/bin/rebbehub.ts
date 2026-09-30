@@ -27,6 +27,7 @@ import {
   readingCopiesRegisterCommand,
   rebuildableCommand,
   relinkDriveCommand,
+  relinkJemCommand,
   schemaCheckCommand,
   type Context,
 } from '../commands.js';
@@ -46,6 +47,9 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 links on Sichos-Kodesh's media proxy as the files' own
                                                 Google Drive links: one reviewed bot suggestion per <n>
                                                 items (500); --dry-run only counts them
+  rebbehub relink-jem [--chunk <n>] [--dry-run]
+                                                JEM recordings on the media proxy as the files on
+                                                Ashreinu's own CDN, the same way
   rebbehub account --id <id> --name <name> [--steward] [--bot]
   rebbehub import <importer> --from <Sichos-Kodesh checkout> [--approve-as <steward>] [--dry-run] [--chunk <n>]
                                                 sichos-kodesh-works, sichos-kodesh-occasions, otzros, hebrewbooks;
@@ -220,6 +224,9 @@ try {
       break;
     case 'relink-drive':
       await relinkDriveCommand(ctx, { chunk: number(values.chunk), dryRun: values['dry-run'] });
+      break;
+    case 'relink-jem':
+      await relinkJemCommand(ctx, { chunk: number(values.chunk), dryRun: values['dry-run'] });
       break;
     case 'account':
       await accountCommand(ctx, { id: need(values.id, 'id'), name: need(values.name, 'name'), steward: values.steward, bot: values.bot });

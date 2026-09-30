@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
 import { isValidDateKey, toHebrewNumeral } from '@rebbehub/hebrew';
-import type { EventKind, LocalName } from '@rebbehub/model';
+import { relinkedJemAudio, type EventKind, type LocalName } from '@rebbehub/model';
 import { ref, type ImportRecord, type Importer } from './importer.js';
-import { audioUrl, FARBRENGENS_SET, occasionDate, SICHOS_KODESH_MEDIA_PROXY, type CatalogEntry } from './sichosKodeshOccasions.js';
+import { audioUrl, FARBRENGENS_SET, occasionDate, type CatalogEntry } from './sichosKodeshOccasions.js';
 
 /**
  * JEM's own catalog of the Rebbe's recordings (the "ccdb" behind
@@ -17,8 +17,8 @@ import { audioUrl, FARBRENGENS_SET, occasionDate, SICHOS_KODESH_MEDIA_PROXY, typ
  * still lacks; one that shares a recording with it is the same farbrengen
  * for certain, and otherwise a JEM farbrengen is the one on its date when
  * each has one. Every other JEM event gets a page of its own. Each
- * recording keeps its link to JEM's own player, and is heard through
- * Sichos-Kodesh's media proxy as its app hears them. The crawl is made at
+ * recording keeps its link to JEM's own player, and is heard from JEM's
+ * own CDN, the file ashreinu.app plays. The crawl is made at
  * import time (.github/workflows/import.yml); RebbeHub keeps no copy.
  */
 
@@ -201,8 +201,7 @@ export function matchFarbrengens(input: JemInput): Map<number, number> {
   return matched;
 }
 
-export function jemImporter(input: JemInput | (() => Promise<JemInput>), options: { proxy?: string } = {}): Importer {
-  const proxy = options.proxy ?? SICHOS_KODESH_MEDIA_PROXY;
+export function jemImporter(input: JemInput | (() => Promise<JemInput>)): Importer {
   return {
     id: 'jem',
     bot: { id: 'bot:jem', displayName: 'JEM recordings importer' },
@@ -254,7 +253,7 @@ export function jemImporter(input: JemInput | (() => Promise<JemInput>), options
             data: {
               event: ref(eventKey),
               title: partName(recording.name || node?.name || ''),
-              url: audioUrl(file, proxy),
+              url: audioUrl(file),
               ...(recording.durationMs > 0 ? { durationMs: recording.durationMs } : {}),
               part: first + i + 1,
               ...(spoken ? { language: 'yi' } : {}),
@@ -266,4 +265,29 @@ export function jemImporter(input: JemInput | (() => Promise<JemInput>), options
       }
     },
   };
+}
+
+type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+
+/**
+ * An item's data with every media proxy address of a JEM recording
+ * (`…workers.dev/jem-audio/<file>`) replaced by the file on Ashreinu's
+ * CDN; everything else as it was. Null when nothing in it points at the
+ * proxy's JEM audio. `rebbehub relink-jem` (services/jobs) sends these.
+ */
+export function relinkJem(data: Json): { data: Json; links: number } | null {
+  let links = 0;
+  const convert = (value: Json): Json => {
+    if (typeof value === 'string') {
+      const url = relinkedJemAudio(value);
+      if (!url) return value;
+      links++;
+      return url;
+    }
+    if (Array.isArray(value)) return value.map(convert);
+    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, convert(v)]));
+    return value;
+  };
+  const out = convert(data);
+  return links ? { data: out, links } : null;
 }

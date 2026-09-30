@@ -237,8 +237,14 @@ is dropped. Each Suggestion is the relink bot's (`bot:relink-drive`,
 labelled a bot) and is approved like any import: by a steward or the
 keepers of the affected Sets. Running it again sends only what is still on
 the proxy and not already waiting in one of its Suggestions; once all are
-approved it finds nothing. JEM's recordings (`/jem-audio/<file>`) are not
-on Drive and stay on the proxy.
+approved it finds nothing.
+
+JEM's recordings were stored the same way
+(`https://sichos-kodesh-media-proxy.shmuky.workers.dev/jem-audio/<file>`),
+and `rebbehub relink-jem` (or the workflow's `relink-jem-dry-run` and
+`relink-jem`) points each at the same file on JEM's own CDN, the one
+ashreinu.app plays (`https://dtgj2yu3gmlic.cloudfront.net/<file>`), as
+the relink bot `bot:relink-jem`, a Suggestion per 500 items for review.
 
 On the catalog as the Sichos-Kodesh checkout builds it, that is about
 3,300 farbrengens (some 14,000 hanacha links, more with the mafteiach

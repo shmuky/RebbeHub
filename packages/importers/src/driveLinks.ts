@@ -11,7 +11,7 @@
  * their place, with `relinkDrive` below.
  */
 
-/** Sichos-Kodesh's media proxy: JEM's recordings are still played through it (`/jem-audio/<file>`); Drive files no longer are. */
+/** Sichos-Kodesh's media proxy, where older imports pointed Drive files and JEM's recordings (`/jem-audio/<file>`); neither is read through it now. */
 export const SICHOS_KODESH_MEDIA_PROXY = 'https://sichos-kodesh-media-proxy.shmuky.workers.dev';
 
 const PROXY_HOST = new URL(SICHOS_KODESH_MEDIA_PROXY).hostname;

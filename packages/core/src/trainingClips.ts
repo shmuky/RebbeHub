@@ -1,4 +1,4 @@
-import { hasUnclear, type EntityId } from '@rebbehub/model';
+import { hasUnclear, jemAudioFile, type EntityId } from '@rebbehub/model';
 import type { Catalog } from './catalog.js';
 
 /**
@@ -127,8 +127,8 @@ async function checkedParagraphs(catalog: Catalog, since?: string): Promise<Row[
 
 /** The recording's audio as the training script fetches it. */
 function audioOf(row: Pick<Row, 'url' | 'file'>, filesBaseUrl: string): string | null {
-  const jem = row.url ? /\/jem-audio\/([^/?#]+)$/.exec(row.url) : null;
-  if (jem) return decodeURIComponent(jem[1]!);
+  const jem = jemAudioFile(row.url);
+  if (jem) return jem;
   if (row.file) return `${filesBaseUrl.replace(/\/$/, '')}/objects/${row.file}`;
   return row.url;
 }
@@ -284,8 +284,8 @@ async function farbrengenProgress(catalog: Catalog): Promise<Array<GoalFarbrenge
   );
   const byEvent = new Map<EntityId, GoalFarbrengen & { heldOut: boolean }>();
   for (const r of rows) {
-    const jem = r.url ? /\/jem-audio\/([^/?#]+)$/.exec(r.url) : null;
-    const heldOut = Boolean(jem && HELD_OUT_AUDIO.includes(decodeURIComponent(jem[1]!)));
+    const jem = jemAudioFile(r.url);
+    const heldOut = Boolean(jem && HELD_OUT_AUDIO.includes(jem));
     const year = Number(r.date?.slice(0, 4));
     const e = byEvent.get(r.event) ?? { event: r.event, path: r.path, title: r.title, date: r.date, paragraphs: 0, checked: 0, mostWanted: year > 0 && year < TRAINING_GOAL.mostWantedBefore, heldOut: false };
     e.paragraphs += Number(r.paragraphs);
