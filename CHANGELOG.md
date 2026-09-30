@@ -10,14 +10,14 @@ any time. `@rebbehub/client` carries the API's version.
 
 ## Unreleased
 
-### Fixed
+### Changed
 
-- **Word by word again after a fix.** Fixing a paragraph's words used to
-  throw away all its word timings until the audio was timed again, which
-  for JEM's recordings never came, so the lyrics lit such a paragraph as
-  a guess. A fix now keeps the timing of every word it left and times the
-  changed words between them. `rebbehub restore-word-times` gives the
-  timings back to paragraphs fixed before.
+- **The library by Rebbe.** The library page's shelves are now a shelf
+  for each Rebbe, from the Baal Shem Tov to the Rebbe, then history,
+  halacha, journals and the rest, in the order the catalog keeps them,
+  each with the sets inside it. "Every sefer" lists each sefer under its
+  shelf instead of by kind, and the sources the sefarim came from
+  (HebrewBooks, Otzros, Sefaria) are no longer shown as shelves.
 
 ### Removed
 
@@ -28,6 +28,13 @@ any time. `@rebbehub/client` carries the API's version.
   right" still marks it checked.
 
 ### Fixed
+
+- **Word by word again after a fix.** Fixing a paragraph's words used to
+  throw away all its word timings until the audio was timed again, which
+  for JEM's recordings never came, so the lyrics lit such a paragraph as
+  a guess. A fix now keeps the timing of every word it left and times the
+  changed words between them. `rebbehub restore-word-times` gives the
+  timings back to paragraphs fixed before.
 
 - **Each volume's printings are on one page.** A sefer's volume page
   showed only the printings named exactly as its contents name the

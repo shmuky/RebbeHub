@@ -8,6 +8,7 @@ import { langFrom, nameOf, t, type Lang } from '../lib/i18n.js';
 import { num } from '../lib/i18nUi.js';
 import { href, itemPath, setPath } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
+import { everyWork, shelvesOf, type Shelf } from '../lib/shelves.js';
 import { Icon } from '../ui/Icon.js';
 import { Avatar, EmptyState } from '../ui/primitives.js';
 import { Shaar } from '../ui/Shaar.js';
@@ -16,11 +17,12 @@ import { SEARCH_KEYS } from './search.js';
 import '../styles/pages/browse.css';
 
 /**
- * The library: every shelf (a set) with what it holds, the sefarim people
- * look for first as their title pages, every sefer by its kind, and the
- * Rebbeim in their order with how many of their sefarim are here.
- * Everything is browsed by what it is, not by how the catalog stores it;
- * a search from here is the site's search.
+ * The library: a shelf for each Rebbe and the other shelves, in the order
+ * the catalog keeps them, each with the sets inside it; the sefarim people
+ * look for first as their title pages; every sefer in its shelf's order;
+ * and the Rebbeim with how many of their sefarim are here. The sources the
+ * sefarim came from are not shelves (lib/shelves.ts); a search from here is
+ * the site's search.
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { api, siteUrl } = siteOf(context);
@@ -39,7 +41,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     covers,
     lang,
     siteUrl,
-    sets: sets.items.filter((s) => !(s.data as { parent?: string }).parent),
+    // Only what the shelves need of each set: the page lists every one.
+    sets: sets.items.map((s) => {
+      const d = s.data as { name?: LocalName; parent?: string; order?: string };
+      return { ...s, data: { name: d.name, parent: d.parent, order: d.order } };
+    }),
     works: works.items,
     rebbeim: authors.items.filter((a) => (a.data as { kind?: string }).kind === 'rebbe').sort((a, b) => rebbeOrder(a) - rebbeOrder(b)),
     authors: authors.items,
@@ -68,7 +74,6 @@ const GENRES: Record<string, { he: string; en: string }> = {
   diaries: { he: 'יומנים', en: 'Diaries' },
   recordings: { he: 'הקלטות', en: 'Recordings' },
 };
-const GENRE_ORDER = Object.keys(GENRES);
 
 const W = {
   lede: { he: 'ספרי רבותינו נשיאינו, השיחות, האגרות וההתוועדויות — כל מדף עם מה שיש בו.', en: 'The sefarim of the Rebbeim, the sichos, the letters and the farbrengens — each shelf with what it holds.' },
@@ -100,23 +105,15 @@ export default function Library({ loaderData }: Route.ComponentProps) {
   const rebbeim = loaderData.rebbeim as unknown as Entity[];
   const authors = new Map((loaderData.authors as unknown as Entity[]).map((a) => [a.id, a]));
   const covers = loaderData.covers as Record<string, Cover>;
-  const worksOf = (set: Entity) => works.filter((wk) => ((wk.data as { sets?: string[] }).sets ?? []).includes(set.id));
   const authorsOf = (wk: Entity) => ((wk.data as { authors?: string[] }).authors ?? []).map((id) => authors.get(id)).filter((a): a is Entity => Boolean(a));
   const known = WELL_KNOWN.flatMap((slug) => works.filter((wk) => slugOf(wk) === slug).slice(0, 1));
   const events = counts.event ?? 0;
   const isFarbrengens = (set: Entity) => set.path === '/sets/farbrengens';
-  // Shelves with most first; the farbrengens, which are not sefarim, lead.
-  const shelves = sets
-    .map((set) => ({ set, works: worksOf(set) }))
-    .filter(({ set, works: list }) => list.length || isFarbrengens(set))
-    .sort((a, b) => Number(isFarbrengens(b.set)) - Number(isFarbrengens(a.set)) || b.works.length - a.works.length);
-  // Every sefer, grouped by its kind, in the order the library keeps them.
-  const byGenre = new Map<string, Entity[]>();
-  for (const wk of works) {
-    const g = (wk.data as { genre?: string }).genre ?? '';
-    byGenre.set(GENRES[g] ? g : '', [...(byGenre.get(GENRES[g] ? g : '') ?? []), wk]);
-  }
-  const genres = [...byGenre.keys()].sort((a, b) => (a ? GENRE_ORDER.indexOf(a) : 99) - (b ? GENRE_ORDER.indexOf(b) : 99));
+  // A shelf for each Rebbe, then the others, as the catalog orders them.
+  const shelves = shelvesOf(sets, works, (x) => titleOf(x, lang), isFarbrengens);
+  // Every sefer under its shelf; those on no shelf last.
+  const shelved = new Set(shelves.flatMap((sh) => everyWork(sh).map((wk) => wk.id)));
+  const unshelved = works.filter((wk) => !shelved.has(wk.id)).sort((a, b) => titleOf(a, lang).localeCompare(titleOf(b, lang), lang === 'he' ? 'he' : 'en'));
   const countOf = (rebbe: Entity) => works.filter((wk) => ((wk.data as { authors?: string[] }).authors ?? []).includes(rebbe.id)).length;
 
   return (
@@ -185,11 +182,12 @@ export default function Library({ loaderData }: Route.ComponentProps) {
             </h2>
             {shelves.length ? (
               <nav className="box" aria-labelledby="shelves">
-                {shelves.map(({ set, works: list }) => {
+                {shelves.map((shelf) => {
+                  const { set } = shelf;
                   const farbrengens = isFarbrengens(set);
-                  const sample = list
-                    .slice(0, 3)
-                    .map((wk) => titleOf(wk, lang))
+                  const sample = (shelf.sets.length ? shelf.sets.map((sh) => sh.set) : everyWork(shelf))
+                    .slice(0, 4)
+                    .map((x) => titleOf(x, lang))
                     .join(' · ');
                   return (
                     <Link key={set.id} className="row shelf-row" to={href(setPath(set), lang)}>
@@ -198,7 +196,7 @@ export default function Library({ loaderData }: Route.ComponentProps) {
                         <span className="row-title torah">{nameOf((set.data as { name?: LocalName }).name, lang)}</span>
                         {sample || (set.data as { description?: LocalName }).description ? <span className="row-sub">{sample || nameOf((set.data as { description?: LocalName }).description, lang)}</span> : null}
                       </span>
-                      <span className="num">{farbrengens ? `${num(events, lang)} ${t(lang, 'farbrengensCount')}` : `${num(list.length, lang)} ${t(lang, 'seforim')}`}</span>
+                      <span className="num">{farbrengens && !shelf.total ? `${num(events, lang)} ${t(lang, 'farbrengensCount')}` : `${num(shelf.total, lang)} ${t(lang, 'seforim')}`}</span>
                     </Link>
                   );
                 })}
@@ -245,32 +243,22 @@ export default function Library({ loaderData }: Route.ComponentProps) {
                 {w(lang, 'allSeforim')} <span className="count">{num(works.length, lang)}</span>
               </h2>
               <div className="box">
-                {genres.map((g) => (
-                  <div key={g || 'other'} role="group" aria-label={g ? GENRES[g]![lang] : w(lang, 'other')}>
+                {shelves
+                  .filter((sh) => sh.total)
+                  .map((sh) => (
+                    <ShelfGroup key={sh.set.id} shelf={sh} depth={0} lang={lang} units={units} authorsOf={authorsOf} />
+                  ))}
+                {unshelved.length ? (
+                  <div role="group" aria-label={w(lang, 'other')}>
                     <div className="row group">
-                      <span>{g ? GENRES[g]![lang] : w(lang, 'other')}</span>
-                      <span className="num">{num(byGenre.get(g)!.length, lang)}</span>
+                      <span>{w(lang, 'other')}</span>
+                      <span className="num">{num(unshelved.length, lang)}</span>
                     </div>
-                    {byGenre
-                      .get(g)!
-                      .sort((a, b) => titleOf(a, lang).localeCompare(titleOf(b, lang), lang === 'he' ? 'he' : 'en'))
-                      .map((wk) => {
-                        const by = authorsOf(wk)
-                          .map((a) => nameOf((a.data as { name?: LocalName }).name, lang))
-                          .join(', ');
-                        return (
-                          <Link key={wk.id} className="row sefer-row" to={href(itemPath(wk), lang)}>
-                            <Icon name="book" />
-                            <span className="row-main one-line">
-                              <span className="row-title torah">{titleOf(wk, lang)}</span>
-                              {by ? <span className="by">{by}</span> : null}
-                            </span>
-                            {units[wk.id] ? <span className="num">{`${num(units[wk.id]!, lang)} ${t(lang, 'unitsShort')}`}</span> : null}
-                          </Link>
-                        );
-                      })}
+                    {unshelved.map((wk) => (
+                      <SeferRow key={wk.id} work={wk} lang={lang} units={units} authorsOf={authorsOf} />
+                    ))}
                   </div>
-                ))}
+                ) : null}
               </div>
             </section>
           ) : null}
@@ -332,6 +320,44 @@ export default function Library({ loaderData }: Route.ComponentProps) {
           </section>
         </aside>
       </div>
+    </div>
+  );
+}
+
+type Units = Record<string, number>;
+
+/** A sefer's row in the list of every sefer: its name, who wrote it, how many sichos or chapters. */
+function SeferRow({ work, lang, units, authorsOf }: { work: Entity; lang: Lang; units: Units; authorsOf: (wk: Entity) => Entity[] }) {
+  const by = authorsOf(work)
+    .map((a) => nameOf((a.data as { name?: LocalName }).name, lang))
+    .join(', ');
+  return (
+    <Link className="row sefer-row" to={href(itemPath(work), lang)}>
+      <Icon name="book" />
+      <span className="row-main one-line">
+        <span className="row-title torah">{titleOf(work, lang)}</span>
+        {by ? <span className="by">{by}</span> : null}
+      </span>
+      {units[work.id] ? <span className="num">{`${num(units[work.id]!, lang)} ${t(lang, 'unitsShort')}`}</span> : null}
+    </Link>
+  );
+}
+
+/** A shelf in the list of every sefer: its own sefarim, then each set inside it under its name. */
+function ShelfGroup({ shelf, depth, lang, units, authorsOf }: { shelf: Shelf<Entity>; depth: number; lang: Lang; units: Units; authorsOf: (wk: Entity) => Entity[] }) {
+  const name = nameOf((shelf.set.data as { name?: LocalName }).name, lang);
+  return (
+    <div role="group" aria-label={name}>
+      <div className={depth ? 'row group sub' : 'row group'}>
+        <Link to={href(setPath(shelf.set), lang)}>{name}</Link>
+        <span className="num">{num(shelf.total, lang)}</span>
+      </div>
+      {shelf.works.map((wk) => (
+        <SeferRow key={wk.id} work={wk} lang={lang} units={units} authorsOf={authorsOf} />
+      ))}
+      {shelf.sets.map((sh) => (
+        <ShelfGroup key={sh.set.id} shelf={sh} depth={depth + 1} lang={lang} units={units} authorsOf={authorsOf} />
+      ))}
     </div>
   );
 }
