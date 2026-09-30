@@ -78,8 +78,115 @@ function mergeValue(base: Json | undefined, ours: Json | undefined, theirs: Json
   if (isKeyedList(ours) && isKeyedList(theirs) && (base === undefined || isKeyedList(base) || (Array.isArray(base) && base.length === 0))) {
     return mergeKeyedList((base as Array<{ id: string } & { [key: string]: Json }> | undefined) ?? [], ours, theirs, path, conflicts);
   }
+  // Words: where the site and the suggestion changed different words of a running text (a paragraph's
+  // content, a line's text), both changes are kept. Names and titles are not merged word by word.
+  if (typeof base === 'string' && typeof ours === 'string' && typeof theirs === 'string' && TEXT_FIELD.test(path)) {
+    const text = mergeText(base, ours, theirs);
+    if (text !== null) return text;
+  }
   conflicts.push({ path, base, ours, theirs });
   return ours;
+}
+
+/** The fields holding running text, merged word by word. */
+const TEXT_FIELD = /\/(content|text)$/;
+
+/** Words and the runs between them (spaces, marks), keeping every character, so a changed word never swallows its neighbour. */
+const textPieces = (text: string): string[] => text.match(/[\p{L}\p{M}\p{N}״׳'"־-]+|[^\p{L}\p{M}\p{N}״׳'"־-]+/gu) ?? [];
+
+/** Past this many pieces a side, texts are not merged word by word; the reviewer decides. */
+const TEXT_MERGE_LIMIT = 6000;
+/** And past this many comparisons between the parts that differ. */
+const TEXT_MERGE_CELLS = 4_000_000;
+
+interface Hunk {
+  from: number;
+  to: number;
+  pieces: string[];
+}
+
+/** What changed from `a` to `b`, as stretches of `a` replaced: the pieces both keep are found by their longest common run. */
+function hunks(a: string[], b: string[]): Hunk[] | null {
+  // Common start and end first: most fixes change a few words of a long paragraph.
+  let start = 0;
+  while (start < a.length && start < b.length && a[start] === b[start]) start++;
+  let endA = a.length;
+  let endB = b.length;
+  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
+    endA--;
+    endB--;
+  }
+  const n = endA - start;
+  const m = endB - start;
+  // Two long rewrites of one text are not compared piece by piece: a person decides.
+  if (n * m > TEXT_MERGE_CELLS) return null;
+  // Longest common subsequence of the middles, as a table of suffix lengths.
+  const table = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--) table[i]![j] = a[start + i] === b[start + j] ? table[i + 1]![j + 1]! + 1 : Math.max(table[i + 1]![j]!, table[i]![j + 1]!);
+  const out: Hunk[] = [];
+  let i = 0;
+  let j = 0;
+  let open: Hunk | null = null;
+  const close = () => {
+    if (open) out.push(open);
+    open = null;
+  };
+  while (i < n || j < m) {
+    if (i < n && j < m && a[start + i] === b[start + j]) {
+      close();
+      i++;
+      j++;
+    } else if (j < m && (i === n || table[i]![j + 1]! >= table[i + 1]![j]!)) {
+      open ??= { from: start + i, to: start + i, pieces: [] };
+      open.pieces.push(b[start + j]!);
+      j++;
+    } else {
+      open ??= { from: start + i, to: start + i, pieces: [] };
+      open.to = start + i + 1;
+      i++;
+    }
+  }
+  close();
+  return out;
+}
+
+/**
+ * Merges two edits of one text word by word: each side's changes are kept
+ * where they touch different words. Null when both changed the same words
+ * differently, or added different words at the same place: then a person
+ * decides.
+ */
+export function mergeText(base: string, ours: string, theirs: string): string | null {
+  const b = textPieces(base);
+  const o = textPieces(ours);
+  const t = textPieces(theirs);
+  if (Math.max(b.length, o.length, t.length) > TEXT_MERGE_LIMIT) return null;
+  const mine = hunks(b, o);
+  const other = hunks(b, t);
+  if (!mine || !other) return null;
+  const all = [...mine.map((h) => ({ ...h, side: 0 })), ...other.map((h) => ({ ...h, side: 1 }))].sort((x, y) => x.from - y.from || x.to - y.to);
+  const kept: Hunk[] = [];
+  for (const h of all) {
+    const last = kept[kept.length - 1];
+    // Changes that touch (one word and the mark after it, or two insertions at one place) are one change made two ways.
+    const overlaps = last && h.from <= last.to;
+    if (!overlaps) {
+      kept.push(h);
+      continue;
+    }
+    // The same change on both sides is taken once; any other overlap is for a person.
+    if (last.from === h.from && last.to === h.to && last.pieces.join('') === h.pieces.join('')) continue;
+    return null;
+  }
+  const out: string[] = [];
+  let at = 0;
+  for (const h of kept) {
+    out.push(...b.slice(at, h.from), ...h.pieces);
+    at = h.to;
+  }
+  out.push(...b.slice(at));
+  return out.join('');
 }
 
 function mergeObject(base: { [key: string]: Json }, ours: { [key: string]: Json }, theirs: { [key: string]: Json }, path: string, conflicts: Conflict[]): Json {

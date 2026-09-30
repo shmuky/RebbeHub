@@ -11,7 +11,12 @@ interface RecordingData {
   durationMs?: number;
   part?: number;
   videos?: Array<{ provider: string; url: string; startMs?: number }>;
+  sources?: Array<{ source: string; url?: string }>;
 }
+
+/** The recording in the Ashreinu app, where JEM's own player plays it. */
+const ASHREINU_LABEL = { he: 'JEM (אשרינו)', en: 'JEM (Ashreinu)' };
+const ashreinuOf = (data: RecordingData) => data.sources?.find((s) => s.source === 'jem' && s.url?.startsWith('https://ashreinu.app/'))?.url ?? null;
 
 const clock = (ms: number) => {
   const s = Math.floor(ms / 1000);
@@ -50,6 +55,7 @@ export function AudioPlayer({ recordings, sources, queue }: { recordings: Entity
           return url ? [{ id: r.id, title: nameOf(d.title, lang), subtitle: '', url, durationMs: d.durationMs, href: href(itemPath(r), lang) }] : [];
         });
         const active = player.current?.id === recording.id;
+        const ashreinu = ashreinuOf(data);
         return (
           <div className="player" key={recording.id}>
             <strong>{nameOf(data.title, lang)}</strong>
@@ -70,6 +76,17 @@ export function AudioPlayer({ recordings, sources, queue }: { recordings: Entity
                 >
                   {active && player.playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />} {active && player.playing ? t(lang, 'pause') : t(lang, 'play')}
                 </button>
+                {ashreinu ? (
+                  <a href={ashreinu} rel="noopener" target="_blank" style={{ marginInlineStart: 16 }}>
+                    {nameOf(ASHREINU_LABEL, lang)}
+                  </a>
+                ) : null}
+              </p>
+            ) : ashreinu ? (
+              <p>
+                <a href={ashreinu} rel="noopener" target="_blank">
+                  {nameOf(ASHREINU_LABEL, lang)}
+                </a>
               </p>
             ) : null}
             {data.videos?.length ? (

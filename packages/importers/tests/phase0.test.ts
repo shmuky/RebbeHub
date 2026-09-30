@@ -207,7 +207,7 @@ describe("JEM's recordings", () => {
     const farbrengen = await idForKey('mafteiach-occasion:100');
     // The part it had stays the catalog's; the one it lacked is added after it.
     expect((await catalog.get(await idForKey('jem-audio:JEMT0001'))) ?? null).toBeNull();
-    expect((await catalog.get(await idForKey('jem-audio:JEMT0002')))?.data).toMatchObject({ event: farbrengen, part: 2, url: audioUrl('JEMT0002.mp3'), title: { he: 'שיחה ב׳', en: 'Sicha 2' }, sources: [{ source: 'jem', url: 'https://ashreinu.app/player?parentEvent=1&event=3' }] });
+    expect((await catalog.get(await idForKey('jem-audio:JEMT0002')))?.data).toMatchObject({ event: farbrengen, part: 2, url: audioUrl('JEMT0002.mp3'), title: { he: 'שיחה ב׳', en: 'Sicha 2' }, sources: [{ source: 'jem', url: 'https://ashreinu.app/#/player/parentEvent~1_event~3' }] });
     expect((await catalog.get(await idForKey('jem-audio:JEMT0003')))?.data).toMatchObject({ event: await idForKey('mafteiach-occasion:200'), part: 1 });
     const shacharis = await catalog.get(await idForKey('jem-event:5'));
     expect(shacharis?.path).toBe('/events/jem/5');

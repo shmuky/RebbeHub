@@ -54,6 +54,7 @@ describe('the MCP server', () => {
       'approve_suggestion',
       'close_suggestion',
       'reopen_suggestion',
+      'combine_suggestions',
       'send_back_suggestion',
       'ask_machine',
       'machine_queue',

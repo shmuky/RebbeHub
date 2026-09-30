@@ -33,7 +33,17 @@ any time. `@rebbehub/client` carries the API's version.
   printings of the sefer they copy, so a sefer is on one page) opens in
   the site's reader from its page, and the sefer's printings list says
   "PDF copy" with a link to read it instead of "no scan yet".
-
+- **Combine suggestions into one, like commits in one pull request.**
+  `POST /v1/suggestions/combine` (and the `combine_suggestions` MCP tool)
+  makes several of your own suggestions not yet approved into one, their
+  changes applied in the order they were made; the ones combined are
+  withdrawn. The transcript fixes page offers it for a farbrengen where
+  your fixes are in several suggestions.
+- **Changes to different words of one text no longer clash.** When two
+  suggestions change the same paragraph (or a site change comes between),
+  the three-way merge now merges its words: changes to different words are
+  all kept, and only a change to the same words is left for a person to
+  settle.
 - **Fixes waiting for approval show in the transcript.** `GET
   /v1/recordings/{id}/transcript` gives `pending`: each paragraph fix not
   yet approved, as the paragraph would be, with who sent it and its

@@ -6,6 +6,7 @@ import {
   idForKey,
   pdfUrl,
   relinkDrive,
+  relinkJem,
   runImport,
   sichosKodeshOccasionsImporter,
   type CatalogEntry,
@@ -13,7 +14,7 @@ import {
   type ImportRecord,
   type Importer,
 } from '@rebbehub/importers';
-import { RELINK_BOT, relinkDriveLinks } from '../src/relinkDrive.js';
+import { RELINK_BOT, RELINK_JEM_BOT, relinkDriveLinks, relinkJemLinks } from '../src/relinkDrive.js';
 import { freshCatalog } from '../../../packages/core/tests/helpers.js';
 
 /**
@@ -148,5 +149,36 @@ describe('rebbehub relink-drive', () => {
     const up = MIGRATIONS.find((m) => m.name === 'drive-files')!.up;
     await catalog.db.exec(`DELETE FROM drive_file; ${up.slice(up.indexOf('INSERT INTO drive_file'))}`);
     expect(await rows()).toEqual(kept);
+  });
+});
+
+const OLD_PLAYER = 'https://ashreinu.app/player?parentEvent=75&event=76';
+const APP_PLAYER = 'https://ashreinu.app/#/player/parentEvent~75_event~76';
+
+describe('relinkJem', () => {
+  it("turns the older links to JEM's player into the Ashreinu app's own, and leaves the audio on the proxy", () => {
+    const audio = 'https://sichos-kodesh-media-proxy.shmuky.workers.dev/jem-audio/AR1.mp3';
+    expect(relinkJem({ url: audio, sources: [{ source: 'jem', url: OLD_PLAYER }] })).toEqual({ links: 1, data: { url: audio, sources: [{ source: 'jem', url: APP_PLAYER }] } });
+    expect(relinkJem({ url: audio, sources: [{ source: 'jem', url: APP_PLAYER }] })).toBeNull();
+  });
+});
+
+describe('rebbehub relink-jem', () => {
+  it('sends the older player links for review, once', async () => {
+    const id = await idForKey('mafteiach-recording:11113014/1');
+    const before = (await catalog.get(id))!.data as { url: string };
+    const cs = await catalog.createChangeset('shmuly', { title: 'older JEM link' });
+    await catalog.putRevision(cs.id, 'shmuly', { id, type: 'recording', data: { ...before, sources: [{ source: 'jem', sourceId: 'AR0016657.mp3', url: OLD_PLAYER }] } });
+    await catalog.submit(cs.id, 'shmuly');
+    await catalog.merge(cs.id, 'shmuly');
+
+    expect(await relinkJemLinks(catalog, { dryRun: true })).toMatchObject({ items: 1, links: 1, byType: { recording: 1 }, suggestions: [] });
+    const result = await relinkJemLinks(catalog);
+    expect(await catalog.changeset(result.suggestions[0]!)).toMatchObject({ author: RELINK_JEM_BOT.id, status: 'open', kind: 'import' });
+    expect((await relinkJemLinks(catalog)).items).toBe(0);
+    await approveAll(result.suggestions);
+    const after = (await catalog.get(id))!.data as { url: string; sources: Array<{ url: string }> };
+    expect(after.sources[0]!.url).toBe(APP_PLAYER);
+    expect(after.url).toBe(before.url); // still heard through the proxy
   });
 });
