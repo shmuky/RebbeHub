@@ -29,6 +29,9 @@ import { Avatar, EmptyState, Label, MachineLabel, RelativeTime, Skeleton, StateI
  * was said. Public reports are read on the server, so the list works
  * before script and for search engines; a signed-in reader's list is
  * asked again, since some reports are private to those who may read them.
+ * As on GitHub, the list is one line per report, its title; what was
+ * written in it is read on the report's own page (routes/issue.tsx), so
+ * the list leaves the words out and the page carries none of them.
  */
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -46,7 +49,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const line = lineOf(url.searchParams, keys, lang);
   const query = queryOf(line, keys);
   const mine = query.assignee === '@me' || query.author === '@me';
-  const listing = mine ? null : await api.issues({ ...apiParams(query, null), limit: 30 } as never).catch(() => null);
+  const listing = mine ? null : await api.issues({ ...apiParams(query, null), limit: 30 } as never).then(titlesOnly, () => null);
   // Which open suggestion says it fixes each report.
   const fixedBy: Record<number, number[]> = {};
   for (const s of open?.suggestions ?? []) for (const n of s.fixes) (fixedBy[n] ??= []).push(s.number);
@@ -103,10 +106,22 @@ const W = {
 } as const;
 const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
 
+/** A report as the list shows it: everything but its words. */
+type Row = Omit<Issue, 'body'>;
+
 interface Listing {
-  items: Issue[];
+  items: Row[];
   people: People;
   counts: { open: number; closed: number };
+}
+
+/**
+ * The API answers each report with its words, a page of them for some;
+ * the list shows titles, so the words are dropped before the page keeps
+ * the list (and carries it, hidden, to the browser for hydration).
+ */
+function titlesOnly<T extends { items: Issue[] }>(listing: T): Omit<T, 'items'> & { items: Row[] } {
+  return { ...listing, items: listing.items.map(({ body: _body, ...row }) => row) };
 }
 
 const SAVED_KEY = 'rebbehub.issues.saved';
@@ -155,7 +170,7 @@ export default function Issues({ loaderData }: Route.ComponentProps) {
       return;
     }
     let live = true;
-    void threads<Listing>(`issues?${apiKey}`).then(
+    void threads<Omit<Listing, 'items'> & { items: Issue[] }>(`issues?${apiKey}`).then(titlesOnly).then(
       (r) => live && (setListing(r), setMore(r.items.length >= 30)),
       () => undefined,
     );
@@ -168,7 +183,7 @@ export default function Issues({ loaderData }: Route.ComponentProps) {
     if (!listing) return;
     const last = listing.items[listing.items.length - 1];
     if (!last) return;
-    const next = await threads<Listing>(`issues?${apiKey}&before=${last.number}`);
+    const next = titlesOnly(await threads<Omit<Listing, 'items'> & { items: Issue[] }>(`issues?${apiKey}&before=${last.number}`));
     setListing({ ...listing, items: [...listing.items, ...next.items], people: { ...listing.people, ...next.people } });
     setMore(next.items.length >= 30);
   }
@@ -371,7 +386,7 @@ export default function Issues({ loaderData }: Route.ComponentProps) {
     </>
   );
 
-  function issueRow(issue: Issue, fixes: number[]) {
+  function issueRow(issue: Row, fixes: number[]) {
     const author = issue.author ? people[issue.author] : null;
     const bot = Boolean(author?.bot);
     const state = issue.state === 'open' ? 'open' : issue.stateReason === 'not_planned' ? 'closed' : 'approved';
@@ -464,7 +479,7 @@ export default function Issues({ loaderData }: Route.ComponentProps) {
 }
 
 /** People who wrote (or are on) the reports listed, to filter by. */
-function peopleOf(items: Issue[], people: People, field: 'author' | 'assignees') {
+function peopleOf(items: Row[], people: People, field: 'author' | 'assignees') {
   const ids = new Set(items.flatMap((i) => (field === 'author' ? (i.author ? [i.author] : []) : i.assignees)));
   return [...ids]
     .map((id) => ({ id, handle: people[id]?.username ?? '', name: people[id]?.name ?? id }))
