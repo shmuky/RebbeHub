@@ -6,6 +6,7 @@ import type { Lang } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
 import { Icon } from '../ui/Icon.js';
 import { MachineNote } from '../ui/primitives.js';
+import { linkTitle } from '../lib/linkTitle.js';
 import '../styles/pages/words.css';
 import { SegmentEditor, SentNote, type SentSuggestion } from './SegmentEditor.js';
 
@@ -73,14 +74,15 @@ function Runs({ runs, ctx }: { runs: readonly PageInline[] | undefined; ctx: Con
         }
         if (run.href) {
           const target = run.href;
+          const title = linkTitle(target);
           if (/^https?:/.test(target))
             return (
-              <a key={i} href={target} target="_blank" rel="noopener nofollow">
+              <a key={i} href={target} title={title} target="_blank" rel="noopener nofollow">
                 {node}
               </a>
             );
           return (
-            <Link key={i} to={href(target.startsWith('/') ? target : `/${target}`, ctx.lang)}>
+            <Link key={i} to={href(target.startsWith('/') ? target : `/${target}`, ctx.lang)} title={title}>
               {node}
             </Link>
           );
