@@ -7,11 +7,11 @@ import { clockOf } from '../lib/i18nNetwork.js';
 import { href } from '../lib/links.js';
 import { useAccount } from '../lib/useAccount.js';
 import { postJson } from '../lib/post.js';
-import { get, pendingRanges, tokensOf, wholeWords, within, type Paragraph, type Pending, type Span, type Transcript, type TranscriptCommit } from '../lib/transcript.js';
+import { get, pendingRanges, tokensOf, wholeWords, within, type Paragraph, type Pending, type Transcript, type TranscriptCommit } from '../lib/transcript.js';
 import { wordDiff } from '../lib/wordDiff.js';
 import { usePlayer, type Track } from '../player/PlayerProvider.js';
 import { InlineDiff } from '../ui/Diff.js';
-import { ConfirmSync, DiscussUnclear, SyncNow, discussLabel, timingWords } from './TimingTools.js';
+import { ConfirmSync, DiscussUnclear, discussLabel } from './TimingTools.js';
 import { Bar, MachineLabel, RelativeTime } from '../ui/primitives.js';
 
 /**
@@ -19,8 +19,7 @@ import { Bar, MachineLabel, RelativeTime } from '../ui/primitives.js';
  * recording's transcript by "Review machine text". The words are the
  * recording: tapping one plays from it. Selecting words opens a small
  * editor for just those, or marks them unclear (`[words?]`); the
- * paragraph's own tools (all exact, retype it, exact timing, talk over
- * unclear words, and its history) show under the paragraph being worked
+ * paragraph's own tools (all exact, retype it, talk over unclear words, and its history) show under the paragraph being worked
  * on, each saying what it does. The recording pauses while words are being
  * fixed, and this browser remembers where the listener was. A fix of
  * some words is on the site once approved but leaves the paragraph the
@@ -243,7 +242,6 @@ function Para({
   onOpen,
   onPlayFrom,
   onFixed,
-  onAnchored,
   pickWords,
   numberOf,
   waiting,
@@ -265,7 +263,6 @@ function Para({
   onOpen: () => void;
   onPlayFrom: (ms: number) => void;
   onFixed: (content: string, complete: boolean, merged: boolean) => void;
-  onAnchored: (spans: Span[]) => void;
   pickWords: { from: number; to: number; unclear?: boolean } | null;
   numberOf: (segment: string) => number;
   /** Fixes of this paragraph's words that wait for approval, and who is signed in, to tell theirs from others'. */
@@ -491,7 +488,6 @@ function Para({
               {w(lang, 'edit')}
             </button>
           ) : null}
-          {canFix && playing && paragraph.startMs !== null ? <SyncNow recording={recording} segment={paragraph.id} lang={lang} onAnchored={onAnchored} /> : null}
           {marks.map((m) => (
             <button key={m.from} type="button" className={discussing?.from === m.from ? 'tx-tool on' : 'tx-tool'} onClick={() => setDiscussing(discussing?.from === m.from ? null : m)}>
               <MessageCircle size={16} aria-hidden />
@@ -548,7 +544,6 @@ export function TranscriptEditor({
   account,
   onBack,
   onFixed,
-  onAnchored,
 }: {
   transcripts: Transcript[];
   tracks: Track[];
@@ -558,7 +553,6 @@ export function TranscriptEditor({
   account: unknown;
   onBack: () => void;
   onFixed: (recording: string, segment: string, content: string, complete: boolean) => void;
-  onAnchored: (recording: string, spans: Span[]) => void;
 }) {
   const player = usePlayer();
   // Where this listener stopped last time in these recordings, unless a link names a paragraph.
@@ -650,7 +644,6 @@ export function TranscriptEditor({
             <li>{w(lang, 'howEdit')}</li>
             <li>{w(lang, 'howUnclear')}</li>
             <li>{w(lang, 'howPause')}</li>
-            <li>{timingWords.howSync[lang]}</li>
             <li>{w(lang, 'howHistory')}</li>
           </ul>
         </details>
@@ -743,7 +736,6 @@ export function TranscriptEditor({
                     if (playing && !player.playing) player.toggle();
                   }}
                   onFixed={(content, complete) => onFixed(tr.recording, p.id, content, complete)}
-                  onAnchored={(spans) => onAnchored(tr.recording, spans)}
                   pickWords={pick?.segment === p.id ? pick : null}
                   numberOf={numberOf}
                   waiting={(tr.pending ?? []).filter((x) => x.segment === p.id)}
