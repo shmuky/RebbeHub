@@ -108,9 +108,20 @@
   line-height: 1.5;
 }
 
+/* "——— * ———" as the book sets it above the blessing. */
 .hy-close-mark {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   font-size: 18px;
+}
+
+.hy-close-mark::before,
+.hy-close-mark::after {
+  content: '';
+  width: 64px;
+  border-top: 1px solid currentColor;
 }
 
 /* The words: no paragraph numbers in the margin, set justified as the book is. */
