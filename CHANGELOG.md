@@ -32,7 +32,8 @@ any time. `@rebbehub/client` carries the API's version.
   carry `printed`: the boxes it is printed in on its version's scan (page,
   and x, y, width, height as fractions of the page). On the edit page that
   checks a machine's words beside the scan, clicking a segment turns to its
-  page and highlights its lines.
+  page and highlights its lines. (Built-in schemas version 10, so catalogs
+  already running take the field at start-up.)
 - **Machine-read pages wait in the check lists.** `GET /v1/machine/to-check`
   also lists `texts`: pages whose words a machine read (the Likkutei Sichos
   subject index, read from its scans) with segments nobody checked, and
