@@ -68,7 +68,7 @@ describe("every item's own page", () => {
   it("goes back and forth between a sefer's sichos, above the text and below it", async () => {
     const around = (await get(`/${ids.unit2}`)).html;
     // Hebrew first: "previous" at the line's start, the right, its chevron pointing there.
-    expect(around.match(/class="chapter-nav (top|bottom)"/g)).toEqual(['class="chapter-nav top"', 'class="chapter-nav bottom"']);
+    expect(around.match(/class="chapter-nav chapter-nav-(top|bottom)"/g)).toEqual(['class="chapter-nav chapter-nav-top"', 'class="chapter-nav chapter-nav-bottom"']);
     expect(around).toMatch(new RegExp(`rel="prev" href="/${ids.unit1}".*?הקודם.*?שיחה 1`));
     expect(around).toMatch(new RegExp(`rel="next" href="/${ids.unit3}".*?הבא.*?שיחה 3`));
     const english = (await get(`/${ids.unit2}?lang=en`)).html;

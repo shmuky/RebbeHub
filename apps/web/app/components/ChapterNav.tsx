@@ -36,7 +36,8 @@ export function neighbourLabel(neighbour: Pick<Entity, 'id' | 'type' | 'data'>, 
 export function ChapterNav({ unit, previous, next, lang, where }: { unit: Entity; previous: Entity | null; next: Entity | null; lang: Lang; where: 'top' | 'bottom' }) {
   if (!previous && !next) return null;
   return (
-    <nav className={`chapter-nav ${where}`} aria-label={W.chapters[lang]}>
+    // Its own class names: the site header is `.top`, and taking it made these stick over the text.
+    <nav className={`chapter-nav chapter-nav-${where}`} aria-label={W.chapters[lang]}>
       {previous ? (
         <Link className="chapter-nav-link prev" to={href(itemPath(previous), lang)} rel="prev">
           <Icon name="chevr" className="flip-ltr" size={16} />
@@ -46,7 +47,7 @@ export function ChapterNav({ unit, previous, next, lang, where }: { unit: Entity
           </span>
         </Link>
       ) : (
-        <span />
+        <span className="chapter-nav-gap" />
       )}
       {next ? (
         <Link className="chapter-nav-link next" to={href(itemPath(next), lang)} rel="next">
@@ -57,7 +58,7 @@ export function ChapterNav({ unit, previous, next, lang, where }: { unit: Entity
           <Icon name="chev" className="flip-ltr" size={16} />
         </Link>
       ) : (
-        <span />
+        <span className="chapter-nav-gap" />
       )}
     </nav>
   );
