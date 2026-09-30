@@ -3,6 +3,7 @@ import { workToc, type WorkToc } from './workView.server.js';
 import { eventView, type EventView } from './eventView.server.js';
 import { eventRow } from '../components/EventRow.js';
 import type { Backlink, Cover, Entity, FileInfo, LinkGroup, RebbeHubApi, RelationLink, ScanPages, WorkCover } from './api.js';
+import { workVolumes } from './volumes.js';
 
 /**
  * What an item's page needs beyond the item itself, by type: a work's
@@ -123,20 +124,22 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
         linkedItems(api, entity.id, 'work', 'publication'),
         orNone(api.workCover(entity.id), null),
       ]);
-      view.outline = outline;
+      // Its volumes as the page lists them: the contents' volumes, and any only its printings name (a PDF copy of each).
+      view.outline = workVolumes(outline, publications.map((x) => (x.data as { volume?: unknown }).volume));
       view.workCover = cover;
       // Its printings in the order they came out, each with how many scans it has.
       view.lists.publications = sortPrintings(publications);
       if (publications.length) view.scanCounts = await api.refCounts('publication', 'scan');
       const part = url.searchParams.get('part');
-      if (part) view.lists.units = await api.workPart(entity.id, part);
+      const openPart = part ? view.outline.find((x) => x.value === part) : outline.length === 1 ? outline[0] : undefined;
+      if (part) view.lists.units = openPart && !openPart.units ? [] : await api.workPart(entity.id, part);
       else if (outline.length && (outline.length === 1 || outline.every((p) => p.units === 1))) {
         const page = await api.children(entity.id, 'work', 'unit', { after: url.searchParams.get('after') ?? undefined, limit: 200 });
         view.lists.units = page.items;
         view.next = page.items.length === 200 ? page.next : null;
       }
       if (view.lists.units?.length) {
-        view.toc = await workToc(api, view.lists.units, view.lists.publications, view.scanCounts ?? {}, { part: part ?? (outline.length === 1 ? outline[0]!.value : null), printing: url.searchParams.get('printing'), lang: url.searchParams.get('lang') === 'en' ? 'en' : 'he' });
+        view.toc = await workToc(api, view.lists.units, view.lists.publications, view.scanCounts ?? {}, { part: openPart ?? null, printing: url.searchParams.get('printing'), lang: url.searchParams.get('lang') === 'en' ? 'en' : 'he' });
         view.lists.units.forEach((u) => aboutIds.add(u.id));
       }
       break;

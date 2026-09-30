@@ -12,6 +12,14 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Fixed
 
+- **Each volume's printings are on one page.** A sefer's volume page
+  showed only the printings named exactly as its contents name the
+  volume, so Likkutei Sichos 30 (value "1" in its contents) showed the
+  PDF of volume 1, and HebrewBooks' "ל (בראשית)" nowhere. Printings now
+  go with a volume by its number ("30", "ל (בראשית)", "כרך ל" are one
+  volume), and a volume only printings have (1 to 29, with no contents
+  yet) gets its own row and page, with all its PDFs from every source.
+
 - **A bot's suggestion of thousands of alike changes opens.** A sync
   bot's change of every word timing in a recording was a row for each
   (thousands) and stopped phones. Changes that differ only by their place
