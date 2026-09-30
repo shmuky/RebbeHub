@@ -84,6 +84,13 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Changed
 
+- **The review queue lists titles, as GitHub lists pull requests.**
+  `/review` shows one line per Suggestion: its title (to its own page),
+  its #number, who sent it, when, and how many items it changes. Its
+  changes, 25 at a time, and Approve are on its page; a Suggestion with
+  no #number (an import) opens whole in the queue (`/review?s=`). The
+  list of Reports (`/issues`) no longer carries each report's words to
+  the browser, only its title and facts: the words are on its own page.
 - **Tabs on a phone.** On a phone the main sections (Home, Library,
   Farbrengens, Suggestions) and the menu are tabs along the bottom of the
   screen, where a thumb reaches them, instead of hidden behind a button;
