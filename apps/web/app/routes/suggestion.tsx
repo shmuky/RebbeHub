@@ -8,6 +8,7 @@ import { RichText } from '../components/threads/RichText.js';
 import { loadPeople, useReadOnOpen } from '../components/threads/Side.js';
 import { siteOf } from '../lib/context.server.js';
 import { langFrom, type Lang } from '../lib/i18n.js';
+import { postJson } from '../lib/post.js';
 import { num } from '../lib/i18nUi.js';
 import { href } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
@@ -110,6 +111,13 @@ const W = {
   newItem: { he: 'פריט חדש', en: 'New item' },
   removedItem: { he: 'הפריט יימחק', en: 'The item is removed' },
   commentHere: { he: 'הערה כאן', en: 'Comment here' },
+  approveExact: { he: 'לאשר ולסמן שהכל מדוייק', en: 'Approve, and mark all exact' },
+  markExact: { he: 'לסמן שהכל מדוייק', en: 'Mark all exact' },
+  approveReported: { he: 'לאשר שהכל מדוייק', en: 'Approve as all exact' },
+  reportedExact: { he: 'סומן שהכל מדוייק', en: 'Reported all exact' },
+  markExactHint: { he: 'הפסקה נבדקה כולה ונכונה כפי שהיא כאן: היא מסומנת כנבדקה ומלמדת את המודל הבא.', en: 'The whole paragraph was checked and is right as it is here: it is marked checked and teaches the next model.' },
+  unclearTalk: { he: 'דיון על המילים הלא ברורות', en: 'Talk about the unclear words' },
+  openTalk: { he: 'לדף הדיון', en: 'Open the talk page' },
   commentNow: { he: 'הגבה עכשיו', en: 'Comment now' },
   keepForReview: { he: 'שמירה לבדיקה', en: 'Add to review' },
   pendingNote: { he: 'הערות שישלחו עם הבדיקה', en: 'Comments sent with your review' },
@@ -206,6 +214,23 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
   const viewer = account?.person.id ?? null;
   const live = view.status === 'open' || view.status === 'sent_back';
   const mayEdit = Boolean(viewer && (viewer === view.author || account?.person.steward));
+  // A paragraph of a recording's transcript: a reviewer approves it and marks it checked in one step (or, approved
+  // already, marks it), as "All exact" does in the editor. When the suggester found it all exact, approving is that.
+  const markExact =
+    (live && detail?.mayApprove) || (view.status === 'merged' && account?.person.steward)
+      ? (e: EntryView) =>
+          act(async () => {
+            if (!e.transcript || !e.segment) return;
+            if (view.status !== 'merged') {
+              await threads(`suggestions/${id}/reviews`, { body: { verdict: 'approve', body: '', comments: [] } });
+              setView((v) => (v ? { ...v, status: 'merged' } : v));
+            }
+            // Found all exact by the suggester, approving it was all it needed.
+            if (view.status !== 'merged' && e.transcript.reported) return void revalidator.revalidate();
+            await postJson(`recordings/${e.transcript.recording}/transcript/fix`, { segment: e.entityId, content: e.segment.after, complete: true });
+            void revalidator.revalidate();
+          })
+      : undefined;
   const fieldLabel = (a: { entity: string; field: string }) => {
     const e = view.entries.find((x) => x.entityId === a.entity);
     const f = e?.fields.find((x) => x.path === a.field);
@@ -382,7 +407,7 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
               </TimelineComment>
               {view.entries.slice(0, 3).map((e) => (
                 <TimelineBlock key={e.entityId}>
-                  <EntryDiff entry={e} lang={lang} compact />
+                  <EntryDiff entry={e} lang={lang} compact markExact={markExact} merged={view.status === 'merged'} busy={busy} />
                 </TimelineBlock>
               ))}
               {view.entries.length > 3 ? (
@@ -406,7 +431,7 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
           ) : tab === 'changes' ? (
             <div className="stack">
               {view.entries.map((e) => (
-                <ChangeWithComments key={e.entityId} entry={e} lang={lang} talk={talk} conversation={talk ? { people, viewer, id: id!, detail } : null} signedIn={Boolean(account)} onPending={(p) => setPending([...pending, p])} changed={() => void load()} />
+                <ChangeWithComments key={e.entityId} entry={e} lang={lang} markExact={markExact} merged={view.status === 'merged'} busy={busy} talk={talk} conversation={talk ? { people, viewer, id: id!, detail } : null} signedIn={Boolean(account)} onPending={(p) => setPending([...pending, p])} changed={() => void load()} />
               ))}
               {undoBar}
               {reviewBox}
@@ -611,7 +636,23 @@ function Description({ view, lang, mayEdit, id, onSave }: { view: SuggestionView
 }
 
 /** One change as a reader reads it: a paragraph among its neighbours, marked word by word; a field before and after. */
-function EntryDiff({ entry, lang, compact, actions }: { entry: EntryView; lang: Lang; compact?: boolean; actions?: ReactNode }) {
+function EntryDiff({
+  entry,
+  lang,
+  compact,
+  actions,
+  markExact,
+  merged,
+  busy,
+}: {
+  entry: EntryView;
+  lang: Lang;
+  compact?: boolean;
+  actions?: ReactNode;
+  markExact?: (entry: EntryView) => Promise<unknown>;
+  merged?: boolean;
+  busy?: boolean;
+}) {
   const [both, setBoth] = useState(false);
   const seg = entry.segment;
   const parts = seg ? wordDiff(seg.before, seg.after) : null;
@@ -632,6 +673,12 @@ function EntryDiff({ entry, lang, compact, actions }: { entry: EntryView; lang: 
           {seg && seg.before && seg.after ? (
             <button type="button" className="btn sm" onClick={() => setBoth(!both)} aria-pressed={both}>
               {w(lang, both ? 'inline' : 'sideBySide')}
+            </button>
+          ) : null}
+          {entry.transcript?.reported && !merged ? <span className="label sm accent">{w(lang, 'reportedExact')}</span> : null}
+          {markExact && entry.transcript && !(merged && entry.transcript.checked) && entry.segment?.after ? (
+            <button type="button" className="btn sm primary" disabled={busy} onClick={() => void markExact(entry)} title={w(lang, 'markExactHint')}>
+              <Icon name="check" /> {w(lang, merged ? 'markExact' : entry.transcript.reported ? 'approveReported' : 'approveExact')}
             </button>
           ) : null}
           {actions}
@@ -678,6 +725,21 @@ function EntryDiff({ entry, lang, compact, actions }: { entry: EntryView; lang: 
       {entry.fields.map((f) => (
         <FieldDiff key={f.path} name={f.name} before={f.before} after={f.after} />
       ))}
+      {entry.transcript?.talk.length ? (
+        <div className="unclear-talk pad">
+          <p className="row-sub">
+            <Icon name="discuss" size={14} /> {w(lang, 'unclearTalk')} ·{' '}
+            <Link to={href(`/talk/${entry.transcript.recording}`, lang)}>{w(lang, 'openTalk')}</Link>
+          </p>
+          <ul>
+            {entry.transcript.talk.map((c) => (
+              <li key={c.id} className={c.parent !== null ? 'reply' : undefined}>
+                <b>{c.authorName}</b> <span dir="auto">{c.body}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </DiffBox>
   );
 }
@@ -769,9 +831,15 @@ function ChangeWithComments({
   signedIn,
   onPending,
   changed,
+  markExact,
+  merged,
+  busy,
 }: {
   entry: EntryView;
   lang: Lang;
+  markExact?: (entry: EntryView) => Promise<unknown>;
+  merged?: boolean;
+  busy?: boolean;
   talk: ConversationData | null;
   conversation: { people: People; viewer: string | null; id: number; detail: ClientDetail | null } | null;
   signedIn: boolean;
@@ -803,6 +871,9 @@ function ChangeWithComments({
       <EntryDiff
         entry={entry}
         lang={lang}
+        markExact={markExact}
+        merged={merged}
+        busy={busy}
         actions={
           signedIn ? (
             <button type="button" className="btn sm" onClick={() => setOpen(!open)} aria-expanded={open}>

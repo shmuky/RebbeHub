@@ -467,6 +467,9 @@ function RecordingPage({ entity, view, lang }: { entity: Entity; view: ItemView;
   const texts = (view.lists.texts ?? []).filter((x) => !own || (x.data as D).kind !== 'transcript');
   // How many transcripts it has, once the browser has asked: null until then.
   const [transcripts, setTranscripts] = useState<number | null>(null);
+  // Its words, read and checked on a tab of their own (older links say `?review=1`).
+  const [params] = useSearchParams();
+  const textTab = own && (params.get('tab') === 'text' || params.get('review') === '1');
   return (
     <ItemShell
       lang={lang}
@@ -479,8 +482,12 @@ function RecordingPage({ entity, view, lang }: { entity: Entity; view: ItemView;
           d.durationMs ? { icon: 'clock', children: <b className="num">{duration(d.durationMs)}</b> } : null,
           d.language ? { icon: 'globe', children: languageName(d.language, lang) } : null,
         ],
-        tabs: [{ key: 'page', label: w(lang, 'recording'), icon: 'audio', to: href(itemPath(entity), lang) }, ...commonTabs(entity, view, lang)],
-        tab: 'page',
+        tabs: [
+          { key: 'page', label: w(lang, 'recording'), icon: 'audio', to: href(itemPath(entity), lang) },
+          ...(own ? [{ key: 'text', label: w(lang, 'text'), icon: 'file' as const, to: href(itemPath(entity), lang, { tab: 'text' }) }] : []),
+          ...commonTabs(entity, view, lang),
+        ],
+        tab: textTab ? 'text' : 'page',
       }}
       side={
         <SideDetails
@@ -507,6 +514,9 @@ function RecordingPage({ entity, view, lang }: { entity: Entity; view: ItemView;
         />
       }
     >
+      {textTab ? (
+        <Transcripts tracks={tracks} only={entity.id} lang={lang} view="text" />
+      ) : (
       <div className="stack-lg">
         {/*
           One player on the page. With a transcript it is the words, synced, with Edit on top; the plain player only
@@ -529,6 +539,7 @@ function RecordingPage({ entity, view, lang }: { entity: Entity; view: ItemView;
           </section>
         ) : null}
       </div>
+      )}
     </ItemShell>
   );
 }
