@@ -1,7 +1,9 @@
 import type { HayomYomShiurim } from '@rebbehub/hebrew';
 import { inlineText, isPageText, type PageSegment, type PageText } from '@rebbehub/model';
 import type { ReactNode } from 'react';
+import { Link } from 'react-router';
 import type { Lang } from '../lib/i18n.js';
+import { href } from '../lib/links.js';
 import { PageWords } from './PageWords.js';
 import '../styles/pages/hayom-yom.css';
 
@@ -9,7 +11,8 @@ import '../styles/pages/hayom-yom.css';
  * A day of Hayom Yom set as the book prints it: a row with the weekday,
  * the day (as the entry is titled) and the year; the day's notices that the
  * book puts above the shiurim; the shiurim, Chumash, Tehillim and Tanya,
- * under "שיעורים."; then its words, justified. The weekday, the year, the
+ * under "שיעורים.", each a link to its words; the notices it puts right after them; then its words,
+ * justified, each paragraph's first line indented. Notices are in italics. The weekday, the year, the
  * shiurim and which of the day's first paragraphs are notices are worked
  * out from the calendar of 5703 and the scan of the book (@rebbehub/hebrew's
  * hayomYom.ts).
@@ -17,12 +20,12 @@ import '../styles/pages/hayom-yom.css';
  * What the book prints that the day's text source lacks is kept in the day's
  * own words, by the ids of its segments: `lead-…` above the day's head (the
  * letter before the first day), `pre-…` among the notices (a Shabbos's
- * haftorah), `tanya` the Tanya line as printed (its first and last words),
+ * haftorah), `after-…` among those after the shiurim, `tanya` the Tanya line as printed (its first and last words),
  * `close-…` after the words (the blessing that ends the book). Until they
  * are there, the Tanya line names the day's chapter.
  */
 export function HayomYomDay({ title, body, shiurim, lang, actions }: { title: string; body: unknown; shiurim: HayomYomShiurim | null; lang: Lang; actions?: ReactNode }) {
-  const parts = split(isPageText(body) ? spaced(body) : null, shiurim?.before ?? 0);
+  const parts = split(isPageText(body) ? spaced(body) : null, shiurim?.before ?? 0, shiurim?.after ?? 0);
   return (
     <article className="hy-day" lang="he" dir="rtl">
       {parts.lead.length ? (
@@ -44,15 +47,35 @@ export function HayomYomDay({ title, body, shiurim, lang, actions }: { title: st
         <div className="hy-shiurim">
           <span className="hy-shiurim-title">שיעורים.</span>
           <span className="hy-shiur-name">חומש:</span>
-          <span>{shiurim.chumash}</span>
+          <span>{shiurim.chumashRef ? <a className="hy-shiur-link" href={sefaria(shiurim.chumashRef, true)}>{shiurim.chumash}</a> : shiurim.chumash}</span>
           <span className="hy-shiur-name">תהלים:</span>
-          <span>{shiurim.tehillim}</span>
+          <span>
+            {shiurim.tehillimParts.map((part, i) => (
+              <span key={i}>
+                {i ? ' ' : null}
+                {part.ref ? (
+                  <a className="hy-shiur-link" href={sefaria(part.ref, false)}>
+                    {part.text}
+                  </a>
+                ) : (
+                  part.text
+                )}
+              </span>
+            ))}
+          </span>
           {parts.tanya || shiurim.tanya ? (
             <>
               <span className="hy-shiur-name">תניא:</span>
-              {parts.tanya ? <Lines segments={[parts.tanya]} as="span" /> : <span>{shiurim.tanya!.label}.</span>}
+              <TanyaLink shiurim={shiurim} lang={lang}>
+                {parts.tanya ? <Lines segments={[parts.tanya]} as="span" /> : <span>{shiurim.tanya!.label}.</span>}
+              </TanyaLink>
             </>
           ) : null}
+        </div>
+      ) : null}
+      {parts.after.length ? (
+        <div className="hy-after">
+          <Lines segments={parts.after} />
         </div>
       ) : null}
       {parts.words ? <PageWords page={parts.words} lang={lang} /> : null}
@@ -69,30 +92,53 @@ export function HayomYomDay({ title, body, shiurim, lang, actions }: { title: st
   );
 }
 
+/**
+ * Chumash (with Rashi) and Tehillim on Sefaria until RebbeHub has their
+ * words; `Exodus 10:1-11` is Sefaria's `Exodus.10.1-11`.
+ */
+const sefaria = (ref: string, rashi: boolean) => `https://www.sefaria.org/${ref.replace(/[ :]/g, '.')}?lang=he${rashi ? '&with=Rashi' : ''}`;
+
+/** The Tanya line, to where the day's Tanya starts on its chapter's page. */
+function TanyaLink({ shiurim, lang, children }: { shiurim: HayomYomShiurim; lang: Lang; children: ReactNode }) {
+  const tanya = shiurim.tanya;
+  if (!tanya?.path) return <>{children}</>;
+  return (
+    <Link className="hy-shiur-link" to={`${href(tanya.path, lang)}#s-${tanya.segment}`}>
+      {children}
+    </Link>
+  );
+}
+
 interface Parts {
   lead: PageSegment[];
   pre: PageSegment[];
+  after: PageSegment[];
   tanya: PageSegment | null;
   close: PageSegment[];
   words: PageText | null;
 }
 
-/** The day's words, parted as the book sets them: what goes above its head, its notices, its Tanya line, its words, and what follows them. */
-function split(page: PageText | null, before: number): Parts {
-  const out: Parts = { lead: [], pre: [], tanya: null, close: [], words: null };
+/** The day's words, parted as the book sets them: what goes above its head, its notices before and after the shiurim, its Tanya line, its words, and what follows them. */
+function split(page: PageText | null, before: number, after: number): Parts {
+  const out: Parts = { lead: [], pre: [], after: [], tanya: null, close: [], words: null };
   if (!page) return out;
   const [first, ...others] = page.versions;
   if (!first) return out;
   const rest: PageSegment[] = [];
   let notices = before;
+  // The notices after the shiurim are the paragraphs right after those before them.
   for (const s of first.segments) {
     if (s.id.startsWith('lead-')) out.lead.push(s);
     else if (s.id.startsWith('pre-')) out.pre.push(s);
+    else if (s.id.startsWith('after-')) out.after.push(s);
     else if (s.id === 'tanya') out.tanya = s;
     else if (s.id.startsWith('close-')) out.close.push(s);
     else if (notices > 0 && s.kind === 'paragraph') {
       out.pre.push(s);
       notices--;
+    } else if (after > 0 && s.kind === 'paragraph') {
+      out.after.push(s);
+      after--;
     } else rest.push(s);
   }
   out.words = rest.length ? { ...page, versions: [{ ...first, segments: rest }, ...others] } : null;

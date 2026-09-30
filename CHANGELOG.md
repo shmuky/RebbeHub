@@ -12,6 +12,12 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Hayom Yom's shiurim go to their words.** Each day's Chumash (with
+  Rashi) and Tehillim line opens that day's portion on Sefaria, and its
+  Tanya line opens its chapter on RebbeHub where the day starts. A day's
+  notices the book prints right after the shiurim are set there, all
+  notices in italics, and each paragraph's first line is indented, as
+  in the book.
 - **A few words into many pages through the MCP server.** `add_segments`
   adds or replaces segments in the words of up to 200 pages a call, as
   one suggestion, sending only the new segments and where each goes (at

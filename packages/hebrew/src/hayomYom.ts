@@ -2,6 +2,7 @@ import { dateKeyToGregorian } from './dateKey.js';
 import { MONTHS as MONTH_NAMES } from './months.js';
 import { normalizeSearchText } from './normalize.js';
 import { parseHebrewNumeral, toHebrewNumeral } from './numerals.js';
+import { chumashPortion } from './chitas.js';
 import { TANYA_YOMI } from './tanyaYomi.js';
 
 /**
@@ -35,13 +36,30 @@ export interface HayomYomShiurim {
   year: string;
   /** `בא, פרשה ראשונה עם פירש״י.` */
   chumash: string;
+  /** The day's Chumash by Sefaria's reference (`Exodus 10:1-11`), to go to its words. */
+  chumashRef: string | null;
   /** `כג-כח.`; in Elul and the ten days, two ranges; on Yom Kippur, by the times it is said. */
   tehillim: string;
-  /** Where the day's Tanya starts (the unit by its Sefaria reference, and the segment), and where the next day starts. */
-  tanya: { unit: string; segment: string; next: { unit: string; segment: string } | null; label: string } | null;
+  /** The same line in pieces, each range with its Sefaria reference (`Psalms 23-28`), to go to its words. */
+  tehillimParts: Array<{ text: string; ref: string | null }>;
+  /** Where the day's Tanya starts (the unit by its Sefaria reference, its page on RebbeHub, and the segment), and where the next day starts. */
+  tanya: { unit: string; path: string | null; segment: string; next: { unit: string; segment: string } | null; label: string } | null;
   /** How many of the day's first paragraphs the print sets above the shiurim (a Shabbos Mevarchim's "מברכים", a fast's "תענית"). */
   before: number;
+  /** How many paragraphs after those the print sets right after the shiurim, as a notice before the day's words (a fast's "סליחות", "א"א תחנון"). */
+  after: number;
 }
+
+/** Hebcal's names (chitas.ts) for the parshas as the print spells them. */
+const PARSHA: Record<string, string> = {
+  וישלח: 'Vayishlach', וישב: 'Vayeshev', מקץ: 'Miketz', ויגש: 'Vayigash', ויחי: 'Vayechi', שמות: 'Shemot', וארא: 'Vaera', בא: 'Bo', בשלח: 'Beshalach',
+  יתרו: 'Yitro', משפטים: 'Mishpatim', תרומה: 'Terumah', תצוה: 'Tetzaveh', 'כי תשא': 'Ki Tisa', ויקהל: 'Vayakhel', פקודי: 'Pekudei', ויקרא: 'Vayikra',
+  צו: 'Tzav', שמיני: 'Shmini', תזריע: 'Tazria', מצורע: 'Metzora', 'אחרי מות': 'Achrei Mot', קדושים: 'Kedoshim', אמור: 'Emor', בהר: 'Behar',
+  בחוקתי: 'Bechukotai', במדבר: 'Bamidbar', נשא: 'Nasso', בהעלותך: "Beha'alotcha", שלח: "Sh'lach", קרח: 'Korach', חוקת: 'Chukat', בלק: 'Balak',
+  פנחס: 'Pinchas', 'מטות-מסעי': 'Matot-Masei', דברים: 'Devarim', ואתחנן: 'Vaetchanan', עקב: 'Eikev', ראה: "Re'eh", שופטים: 'Shoftim', תצא: 'Ki Teitzei',
+  תבוא: 'Ki Tavo', 'נצבים וילך': 'Nitzavim-Vayeilech', האזינו: "Ha'azinu", ברכה: 'Vezot Haberakhah', נח: 'Noach', 'לך לך': 'Lech-Lecha', וירא: 'Vayera',
+  'חיי שרה': 'Chayei Sara', תולדות: 'Toldot', ויצא: 'Vayetzei',
+};
 
 const WEEKDAYS = ['יום ראשון', 'יום שני', 'יום שלישי', 'יום רביעי', 'יום חמישי', 'יום ששי', 'שבת'];
 const ALIYOS = ['פרשה ראשונה', 'שני', 'שלישי', 'רביעי', 'חמישי', 'ששי', 'שביעי'];
@@ -97,6 +115,16 @@ const BEFORE: Record<string, number> = {
   '12-29': 1, '01-02': 1, '01-03': 1, '01-04': 1, '01-16': 1, '01-17': 3, '01-23': 1,
 };
 
+/**
+ * The days where the print sets a notice right after the shiurim, before
+ * the day's words, and how many of the paragraphs that follow the BEFORE
+ * ones are such notices. Read off the scan the same way.
+ */
+const AFTER: Record<string, number> = {
+  '03-19': 1, '03-26': 1, '04-18': 2, '05-14': 1, '06A-13': 1, '08-13': 1, '08-17': 1, '11-14': 1, '01-02': 1, '01-18': 1, '01-21': 2,
+  '01-22': 2, '01-30': 1, '02-01': 1,
+};
+
 /** Tehillim's monthly cycle: the chapters of each day of the month (119 in two halves, on the 25th and 26th). */
 const TEHILLIM: ReadonlyArray<readonly [number, number] | string> = [
   [1, 9], [10, 17], [18, 22], [23, 28], [29, 34], [35, 38], [39, 43], [44, 48], [49, 54], [55, 59], [60, 65], [66, 68], [69, 71], [72, 76], [77, 78],
@@ -106,6 +134,7 @@ const TEHILLIM: ReadonlyArray<readonly [number, number] | string> = [
 
 const numeral = (n: number) => toHebrewNumeral(n).replace(/[״׳]/g, '');
 const range = ([a, b]: readonly [number, number]) => (a === b ? numeral(a) : `${numeral(a)}-${numeral(b)}`);
+const psalms = ([a, b]: readonly [number, number]) => `Psalms ${a === b ? a : `${a}-${b}`}`;
 
 /** The Hebrew months in the order the book has them, each with its year and days (5703 had a second Adar). */
 const MONTHS: ReadonlyArray<readonly [string, number, number]> = [
@@ -142,17 +171,27 @@ export function hayomYomShiurim(month: string, day: number): HayomYomShiurim | n
   // 19 Kislev 5703 is a Shabbos: the weeks turn on each Sunday after it.
   const parsha = WEEKS[Math.floor((at.index + 6) / 7)]!;
   const chumash = CHUMASH_DAYS[key] ?? `${weekday === 0 ? (SUNDAY[parsha] ?? `${parsha}, ${ALIYOS[0]}`) : `${parsha}, ${ALIYOS[weekday]}`} עם פירש״י.`;
+  // Simchas Torah finishes V'zos Habracha (its sixth and seventh); Shabbos Bereishis learns all of Bereishis.
+  const portion = key === '01-23' ? chumashPortion('Vezot Haberakhah', 6, 7) : key === '01-24' ? chumashPortion('Bereshit', 1, 7) : chumashPortion(PARSHA[parsha]!, weekday + 1);
 
   // The month's day, the 29th of a short month to the book's end; Elul and the ten days add three a day.
   const cycle = TEHILLIM[day - 1]!;
   const monthly = typeof cycle === 'string' ? cycle : range(day === 29 && at.length === 29 ? [140, 150] : cycle);
   const extra = month === '12' ? day : month === '01' && day < 10 ? 29 + day : 0;
-  const tehillim =
+  const monthlyRef = typeof cycle === 'string' ? (day === 25 ? 'Psalms 119:1-96' : 'Psalms 119:97-176') : psalms(day === 29 && at.length === 29 ? [140, 150] : cycle);
+  const tehillimParts =
     month === '01' && day === 10
-      ? `${monthly}. קודם כל נדרי: קטו-קכג. קודם השינה: קכד-קלב. אחר מוסף: קלג-קמא. אחר נעילה: קמב-קנ.`
+      ? [
+          { text: `${monthly}.`, ref: monthlyRef },
+          ...([['קודם כל נדרי', 115, 123], ['קודם השינה', 124, 132], ['אחר מוסף', 133, 141], ['אחר נעילה', 142, 150]] as const).map(([when, a, b]) => ({ text: `${when}: ${range([a, b])}.`, ref: psalms([a, b]) })),
+        ]
       : extra
-        ? `${monthly}. ${range([extra * 3 - 2, extra * 3])}.`
-        : `${monthly}.`;
+        ? [
+            { text: `${monthly}.`, ref: monthlyRef },
+            { text: `${range([extra * 3 - 2, extra * 3])}.`, ref: psalms([extra * 3 - 2, extra * 3]) },
+          ]
+        : [{ text: `${monthly}.`, ref: monthlyRef }];
+  const tehillim = tehillimParts.map((p) => p.text).join(' ');
 
   // Tanya by the cycle of a leap year, as 5703 was.
   const start = TANYA_YOMI.leap[key];
@@ -161,10 +200,10 @@ export function hayomYomShiurim(month: string, day: number): HayomYomShiurim | n
   // Where it ends: in the chapter it starts in, or the one after (not when the next day starts a chapter).
   const ends = next && next[0] !== start?.[0] && next[1] !== '1' ? next[0] : null;
   const tanya = start
-    ? { unit: `Tanya, ${start[0]}`, segment: start[1], next: next ? { unit: `Tanya, ${next[0]}`, segment: next[1] } : null, label: [tanyaChapter(start[0]), ends ? tanyaChapter(ends) : null].filter(Boolean).join(' – ') }
+    ? { unit: `Tanya, ${start[0]}`, path: tanyaPath(start[0]), segment: start[1], next: next ? { unit: `Tanya, ${next[0]}`, segment: next[1] } : null, label: [tanyaChapter(start[0]), ends ? tanyaChapter(ends) : null].filter(Boolean).join(' – ') }
     : null;
 
-  return { hebrew, weekday: WEEKDAYS[weekday]!, year: at.year === 5703 ? 'ה׳תש״ג' : 'ה׳תש״ד', chumash, tehillim, tanya, before: BEFORE[key] ?? 0 };
+  return { hebrew, weekday: WEEKDAYS[weekday]!, year: at.year === 5703 ? 'ה׳תש״ג' : 'ה׳תש״ד', chumash, chumashRef: portion?.ref ?? null, tehillim, tehillimParts, tanya, before: BEFORE[key] ?? 0, after: AFTER[key] ?? 0 };
 }
 
 /** The next day's `MM-DD` in the book's year. */
@@ -173,6 +212,25 @@ function nextKey(month: string, day: number, length: number): string | null {
   const at = MONTHS.findIndex(([m], i) => m === month && (month !== '03' || i === 0));
   const after = MONTHS[at + 1];
   return after ? `${after[0]}-01` : null;
+}
+
+/**
+ * A Tanya chapter's page on RebbeHub (DAILY_WORKS.tanya), by its Sefaria
+ * reference without "Tanya, ": each part is a volume; Likkutei Amarim's
+ * chapters follow its title page, approbations and foreword, Shaar
+ * HaYichud's its Chinuch Katan.
+ */
+export function tanyaPath(ref: string): string | null {
+  const part = { I: 1, II: 2, III: 3, IV: 4, V: 5 }[/^Part ([IV]+);/.exec(ref)?.[1] ?? ''];
+  if (!part) return null;
+  const n = Number(/ (\d+)$/.exec(ref)?.[1] ?? NaN);
+  const base = `${DAILY_WORKS.tanya}/${part}`;
+  if (ref.includes('Title Page')) return `${base}/1`;
+  if (ref.includes('Approbation')) return `${base}/2${Number.isNaN(n) ? '' : `/${n}`}`;
+  if (ref.includes('Compiler')) return `${base}/3`;
+  if (ref.includes('Chinukh Katan')) return `${base}/1`;
+  if (Number.isNaN(n)) return null;
+  return `${base}/${n + (part === 1 ? 3 : part === 2 ? 1 : 0)}`;
 }
 
 /**

@@ -2,8 +2,8 @@
  * A day of Hayom Yom as the book prints it (components/HayomYomDay.tsx):
  * the weekday at the start, the day in the middle and the year at the end,
  * all bold; "שיעורים." with Chumash, Tehillim and Tanya one under another,
- * their names in a column, the day's notices above them; the words
- * justified. All in the Torah face.
+ * their names in a column, the day's notices above or below them, in
+ * italics; the words justified, each paragraph's first line indented. All in the Torah face.
  */
 
 .hy-day {
@@ -64,6 +64,18 @@
   grid-column: 3;
 }
 
+/* Each shiur goes to its words: the print's look, underlined only under the pointer. */
+.hy-shiur-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.hy-shiur-link:hover,
+.hy-shiur-link:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
 /* Lines set apart from the words: each on a line of its own. */
 .hy-line-part {
   display: block;
@@ -74,11 +86,22 @@
   text-underline-offset: 4px;
 }
 
-/* The day's notices (מברכים, a fast, the haftorah), between its head and its shiurim. */
-.hy-pre {
+/* The day's notices (מברכים, a fast, the haftorah), between its head and its shiurim or right after them: in italics, as printed. */
+.hy-pre,
+.hy-after {
   margin: 0 0 10px;
   font-size: 18px;
   line-height: 1.55;
+  font-style: italic;
+  text-align: justify;
+}
+
+/* Each paragraph's first line starts in from the side, as in the book. */
+.hy-pre .hy-line,
+.hy-after .hy-line,
+.hy-lead .hy-line:not(.hy-line-heading),
+.hy-day .words-p {
+  text-indent: 1.5em;
 }
 
 /* Above the first day: the letter the book opens with, its heading spaced out. */
