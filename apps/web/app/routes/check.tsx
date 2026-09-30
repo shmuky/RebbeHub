@@ -5,6 +5,7 @@ import { dateLabel } from '../lib/dates.js';
 import { langFrom, nameOf, type Lang } from '../lib/i18n.js';
 import { num } from '../lib/i18nUi.js';
 import { href } from '../lib/links.js';
+import { pageTitle } from '../components/ReviewHero.js';
 import { pageMeta } from '../lib/seo.js';
 import { Icon } from '../ui/Icon.js';
 import { Bar, Box, EmptyState, MachineLabel, RelativeTime } from '../ui/primitives.js';
@@ -12,10 +13,12 @@ import '../styles/pages/projects.css';
 
 /**
  * What the machines wrote that nobody checked yet: farbrengens the
- * transcription bot heard, with paragraphs no person has checked, and scans
- * the OCR bot read, with pages nobody proofread. The newest first, so what
- * the bots did last night is at the top. Each row leads to where it is
- * checked: a farbrengen's transcript, a scan's text. What people check
+ * transcription bot heard, with paragraphs no person has checked, pages
+ * whose words OCR read (a subject index read from its scan), with lines
+ * nobody checked, and scans the OCR bot read, with pages nobody proofread.
+ * The newest first, so what the bots did last night is at the top. Each row
+ * leads to where it is checked: a farbrengen's transcript, a page's edit
+ * page with the scan beside it, a scan's text. What people check
  * becomes the training data for the next models (docs/transcription.md).
  * One API call, kept at the edge for five minutes.
  */
@@ -39,6 +42,11 @@ const W = {
   },
   transcripts: { he: 'תמלולים של הקלטות', en: 'Transcripts of recordings' },
   scans: { he: 'סריקות שנקראו במכונה (OCR)', en: 'Scans read by machine (OCR)' },
+  texts: { he: 'עמודים שנקראו מסריקה', en: 'Pages read from a scan' },
+  textsSay: { he: 'כל שורה נבדקת מול עמוד הסריקה שלצידה: "נכון" או תיקון במקום.', en: 'Each line is checked against the page of the scan beside it: "Right", or a fix in place.' },
+  entries: { he: 'שורות לבדוק', en: 'lines to check' },
+  notChecked: { he: 'טרם נבדק', en: 'not checked yet' },
+  noTexts: { he: 'אין עמודים שמחכים לבדיקה', en: 'No pages wait for a check' },
   paragraphs: { he: 'פסקאות לבדוק', en: 'paragraphs to check' },
   pages: { he: 'עמודים לבדוק', en: 'pages to check' },
   of: { he: 'מתוך', en: 'of' },
@@ -54,6 +62,7 @@ const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
 export default function Check({ loaderData }: Route.ComponentProps) {
   const { lang, list } = loaderData;
   const { totals } = list;
+  const texts = list.texts ?? [];
   const more = (shown: number, all: number) => (all > shown ? <p className="subtle tiny">{w(lang, 'more').replace('{n}', num(all - shown, lang))}</p> : undefined);
 
   return (
@@ -104,6 +113,38 @@ export default function Check({ loaderData }: Route.ComponentProps) {
               </ul>
             ) : (
               <EmptyState compact icon="check" title={w(lang, 'noTranscripts')} />
+            )}
+          </Box>
+        </section>
+
+        <section aria-labelledby="texts">
+          <h2 className="h-block" id="texts">
+            <Icon name="file" className="subtle" />
+            {w(lang, 'texts')}
+            <span className="count">{num(totals.entries || totals.texts, lang)}</span>
+          </h2>
+          <p className="muted">{w(lang, 'textsSay')}</p>
+          <Box footer={more(texts.length, totals.texts)}>
+            {texts.length ? (
+              <ul className="hl-long">
+                {texts.map((p) => (
+                  <li key={p.entity}>
+                    <Link className="row hover" to={href(`/edit/${p.entity}`, lang)}>
+                      <Icon name="file" />
+                      <span className="row-main">
+                        <span className="row-title">{pageTitle(p, lang)}</span>
+                        <span className="row-sub">
+                          {p.segments ? `${num(p.segments - p.checked, lang)} ${w(lang, 'entries')}` : w(lang, 'notChecked')} · {w(lang, 'made')} <RelativeTime at={p.made} lang={lang} />
+                        </span>
+                        {p.segments ? <Bar value={p.checked} max={p.segments} label={`${num(p.checked, lang)} ${w(lang, 'of')} ${num(p.segments, lang)} ${w(lang, 'checked')}`} /> : null}
+                      </span>
+                      <MachineLabel lang={lang} size="sm" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyState compact icon="check" title={w(lang, 'noTexts')} />
             )}
           </Box>
         </section>

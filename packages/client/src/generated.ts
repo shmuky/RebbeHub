@@ -1522,7 +1522,7 @@ export interface Operations {
     input: Record<string, never>;
     output: Record<string, unknown>;
   };
-  /** What the machines wrote that no person has checked yet: farbrengens with unchecked transcript paragraphs, scans with pages read by OCR and not yet proofread, the newest first */
+  /** What the machines wrote that no person has checked yet: farbrengens with unchecked transcript paragraphs, scans with pages read by OCR and not yet proofread, pages whose words a machine read with segments nobody checked, the newest first */
   machineToCheck: {
     input: {
       /** How many (at most 200) */
@@ -1549,11 +1549,25 @@ export interface Operations {
         checked: number;
         made: string;
       }>;
+      texts: Array<{
+        /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+        entity: string;
+        type: string;
+        path: string | null;
+        title: Record<string, unknown>;
+        label: Record<string, unknown>;
+        /** Segments the machine labelled one by one (0 when only the version is labelled) */
+        segments: number;
+        checked: number;
+        made: string;
+      }>;
       totals: {
         transcripts: number;
         paragraphs: number;
         scans: number;
         pages: number;
+        texts: number;
+        entries: number;
       };
     };
   };
@@ -3157,7 +3171,7 @@ export abstract class GeneratedMethods {
     return this.call('machineSummary', {} as Operations['machineSummary']['input']);
   }
 
-  /** What the machines wrote that no person has checked yet: farbrengens with unchecked transcript paragraphs, scans with pages read by OCR and not yet proofread, the newest first (GET /v1/machine/to-check) */
+  /** What the machines wrote that no person has checked yet: farbrengens with unchecked transcript paragraphs, scans with pages read by OCR and not yet proofread, pages whose words a machine read with segments nobody checked, the newest first (GET /v1/machine/to-check) */
   machineToCheck(input?: Operations['machineToCheck']['input']): Promise<Operations['machineToCheck']['output']> {
     return this.call('machineToCheck', input ?? {} as Operations['machineToCheck']['input']);
   }

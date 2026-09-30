@@ -17,20 +17,24 @@ import '../styles/pages/info.css';
 /**
  * How anyone helps build RebbeHub, and what needs help now: the ways in
  * (report a mistake from any page, no account needed; suggest a fix,
- * signed in, and review what waits; add what is missing; write code), and
- * then this week's farbrengens that have no recording linked yet and the
+ * signed in, and review what waits; check what the machines wrote, the
+ * transcripts they heard and the pages they read from scans; add what is
+ * missing; write code), and then this week's farbrengens that have no recording linked yet and the
  * farbrengens with no hanacha, each to open and fill in.
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { api, siteUrl } = siteOf(context);
   const lang = langFrom(request);
   const week = thisWeek(lang);
-  const [noRecording, noText, community] = await Promise.all([
+  const [noRecording, noText, community, toCheck] = await Promise.all([
     api.events({ day: week.dayTokens, missing: 'recordings', limit: 40 }),
     api.events({ missing: 'texts', limit: 200 }),
     api.community(1),
+    api.toCheck(1).catch(() => null),
   ]);
-  return { lang, siteUrl, noRecording, noText, gaps: community.gaps, openReports: community.openReports, openSuggestions: community.openSuggestions };
+  // Only the counts: the rows are on /check.
+  const machine = toCheck ? { transcripts: toCheck.totals.transcripts, texts: toCheck.totals.texts, scans: toCheck.totals.scans } : null;
+  return { lang, siteUrl, noRecording, noText, machine, gaps: community.gaps, openReports: community.openReports, openSuggestions: community.openSuggestions };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -44,6 +48,12 @@ const W = {
   addText: { he: 'הנחה, הקלטה, ספר או מכתב שאין באתר: מעלים קובץ, המכונה מציעה לאן הוא שייך, ואתם מאשרים.', en: 'A hanacha, recording, sefer or letter the site lacks: upload the file, the machine proposes where it belongs, and you confirm.' },
   add: { he: 'הוספה', en: 'Add' },
   review: { he: 'לבדיקה', en: 'Review' },
+  checkTitle: { he: 'בדיקת מה שהמכונה כתבה', en: 'Check what the machines wrote' },
+  checkText: {
+    he: 'תמלולים של הקלטות, ועמודים וסריקות שנקראו במכונה (OCR). מאזינים או משווים לסריקה, ומתקנים. כל בדיקה מתקנת את האתר ומלמדת את הדגם הבא.',
+    en: 'Transcripts of recordings, and pages and scans read by machine (OCR). Listen or compare with the scan, and fix. Every check fixes the site and teaches the next model.',
+  },
+  check: { he: 'לבדוק', en: 'Check' },
   reports: { he: 'דיווחים', en: 'Reports' },
   code: { he: 'GitHub', en: 'GitHub' },
   now: { he: 'מה צריך עזרה עכשיו', en: 'What needs help now' },
@@ -85,7 +95,8 @@ function Some({ events, lang }: { events: EventItem[]; lang: Lang }) {
 }
 
 export default function Help({ loaderData }: Route.ComponentProps) {
-  const { lang, noRecording, noText, gaps, openSuggestions, openReports } = loaderData;
+  const { lang, noRecording, noText, machine, gaps, openSuggestions, openReports } = loaderData;
+  const toCheck = machine ? machine.transcripts + machine.texts + machine.scans : 0;
   return (
     <>
       <div className="phead">
@@ -106,6 +117,9 @@ export default function Help({ loaderData }: Route.ComponentProps) {
               </Way>
               <Way icon="suggest" title={t(lang, 'helpSuggestTitle')} action={<Link className="btn sm" to={href('/review', lang)}>{W.review[lang]} <span className="count">{num(openSuggestions, lang)}</span></Link>}>
                 {t(lang, 'helpSuggestText')}
+              </Way>
+              <Way icon="check" title={W.checkTitle[lang]} action={<Link className="btn sm" to={href('/check', lang)}>{W.check[lang]} <span className="count">{num(toCheck, lang)}</span></Link>}>
+                {W.checkText[lang]}
               </Way>
               <Way icon="upload" title={W.addTitle[lang]} action={<Link className="btn sm primary" to={href('/add', lang)}><Icon name="plus" />{W.add[lang]}</Link>}>
                 {W.addText[lang]}
@@ -158,6 +172,13 @@ export default function Help({ loaderData }: Route.ComponentProps) {
                   <Icon name="suggest" />
                   <span className="grow">{t(lang, 'reviewTitle')}</span>
                   <span className="num subtle">{num(openSuggestions, lang)}</span>
+                </Link>
+              </li>
+              <li>
+                <Link to={href('/check', lang)}>
+                  <Icon name="check" />
+                  <span className="grow">{W.checkTitle[lang]}</span>
+                  <span className="num subtle">{num(toCheck, lang)}</span>
                 </Link>
               </li>
               <li>
