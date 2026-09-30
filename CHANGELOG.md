@@ -28,6 +28,11 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **A printing's PDF on Drive is read like a scan.** A printing whose
+  source is a PDF on Google Drive (the Otzros library's copies, added as
+  printings of the sefer they copy, so a sefer is on one page) opens in
+  the site's reader from its page, and the sefer's printings list says
+  "PDF copy" with a link to read it instead of "no scan yet".
 - **Combine suggestions into one, like commits in one pull request.**
   `POST /v1/suggestions/combine` (and the `combine_suggestions` MCP tool)
   makes several of your own suggestions not yet approved into one, their
