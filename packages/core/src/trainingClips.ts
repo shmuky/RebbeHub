@@ -95,7 +95,7 @@ interface Row {
   recording: EntityId;
   url: string | null;
   file: string | null;
-  span: { startMs: number; endMs: number; words?: Array<{ from: number; to: number; startMs: number; endMs: number }>; locked?: boolean; origin?: { checked?: boolean } } | null;
+  span: { startMs: number; endMs: number; words?: Array<{ from: number; to: number; startMs: number; endMs: number }>; locked?: boolean; origin?: { checked?: boolean; edited?: boolean } } | null;
   checked_at: Date | string;
 }
 
@@ -147,7 +147,8 @@ export function splitOf(recording: EntityId, audio: string): 'train' | 'test' {
 /** A paragraph's pieces of at most CLIP_MAX_SECONDS, cut between words; null when it is too long and has no word timings. */
 export function piecesOf(content: string, span: NonNullable<Row['span']>): Array<{ text: string; startMs: number; endMs: number }> | null {
   if (span.endMs - span.startMs <= CLIP_MAX_SECONDS * 1000) return [{ text: content, startMs: span.startMs, endMs: span.endMs }];
-  const words = span.words?.length && span.words.every((w) => w.to <= content.length) ? span.words : null;
+  // Word times a fix carried over are good enough to follow along, not to cut clips by: those wait for the next alignment run.
+  const words = span.words?.length && !span.origin?.edited && span.words.every((w) => w.to <= content.length) ? span.words : null;
   if (!words) return null;
   const pieces: Array<{ text: string; startMs: number; endMs: number }> = [];
   let first = 0;

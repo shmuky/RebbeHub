@@ -10,6 +10,15 @@ any time. `@rebbehub/client` carries the API's version.
 
 ## Unreleased
 
+### Fixed
+
+- **Word by word again after a fix.** Fixing a paragraph's words used to
+  throw away all its word timings until the audio was timed again, which
+  for JEM's recordings never came, so the lyrics lit such a paragraph as
+  a guess. A fix now keeps the timing of every word it left and times the
+  changed words between them. `rebbehub restore-word-times` gives the
+  timings back to paragraphs fixed before.
+
 ### Removed
 
 - **No timing button in the player.** The **תזמון** button, which let a
