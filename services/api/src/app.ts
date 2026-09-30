@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono';
 import type { DbCost } from '@rebbehub/db';
 import { Catalog, CatalogError, ExportGate, openTranscriptFixes, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, getDerivations, getDerivationsOf, getFile, getFiles, getPageFix, getPageFixes, hanachaSyncs, itemsUsingFile, listWebhooks, pageImageCounts, printingsOf, projectTodo, recordingTranscript, transcriptHistory, transcriptPending, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type FileRow, type Mailer, type PageFixRow, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
-import { peopleOf } from '@rebbehub/core';
+import { dailyLearning, peopleOf } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType, type Language, type PageInline, type PageSegmentKind } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
@@ -302,6 +302,15 @@ export function createApp(options: ApiOptions): Hono {
   // A work's volumes (its top-level parts) with how many units each holds, and one volume's units.
   app.get('/v1/works/:id/outline', async (c) => c.json({ parts: await catalog.workOutline(entityId(c.req.param('id'))) }));
   app.get('/v1/works/:id/parts/:part', async (c) => c.json({ items: await catalog.workPart(entityId(c.req.param('id')), c.req.param('part'), intParam(c.req.query('limit'), 'limit')) }));
+
+  // The day's learning, Chitas' Tanya and Hayom Yom, for a civil day: the daily page's one read (core/daily.ts).
+  app.get('/v1/daily', async (c) => {
+    const date = c.req.query('date') ?? '';
+    const found = /^\d{4}-\d{2}-\d{2}$/.test(date) ? await dailyLearning(catalog, date) : null;
+    if (!found) throw new HttpError(400, 'give date as YYYY-MM-DD');
+    const [tanya, hayomYom] = await Promise.all([redact(found.tanya), redact(found.hayomYom)]);
+    return c.json({ ...found, tanya, hayomYom });
+  });
 
   // The community page in numbers: the latest merges, reports waiting (a count), people, and what the catalog lacks.
   app.get('/v1/community', async (c) => c.json(await catalog.community(intParam(c.req.query('limit'), 'limit')), 200, { 'Cache-Control': PUBLIC_SUMMARY }));

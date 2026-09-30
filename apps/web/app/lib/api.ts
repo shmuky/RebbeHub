@@ -530,6 +530,11 @@ export class RebbeHubApi {
     return (await this.get<{ counts: Record<string, number> }>('/v1/refcounts', { field, type })).counts;
   }
 
+  /** A day's learning (Chitas' Tanya, cut to the day's portion, and Hayom Yom), for a civil day: one read. */
+  daily(date: string) {
+    return this.get<{ date: string; hebrew: string; tanya: Array<Entity & { from: string; to: string | null }>; hayomYom: Entity[] }>('/v1/daily', { date });
+  }
+
   /** A work's volumes, with how many units each holds. */
   async workOutline(id: string) {
     return (await this.get<{ parts: Array<{ value: string; label: { he: string; en?: string } | null; units: number }> }>(`/v1/works/${encodeURIComponent(id)}/outline`)).parts;

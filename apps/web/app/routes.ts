@@ -5,6 +5,8 @@ export default [
   route('search', 'routes/search.tsx'),
   route('sets', 'routes/sets.tsx'),
   route('calendar/:year?/:month?', 'routes/calendar.tsx'),
+  // The day's learning: Chitas' Tanya and Hayom Yom, today or any day (`/daily/2026-09-30`).
+  route('daily/:date?', 'routes/daily.tsx'),
   route('about', 'routes/about.tsx'),
   // Asking for a file to stop being served (rights holders, families): no account needed.
   route('takedown', 'routes/takedown.tsx'),

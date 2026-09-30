@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ServerBuild } from 'react-router';
 import { registerFile, type Catalog, type Json } from '@rebbehub/core';
+import { toHebrewNumeral } from '@rebbehub/hebrew';
 import type { Db } from '@rebbehub/db';
 import type { EntityId } from '@rebbehub/model';
 import { createApp } from '../../../services/api/src/app.js';
@@ -118,6 +119,13 @@ beforeAll(async () => {
     if (author === 'chaim') suggestion = row.number!;
   }
 
+  // Tanya's chapter of 30 September 2026 (19 Tishrei 5787: Iggeret HaKodesh 22 from its 17th segment) and that day's Hayom Yom.
+  const tanya = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'תניא', en: 'Tanya' }, slug: 'tanya', authors: [], genre: 'chassidus', levels: ['part', 'chapter'], sets: [set] }, '/tanya');
+  const verses = (language: string) => Array.from({ length: 30 }, (_, i) => ({ id: String(i + 1), n: i + 1, kind: 'verse', text: [{ text: `${language === 'he' ? 'קטע' : 'Segment'} ${i + 1} `.repeat(20) }] }));
+  await add(catalog, 'mendy', 'keeper', 'unit', { work: tanya, position: [{ level: 'part', value: '4' }, { level: 'chapter', value: '22' }], order: '422', label: { he: 'אגרת הקדש כב' }, editions: [{ kind: 'text', source: 'sefaria', sourceId: 'Tanya, Part IV; Iggeret HaKodesh 22', language: 'he', licence: 'cc-by-nc' }], body: { profile: 'sefaria', versions: [{ id: 'he', language: 'he', segments: verses('he') }, { id: 'en', language: 'en', segments: verses('en') }] } });
+  const hayomYom = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'היום יום', en: 'Hayom Yom' }, slug: 'hayom-yom', authors: [], genre: 'minhagim', levels: ['day'], sets: [set] }, '/hayom-yom');
+  for (let d = 1; d <= 30; d++) await add(catalog, 'mendy', 'keeper', 'unit', { work: hayomYom, position: [{ level: 'day', value: '12', label: { he: '<h2>תשרי</h2>' } }, { level: 'unit', value: String(d) }], order: `c${String(d).padStart(2, '0')}`, label: { he: `<h3>${toHebrewNumeral(d)} תשרי</h3>` }, body: words(d) });
+
   // Every statement the API sends is counted, whatever page asks.
   const db = catalog.db as Db & { query: Db['query'] };
   const query = db.query.bind(db);
@@ -211,6 +219,7 @@ describe("each page's statements and API calls stay within its ceiling", () => {
     within(await page('/review'), '/review', { statements: 2, calls: 2, kB: 30 });
     within(await page('/check'), '/check', { statements: 4, calls: 2, kB: 30 });
   });
+  it("the day's learning is one read", async () => within(await page('/daily/2026-09-30'), '/daily', { statements: 10, calls: 1, kB: 60 }));
   it('the sitemap', async () => within(await page('/sitemap.xml'), '/sitemap.xml', { statements: 2, calls: 2, kB: 5 }));
 });
 
