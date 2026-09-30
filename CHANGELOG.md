@@ -52,6 +52,11 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Fixed
 
+- **The synced player has its look back.** A stylesheet merged without
+  one closing brace, so the lyrics player and the rest of the farbrengen
+  page lost all their styling. A test now checks every stylesheet closes
+  what it opens.
+
 - **Hayom Yom is set as the book prints it.** Each day now has the
   book's head: the weekday, the day and the year (5703 or 5704) in one
   bold row, and the day's shiurim under "שיעורים." (Chumash with its
