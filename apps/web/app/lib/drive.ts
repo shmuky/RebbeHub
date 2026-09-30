@@ -28,3 +28,16 @@ export function driveReadUrl(url: string, apiBase: string): string | null {
   const id = driveFileId(url);
   return id ? `${apiBase.replace(/\/+$/, '')}/v1/drive/${id}` : null;
 }
+
+/**
+ * A printing's PDF copy on Drive, when one of its sources is a Drive file
+ * (the Otzros library's PDFs, added as printings of the sefer they copy):
+ * read in the site's reader like a scan, though RebbeHub keeps no file of it.
+ */
+export function driveCopyOf(sources: unknown): { url: string; credit: string | null } | null {
+  if (!Array.isArray(sources)) return null;
+  for (const s of sources as Array<{ url?: unknown; note?: unknown }>) {
+    if (typeof s?.url === 'string' && driveFileId(s.url)) return { url: s.url, credit: typeof s.note === 'string' ? s.note : null };
+  }
+  return null;
+}

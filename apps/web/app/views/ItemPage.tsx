@@ -18,6 +18,7 @@ import { dateLabel } from '../lib/dates.js';
 import { kindName, languageName, nameOf, t, typeName, type Lang } from '../lib/i18n.js';
 import { num } from '../lib/i18nUi.js';
 import type { ItemView } from '../lib/itemData.server.js';
+import { driveCopyOf } from '../lib/drive.js';
 import { labelOf } from '../lib/labels.js';
 import { st } from '../lib/scanStrings.js';
 import { tracksOf } from '../lib/tracks.js';
@@ -271,12 +272,14 @@ function PublicationPage({ entity, view, lang }: { entity: Entity; view: ItemVie
   const work = view.refs[d.work];
   const year = d.date ? dateLabel(d.date, lang, { civil: false }) : d.gregorianYear ? String(d.gregorianYear) : undefined;
   const contents = view.lists.contents ?? [];
+  // No scan of its own: a PDF copy on Drive, if it has one, is read in its place.
+  const driveCopy = scans.length ? null : driveCopyOf(d.sources);
   const facts: Array<ItemFact | null> = [
     d.publisher ? { icon: 'layers', children: <b>{[d.publisher, d.placePrinted].filter(Boolean).join(', ')}</b> } : null,
     year ? { icon: 'cal', children: <>{year}{d.gregorianYear && d.date ? ` · ${d.gregorianYear}` : ''}</> } : null,
     d.printing ? { icon: 'layers', children: <>{w(lang, 'printingNo')} <b>{num(d.printing, lang)}</b></> } : null,
     d.pageCount ? { icon: 'file', children: <><b>{num(d.pageCount, lang)}</b> {w(lang, 'pagesCount')}</> } : null,
-    { icon: 'scan', children: scans.length ? <><b>{num(scans.length, lang)}</b> {st(lang, 'scansCount')}</> : st(lang, 'noScanYet') },
+    { icon: 'scan', children: scans.length ? <><b>{num(scans.length, lang)}</b> {st(lang, 'scansCount')}</> : st(lang, driveCopy ? 'pdfCopy' : 'noScanYet') },
   ];
   return (
     <ItemShell
@@ -360,6 +363,8 @@ function PublicationPage({ entity, view, lang }: { entity: Entity; view: ItemVie
               </div>
             ))}
           </section>
+        ) : driveCopy ? (
+          <ScanViewer file={driveCopy} title={nameOf(d.title, lang)} sourceLink={null} />
         ) : d.identifiers?.hebrewbooks ? (
           <ScanViewer file={null} title={nameOf(d.title, lang)} sourceLink={sourceUrl({ source: 'hebrewbooks', sourceId: d.identifiers.hebrewbooks })} />
         ) : (

@@ -22,7 +22,8 @@ export function ScanViewer({
   pages,
   initialPage = 1,
 }: {
-  file: FileInfo | null;
+  /** The file to read; a Drive copy has only its address and credit. */
+  file: Pick<FileInfo, 'url' | 'credit'> | null;
   title: string;
   sourceLink: string | null;
   pageLabels?: Array<{ pdfPage: number; printed: string }>;

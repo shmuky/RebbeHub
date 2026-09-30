@@ -28,6 +28,12 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **A printing's PDF on Drive is read like a scan.** A printing whose
+  source is a PDF on Google Drive (the Otzros library's copies, added as
+  printings of the sefer they copy, so a sefer is on one page) opens in
+  the site's reader from its page, and the sefer's printings list says
+  "PDF copy" with a link to read it instead of "no scan yet".
+
 - **Fixes waiting for approval show in the transcript.** `GET
   /v1/recordings/{id}/transcript` gives `pending`: each paragraph fix not
   yet approved, as the paragraph would be, with who sent it and its
