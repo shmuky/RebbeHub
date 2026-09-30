@@ -40,9 +40,9 @@ const entry = (i: number) => ({
 
 const detail: ReviewDetail = {
   changeset: { ...row, checks: [{ check: 'date', status: 'warn', message: 'no date' }] },
-  entries: Array.from({ length: 25 }, (_, i) => entry(i)),
+  entries: Array.from({ length: 10 }, (_, i) => entry(i)),
   total: 500,
-  next: 25,
+  next: 10,
   summary: [{ type: 'event', kind: 'changed', count: 500, fields: [{ path: '/links', before: 'link:sichos-kodesh-media-proxy.shmuky.workers.dev', after: 'link:drive.google.com' }], examples: ['rh-e0', 'rh-e1', 'rh-e2'] }],
   reviews: [],
   names: { 'bot:relink-drive': 'Drive links (relink bot)' },
@@ -77,7 +77,7 @@ describe("a bot's Suggestion of 500 items in the review queue", () => {
     expect(render(detail)).toContain('no date');
   });
 
-  it('then sums the 500 up, shows the first 25, offers the rest, and approves all of it', () => {
+  it('then sums the 500 up, shows the first 10, offers the rest, and approves all of it', () => {
     const html = render(detail);
     expect(html).toContain('What changes');
     expect(html).toContain('links to sichos-kodesh-media-proxy.shmuky.workers.dev');
@@ -87,10 +87,10 @@ describe("a bot's Suggestion of 500 items in the review queue", () => {
     expect(html).toContain('links › 0 › url');
     expect(html).toContain('<ins>drive</ins>');
     expect(html).not.toContain('(changed)');
-    expect((html.match(/class="diff"/g) ?? []).length).toBe(25);
-    expect(html).toContain('Showing 25 of 500');
+    expect((html.match(/class="diff"/g) ?? []).length).toBe(10);
+    expect(html).toContain('Showing 10 of 500');
     expect(html).toContain('Show more');
-    expect(html).toContain('475 left');
+    expect(html).toContain('490 left');
     expect(html).toMatch(/Approve<span class="num"> · 500<\/span>/);
     expect(html).toContain('Don’t approve, send back');
   });
@@ -111,6 +111,32 @@ describe("a bot's Suggestion of 500 items in the review queue", () => {
     expect(html).toMatch(/Approve, keep what’s on the site|Approve, keep what&#x27;s on the site/);
     expect(html).toContain('Approve, take the suggestion');
     expect(html).not.toMatch(/>Approve<span/);
+  });
+
+  it('sums up a page’s words in one line, by names and not paths, and never more than a few lines', () => {
+    const segments = Array.from({ length: 40 }, (_, i) => [
+      { path: `/body/versions/he/segments/t${i}/text`, before: 'list', after: 'list' },
+      { path: `/body/versions/he/segments/t${i}/printed`, before: 'list', after: 'none' },
+      { path: `/body/versions/he/segments/t${i}/words/*/startMs`, before: 'number', after: 'number' },
+    ]).flat();
+    const groups = Array.from({ length: 12 }, (_, i) => ({ type: 'unit', kind: 'changed' as const, count: 2, fields: [...segments, { path: `/label/he`, before: 'text', after: 'text' }, { path: `/x${i}`, before: 'text', after: 'text' }, { path: `/y${i}`, before: 'text', after: 'text' }], examples: [`rh-u${i}`] }));
+    const html = render({ ...detail, summary: groups });
+    expect(html).not.toContain('body/versions');
+    expect(html).not.toContain('segments');
+    expect(html).not.toContain('startMs');
+    expect(html).not.toContain('rh-u0<');
+    expect(html).toContain('>The words<');
+    expect(html).toContain('+1 more<');
+    expect(html).toContain('<span class="rq-summary-n num">14</span><span class="rq-summary-what subtle">more kinds of change');
+    expect((html.match(/rq-summary-field/g) ?? []).length).toBe(15);
+    expect(html).toContain('Example 1');
+  });
+
+  it('draws groups that read the same as one', () => {
+    const groups = Array.from({ length: 30 }, (_, i) => ({ type: 'unit', kind: 'changed' as const, count: 2, fields: [{ path: `/body/versions/he/segments/t${i}/text`, before: 'list', after: 'list' }], examples: [`rh-u${i}`] }));
+    const html = render({ ...detail, summary: groups });
+    expect((html.match(/rq-summary-field/g) ?? []).length).toBe(1);
+    expect(html).toContain('<span class="rq-summary-n num">60</span>');
   });
 
   it('once every item is shown, offers no more', () => {

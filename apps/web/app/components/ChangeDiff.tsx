@@ -28,8 +28,11 @@ function segmentOf(path: string, lang: Lang): string {
   return name.length > 2 ? name[name.length - 1]! : '';
 }
 
+/** At most this many rows an item: the rest are counted, never all drawn (a phone stops on thousands). */
+const ROWS = 6;
+
 export function ChangeRows({ changes, lang }: { changes: Change[]; lang: Lang }) {
-  const folded = foldChanges(changes);
+  const folded = foldChanges(changes, ROWS);
   return (
     <>
       {folded.rows.map((c) =>
