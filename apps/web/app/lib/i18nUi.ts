@@ -70,6 +70,7 @@ const UI = {
   sendBack: { he: 'לא לאשר', en: 'Don’t approve' },
   sendBackHint: { he: 'שום דבר לא משתנה. ההצעה חוזרת למציע עם ההערה שלכם, לתיקון.', en: 'Nothing changes. The suggestion goes back to its author with your note, to fix.' },
   approveSuggestion: { he: 'אישור ההצעה', en: 'Approve suggestion' },
+  merging: { he: 'ממזג…', en: 'Merging…' },
   sendBackSuggestion: { he: 'לא לאשר ולהחזיר למציע', en: 'Don’t approve, send back' },
   addComment: { he: 'הוספת הערה', en: 'Comment' },
   words: { he: 'מילים', en: 'words' },

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Ref, type RefObject } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type Ref, type RefObject } from 'react';
 import { Clamp } from '../ui/Clamp.js';
 import { Link } from 'react-router';
 import { ChangeDiff } from './ChangeDiff.js';
@@ -11,7 +11,7 @@ import { labelOf } from '../lib/labels.js';
 import { st } from '../lib/scanStrings.js';
 import { href } from '../lib/links.js';
 import { LABELS, detailLabels, stateOf, stateWord } from '../lib/suggestions.js';
-import { Icon } from '../ui/Icon.js';
+import { Icon, type IconName } from '../ui/Icon.js';
 import { Avatar, Label, MachineLabel, RelativeTime, Skeleton, StateIcon, StatusBadge } from '../ui/primitives.js';
 
 /**
@@ -103,7 +103,54 @@ const W = {
   keepSite: { he: 'לאשר, להשאיר את מה שבאתר', en: "Approve, keep what's on the site" },
   takeSuggested: { he: 'לאשר, לקחת את ההצעה', en: 'Approve, take the suggestion' },
   unchanged: { he: 'כבר באתר כפי שהוצע', en: 'already on the site as suggested' },
+  merging: { he: 'ממזג…', en: 'Merging…' },
+  sendingBack: { he: 'מחזיר…', en: 'Sending back…' },
+  withdrawing: { he: 'מבטל…', en: 'Withdrawing…' },
+  keeping: { he: 'משאיר…', en: 'Keeping…' },
+  undoing: { he: 'מבטל…', en: 'Undoing…' },
+  merged: { he: 'מוזג', en: 'Merged' },
+  sentBack: { he: 'הוחזרה למציע', en: 'Sent back' },
+  withdrawn: { he: 'בוטלה', en: 'Withdrawn' },
+  kept: { he: 'נשאר', en: 'Kept' },
+  undone: { he: 'בוטל', en: 'Undone' },
 } as const;
+
+/** A decision a keeper (or the author) makes on the card, and the API's address for it. Approving over clashes takes the site's version or the suggestion's. */
+export type Doing = 'approve' | 'approve-theirs' | 'send-back' | 'withdraw' | 'keep-live' | 'undo-live';
+
+const DECISIONS: Record<Doing, { path: string; working: keyof typeof W; done: keyof typeof W }> = {
+  approve: { path: 'approve', working: 'merging', done: 'merged' },
+  'approve-theirs': { path: 'approve', working: 'merging', done: 'merged' },
+  'send-back': { path: 'send-back', working: 'sendingBack', done: 'sentBack' },
+  withdraw: { path: 'withdraw', working: 'withdrawing', done: 'withdrawn' },
+  'keep-live': { path: 'review-live', working: 'keeping', done: 'kept' },
+  'undo-live': { path: 'review-live', working: 'undoing', done: 'undone' },
+};
+
+/**
+ * What the Suggestion is once the API has said yes to a decision: an
+ * approval merges it there and then (Catalog.merge), so the card can draw
+ * it merged at once, without waiting for the queue to be read again.
+ */
+export function decidedAs(doing: Doing): Pick<ReviewRow, 'status'> | Pick<ReviewRow, 'post_review'> {
+  if (doing === 'approve' || doing === 'approve-theirs') return { status: 'merged' };
+  if (doing === 'send-back') return { status: 'sent_back' };
+  if (doing === 'withdraw') return { status: 'withdrawn' };
+  return { post_review: 'done' };
+}
+
+/** A card's decision as it stands: being sent, answered, or refused. */
+export interface Decision {
+  /** Sent and not yet answered: its button says so, and no button can be pressed again. */
+  doing: Doing | null;
+  /** Answered: what was decided, drawn over the card's own copy of the Suggestion. */
+  done: Doing | null;
+  error: string | null;
+  /** Clashes found by Approve itself, where the summary had not counted them (a page read without it). */
+  refused: number | null;
+}
+
+export const UNDECIDED: Decision = { doing: null, done: null, error: null, refused: null };
 
 /** One decision for every clash: `*` stands for every item and every field. In a merge "ours" is the site's version, "theirs" the suggestion's. */
 export const KEEP_SITE = { '*': { '*': { take: 'ours' } } } as const;
@@ -361,6 +408,7 @@ export function SuggestionCard({
   loadError = null,
   onRetry,
   cardRef,
+  decision: shown,
 }: {
   row: ReviewRow;
   person?: ReviewPerson;
@@ -373,35 +421,43 @@ export function SuggestionCard({
   loadError?: string | null;
   onRetry?: () => void;
   cardRef?: Ref<HTMLElement>;
+  /** A decision to draw in place of the card's own (a test draws each stage of one). */
+  decision?: Decision;
 }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [own, setDecision] = useState<Decision>(UNDECIDED);
+  const decision = shown ?? own;
+  const { doing, done, error, refused } = decision;
+  // Pressed once: the button is off from that moment, before React draws it so, and a second press does nothing.
+  const sending = useRef(false);
+  const busy = doing !== null;
   const [note, setNote] = useState<string | null>(null);
-  // Clashes found by Approve itself, where the summary had not counted them (a page read without it).
-  const [refused, setRefused] = useState<number | null>(null);
-  const cs = detail?.changeset ?? row;
+  // Once the API has answered, the card is the Suggestion as it now is: merged, sent back or withdrawn, its buttons gone.
+  const cs = { ...(detail?.changeset ?? row), ...(done ? decidedAs(done) : {}) };
   const author = person?.name ?? detail?.names[cs.author] ?? cs.author;
   const bot = person?.bot ?? cs.author.startsWith('bot:');
   const live = cs.post_review === 'pending';
   const state = live ? 'open' : stateOf(cs.status);
   const total = detail?.total ?? row.items ?? detail?.entries.length ?? 0;
 
-  const act = (path: string, body: unknown = {}) => async () => {
-    setBusy(true);
-    setError(null);
+  const act = (what: Doing, body: unknown = {}) => async () => {
+    if (sending.current) return;
+    sending.current = true;
+    setDecision((d) => ({ ...d, doing: what, error: null }));
     try {
-      await call(`/${cs.id}/${path}`, { method: 'POST', body });
+      await call(`/${cs.id}/${DECISIONS[what].path}`, { method: 'POST', body });
+      // Drawn as decided now; the queue is read again behind it, and drops or moves the card when it has.
+      setDecision({ ...UNDECIDED, done: what });
       onDone();
     } catch (e) {
-      if (e instanceof CallError && e.conflicts?.length) {
-        setRefused(new Set(e.conflicts.map((c) => String((c as { path?: string }).path ?? '').split('/')[0])).size);
-        return;
-      }
-      setError(e instanceof Error ? e.message : String(e));
+      const clashes = e instanceof CallError && e.conflicts?.length ? new Set(e.conflicts.map((c) => String((c as { path?: string }).path ?? '').split('/')[0])).size : null;
+      setDecision((d) => ({ ...d, doing: null, refused: clashes ?? d.refused, error: clashes ? null : e instanceof Error ? e.message : String(e) }));
     } finally {
-      setBusy(false);
+      sending.current = false;
     }
   };
+  // The pressed button's words while it waits ("Merging…") and a turning mark, or its own.
+  const says = (what: Doing, words: ReactNode) => (doing === what ? W[DECISIONS[what].working][lang] : words);
+  const icon = (what: Doing, name: IconName) => (doing === what ? <Icon name="loader" className="spin" /> : <Icon name={name} />);
 
   const failed = (cs.checks ?? []).filter((c) => c.status !== 'pass');
   const lastSendBack = detail ? [...detail.reviews].reverse().find((r) => r.verdict === 'send_back') : undefined;
@@ -564,25 +620,29 @@ export function SuggestionCard({
       </div>
 
       <footer className="rq-f">
+        {done ? (
+          <StatusBadge state={done === 'approve' || done === 'approve-theirs' || done === 'keep-live' ? 'approved' : 'closed'} size="sm" icon={done === 'send-back' || done === 'withdraw' ? 'x' : done === 'undo-live' ? 'history' : 'check'}>
+            <span role="status">{W[DECISIONS[done].done][lang]}</span>
+          </StatusBadge>
+        ) : null}
         {cs.status === 'open' && mayApprove ? (
           note === null ? (
             <>
               {clashes > 0 ? (
                 <>
-                  <button type="button" className="btn approve" onClick={act('approve', { resolutions: KEEP_SITE })} disabled={busy} aria-busy={busy || undefined}>
-                    <Icon name="check" />
-                    {W.keepSite[lang]}
-                    {allOf}
+                  <button type="button" className="btn approve" onClick={act('approve', { resolutions: KEEP_SITE })} disabled={busy} aria-busy={doing === 'approve' || undefined}>
+                    {icon('approve', 'check')}
+                    {says('approve', <>{W.keepSite[lang]}{allOf}</>)}
                   </button>
-                  <button type="button" className="btn" onClick={act('approve', { resolutions: TAKE_SUGGESTED })} disabled={busy}>
-                    {W.takeSuggested[lang]}
+                  <button type="button" className="btn" onClick={act('approve-theirs', { resolutions: TAKE_SUGGESTED })} disabled={busy} aria-busy={doing === 'approve-theirs' || undefined}>
+                    {doing === 'approve-theirs' ? icon('approve-theirs', 'check') : null}
+                    {says('approve-theirs', W.takeSuggested[lang])}
                   </button>
                 </>
               ) : (
-                <button type="button" className="btn approve" onClick={act('approve')} disabled={busy} aria-busy={busy || undefined}>
-                  <Icon name="check" />
-                  {t(lang, 'approve')}
-                  {allOf}
+                <button type="button" className="btn approve" onClick={act('approve')} disabled={busy} aria-busy={doing === 'approve' || undefined}>
+                  {icon('approve', 'check')}
+                  {says('approve', <>{t(lang, 'approve')}{allOf}</>)}
                 </button>
               )}
               <button type="button" className="btn danger" onClick={() => setNote('')} disabled={busy}>
@@ -597,11 +657,11 @@ export function SuggestionCard({
               </label>
               <textarea id={`note-${cs.id}`} value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder={t(lang, 'sendBackWhy')} autoFocus dir="auto" />
               <span className="btn-row">
-                <button type="button" className="btn danger" onClick={act('send-back', { note })} disabled={busy || !note.trim()}>
-                  <Icon name="x" />
-                  {t(lang, 'sendBack')}
+                <button type="button" className="btn danger" onClick={act('send-back', { note })} disabled={busy || !note.trim()} aria-busy={doing === 'send-back' || undefined}>
+                  {icon('send-back', 'x')}
+                  {says('send-back', t(lang, 'sendBack'))}
                 </button>
-                <button type="button" className="btn ghost" onClick={() => setNote(null)}>
+                <button type="button" className="btn ghost" onClick={() => setNote(null)} disabled={busy}>
                   {t(lang, 'cancel')}
                 </button>
               </span>
@@ -610,20 +670,20 @@ export function SuggestionCard({
         ) : null}
         {live && mayApprove ? (
           <>
-            <button type="button" className="btn approve" onClick={act('review-live', { verdict: 'approve' })} disabled={busy}>
-              <Icon name="check" />
-              {t(lang, 'keepLive')}
+            <button type="button" className="btn approve" onClick={act('keep-live', { verdict: 'approve' })} disabled={busy} aria-busy={doing === 'keep-live' || undefined}>
+              {icon('keep-live', 'check')}
+              {says('keep-live', t(lang, 'keepLive'))}
             </button>
-            <button type="button" className="btn danger" onClick={act('review-live', { verdict: 'revert' })} disabled={busy}>
-              <Icon name="history" />
-              {t(lang, 'undoLive')}
+            <button type="button" className="btn danger" onClick={act('undo-live', { verdict: 'revert' })} disabled={busy} aria-busy={doing === 'undo-live' || undefined}>
+              {icon('undo-live', 'history')}
+              {says('undo-live', t(lang, 'undoLive'))}
             </button>
           </>
         ) : null}
         {detail?.mine && (cs.status === 'open' || cs.status === 'sent_back') ? (
-          <button type="button" className="btn" onClick={act('withdraw')} disabled={busy}>
-            <Icon name="x" />
-            {t(lang, 'withdraw')}
+          <button type="button" className="btn" onClick={act('withdraw')} disabled={busy} aria-busy={doing === 'withdraw' || undefined}>
+            {icon('withdraw', 'x')}
+            {says('withdraw', t(lang, 'withdraw'))}
           </button>
         ) : null}
         {detail && !deciding && cs.status === 'open' && !detail.mine ? (

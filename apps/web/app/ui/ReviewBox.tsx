@@ -18,6 +18,8 @@ export interface ReviewChoice {
   hint: string;
   /** The button's words and colour when this choice is picked. */
   submit: string;
+  /** The button's words while the choice is being sent ("Merging…"), when they differ from `submit`. */
+  working?: string;
   tone?: 'approve' | 'primary' | 'danger';
   icon?: IconName;
   /** Whether a note must be written for this choice (sending back says why). */
@@ -27,7 +29,7 @@ export interface ReviewChoice {
 export function reviewChoices(lang: Lang): ReviewChoice[] {
   return [
     { value: 'comment', label: tu(lang, 'comment'), hint: tu(lang, 'commentHint'), submit: tu(lang, 'addComment'), tone: 'primary', icon: 'discuss', needsNote: true },
-    { value: 'approve', label: tu(lang, 'approve'), hint: tu(lang, 'approveHint'), submit: tu(lang, 'approveSuggestion'), tone: 'approve', icon: 'check' },
+    { value: 'approve', label: tu(lang, 'approve'), hint: tu(lang, 'approveHint'), submit: tu(lang, 'approveSuggestion'), working: tu(lang, 'merging'), tone: 'approve', icon: 'check' },
     { value: 'send_back', label: tu(lang, 'sendBack'), hint: tu(lang, 'sendBackHint'), submit: tu(lang, 'sendBackSuggestion'), tone: 'danger', icon: 'x', needsNote: true },
   ];
 }
@@ -57,7 +59,8 @@ export function ReviewBox({
   footnote?: ReactNode;
   busy?: boolean;
   error?: string | null;
-  onSubmit: (choice: string, note: string) => void | Promise<void>;
+  /** Resolves when the choice has been sent; `false` when it was refused (the words are kept to send again). */
+  onSubmit: (choice: string, note: string) => void | boolean | Promise<void | boolean>;
   name?: string;
   /** More actions beside the button (withdraw, cancel). */
   extra?: ReactNode;
@@ -65,9 +68,11 @@ export function ReviewBox({
   const [note, setNote] = useState('');
   const [failed, setFailed] = useState<string | null>(null);
   const [choice, setChoice] = useState(initial ?? choices?.[0]?.value ?? 'comment');
+  // Sent and not yet answered: the button says what it is doing and cannot be pressed again.
+  const [sending, setSending] = useState(false);
   const picked = choices?.find((c) => c.value === choice);
   const tone = picked?.tone ?? 'primary';
-  const blocked = busy || ((picked?.needsNote ?? !choices) && !note.trim());
+  const blocked = busy || sending || ((picked?.needsNote ?? !choices) && !note.trim());
   return (
     <form
       className="review-box"
@@ -75,13 +80,15 @@ export function ReviewBox({
         e.preventDefault();
         if (blocked) return;
         setFailed(null);
+        setSending(true);
         // A refused submit keeps the words and says why; the caller may say it too, through `error`.
         Promise.resolve()
           .then(() => onSubmit(choice, note.trim()))
           .then(
-            () => setNote(''),
+            (sent) => sent !== false && setNote(''),
             (e: unknown) => setFailed(e instanceof Error ? e.message : String(e)),
-          );
+          )
+          .finally(() => setSending(false));
       }}
     >
       <div className="rb-h">
@@ -115,9 +122,9 @@ export function ReviewBox({
         <span>{footnote}</span>
         <span className="end">
           {extra}
-          <button type="submit" className={`btn ${tone}`} disabled={blocked} aria-busy={busy || undefined}>
-            {busy ? <Icon name="loader" className="spin" /> : <Icon name={picked?.icon ?? 'discuss'} />}
-            {picked?.submit ?? tu(lang, 'addComment')}
+          <button type="submit" className={`btn ${tone}`} disabled={blocked} aria-busy={busy || sending || undefined}>
+            {busy || sending ? <Icon name="loader" className="spin" /> : <Icon name={picked?.icon ?? 'discuss'} />}
+            {sending && picked?.working ? picked.working : (picked?.submit ?? tu(lang, 'addComment'))}
           </button>
         </span>
       </div>
