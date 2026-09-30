@@ -1,5 +1,5 @@
 import type { LocalName } from '@rebbehub/model';
-import { fieldName, valueText } from '../components/ChangeTable.js';
+import { foldChanges, foldedName, moreChanges, valueText } from '../components/ChangeTable.js';
 import type { Entity, RebbeHubApi, SuggestionDetail } from './api.js';
 import { nameOf, typeName, type Lang } from './i18n.js';
 import { labelOf } from './labels.js';
@@ -47,7 +47,8 @@ export interface EntryView {
   removed: boolean;
   /** A paragraph's words, with the paragraphs before and after it. */
   segment: { n: string; before: string; after: string; prev: { n: string; content: string } | null; next: { n: string; content: string } | null } | null;
-  fields: Array<{ path: string; name: string; before: string; after: string }>;
+  /** Its fields that changed, alike ones folded into one row (`count` of them), so a bot's thousands are a few rows. */
+  fields: Array<{ path: string; name: string; before: string; after: string; count: number }>;
   scan: ScanContext | null;
   withheld: string | null;
 }
@@ -184,9 +185,9 @@ export async function suggestionView(api: RebbeHubApi, detail: SuggestionDetail,
       segment = { n, before, after, prev, next };
       if (before !== after) scan = await scanOf(api, data, before, after, lang).catch(() => null);
     }
-    const fields = e.changes
-      .filter((c) => !(segment && (c.path === '/content' || c.path === 'content')))
-      .map((c) => ({ path: c.path, name: fieldName(c.path, lang), before: valueText(c.path, c.before, lang), after: valueText(c.path, c.after, lang) }));
+    const folded = foldChanges(e.changes.filter((c) => !(segment && (c.path === '/content' || c.path === 'content'))));
+    const fields = folded.rows.map((c) => ({ path: c.path, name: foldedName(c, lang), before: valueText(c.path, c.before, lang), after: valueText(c.path, c.after, lang), count: c.count }));
+    if (folded.hidden) fields.push({ path: '/…', name: moreChanges(folded.hidden, lang), before: '', after: '', count: folded.hidden });
     views.push({
       entityId: e.entityId,
       type: e.type,
