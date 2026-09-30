@@ -335,16 +335,17 @@ describe('what the machines wrote for people to check', () => {
   it('lists pages whose words a machine read, segment by segment, until a person checks each one', async () => {
     const { catalog, set } = await freshCatalog();
     const ocr = { by: 'ocr:kraken-maftechos-r4' };
-    const words = (origin: 'segments' | 'version' | 'person') => ({
+    const words = (origin: 'segments' | 'version' | 'person' | 'gathered') => ({
       profile: 'plain',
       versions: [
         {
           id: 'he',
           language: 'he',
+          ...(origin === 'gathered' ? {} : { url: 'https://drive.google.com/file/d/scan/view' }),
           ...(origin === 'version' ? { origin: ocr } : {}),
           segments: [
-            { id: 't1', kind: 'heading', level: 2, text: [{ text: 'אב ובן' }], ...(origin === 'segments' ? { origin: ocr } : {}) },
-            { id: 't1.1', kind: 'paragraph', text: [{ text: 'בן ממשיך את אביו' }], ...(origin === 'segments' ? { origin: ocr } : {}) },
+            { id: 't1', kind: 'heading', level: 2, text: [{ text: 'אב ובן' }], ...(origin === 'segments' || origin === 'gathered' ? { origin: ocr } : {}) },
+            { id: 't1.1', kind: 'paragraph', text: [{ text: 'בן ממשיך את אביו' }], ...(origin === 'segments' || origin === 'gathered' ? { origin: ocr } : {}) },
           ],
         },
       ],
@@ -352,6 +353,8 @@ describe('what the machines wrote for people to check', () => {
     const index = await add(catalog, 'mendy', 'keeper', 'event', { ...yudShvat(set), body: words('segments') } as unknown as Json);
     const whole = await add(catalog, 'mendy', 'keeper', 'event', { ...yudShvat(set), title: { he: 'כולו במכונה' }, body: words('version') } as unknown as Json);
     await add(catalog, 'mendy', 'keeper', 'event', { ...yudShvat(set), title: { he: 'בידי אדם' }, body: words('person') } as unknown as Json);
+    // Gathered from other pages, with no scan of its own: checked where its words came from, so not listed.
+    await add(catalog, 'mendy', 'keeper', 'event', { ...yudShvat(set), title: { he: 'מפתח כללי' }, body: words('gathered') } as unknown as Json);
 
     let list = await machineToCheck(catalog);
     expect(list.texts.map((r) => r.entity).sort()).toEqual([index, whole].sort());

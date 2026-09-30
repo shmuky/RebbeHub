@@ -96,11 +96,13 @@ export async function machineToCheck(catalog: Catalog, options: { limit?: number
        WHERE s.pages > s.checked AND s.made IS NOT NULL`,
     ),
     // The segments are counted strict and silent: lax would unwrap each array `**` passes and count its segments twice.
+    // Only a version with its source's address is listed: a page gathered from others (a subject index
+    // merged from its books) has none, and its words are checked where they came from.
     catalog.db.query<{ entity: EntityId; type: string; path: string | null; title: Json | null; label: Json | null; segments: number; checked: number; whole: boolean; made: string }>(
       `SELECT e.id AS entity, e.type, e.path, coalesce(wr.data->'title', r.data->'title') AS title, r.data->'label' AS label,
-              (SELECT count(*) FROM jsonb_path_query(r.data, 'strict $.body.versions[*].segments.**.origin ? (exists(@.by))', '{}', true))::int AS segments,
-              (SELECT count(*) FROM jsonb_path_query(r.data, 'strict $.body.versions[*].segments.**.origin ? (exists(@.by) && @.checked == true)', '{}', true))::int AS checked,
-              jsonb_path_exists(r.data, 'lax $.body.versions[*].origin ? (exists(@.by) && !(@.checked == true))') AS whole,
+              (SELECT count(*) FROM jsonb_path_query(r.data, 'strict $.body.versions[*] ? (exists(@.url)).segments.**.origin ? (exists(@.by))', '{}', true))::int AS segments,
+              (SELECT count(*) FROM jsonb_path_query(r.data, 'strict $.body.versions[*] ? (exists(@.url)).segments.**.origin ? (exists(@.by) && @.checked == true)', '{}', true))::int AS checked,
+              jsonb_path_exists(r.data, 'lax $.body.versions[*] ? (exists(@.url)).origin ? (exists(@.by) && !(@.checked == true))') AS whole,
               r.created_at AS made
        FROM revision r JOIN entity e ON e.id = r.entity_id AND e.main_rev = r.id AND NOT e.deleted
        LEFT JOIN entity w ON w.id = r.data->>'work' LEFT JOIN revision wr ON wr.id = w.main_rev

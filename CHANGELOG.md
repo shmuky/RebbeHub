@@ -12,6 +12,14 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **A page number in a subject index names its sicha.** Hover a link that
+  carries a title (the index's page numbers do: `ח"א ע' 119 (וארא)`) and
+  the tooltip says which sicha it opens.
+- **Pages gathered from others stay off the checking list.** `/check`
+  and `machine_to_check` list a machine-read page only when its version
+  has its source's address; a page merged from others (the full subject
+  index, gathered from its printed books) is checked where its words came
+  from.
 - **Checking a transcript: hear again, the speed, and the page follows
   the words.** While checking, the player bar plays the last five
   seconds again and slows down (0.5×, 0.75×) or speeds up (1.25×, 1.5×);
