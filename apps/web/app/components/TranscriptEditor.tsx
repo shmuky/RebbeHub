@@ -54,7 +54,10 @@ const W = {
   sent: { he: 'נשלח. יופיע באתר אחרי אישור.', en: 'Sent. It shows on the site once approved.' },
   saved: { he: 'נשמר.', en: 'Saved.' },
   yourFix: { he: 'התיקון שלך, מחכה לאישור', en: 'Your fix, waiting for approval' },
-  theirFix: { he: 'תיקון של {name}, מחכה לאישור', en: "{name}'s fix, waiting for approval" },
+  waitingBy: { he: 'מחכה לאישור · {names}', en: 'Waiting for approval · {names}' },
+  you: { he: 'את/ה', en: 'you' },
+  changedBy: { he: 'שונה בידי {names}', en: 'Changed by {names}' },
+  checkedBy: { he: 'נבדק בידי {names}', en: 'Checked by {names}' },
   waitingTitle: { he: 'מחכים לאישור', en: 'Waiting for approval' },
   reviewAll: { he: 'לעבור על כל התיקונים', en: 'Go through all the fixes' },
   waitingCount: { he: '{n} תיקונים כאן מחכים לאישור, מסומנים בקו מקווקו', en: '{n} fixes here wait for approval, marked with a dashed line' },
@@ -187,40 +190,67 @@ function keep(key: string, value: unknown) {
 }
 
 /** One commit's changes, told in words. */
-function ChangeRow({ commit, lang, numberOf, only }: { commit: TranscriptCommit; lang: Lang; numberOf: (segment: string) => number; only?: string }) {
-  const changes = only ? commit.changes.filter((c) => c.segment === only) : commit.changes;
-  if (!changes.length) return null;
-  const made = changes.filter((c) => c.kind === 'made');
-  const who = commit.authorIsBot ? null : (commit.authorName ?? commit.author);
+/** Everything that happened to one paragraph, as one change: the words as the machine heard them beside the words now, and who changed or checked them. */
+interface ParaStory {
+  segment: string;
+  before: string;
+  after: string;
+  changedBy: string[];
+  checkedBy: string[];
+  at: string;
+  suggestions: number[];
+}
+
+function storiesOf(commits: TranscriptCommit[], only?: string): ParaStory[] {
+  const bySegment = new Map<string, ParaStory>();
+  // Oldest first, so the first words are the machine's and the last are today's.
+  for (const commit of [...commits].sort((a, b) => a.commit - b.commit)) {
+    const who = commit.authorIsBot ? null : (commit.authorName ?? commit.author);
+    for (const c of commit.changes) {
+      if (c.kind === 'made' || c.kind === 'sync' || (only && c.segment !== only)) continue;
+      let story = bySegment.get(c.segment);
+      if (!story) {
+        story = { segment: c.segment, before: c.before ?? '', after: c.before ?? '', changedBy: [], checkedBy: [], at: commit.at, suggestions: [] };
+        bySegment.set(c.segment, story);
+      }
+      if (c.kind === 'words') {
+        story.after = c.after ?? story.after;
+        if (who && !story.changedBy.includes(who)) story.changedBy.push(who);
+      }
+      if ((c.kind === 'checked' || c.complete) && who && !story.checkedBy.includes(who)) story.checkedBy.push(who);
+      story.at = commit.at;
+      if (commit.suggestion && !story.suggestions.includes(commit.suggestion)) story.suggestions.push(commit.suggestion);
+    }
+  }
+  return [...bySegment.values()].sort((a, b) => b.at.localeCompare(a.at));
+}
+
+function StoryRow({ story, lang, numberOf, only }: { story: ParaStory; lang: Lang; numberOf: (segment: string) => number; only?: boolean }) {
+  const names = (list: string[]) => list.join(', ');
   return (
     <li className="tx-change">
       <div className="tx-change-head">
-        {who ? <b>{who}</b> : <MachineLabel lang={lang} size="sm" />}
-        <RelativeTime at={commit.at} lang={lang} className="row-sub" />
-        {commit.suggestion ? (
-          <Link className="row-sub" to={href(`/suggestions/${commit.suggestion}`, lang)}>
-            {w(lang, 'suggestion')} #{commit.suggestion}
-          </Link>
+        {!only ? (
+          <a href={`#p-${story.segment}`}>
+            <b>
+              {w(lang, 'para')} {numberOf(story.segment)}
+            </b>
+          </a>
         ) : null}
-      </div>
-      {made.length ? <p className="row-sub">{made.length === 1 && only ? w(lang, 'madeOne') : w(lang, 'made').replace('{n}', made.length.toLocaleString(lang))}</p> : null}
-      {changes
-        .filter((c) => c.kind !== 'made')
-        .map((c, i) => (
-          <div key={i} className="tx-change-item">
-            {!only ? (
-              <a className="row-sub" href={`#p-${c.segment}`}>
-                {w(lang, 'para')} {numberOf(c.segment)}
-              </a>
-            ) : null}{' '}
-            <span className="row-sub">{c.kind === 'checked' ? w(lang, 'wasChecked') : c.kind === 'sync' ? w(lang, 'movedSync') : w(lang, c.complete ? 'fixedAll' : 'fixedSome')}</span>
-            {c.kind === 'words' ? (
-              <p className="tx-diff" dir="auto">
-                <InlineDiff parts={wordDiff(c.before ?? '', c.after ?? '')} />
-              </p>
-            ) : null}
-          </div>
+        <RelativeTime at={story.at} lang={lang} className="row-sub" />
+        {story.suggestions.map((n) => (
+          <Link key={n} className="row-sub" to={href(`/suggestions/${n}`, lang)}>
+            #{n}
+          </Link>
         ))}
+      </div>
+      {story.changedBy.length ? <p className="row-sub">{w(lang, 'changedBy').replace('{names}', names(story.changedBy))}</p> : null}
+      {story.checkedBy.length ? <p className="row-sub">{w(lang, 'checkedBy').replace('{names}', names(story.checkedBy))}</p> : null}
+      {story.before !== story.after ? (
+        <p className="tx-diff" dir="auto">
+          <InlineDiff parts={wordDiff(story.before, story.after)} />
+        </p>
+      ) : null}
     </li>
   );
 }
@@ -290,7 +320,7 @@ function Para({
   // Words picked in the text open their editor here, already marked when they were picked as unclear.
   useEffect(() => {
     if (!pickWords || !canFix) return;
-    const words = paragraph.content.slice(pickWords.from, pickWords.to);
+    const words = base.slice(pickWords.from, pickWords.to);
     setEditing({ kind: 'words', from: pickWords.from, to: pickWords.to, value: pickWords.unclear ? markUnclear(words) : words });
     // Only a new pick opens it; the words changing under it (an approved fix) must not open it again.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -330,15 +360,19 @@ function Para({
   }
 
 
-  const tokens = tokensOf(paragraph);
-  const marks = unclearRanges(paragraph.content);
-  // Fixes already sent by others, or by this listener before, and not yet approved: their words are shown as they will be, below.
-  const others = waiting.filter((x) => x.content !== sent?.content);
-  const changing = others.flatMap((x) => pendingRanges(paragraph.content, x.content));
+  const pending = sent && !sent.merged ? sent : null;
+  // This listener's own fix that still waits: they go on from it, so it is never typed twice, and every word they fix joins it.
+  const mine = pending ?? [...waiting].reverse().find((x) => x.author === me) ?? null;
+  const base = mine?.content ?? paragraph.content;
+  const shown = base === paragraph.content ? paragraph : { ...paragraph, content: base, words: null };
+  const tokens = tokensOf(shown);
+  const marks = unclearRanges(base);
+  // Words a fix waiting for approval changes: this listener's own in their words, or others' in the words on the site.
+  const changing = mine ? pendingRanges(base, paragraph.content) : waiting.flatMap((x) => pendingRanges(paragraph.content, x.content));
   const text: React.ReactNode[] = [];
   let at = 0;
   for (const [i, tk] of tokens.entries()) {
-    if (tk.from > at) text.push(paragraph.content.slice(at, tk.from));
+    if (tk.from > at) text.push(base.slice(at, tk.from));
     const next = tokens[i + 1]?.ms ?? paragraph.endMs ?? Infinity;
     const state = active && tk.ms !== null ? (nowMs >= tk.ms && nowMs < next ? ' w-now' : nowMs >= next ? ' w-past' : '') : '';
     const picked = editing?.kind === 'words' && tk.from < editing.to && tk.to > editing.from ? ' w-picked' : '';
@@ -347,16 +381,18 @@ function Para({
     const title = [unclear ? t(lang, 'unclearWords') : '', pendingWord ? t(lang, 'pendingFix') : ''].filter(Boolean).join(' · ');
     text.push(
       <span key={i} className={`word${state}${picked}${unclear ? ' w-unclear' : ''}${pendingWord ? ' w-pending' : ''}`} data-ms={tk.ms ?? undefined} title={title || undefined}>
-        {paragraph.content.slice(tk.from, tk.to)}
+        {base.slice(tk.from, tk.to)}
       </span>,
     );
     at = tk.to;
   }
-  if (at < paragraph.content.length) text.push(paragraph.content.slice(at));
+  if (at < base.length) text.push(base.slice(at));
 
-  const pending = sent && !sent.merged ? sent : null;
-  // Editing again starts from this listener's own fix that still waits, so it is not typed twice.
-  const mine = pending ?? [...waiting].reverse().find((x) => x.author === me) ?? null;
+  // Every fix of this paragraph that waits, as one: the words on the site beside the words they will be, and who sent them.
+  const waitingFor = [...(pending && !waiting.some((x) => x.author === me) ? [{ author: me ?? '', authorName: null, suggestion: null as number | null }] : []), ...waiting];
+  const waitingNames = [...new Set(waitingFor.map((x) => (x.author === me ? w(lang, 'you') : (x.authorName ?? x.author))))];
+  const waitingNumbers = [...new Set(waitingFor.map((x) => x.suggestion).filter((x): x is number => x !== null))];
+  const waitingWords = mine?.content ?? waiting.at(-1)?.content ?? null;
   const status = paragraph.checked ? 'checked' : paragraph.edited ? 'partly' : 'machine';
   const classes = ['tx-para', open ? 'open' : '', active ? 'active' : '', found ? 'found' : '', `is-${status}`].filter(Boolean).join(' ');
 
@@ -396,28 +432,19 @@ function Para({
         {text}
       </div>
 
-      {others.map((x) => (
-        <div key={`${x.suggestion}:${x.at}`} className="tx-pending">
+      {waitingWords !== null && waitingWords !== paragraph.content ? (
+        <div className="tx-pending">
           <span className="row-sub">
-            {x.author === me ? w(lang, 'yourFix') : w(lang, 'theirFix').replace('{name}', x.authorName ?? x.author)}
-            {x.suggestion !== null ? (
-              <>
+            {w(lang, 'waitingBy').replace('{names}', waitingNames.join(', '))}
+            {waitingNumbers.map((n) => (
+              <span key={n}>
                 {' · '}
-                <Link to={href(`/suggestions/${x.suggestion}`, lang)}>#{x.suggestion}</Link>
-              </>
-            ) : null}
+                <Link to={href(`/suggestions/${n}`, lang)}>#{n}</Link>
+              </span>
+            ))}
           </span>
           <p className="tx-diff" dir="auto">
-            <InlineDiff parts={wordDiff(paragraph.content, x.content)} />
-          </p>
-        </div>
-      ))}
-
-      {pending ? (
-        <div className="tx-pending">
-          <span className="row-sub">{w(lang, 'yourFix')}</span>
-          <p className="tx-diff" dir="auto">
-            <InlineDiff parts={wordDiff(paragraph.content, pending.content)} />
+            <InlineDiff parts={wordDiff(paragraph.content, waitingWords)} />
           </p>
         </div>
       ) : null}
@@ -433,8 +460,8 @@ function Para({
             <button
               type="button"
               className="btn primary"
-              disabled={busy || editing.value === paragraph.content.slice(editing.from, editing.to)}
-              onClick={() => send(`${paragraph.content.slice(0, editing.from)}${editing.value}${paragraph.content.slice(editing.to)}`, false)}
+              disabled={busy || editing.value === base.slice(editing.from, editing.to)}
+              onClick={() => send(`${base.slice(0, editing.from)}${editing.value}${base.slice(editing.to)}`, false)}
             >
               {w(lang, 'save')}
             </button>
@@ -460,7 +487,7 @@ function Para({
             {w(lang, 'wholeRight')}
           </label>
           <div className="actions">
-            <button type="button" className="btn primary" disabled={busy || !editing.value.trim() || (editing.value.trim() === paragraph.content && !editing.complete)} onClick={() => send(editing.value, editing.complete)}>
+            <button type="button" className="btn primary" disabled={busy || !editing.value.trim() || (editing.value.trim() === base && !editing.complete)} onClick={() => send(editing.value, editing.complete)}>
               {w(lang, 'save')}
             </button>
             <button type="button" className="btn" onClick={() => setEditing(null)}>
@@ -473,13 +500,13 @@ function Para({
       {open && !editing ? (
         <div className="tx-tools">
           {canFix && !paragraph.checked && !sent ? (
-            <button type="button" className="tx-tool" onClick={() => send(paragraph.content, true)} disabled={busy}>
+            <button type="button" className="tx-tool" onClick={() => send(base, true)} disabled={busy}>
               <Check size={16} aria-hidden />
               {w(lang, 'allRight')}
             </button>
           ) : null}
-          {canFix && !pending ? (
-            <button type="button" className="tx-tool" onClick={() => setEditing({ kind: 'all', value: mine?.content ?? paragraph.content, complete: true })}>
+          {canFix ? (
+            <button type="button" className="tx-tool" onClick={() => setEditing({ kind: 'all', value: base, complete: true })}>
               <Pencil size={16} aria-hidden />
               {w(lang, 'edit')}
             </button>
@@ -500,8 +527,8 @@ function Para({
             <p className="row-sub">…</p>
           ) : (
             <ul>
-              {history.map((c) => (
-                <ChangeRow key={c.commit} commit={c} lang={lang} numberOf={numberOf} only={paragraph.id} />
+              {storiesOf(history, paragraph.id).map((story) => (
+                <StoryRow key={story.segment} story={story} lang={lang} numberOf={numberOf} only />
               ))}
             </ul>
           )}
@@ -543,7 +570,7 @@ export function TranscriptEditor({
     setOpenNow(segment);
   };
   const [pick, setPick] = useState<{ segment: string; from: number; to: number; unclear?: boolean } | null>(null);
-  const [offer, setOffer] = useState<{ segment: string; from: number; to: number } | null>(null);
+  const [offer, setOffer] = useState<{ segment: string; from: number; to: number; words: string } | null>(null);
   const [history, setHistory] = useState<Record<string, TranscriptCommit[]>>({});
   const [showAll, setShowAll] = useState(false);
   const canFix = Boolean(account);
@@ -580,8 +607,10 @@ export function TranscriptEditor({
       const segment = host.dataset.para!;
       const paragraph = transcripts.flatMap((tr) => tr.paragraphs).find((p) => p.id === segment);
       if (!paragraph) return setOffer(null);
-      const span = wholeWords(paragraph.content, offsetIn(host, range.startContainer, range.startOffset), offsetIn(host, range.endContainer, range.endOffset));
-      setOffer(span.to > span.from ? { segment, ...span } : null);
+      // The words as shown: the listener's own waiting fix, where they have one.
+      const content = host.textContent ?? paragraph.content;
+      const span = wholeWords(content, offsetIn(host, range.startContainer, range.startOffset), offsetIn(host, range.endContainer, range.endOffset));
+      setOffer(span.to > span.from ? { segment, ...span, words: content.slice(span.from, span.to) } : null);
     };
     document.addEventListener('selectionchange', onSelection);
     return () => document.removeEventListener('selectionchange', onSelection);
@@ -673,8 +702,8 @@ export function TranscriptEditor({
               <p className="row-sub">…</p>
             ) : commits.some((c) => c.changes.some((x) => x.kind !== 'made')) ? (
               <ul>
-                {commits.map((c) => (
-                  <ChangeRow key={c.commit} commit={c} lang={lang} numberOf={numberOf} />
+                {storiesOf(commits).map((story) => (
+                  <StoryRow key={story.segment} story={story} lang={lang} numberOf={numberOf} />
                 ))}
               </ul>
             ) : (
@@ -727,7 +756,7 @@ export function TranscriptEditor({
       {offer && offered ? (
         <div className="tx-pick" role="dialog" aria-label={w(lang, 'fixWords')}>
           <span className="tx-pick-words" dir="auto">
-            {offered.content.slice(offer.from, offer.to)}
+            {offer.words}
           </span>
           <button
             type="button"

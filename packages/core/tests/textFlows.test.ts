@@ -224,6 +224,25 @@ describe('word-level sync and fixing it', () => {
     expect(history.at(-1)!.changes.every((c) => c.kind === 'made')).toBe(true);
   });
 
+  it("puts one person's fixes of a transcript in one suggestion until someone reviews it", async () => {
+    const { catalog, set } = await freshCatalog();
+    const { segments } = await transcribed(catalog, set);
+    const first = await fixParagraph(catalog, 'chaim', { segment: segments[0]!, content: 'לחיים, לחיים', complete: false });
+    // Another word of the same paragraph, and another paragraph: the same suggestion, holding the latest words.
+    const second = await fixParagraph(catalog, 'chaim', { segment: segments[0]!, content: 'לחיים, לחיים טובים', complete: false });
+    const third = await fixParagraph(catalog, 'chaim', { segment: segments[1]!, content: 'עס שטייט אין פסוק!' });
+    expect([second.id, third.id]).toEqual([first.id, first.id]);
+    expect(third.status).toBe('open');
+    // Someone else's fix is their own suggestion.
+    expect((await fixParagraph(catalog, 'mendy', { segment: segments[2]!, content: 'אין פסוק!' })).id).not.toBe(first.id);
+    // Once sent back, the next fix starts a new one.
+    await catalog.sendBack(first.id, 'keeper', 'listen again');
+    const after = await fixParagraph(catalog, 'chaim', { segment: segments[1]!, content: 'עס שטייט אין פסוק.' });
+    expect(after.id).not.toBe(first.id);
+    const view = (await catalog.review(first.id, { offset: 0, limit: 25 })).entries.filter((e) => e.type === 'segment');
+    expect(view.map((e) => (e.after as { content: string }).content).sort()).toEqual(['לחיים, לחיים טובים', 'עס שטייט אין פסוק!']);
+  });
+
   it('shows word fixes still waiting for approval, and lets them go once approved', async () => {
     const { catalog, set } = await freshCatalog();
     const { recording, segments } = await transcribed(catalog, set);

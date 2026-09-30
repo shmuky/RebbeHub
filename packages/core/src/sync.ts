@@ -1,6 +1,6 @@
 import { one } from '@rebbehub/db';
 import type { EntityId } from '@rebbehub/model';
-import type { Catalog, ChangesetRow } from './catalog.js';
+import type { Catalog, ChangesetRow, NewRevision } from './catalog.js';
 import { invalid, notFound } from './errors.js';
 import type { Json } from './merge.js';
 import { matchWords, wordKey, words as wordsOf } from './words.js';
@@ -318,7 +318,9 @@ export async function recordingTranscript(catalog: Catalog, recording: EntityId)
 }
 
 /**
- * Fixes a paragraph of a transcript as a suggestion: its words as the
+ * Fixes a paragraph of a transcript as a suggestion (the one this person
+ * already sent for this transcript, while nobody has reviewed it yet, so
+ * fixing word after word makes one suggestion): its words as the
  * person heard them, marked checked. A person who fixed only some words
  * (`complete: false`) leaves the paragraph machine hearing, marked
  * `edited`: the fix is on the site, but the paragraph stays labelled and
@@ -334,24 +336,39 @@ export async function fixParagraph(catalog: Catalog, by: string, input: { segmen
   const segment = await catalog.get(input.segment);
   if (!segment || segment.type !== 'segment') throw notFound(`paragraph ${input.segment}`);
   const data = segment.data as Record<string, unknown> & { origin?: Record<string, unknown> };
-  const suggestion = await catalog.createChangeset(by, { title: 'תיקון תמלול' });
-  await catalog.putRevision(suggestion.id, by, {
-    id: segment.id,
-    type: 'segment',
-    data: (input.complete === false
-      ? { ...data, content, ...(data.origin && !data.origin.checked ? { origin: { ...data.origin, edited: true } } : {}) }
-      : { ...data, content, proofread: 1, ...(data.origin ? { origin: { ...data.origin, checked: true } } : {}) }) as Json,
-  });
+  const revisions: NewRevision[] = [
+    {
+      id: segment.id,
+      type: 'segment',
+      data: (input.complete === false
+        ? { ...data, content, ...(data.origin && !data.origin.checked ? { origin: { ...data.origin, edited: true } } : {}) }
+        : { ...data, content, proofread: 1, ...(data.origin ? { origin: { ...data.origin, checked: true } } : {}) }) as Json,
+    },
+  ];
   const spans = data.content === content ? [] : await catalog.backlinks(segment.id, { field: 'segment', type: 'alignment-span' });
   for (const s of spans) {
     const span = await catalog.get(s.from);
     const sd = span?.data as unknown as SpanData | undefined;
     if (!span || !sd?.words) continue;
     const { words: _dropped, ...rest } = sd;
-    await catalog.putRevision(suggestion.id, by, { id: span.id, type: 'alignment-span', data: rest as unknown as Json });
+    revisions.push({ id: span.id, type: 'alignment-span', data: rest as unknown as Json });
   }
+  // A listener's fixes of one transcript go into one suggestion while nobody has reviewed it yet: every word they fix joins it.
+  const open = await one<{ id: number }>(
+    catalog.db,
+    `SELECT c.id FROM changeset c WHERE c.author = $1 AND c.status = 'open' AND c.kind = 'suggestion' AND c.title = $2
+       AND EXISTS (SELECT 1 FROM revision r WHERE r.changeset_id = c.id AND r.entity_type = 'segment' AND r.data->>'text' = $3)
+       AND NOT EXISTS (SELECT 1 FROM revision r WHERE r.changeset_id = c.id AND r.entity_type NOT IN ('segment', 'alignment-span'))
+     ORDER BY c.id DESC LIMIT 1`,
+    [by, FIX_TITLE, String(data.text ?? '')],
+  );
+  if (open && (await catalog.amend(open.id, by, revisions))) return catalog.changeset(open.id);
+  const suggestion = await catalog.createChangeset(by, { title: FIX_TITLE });
+  for (const revision of revisions) await catalog.putRevision(suggestion.id, by, revision);
   return catalog.submit(suggestion.id, by);
 }
+
+const FIX_TITLE = 'תיקון תמלול';
 
 /** A time moved by a fix: the piece between the fixed point and the next locked one is stretched to fit. */
 export function remapper(oldAt: number, newAt: number, nextLocked: number | null): (t: number) => number {

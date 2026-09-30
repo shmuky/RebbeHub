@@ -929,6 +929,34 @@ export class Catalog {
     return this.changeset(changesetId);
   }
 
+  /**
+   * Adds to a suggestion its author already sent, while nobody has reviewed
+   * it yet: a listener fixing word after word makes one suggestion, not one
+   * per word. The keepers are not asked again; its checks run again over
+   * all of it. Returns false (and changes nothing) once it has a review or
+   * is no longer open, so the caller makes a new one.
+   */
+  async amend(changesetId: number, by: string, revisions: NewRevision[]): Promise<boolean> {
+    const opened = await this.db.transaction(async (tx) => {
+      const cs = await this.changeset(changesetId, tx);
+      if (cs.author !== by || cs.status !== 'open' || cs.post_review !== null) return false;
+      if (await one(tx, 'SELECT 1 FROM review WHERE changeset_id = $1 LIMIT 1', [cs.id])) return false;
+      await tx.query("UPDATE changeset SET status = 'draft' WHERE id = $1", [cs.id]);
+      return true;
+    });
+    if (!opened) return false;
+    try {
+      for (const revision of revisions) await this.putRevision(changesetId, by, revision);
+    } finally {
+      await this.db.transaction(async (tx) => {
+        const cs = await this.changeset(changesetId, tx);
+        const checks = await this.runChecks(tx, cs, await this.proposals(cs.id, tx));
+        await tx.query("UPDATE changeset SET status = 'open', checks = $2 WHERE id = $1", [cs.id, JSON.stringify(checks)]);
+      });
+    }
+    return true;
+  }
+
   /** "Send back": returns a suggestion to its author with a note; they can edit and send it again. */
   async sendBack(changesetId: number, by: string, note: string): Promise<void> {
     await this.db.transaction(async (tx) => {

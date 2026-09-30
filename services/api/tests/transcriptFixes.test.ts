@@ -116,7 +116,8 @@ describe("transcript fixes, all together", () => {
       segment: segments[1]!,
       content: "עס שטייט אין [פסוק?]",
     });
-    const checked = await fixParagraph(catalog, "chaim", {
+    // Another listener: one person's fixes of a transcript join one suggestion.
+    const checked = await fixParagraph(catalog, "mendy", {
       segment: segments[0]!,
       content: "לחיים לחיים",
     });
@@ -145,7 +146,7 @@ describe("transcript fixes, all together", () => {
     expect(list.body.fixes[2].changes[0].newStartMs).toBe(9500);
     expect(list.body.fixes[0]).toMatchObject({
       recording,
-      author: "chaim",
+      author: "mendy",
       mayApprove: true,
       mine: false,
       eventPath: "/events/5742-05-10",

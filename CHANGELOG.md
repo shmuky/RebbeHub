@@ -412,6 +412,14 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Changed
 
+- **One suggestion per listener per transcript.** Fixing word after word
+  in a transcript adds to the suggestion you already sent for it, while
+  nobody has reviewed it yet, instead of making one per word (which
+  clashed with each other). The editor goes on from your own waiting
+  fix, shows each paragraph's waiting fixes as one, and its history as
+  one change per paragraph: the machine's words beside today's, and who
+  changed and checked them.
+
 - **A list answers with each item's facts, not its words.** `body` (the
   words a page keeps in itself, kilobytes for each sicha or letter) is
   left out of every list (`/v1/entities`, `children`, `linked`,
