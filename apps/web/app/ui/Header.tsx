@@ -13,8 +13,13 @@ import { setTheme, useTheme, type Theme } from './theme.js';
  * The frame's header. On a wide screen: the mark, the six sections, the
  * search box (Ctrl K opens the command palette; without script it is a
  * plain form to the search page), the language, what you follow, and you.
- * On a phone: back, the section's name, search, and a menu sheet.
+ * On a phone: back, the section's name, search, the bell and a menu sheet
+ * at the top, and the main sections as tabs along the bottom, where a
+ * thumb reaches them.
  */
+
+/** The sections a phone keeps as tabs at the bottom; the rest are in the menu. */
+const TABS = ['/', '/sets', '/calendar', '/suggestions'];
 
 const NAV: Array<{ to: string; key: UiKey; icon: IconName }> = [
   { to: '/', key: 'navHome', icon: 'home' },
@@ -347,6 +352,7 @@ export function Header({ lang }: { lang: Lang }) {
         >
           <Icon name="search" />
         </Link>
+        {account ? <InboxLink lang={lang} first={account.unread ?? 0} /> : null}
         <details className="msheet" ref={sheet}>
           <summary className="ib" aria-label={tu(lang, 'menu')}>
             <Icon name="more" />
@@ -433,6 +439,25 @@ export function Header({ lang }: { lang: Lang }) {
           </div>
         </details>
       </header>
+
+      <nav className="mtabs" aria-label={tu(lang, 'mainNav')}>
+        {NAV.filter((n) => TABS.includes(n.to)).map((n) => (
+          <Link key={n.to} to={href(n.to, lang)} aria-current={section === n.to ? 'page' : undefined}>
+            <Icon name={n.icon} />
+            <span>{tu(lang, n.key)}</span>
+          </Link>
+        ))}
+        <button
+          type="button"
+          aria-current={TABS.includes(section) ? undefined : 'page'}
+          onClick={() => {
+            if (sheet.current) sheet.current.open = true;
+          }}
+        >
+          <Icon name="more" />
+          <span>{tu(lang, 'menu')}</span>
+        </button>
+      </nav>
 
       <CommandPalette lang={lang} account={account} open={palette.open} initial={palette.initial} onClose={() => setPalette({ open: false, initial: '' })} />
     </>

@@ -76,6 +76,11 @@ any time. `@rebbehub/client` carries the API's version.
   no #number (an import) opens whole in the queue (`/review?s=`). The
   list of Reports (`/issues`) no longer carries each report's words to
   the browser, only its title and facts: the words are on its own page.
+- **Tabs on a phone.** On a phone the main sections (Home, Library,
+  Farbrengens, Suggestions) and the menu are tabs along the bottom of the
+  screen, where a thumb reaches them, instead of hidden behind a button;
+  the bell is in the top bar. The player and messages sit just above the
+  tabs, and the menu's light/dark switch no longer spills out of it.
 
 - **The library by Rebbe.** The library page's shelves are now a shelf
   for each Rebbe, from the Baal Shem Tov to the Rebbe, then history,
@@ -93,6 +98,12 @@ any time. `@rebbehub/client` carries the API's version.
   right" still marks it checked.
 
 ### Fixed
+
+- **Previous and Next stay in their place.** The buttons above a sicha's
+  text stuck to the top of the screen and covered the words as you
+  scrolled, because they shared the site header's class name. They now
+  sit above and below the text only, each takes half the row, and a long
+  sicha name wraps to two lines instead of being cut.
 
 - **The synced player has its look back.** A stylesheet merged without
   one closing brace, so the lyrics player and the rest of the farbrengen
