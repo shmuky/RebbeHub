@@ -457,11 +457,10 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Changed
 
-- **Timing tools are back, in the editor and while listening.** Under a
-  paragraph, **תזמון מדוייק** takes the moment of the tap as where it
-  starts, and asks once before sending, so a stray tap never moves the
-  sync; **the sync of the whole recording is right** marks it checked.
-  While listening, **Timing** turns a tap on a paragraph into the same.
+- **Timing while listening.** **Timing** turns a tap on a paragraph into
+  where it starts, and asks once before sending, so a stray tap never
+  moves the sync; in the editor, **the sync of the whole recording is
+  right** marks it checked. The editor has no **תזמון מדוייק** button.
   A listener's timing taps on one recording are one suggestion, each
   going on from the last, so they never clash.
 - **Talk over unclear words.** Tapping words marked unclear (`[words?]`)

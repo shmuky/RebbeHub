@@ -221,7 +221,6 @@ export function Transcripts({ tracks, lang, onLoaded, only }: { tracks: Track[];
         account={account}
         onBack={() => review(false)}
         onFixed={fixed}
-        onAnchored={anchored}
       />
       {ask}
     </section>

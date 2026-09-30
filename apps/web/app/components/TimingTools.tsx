@@ -1,4 +1,4 @@
-import { MessageCircle, Radio } from 'lucide-react';
+import { MessageCircle } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import type { Lang } from '../lib/i18n.js';
@@ -6,13 +6,13 @@ import { clockOf } from '../lib/i18nNetwork.js';
 import { href } from '../lib/links.js';
 import { postJson } from '../lib/post.js';
 import type { Span, Transcript } from '../lib/transcript.js';
-import { usePlayer } from '../player/PlayerProvider.js';
 
 /**
- * The timing tools, in the editor and while listening. "Exact timing"
- * takes the moment of the tap as where the paragraph starts (what follows
- * moves with it, core/sync.ts anchorSync), and asks once before it is sent,
- * so a stray tap never moves the sync. A listener's taps on one recording
+ * The timing tools while listening. "Timing" takes the moment a paragraph
+ * is tapped as where it starts (what follows moves with it, core/sync.ts
+ * anchorSync), and asks once before it is sent, so a stray tap never moves
+ * the sync. There is no "Exact timing" button under a paragraph in the
+ * editor: Shmuly had it removed. A listener's taps on one recording
  * are one suggestion, each going on from the last, so they never clash.
  * "The sync is right" marks the whole recording's sync checked. And words
  * nobody is sure of (`[words?]`) can be talked over on the recording's
@@ -20,11 +20,7 @@ import { usePlayer } from '../player/PlayerProvider.js';
  */
 
 const W = {
-  saidNow: { he: 'תזמון מדוייק', en: 'Exact timing' },
-  howSync: {
-    he: '„תזמון מדוייק”: מתקן את התזמון, לא את המילים. לחצו בדיוק כשהרבי מתחיל את הפסקה, ואשרו. ההמשך זז איתה.',
-    en: '"Exact timing": fixes the timing, not the words. Tap just as the Rebbe starts the paragraph, then confirm. What follows moves with it.',
-  },
+  saidNow: { he: 'תזמון', en: 'Timing' },
   startsAt: { he: 'הפסקה תתחיל ב־{at}', en: 'The paragraph will start at {at}' },
   confirm: { he: 'לאשר', en: 'Confirm' },
   cancel: { he: 'ביטול', en: 'Cancel' },
@@ -91,35 +87,7 @@ export function ConfirmTiming({ recording, segment, atMs, lang, onDone, onCancel
   );
 }
 
-/** The editor's "Exact timing" under a paragraph: the tap takes the moment, Confirm sends it. */
-export function SyncNow({ recording, segment, lang, onAnchored }: { recording: string; segment: string; lang: Lang; onAnchored: (spans: Span[]) => void }) {
-  const player = usePlayer();
-  const [at, setAt] = useState<number | null>(null);
-  const [done, setDone] = useState(false);
-  if (done) return <p className="row-sub tx-sent">{w(lang, 'syncFixed')}</p>;
-  if (at !== null)
-    return (
-      <ConfirmTiming
-        recording={recording}
-        segment={segment}
-        atMs={at}
-        lang={lang}
-        onCancel={() => setAt(null)}
-        onDone={(spans) => {
-          setDone(true);
-          onAnchored(spans);
-        }}
-      />
-    );
-  return (
-    <button type="button" className="tx-tool" onClick={() => setAt(Math.round(player.now() * 1000))} title={w(lang, 'howSync')}>
-      <Radio size={16} aria-hidden />
-      {w(lang, 'saidNow')}
-    </button>
-  );
-}
-
-export const timingWords = { howSync: W.howSync, timingMode: W.timingMode, timingModeHint: W.timingModeHint, syncFixed: W.syncFixed };
+export const timingWords = { timingMode: W.timingMode, timingModeHint: W.timingModeHint, syncFixed: W.syncFixed };
 
 /** "The sync of the whole recording is right". */
 export function ConfirmSync({ recording, lang }: { recording: string; lang: Lang }) {
