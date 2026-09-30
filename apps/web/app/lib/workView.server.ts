@@ -4,6 +4,7 @@ import { dateLabel } from './dates.js';
 import { nameOf, type Lang } from './i18n.js';
 import { labelOf } from './labels.js';
 import { itemPath } from './links.js';
+import { ofVolume, type Part } from './volumes.js';
 
 /**
  * A sefer's contents as its page shows them (the plan's "every sicha, its
@@ -56,11 +57,11 @@ const printingLabel = (p: Entity, lang: Lang) => {
   return [d.publisher, d.date ? dateLabel(d.date, lang, { civil: false }) : d.gregorianYear ? String(d.gregorianYear) : null].filter(Boolean).join(', ');
 };
 
-export async function workToc(api: RebbeHubApi, units: Entity[], publications: Entity[], scanCounts: Record<string, number>, options: { part: string | null; printing: string | null; lang: Lang }): Promise<WorkToc> {
+export async function workToc(api: RebbeHubApi, units: Entity[], publications: Entity[], scanCounts: Record<string, number>, options: { part: Part | null; printing: string | null; lang: Lang }): Promise<WorkToc> {
   const { lang, part } = options;
   const rowsOf = units.slice(0, MAX_ROWS);
   // This volume's printings (all of them for a sefer of one volume).
-  const ofPart = publications.filter((p) => !part || !(p.data as D).volume || String((p.data as D).volume) === part);
+  const ofPart = publications.filter((p) => ofVolume((p.data as D).volume, part));
 
   // Where each sicha is in each printing: the printings' contents maps, all in one request.
   const mapsOf = await api.linkedOfEach(ofPart.map((p) => p.id), { field: 'publication', type: 'contents-map', limit: 500 }).catch(() => new Map<string, Entity[]>());

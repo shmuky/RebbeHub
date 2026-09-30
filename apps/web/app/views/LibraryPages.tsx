@@ -21,6 +21,7 @@ import { ItemShell } from '../ui/ItemShell.js';
 import { EmptyState, MachineLabel } from '../ui/primitives.js';
 import { Shaar } from '../ui/Shaar.js';
 import { commonTabs, p, SideActivity, SideDetails, SideKeepers, SideSection, SideSources, ThreadRows } from './itemParts.js';
+import { ofVolume } from '../lib/volumes.js';
 
 /**
  * The library's own pages. A sefer (and each of its volumes) as the design
@@ -310,12 +311,13 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
   const openPart = part ? outline.find((x) => x.value === part) : outline.length === 1 ? outline[0] : undefined;
   const volumes = outline.length > 1 && !openPart;
   const asked = params.get('tab') as WorkTab | null;
-  const tab: WorkTab = asked && ['contents', 'printings', 'recordings', 'suggestions'].includes(asked) ? asked : 'contents';
+  // A volume only its printings have (no contents yet) opens on them.
+  const tab: WorkTab = asked && ['contents', 'printings', 'recordings', 'suggestions'].includes(asked) ? asked : openPart && !openPart.units && outline.length > 1 ? 'printings' : 'contents';
   const authors = ((d.authors ?? []) as string[]).map((id) => view.refs[id]).filter((a): a is Entity => Boolean(a));
   const toc = view.toc;
   const title = nameOf(d.title, lang);
   const partLabel = openPart && outline.length > 1 ? (openPart.label ? nameOf(openPart.label, lang) : openPart.value) : null;
-  const ofPart = publications.filter((x) => !openPart || !(x.data as D).volume || String((x.data as D).volume) === openPart.value);
+  const ofPart = publications.filter((x) => ofVolume((x.data as D).volume, openPart));
   const first = ofPart[0];
   const fd = (first?.data ?? {}) as D;
   const firstYear = fd.date ? dateLabel(fd.date, lang, { civil: false }) : fd.gregorianYear ? String(fd.gregorianYear) : null;
@@ -435,7 +437,7 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
         volumes ? (
           <ul className="box rows volumes">
             {outline.map((x, i) => {
-              const printings = publications.filter((pb) => String((pb.data as D).volume ?? '') === x.value).length;
+              const printings = publications.filter((pb) => (pb.data as D).volume && ofVolume((pb.data as D).volume, x)).length;
               return (
                 <li key={x.value}>
                   <Link className="row hover" to={href(itemPath(entity), lang, { part: x.value })}>
@@ -443,8 +445,7 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
                     <span className="row-main">
                       <span className="row-title torah">{x.label ? nameOf(x.label, lang) : `${w(lang, 'volumeRow')} ${x.value}`}</span>
                       <span className="row-sub">
-                        {num(x.units, lang)} {w(lang, 'sichos')}
-                        {printings ? ` · ${num(printings, lang)} ${w(lang, 'printings')}` : ''}
+                        {[x.units ? `${num(x.units, lang)} ${w(lang, 'sichos')}` : null, printings ? `${num(printings, lang)} ${w(lang, 'printings')}` : null].filter(Boolean).join(' · ')}
                       </span>
                     </span>
                     <Icon name="chev" className="subtle flip-ltr" />
