@@ -264,6 +264,28 @@ export interface CatalogHealth {
 }
 
 /** What the machines wrote that no person has checked yet, as GET /v1/machine/to-check gives it, the newest first. */
+/** A place a subject index names: the page, the index's own words for it, the sicha's PDF at that page and its page here. */
+export interface MafteachPlace {
+  page: number;
+  to?: number;
+  context?: string;
+  pdf?: string;
+  at?: number;
+  sicha?: string;
+  text?: string;
+}
+
+/** A sefer's whole subject index (GET /v1/mafteach): one letter's topics or a search's, each volume's places under each. */
+export interface Mafteach {
+  index: { id: string; path: string | null; title: unknown };
+  letters: Array<{ letter: string; topics: number }>;
+  totals: { topics: number; places: number; volumes: number };
+  topics: Array<{ topic: string; letter: string; volumes: Array<{ volume: number; label: string; path: string | null; machine: boolean; places: MafteachPlace[] }> }>;
+  found: number;
+  offset: number;
+  next: number | null;
+}
+
 export interface MachineToCheck {
   transcripts: Array<{ event: string; path: string | null; title: { he: string; en?: string } | null; date: string | null; paragraphs: number; checked: number; made: string }>;
   scans: Array<{ scan: string; publication: string | null; title: { he: string; en?: string } | null; pages: number; checked: number; made: string }>;
@@ -639,6 +661,11 @@ export class RebbeHubApi {
 
   health() {
     return this.get<CatalogHealth>('/v1/health');
+  }
+
+  /** A sefer's whole subject index gathered from its volumes' index pages: one letter's topics, or a search's. */
+  mafteach(params: { index: string; sefer?: string; letter?: string; q?: string; limit?: number; places?: number; offset?: number }) {
+    return this.get<Mafteach>('/v1/mafteach', params);
   }
 
   toCheck(limit?: number) {

@@ -24,6 +24,7 @@ import { threadRoutes } from './threads.js';
 import { organizeRoutes } from './organize.js';
 import { appCatalogRoutes, type AppReleases } from './appCatalog.js';
 import { machineRoutes, type MachineDispatch } from './machine.js';
+import { mafteachRoutes } from './mafteach.js';
 
 /**
  * The RebbeHub API, version 1 (docs/developers/api.md). Reading needs
@@ -207,6 +208,7 @@ export function createApp(options: ApiOptions): Hono {
   threadRoutes(app, catalog, signedIn, authenticate);
   organizeRoutes(app, catalog, signedIn);
   appCatalogRoutes(app, catalog, options.appReleases);
+  mafteachRoutes(app, catalog);
   machineRoutes(app, catalog, signedIn, { dispatch: options.machineDispatch, waitUntil: options.waitUntil ? (_c, work) => options.waitUntil!(work) : undefined });
   scanRoutes(app, catalog, {
     filesBase,

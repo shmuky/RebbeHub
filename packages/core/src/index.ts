@@ -263,3 +263,4 @@ export { DAILY_WORKS, dailyLearning, dailyPathOf, tanyaStart, type DailyLearning
 export { dailyRambam, type DailyRambam, type RambamShiur } from './rambam.js';
 export { combineSuggestions } from './combine.js';
 export { fillShaars, shaarFile, suggestShaar, type ShaarFile, type ShaarInput } from './shaar.js';
+export { driveId, mafteach, placesOf, type Mafteach, type MafteachPlace, type MafteachTopic, type MafteachVolume } from './mafteach.js';

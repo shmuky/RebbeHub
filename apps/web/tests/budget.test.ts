@@ -218,6 +218,8 @@ describe("each page's statements and API calls stay within its ceiling", () => {
     within(await page(`/suggestions/${suggestion}`), 'a suggestion', { statements: 18, calls: 8, kB: 45 });
     within(await page('/review'), '/review', { statements: 2, calls: 2, kB: 30 });
     within(await page('/check'), '/check', { statements: 4, calls: 2, kB: 30 });
+    // The full subject index: one call, a letter or a search at a time (here, with no index yet, the page says so).
+    within(await page('/mafteach'), '/mafteach', { statements: 4, calls: 1, kB: 30 });
   });
   it("the day's learning is one read", async () => within(await page('/daily/2026-09-30'), '/daily', { statements: 10, calls: 1, kB: 60 }));
   it('the sitemap', async () => within(await page('/sitemap.xml'), '/sitemap.xml', { statements: 2, calls: 2, kB: 5 }));

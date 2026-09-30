@@ -1652,6 +1652,63 @@ export interface Operations {
       };
     };
   };
+  /** A sefer's whole subject index on one page, gathered from its volumes' index pages: every topic once, each volume's places under it with their context and links (the sicha's PDF at that page, the sicha's page here); one first letter's topics, or those a search finds */
+  mafteach: {
+    input: {
+      /** The index: a work whose units are its volumes' index pages (an id, or its path, like /likkutei-sichos-mafteach-inyanim) */
+      index: string;
+      /** The sefer it indexes (an id or path), for the links to its sichos */
+      sefer?: string;
+      /** One first letter's topics (the first letter when neither this nor q is given) */
+      letter?: string;
+      /** Topics whose name, context or sicha holds these words */
+      q?: string;
+      /** How many (at most 200) */
+      limit?: number;
+      /** Stop the page sooner, at about this many places (never at no topic) */
+      places?: number;
+      /** Topics to skip: the `next` of the page before */
+      offset?: number;
+    };
+    output: {
+      /** id, path, title */
+      index: Record<string, unknown>;
+      letters: Array<{
+        letter: string;
+        topics: number;
+      }>;
+      totals: {
+        topics: number;
+        places: number;
+        volumes: number;
+      };
+      topics: Array<{
+        topic: string;
+        letter: string;
+        volumes: Array<{
+          volume: number;
+          label: string;
+          path: string | null;
+          machine: boolean;
+          places: Array<{
+            page: number;
+            to?: number;
+            context?: string;
+            /** The sicha's PDF */
+            pdf?: string;
+            /** The page of the PDF where the place is */
+            at?: number;
+            sicha?: string;
+            /** The sicha's page here */
+            text?: string;
+          }>;
+        }>;
+      }>;
+      found: number;
+      offset: number;
+      next: number | null;
+    };
+  };
   /** Map pages of a publication to the unit they hold (an existing unit, a new one, or words) */
   mapContents: {
     input: {
@@ -2753,6 +2810,7 @@ export const OPERATIONS = {
   machineRequests: {"method":"GET","path":"/v1/machine/requests","pathParams":[],"query":["kind","status","item","items","limit"],"body":null,"answer":"json"},
   machineSummary: {"method":"GET","path":"/v1/machine","pathParams":[],"query":[],"body":null,"answer":"json"},
   machineToCheck: {"method":"GET","path":"/v1/machine/to-check","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
+  mafteach: {"method":"GET","path":"/v1/mafteach","pathParams":[],"query":["index","sefer","letter","q","limit","places","offset"],"body":null,"answer":"json"},
   mapContents: {"method":"POST","path":"/v1/suggestions/contents-map","pathParams":[],"query":[],"body":"json","answer":"json"},
   markInboxRead: {"method":"POST","path":"/v1/inbox/read","pathParams":[],"query":[],"body":"json","answer":"json"},
   mcp: {"method":"POST","path":"/mcp","pathParams":[],"query":[],"body":"json","answer":"json"},
@@ -3301,6 +3359,11 @@ export abstract class GeneratedMethods {
   /** What the machines wrote that no person has checked yet: farbrengens with unchecked transcript paragraphs, scans with pages read by OCR and not yet proofread, pages whose words a machine read with segments nobody checked, the newest first (GET /v1/machine/to-check) */
   machineToCheck(input?: Operations['machineToCheck']['input']): Promise<Operations['machineToCheck']['output']> {
     return this.call('machineToCheck', input ?? {} as Operations['machineToCheck']['input']);
+  }
+
+  /** A sefer's whole subject index on one page, gathered from its volumes' index pages: every topic once, each volume's places under it with their context and links (the sicha's PDF at that page, the sicha's page here); one first letter's topics, or those a search finds (GET /v1/mafteach) */
+  mafteach(input: Operations['mafteach']['input']): Promise<Operations['mafteach']['output']> {
+    return this.call('mafteach', input ?? {} as Operations['mafteach']['input']);
   }
 
   /** Map pages of a publication to the unit they hold (an existing unit, a new one, or words) (POST /v1/suggestions/contents-map) */
