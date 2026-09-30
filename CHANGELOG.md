@@ -114,6 +114,16 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Fixed
 
+- **Approve answers at once.** Pressing Approve in the review queue now
+  says "Merging…" (ממזג…) and turns every button off until the API
+  answers; then the card shows the suggestion merged, its buttons gone,
+  without a reload. Before, the buttons came back as soon as the API
+  answered and the card kept its old copy of the suggestion, so it
+  looked unmerged until the queue was read again and invited a second
+  press. The same on a suggestion's own page: its Approve says
+  "Merging…", the page turns merged the moment the merge is done, and
+  its checks are read again so they say so too. A refusal says why and
+  gives the buttons back.
 - **Checking a transcript.** "All exact" stays after you fix some of a
   paragraph's words, so a paragraph can be checked in the same visit;
   "Edit paragraph" is gone where your fix waits for approval (select the

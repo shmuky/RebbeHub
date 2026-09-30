@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Clamp } from '../ui/Clamp.js';
-import { data, Link, redirect, useSearchParams } from 'react-router';
+import { data, Link, redirect, useRevalidator, useSearchParams } from 'react-router';
 import type { Route } from './+types/suggestion';
 import { Composer } from '../components/threads/Composer.js';
 import { Picker } from '../components/threads/Picker.js';
@@ -168,6 +168,7 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
+  const revalidator = useRevalidator();
   useEffect(() => setView(loaderData.view), [loaderData.view]);
 
   const load = useCallback(async () => {
@@ -310,10 +311,16 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
         ) : null
       }
       onSubmit={(choice, note) =>
-        void act(async () => {
+        act(async () => {
           if (choice === 'comment' && !pending.length) await threads(`suggestions/${id}/comments`, { body: { body: note } });
           else await threads(`suggestions/${id}/reviews`, { body: { verdict: choice === 'send_back' ? 'request_changes' : choice, body: note, comments: pending } });
           setPending([]);
+          if (choice === 'approve') {
+            // Approving merges it there and then (Catalog.merge): the page is merged from this moment, whatever is read next.
+            setView((v) => (v ? { ...v, status: 'merged' } : v));
+            // What the server drew (its checks, still waiting for a keeper) is read again, so it says merged too.
+            void revalidator.revalidate();
+          }
         })
       }
     />

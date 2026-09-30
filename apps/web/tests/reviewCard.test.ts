@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import { QueueRow } from '../app/components/QueueRow.js';
-import { SuggestionCard, type ReviewDetail, type ReviewRow } from '../app/components/ReviewCard.js';
+import { SuggestionCard, UNDECIDED, decidedAs, type Decision, type ReviewDetail, type ReviewRow } from '../app/components/ReviewCard.js';
+import { reviewChoices } from '../app/ui/ReviewBox.js';
 import type { Lang } from '../app/lib/i18n.js';
 
 /**
@@ -51,9 +52,9 @@ const detail: ReviewDetail = {
   advice: null,
 };
 
-const render = (d: ReviewDetail | null, lang: Lang = 'en') =>
+const render = (d: ReviewDetail | null, lang: Lang = 'en', decision?: Decision) =>
   renderToStaticMarkup(
-    createElement(MemoryRouter, null, createElement(SuggestionCard, { row, person: { name: 'Drive links (relink bot)', bot: true }, detail: d, lang, open: true, onDone: () => {}, onMore: () => {} })),
+    createElement(MemoryRouter, null, createElement(SuggestionCard, { row, person: { name: 'Drive links (relink bot)', bot: true }, detail: d, lang, open: true, onDone: () => {}, onMore: () => {}, decision })),
   );
 
 describe("a bot's Suggestion of 500 items in the review queue", () => {
@@ -116,6 +117,62 @@ describe("a bot's Suggestion of 500 items in the review queue", () => {
     const html = render({ ...detail, entries: detail.entries.slice(0, 3), total: 3, next: null, summary: [{ ...detail.summary![0]!, count: 3 }] });
     expect(html).not.toContain('Show more');
     expect(html).toContain('3 items');
+  });
+});
+
+/**
+ * Pressing Approve: the button says "Merging…" and nothing can be pressed
+ * again while the API merges; once it answers, the card is merged at once
+ * (no reload, no second press), and a refusal says why and gives the
+ * buttons back.
+ */
+describe('approving from the review queue', () => {
+  const buttons = (html: string) => html.match(/<button[^>]*>/g) ?? [];
+
+  it('says Merging… while the API merges, and no button can be pressed', () => {
+    const html = render(detail, 'en', { ...UNDECIDED, doing: 'approve' });
+    expect(html).toContain('Merging…');
+    expect(html).not.toMatch(/>Approve<span/);
+    expect(html).toMatch(/<button[^>]*aria-busy="true"[^>]*>/);
+    // Every decision is off while one is on its way ("Show more" only reads more of it).
+    for (const b of buttons(html).filter((b) => !b.includes('btn sm'))) expect(b).toContain('disabled');
+  });
+
+  it('in Hebrew too', () => {
+    expect(render(detail, 'he', { ...UNDECIDED, doing: 'approve' })).toContain('ממזג…');
+    expect(render(detail, 'he', { ...UNDECIDED, done: 'approve' })).toContain('מוזג');
+  });
+
+  it('once merged, shows it merged and offers Approve no more', () => {
+    const html = render(detail, 'en', { ...UNDECIDED, done: 'approve' });
+    expect(html).toContain('Merged');
+    expect(html).not.toContain('Merging…');
+    expect(html).not.toMatch(/>Approve<span/);
+    expect(html).not.toContain('Don’t approve, send back');
+    expect(html).toContain('class="state approved sm"');
+  });
+
+  it('refused, says why and gives the buttons back', () => {
+    const html = render(detail, 'en', { ...UNDECIDED, error: 'failed checks: no date' });
+    expect(html).toContain('failed checks: no date');
+    expect(html).toMatch(/>Approve<span/);
+    expect(html).not.toContain('Merging…');
+    const approve = buttons(html).find((b) => b.includes('btn approve'));
+    expect(approve).toBeDefined();
+    expect(approve).not.toContain('disabled');
+  });
+
+  it('knows what each decision makes of the Suggestion', () => {
+    expect(decidedAs('approve')).toEqual({ status: 'merged' });
+    expect(decidedAs('approve-theirs')).toEqual({ status: 'merged' });
+    expect(decidedAs('send-back')).toEqual({ status: 'sent_back' });
+    expect(decidedAs('withdraw')).toEqual({ status: 'withdrawn' });
+    expect(decidedAs('keep-live')).toEqual({ post_review: 'done' });
+  });
+
+  it('on a suggestion’s own page, the approve choice says Merging… while it is sent', () => {
+    expect(reviewChoices('en').find((c) => c.value === 'approve')?.working).toBe('Merging…');
+    expect(reviewChoices('he').find((c) => c.value === 'approve')?.working).toBe('ממזג…');
   });
 });
 
