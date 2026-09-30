@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono';
 import type { DbCost } from '@rebbehub/db';
-import { Catalog, CatalogError, ExportGate, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, getDerivations, getDerivationsOf, getFile, getFiles, getPageFix, getPageFixes, hanachaSyncs, itemsUsingFile, listWebhooks, pageImageCounts, printingsOf, projectTodo, recordingTranscript, transcriptHistory, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type FileRow, type Mailer, type PageFixRow, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
+import { Catalog, CatalogError, ExportGate, openTranscriptFixes, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, getDerivations, getDerivationsOf, getFile, getFiles, getPageFix, getPageFixes, hanachaSyncs, itemsUsingFile, listWebhooks, pageImageCounts, printingsOf, projectTodo, recordingTranscript, transcriptHistory, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type FileRow, type Mailer, type PageFixRow, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
 import { peopleOf } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType, type Language, type PageInline, type PageSegmentKind } from '@rebbehub/model';
@@ -458,6 +458,43 @@ export function createApp(options: ApiOptions): Hono {
   });
 
   // A recording's transcript, paragraph by paragraph with where each is heard; machine paragraphs are marked until checked.
+  // Every transcript fix waiting for approval, to go through together: for the person asking, which each may approve.
+  app.get('/v1/transcripts/fixes', async (c) => {
+    const fixes = await openTranscriptFixes(catalog, { limit: intParam(c.req.query('limit'), 'limit') });
+    const viewer = (await authenticate?.(c)) ?? null;
+    const may = viewer ? await Promise.all(fixes.map(async (f) => (await catalog.mayApprove(f.id, viewer)).ok)) : fixes.map(() => false);
+    return c.json({ fixes: fixes.map((f, i) => ({ ...f, mayApprove: may[i], mine: f.author === viewer })) });
+  });
+
+  // Keep some and remove others in one go: kept ones are approved; removed ones are withdrawn when they are
+  // the person's own, else sent back with the note. Each is decided on its own; one that cannot be says why.
+  app.post('/v1/transcripts/fixes/decide', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ keep?: unknown; remove?: unknown; note?: string }>(c);
+    const ids = (v: unknown) => (Array.isArray(v) ? v.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0) : []);
+    const keep = ids(input.keep);
+    const remove = ids(input.remove);
+    if (!keep.length && !remove.length) throw new HttpError(400, 'keep or remove: the suggestions to approve or take out');
+    if (keep.length + remove.length > 200) throw new HttpError(400, 'at most 200 suggestions at a time');
+    const note = input.note?.trim().slice(0, 2000) || 'Taken out while going through the transcript fixes.';
+    const results: Array<{ id: number; done: 'kept' | 'withdrawn' | 'sent_back' | null; error?: string }> = [];
+    const attempt = async (id: number, act: () => Promise<'kept' | 'withdrawn' | 'sent_back'>) => {
+      try {
+        results.push({ id, done: await act() });
+      } catch (e) {
+        if (!(e instanceof CatalogError) && !(e instanceof UnresolvedConflictError)) throw e;
+        results.push({ id, done: null, error: e.message });
+      }
+    };
+    for (const id of keep) await attempt(id, async () => (await catalog.merge(id, by), 'kept'));
+    for (const id of remove)
+      await attempt(id, async () => {
+        if ((await catalog.changeset(id)).author === by) return (await catalog.withdraw(id, by), 'withdrawn');
+        return (await catalog.sendBack(id, by, note), 'sent_back');
+      });
+    return c.json({ results });
+  });
+
   app.get('/v1/recordings/:id/transcript', async (c) => {
     const transcript = await recordingTranscript(catalog, entityId(c.req.param('id')));
     if (!transcript) throw new CatalogError('not-found', 'this recording has no transcript yet');

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import type { Route } from './+types/review';
+import { TranscriptFixes } from '../components/TranscriptFixes.js';
 import { ReviewCard, suggestionCall as call, type ReviewDetail, type ReviewPerson, type ReviewRow } from '../components/ReviewCard.js';
 import { langFrom, t } from '../lib/i18n.js';
 import { num } from '../lib/i18nUi.js';
@@ -34,11 +35,12 @@ export function meta({ loaderData }: Route.MetaArgs) {
   return pageMeta({ title: t(loaderData.lang, 'reviewTitle'), path: '/review', lang: loaderData.lang, siteUrl: loaderData.siteUrl, noindex: true });
 }
 
-type View = 'waiting' | 'live' | 'mine';
+type View = 'waiting' | 'transcripts' | 'live' | 'mine';
 
 const W = {
   crumbs: { he: 'הצעות', en: 'Suggestions' },
   waitingTab: { he: 'ממתינות', en: 'Waiting' },
+  transcriptsTab: { he: 'תיקוני תמלול', en: 'Transcript fixes' },
   liveTab: { he: 'עלו, נבדקות אחרי', en: 'Live, reviewed after' },
   mineTab: { he: 'שלי', en: 'Mine' },
   howTitle: { he: 'איך בודקים', en: 'How to review' },
@@ -107,14 +109,14 @@ export default function Review() {
   // The view asked for, or the one the suggestion asked for is in.
   const asked = params.get('view');
   const holding = (list: ReviewRow[]) => focus !== null && list.some((d) => d.id === focus);
-  const view: View = asked === 'live' || asked === 'mine' || asked === 'waiting' ? asked : holding(live) ? 'live' : holding(mine) ? 'mine' : 'waiting';
+  const view: View = asked === 'live' || asked === 'mine' || asked === 'waiting' || asked === 'transcripts' ? asked : holding(live) ? 'live' : holding(mine) ? 'mine' : 'waiting';
 
   useEffect(() => {
     if (focus && waiting) document.getElementById(`s${focus}`)?.scrollIntoView({ block: 'start' });
   }, [focus, waiting]);
 
   const tabHref = (v: View) => href('/review', lang, { view: v === 'waiting' ? undefined : v });
-  const shown = view === 'live' ? live : view === 'mine' ? mine : (waiting ?? []);
+  const shown = view === 'transcripts' ? [] : view === 'live' ? live : view === 'mine' ? mine : (waiting ?? []);
   const mayApproveAny = decidable.size > 0;
 
   return (
@@ -130,6 +132,7 @@ export default function Review() {
             replace
             items={[
               { key: 'waiting', label: W.waitingTab[lang], icon: 'suggest', to: tabHref('waiting'), count: waiting ? num(waiting.length, lang) : undefined },
+              { key: 'transcripts', label: W.transcriptsTab[lang], icon: 'audio', to: tabHref('transcripts') },
               { key: 'live', label: W.liveTab[lang], icon: 'pulse', to: tabHref('live'), count: waiting ? num(live.length, lang) : undefined },
               { key: 'mine', label: W.mineTab[lang], icon: 'user', to: tabHref('mine'), count: account && waiting ? num(mine.length, lang) : undefined },
             ]}
@@ -144,13 +147,14 @@ export default function Review() {
               <span>{error}</span>
             </p>
           ) : null}
+          {view === 'transcripts' ? <TranscriptFixes lang={lang} onDone={load} /> : null}
           {view === 'live' ? <p className="rq-intro muted">{t(lang, 'liveIntro')}</p> : null}
-          {waiting === null && !error ? (
+          {view !== 'transcripts' && waiting === null && !error ? (
             <div className="box">
               <Skeleton rows={4} lang={lang} />
             </div>
           ) : null}
-          {waiting !== null && shown.length === 0 ? (
+          {view !== 'transcripts' && waiting !== null && shown.length === 0 ? (
             view === 'mine' && account === null ? (
               <EmptyState icon="user" title={W.mineSignIn[lang]} actions={<Link className="btn primary" to={href('/signin', lang, { return: '/review?view=mine' })}>{t(lang, 'signIn')}</Link>} />
             ) : (

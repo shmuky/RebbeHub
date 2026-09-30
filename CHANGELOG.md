@@ -12,6 +12,14 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Transcript fixes, all together.** `/review?view=transcripts` lists
+  every transcript fix waiting for approval, a farbrengen's together in the
+  order heard: the words on the site beside the words sent, a tap to hear
+  the paragraph, and Keep or Remove for each. Apply decides them all at
+  once: kept fixes are approved, removed ones withdrawn if they are yours,
+  else sent back. Timing changes from the editor's removed timing tool
+  start marked Remove. API: `GET /v1/transcripts/fixes` and
+  `POST /v1/transcripts/fixes/decide`.
 - **A machine's words checked against their scan.** On the edit page, a
   page whose words a machine read from a scan (a version with the scan's
   `url` and segments carrying `origin`) opens beside the scan, turned to

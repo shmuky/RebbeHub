@@ -846,6 +846,22 @@ export interface Operations {
     };
     output: Record<string, unknown>;
   };
+  /** Keep some transcript fixes and remove others in one go: kept ones are approved; removed ones are withdrawn if they are yours, else sent back with the note */
+  decideTranscriptFixes: {
+    input: {
+      body?: {
+        /** Suggestions to approve */
+        keep?: Array<number>;
+        /** Suggestions to take out */
+        remove?: Array<number>;
+        /** Said to the people whose fixes are sent back */
+        note?: string;
+      };
+    };
+    output: {
+      results: Array<Record<string, unknown>>;
+    };
+  };
   /** Remove a webhook */
   deleteWebhook: {
     input: {
@@ -2353,6 +2369,16 @@ export interface Operations {
       goal: Record<string, unknown>;
     };
   };
+  /** Every transcript fix waiting for approval, to go through together: each paragraph on the site and as the fix would make it, where it is heard, who sent it, and whether you may approve it */
+  transcriptFixes: {
+    input: {
+      /** How many (at most 200) */
+      limit?: number;
+    };
+    output: {
+      fixes: Array<Record<string, unknown>>;
+    };
+  };
   /** Everything that happened to a recording's transcript, newest first */
   transcriptHistory: {
     input: {
@@ -2544,6 +2570,7 @@ export const OPERATIONS = {
   createProject: {"method":"POST","path":"/v1/projects","pathParams":[],"query":[],"body":"json","answer":"json"},
   createSuggestion: {"method":"POST","path":"/v1/suggestions","pathParams":[],"query":[],"body":"json","answer":"json"},
   createWebhook: {"method":"POST","path":"/v1/webhooks","pathParams":[],"query":[],"body":"json","answer":"json"},
+  decideTranscriptFixes: {"method":"POST","path":"/v1/transcripts/fixes/decide","pathParams":[],"query":[],"body":"json","answer":"json"},
   deleteWebhook: {"method":"DELETE","path":"/v1/webhooks/{id}","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   driveFile: {"method":"GET","path":"/v1/drive/{id}","pathParams":["id"],"query":[],"body":null,"answer":"raw"},
   driveFix: {"method":"GET","path":"/v1/page-fixes/drive/{id}","pathParams":["id"],"query":[],"body":null,"answer":"json"},
@@ -2669,6 +2696,7 @@ export const OPERATIONS = {
   threadByNumber: {"method":"GET","path":"/v1/threads/{number}","pathParams":["number"],"query":[],"body":null,"answer":"json"},
   trainingClips: {"method":"GET","path":"/v1/machine/training/clips","pathParams":[],"query":[],"body":null,"answer":"json"},
   trainingSummary: {"method":"GET","path":"/v1/machine/training","pathParams":[],"query":["since"],"body":null,"answer":"json"},
+  transcriptFixes: {"method":"GET","path":"/v1/transcripts/fixes","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
   transcriptHistory: {"method":"GET","path":"/v1/recordings/{id}/transcript/history","pathParams":["id"],"query":["limit"],"body":null,"answer":"json"},
   types: {"method":"GET","path":"/v1/types","pathParams":[],"query":[],"body":null,"answer":"json"},
   unitPrintings: {"method":"GET","path":"/v1/units/{id}/printings","pathParams":["id"],"query":[],"body":null,"answer":"json"},
@@ -2837,6 +2865,11 @@ export abstract class GeneratedMethods {
   /** Add a webhook (up to five); its signing secret is shown this once (POST /v1/webhooks) */
   createWebhook(input: Operations['createWebhook']['input']): Promise<Operations['createWebhook']['output']> {
     return this.call('createWebhook', input ?? {} as Operations['createWebhook']['input']);
+  }
+
+  /** Keep some transcript fixes and remove others in one go: kept ones are approved; removed ones are withdrawn if they are yours, else sent back with the note (POST /v1/transcripts/fixes/decide) */
+  decideTranscriptFixes(input?: Operations['decideTranscriptFixes']['input']): Promise<Operations['decideTranscriptFixes']['output']> {
+    return this.call('decideTranscriptFixes', input ?? {} as Operations['decideTranscriptFixes']['input']);
   }
 
   /** Remove a webhook (DELETE /v1/webhooks/{id}) */
@@ -3462,6 +3495,11 @@ export abstract class GeneratedMethods {
   /** The next Rebbe Whisper's training data so far: every transcript paragraph a person checked, as clips (GET /v1/machine/training) */
   trainingSummary(input?: Operations['trainingSummary']['input']): Promise<Operations['trainingSummary']['output']> {
     return this.call('trainingSummary', input ?? {} as Operations['trainingSummary']['input']);
+  }
+
+  /** Every transcript fix waiting for approval, to go through together: each paragraph on the site and as the fix would make it, where it is heard, who sent it, and whether you may approve it (GET /v1/transcripts/fixes) */
+  transcriptFixes(input?: Operations['transcriptFixes']['input']): Promise<Operations['transcriptFixes']['output']> {
+    return this.call('transcriptFixes', input ?? {} as Operations['transcriptFixes']['input']);
   }
 
   /** Everything that happened to a recording's transcript, newest first (GET /v1/recordings/{id}/transcript/history) */
