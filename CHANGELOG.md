@@ -48,6 +48,13 @@ any time. `@rebbehub/client` carries the API's version.
   Chumash and Tehillim are worked out from the calendar of 5703 and match
   the print on every day read from its scan. Names brought from
   chabadlibrary.org no longer show their tags (`<h3>ד שבט</h3>`).
+- **Word by word again after a fix.** Fixing a paragraph's words used to
+  throw away all its word timings until the audio was timed again, which
+  for JEM's recordings never came, so the lyrics lit such a paragraph as
+  a guess. A fix now keeps the timing of every word it left and times the
+  changed words between them. `rebbehub restore-word-times` gives the
+  timings back to paragraphs fixed before.
+
 - **Each volume's printings are on one page.** A sefer's volume page
   showed only the printings named exactly as its contents name the
   volume, so Likkutei Sichos 30 (value "1" in its contents) showed the

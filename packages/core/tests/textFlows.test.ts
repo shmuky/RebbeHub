@@ -194,12 +194,24 @@ describe('word-level sync and fixing it', () => {
     await expect(anchorSync(catalog, 'chaim', { recording, segment: segments[1]!, word: 9, atMs: 1 })).rejects.toThrow(/word 9/);
   });
 
-  it('lets go of word timings when a paragraph is corrected', async () => {
+  it('keeps the word timings of the words a correction left, and times the new ones between them', async () => {
     const { catalog, set } = await freshCatalog();
     const { recording, segments } = await transcribed(catalog, set);
     await catalog.merge((await fixParagraph(catalog, 'chaim', { segment: segments[0]!, content: 'לחיים, לחיים טובים' })).id, 'keeper');
     const view = (await recordingTranscript(catalog, recording))!;
-    expect(view.paragraphs[0]).toMatchObject({ content: 'לחיים, לחיים טובים', words: null, startMs: 0, checked: true });
+    expect(view.paragraphs[0]).toMatchObject({
+      content: 'לחיים, לחיים טובים',
+      startMs: 0,
+      checked: true,
+      words: [
+        { from: 0, to: 6, startMs: 0, endMs: 2000 },
+        { from: 7, to: 12, startMs: 2000, endMs: 4000 },
+        { from: 13, to: 18, startMs: 4000, endMs: 4000 },
+      ],
+    });
+    // Marked for the next alignment run to time from the audio.
+    const [span] = await catalog.backlinks(segments[0]!, { field: 'segment', type: 'alignment-span' });
+    expect(((await catalog.get(span!.from))!.data as { origin: { edited?: boolean } }).origin.edited).toBe(true);
   });
 
   it('keeps a paragraph fixed in part as machine hearing, marked edited, until someone checks all of it', async () => {

@@ -1,7 +1,7 @@
 import { Check, CircleHelp, History, MessageCircle, Pencil, ShieldQuestion, Undo2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { markUnclear, spellingHints, unclearRanges } from '@rebbehub/model';
+import { carryWordTimes, markUnclear, spellingHints, unclearRanges } from '@rebbehub/model';
 import { t, type Lang } from '../lib/i18n.js';
 import { clockOf } from '../lib/i18nNetwork.js';
 import { href } from '../lib/links.js';
@@ -336,7 +336,8 @@ function Para({
   // This listener's own fix that still waits: they go on from it, so it is never typed twice and a new fix never undoes their last.
   const mine = pending ?? [...waiting].reverse().find((x) => x.author === me) ?? null;
   const base = mine?.content ?? paragraph.content;
-  const shown = base === paragraph.content ? paragraph : { ...paragraph, content: base, words: null };
+  // Your waiting fix is shown with the words you left keeping their times, so it lights up word by word too.
+  const shown = base === paragraph.content ? paragraph : { ...paragraph, content: base, words: carryWordTimes(paragraph.content, paragraph.words, base) };
   const tokens = tokensOf(shown);
   const marks = unclearRanges(base);
   // Fixes already sent by others, or by this listener before, and not yet approved: their words are shown as they will be, below.
