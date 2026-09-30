@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type Ref, type RefObject } from 'react';
+import { Clamp } from '../ui/Clamp.js';
 import { Link } from 'react-router';
 import { ChangeDiff } from './ChangeDiff.js';
 import { PlainWords } from './PlainWords.js';
@@ -449,7 +450,7 @@ export function SuggestionCard({
       <div className="rq-b">
         {cs.description ? (
           <div className="rq-desc">
-            <PlainWords text={cs.description} lang={lang} />
+            <Clamp text={cs.description} lang={lang} render={(text) => <PlainWords text={text} lang={lang} />} />
           </div>
         ) : null}
         {detail === null && !loadError ? <Skeleton rows={2} lang={lang} /> : null}

@@ -17,7 +17,10 @@ any time. `@rebbehub/client` carries the API's version.
   (thousands) and stopped phones. Changes that differ only by their place
   in a list are now one row, with how many there are, the first as the
   example, and by how much they all moved when they moved alike; at most
-  30 rows an item, the rest counted. A suggestion's page reads 40 items,
+  12 rows an item, the rest counted. Timings and machine details (where
+  each word is heard, which engine, how sure) are no longer shown as
+  changes: one line counts them. A long value or description shows its
+  beginning, with Show all. A suggestion's page reads 40 items,
   and no longer a second full copy of 200 in the browser.
 
 ### Added

@@ -1,5 +1,5 @@
 import type { LocalName } from '@rebbehub/model';
-import { foldChanges, foldedName, moreChanges, valueText } from '../components/ChangeTable.js';
+import { foldChanges, foldedName, infoChanges, moreChanges, valueText } from '../components/ChangeTable.js';
 import type { Entity, RebbeHubApi, SuggestionDetail } from './api.js';
 import { nameOf, typeName, type Lang } from './i18n.js';
 import { labelOf } from './labels.js';
@@ -188,6 +188,8 @@ export async function suggestionView(api: RebbeHubApi, detail: SuggestionDetail,
     const folded = foldChanges(e.changes.filter((c) => !(segment && (c.path === '/content' || c.path === 'content'))));
     const fields = folded.rows.map((c) => ({ path: c.path, name: foldedName(c, lang), before: valueText(c.path, c.before, lang), after: valueText(c.path, c.after, lang), count: c.count }));
     if (folded.hidden) fields.push({ path: '/…', name: moreChanges(folded.hidden, lang), before: '', after: '', count: folded.hidden });
+    // Timings and machine details are counted, not shown, and are not changes to count on the tab.
+    if (folded.info) fields.push({ path: '/…info', name: infoChanges(folded.info, lang), before: '', after: '', count: 0 });
     views.push({
       entityId: e.entityId,
       type: e.type,

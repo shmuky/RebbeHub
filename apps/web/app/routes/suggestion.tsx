@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Clamp } from '../ui/Clamp.js';
 import { data, Link, redirect, useSearchParams } from 'react-router';
 import type { Route } from './+types/suggestion';
 import { Composer } from '../components/threads/Composer.js';
@@ -592,7 +593,7 @@ function Description({ view, lang, mayEdit, id, onSave }: { view: SuggestionView
     );
   return (
     <div className="words">
-      {view.description ? <RichText text={view.description} lang={lang} /> : <p className="subtle">{tt(lang, 'noDescription')}</p>}
+      {view.description ? <Clamp text={view.description} lang={lang} render={(text) => <RichText text={text} lang={lang} />} /> : <p className="subtle">{tt(lang, 'noDescription')}</p>}
       {mayEdit ? (
         <button type="button" className="icon-btn edit-own" onClick={() => (setValue(view.description ?? ''), setEditing(true))} aria-label={tt(lang, 'edit')} title={tt(lang, 'edit')}>
           <Icon name="pencil" size={13} />

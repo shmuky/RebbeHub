@@ -40,12 +40,12 @@ const isRuns = (value: unknown): value is PageInline[] => Array.isArray(value) &
 export function valueText(path: string, value: unknown, lang: Lang): string {
   if (value === undefined || value === null || value === '') return '—';
   if (typeof value === 'string' && /date/i.test(path)) return dateLabel(value, lang, { civil: false });
-  if (typeof value === 'string') return value.length > 500 ? `${value.slice(0, 500)}…` : value;
+  if (typeof value === 'string') return value.length > 200 ? `${value.slice(0, 200)}…` : value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (isRuns(value)) return inlineText(value) || '—';
   if (isPageText(value)) {
     const words = pageTextPlain(value);
-    return words.length > 300 ? `${words.slice(0, 300)}…` : words || '—';
+    return words.length > 200 ? `${words.slice(0, 200)}…` : words || '—';
   }
   if (typeof value === 'object' && isRuns((value as { text?: unknown }).text)) return inlineText((value as { text: PageInline[] }).text) || '—';
   return t(lang, 'changedValue');
@@ -71,9 +71,23 @@ export interface FoldedChange {
 
 const FOLD_AT = 4;
 
-export function foldChanges(changes: ReadonlyArray<{ path: string; before?: unknown; after?: unknown }>, limit = 30): { rows: FoldedChange[]; hidden: number } {
+/**
+ * Details that are not the words or the file: where each word is heard (a
+ * sync's timings), which machine wrote it and how sure it was, whether a
+ * span is locked. They change by the thousand with every sync run, and a
+ * reviewer reads nothing in them (Shmuly: "not real text or file change,
+ * just info change"), so they are counted in one line, not shown as changes.
+ */
+export const isInfoOnly = (path: string) => /(^|\/)(words|origin|engine)(\/|$)|(^|\/)(startMs|endMs|durationMs|locked|confidence)$/.test(path);
+
+export function foldChanges(changes: ReadonlyArray<{ path: string; before?: unknown; after?: unknown }>, limit = 12): { rows: FoldedChange[]; hidden: number; info: number } {
   const groups = new Map<string, Array<{ path: string; before?: unknown; after?: unknown }>>();
+  let info = 0;
   for (const c of changes) {
+    if (isInfoOnly(c.path)) {
+      info++;
+      continue;
+    }
     const pattern = c.path.replace(/\/\d+(?=\/|$)/g, '/*');
     const group = groups.get(pattern);
     if (group) group.push(c);
@@ -90,7 +104,7 @@ export function foldChanges(changes: ReadonlyArray<{ path: string; before?: unkn
     const shift = moves.every((m) => m === moves[0] && !Number.isNaN(m)) ? moves[0] : undefined;
     rows.push({ path: pattern, before: first.before, after: first.after, count: group.length, ...(shift !== undefined ? { shift } : {}) });
   }
-  return { rows: rows.slice(0, limit), hidden: rows.slice(limit).reduce((n, r) => n + r.count, 0) };
+  return { rows: rows.slice(0, limit), hidden: rows.slice(limit).reduce((n, r) => n + r.count, 0), info };
 }
 
 /** A folded row's name: the field without its places in the list, and how many there are. */
@@ -106,6 +120,10 @@ export function foldedName(row: FoldedChange, lang: Lang): string {
 
 /** The line under folded rows that were left out: "and 1,200 more changes". */
 export const moreChanges = (hidden: number, lang: Lang) => (lang === 'he' ? `ועוד ${hidden.toLocaleString('he-IL')} שינויים` : `and ${hidden.toLocaleString('en-US')} more changes`);
+
+/** The one line that stands for timing and machine details: "and 2,000 timing and machine details (not the words)". */
+export const infoChanges = (info: number, lang: Lang) =>
+  lang === 'he' ? `ועוד ${info.toLocaleString('he-IL')} עדכוני תזמון ופרטי מכונה (לא שינוי בטקסט)` : `and ${info.toLocaleString('en-US')} timing and machine details updated (not the words)`;
 
 export function ChangeTable({ changes, lang }: { changes: Array<{ path: string; before?: unknown; after?: unknown }>; lang: Lang }) {
   const folded = foldChanges(changes);
@@ -124,6 +142,13 @@ export function ChangeTable({ changes, lang }: { changes: Array<{ path: string; 
           <tr>
             <td colSpan={4} className="subtle">
               {moreChanges(folded.hidden, lang)}
+            </td>
+          </tr>
+        ) : null}
+        {folded.info ? (
+          <tr>
+            <td colSpan={4} className="subtle">
+              {infoChanges(folded.info, lang)}
             </td>
           </tr>
         ) : null}

@@ -3,7 +3,7 @@ import type { Lang } from '../lib/i18n.js';
 import { wordDiff } from '../lib/wordDiff.js';
 import { DiffBox, DiffSegment, DiffStat, FieldDiff } from '../ui/Diff.js';
 import type { IconName } from '../ui/Icon.js';
-import { fieldName, foldChanges, foldedName, moreChanges, valueText } from './ChangeTable.js';
+import { fieldName, foldChanges, foldedName, infoChanges, moreChanges, valueText } from './ChangeTable.js';
 
 /**
  * A change to one item as a reviewer reads it (the review queue, an item's
@@ -40,6 +40,7 @@ export function ChangeRows({ changes, lang }: { changes: Change[]; lang: Lang })
         ),
       )}
       {folded.hidden ? <p className="subtle small pad">{moreChanges(folded.hidden, lang)}</p> : null}
+      {folded.info ? <p className="subtle small pad">{infoChanges(folded.info, lang)}</p> : null}
     </>
   );
 }
