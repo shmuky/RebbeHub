@@ -12,6 +12,11 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Where a machine read each segment, on its scan.** A page's segment may
+  carry `printed`: the boxes it is printed in on its version's scan (page,
+  and x, y, width, height as fractions of the page). On the edit page that
+  checks a machine's words beside the scan, clicking a segment turns to its
+  page and highlights its lines.
 - **Machine-read pages wait in the check lists.** `GET /v1/machine/to-check`
   also lists `texts`: pages whose words a machine read (the Likkutei Sichos
   subject index, read from its scans) with segments nobody checked, and

@@ -1,4 +1,4 @@
-import type { PageSegment, PageText } from '@rebbehub/model';
+import type { PageSegment, PageText, PrintedPlace } from '@rebbehub/model';
 
 /**
  * The scan page a machine's segments were read from, found by the source
@@ -22,6 +22,26 @@ export function scanPages(page: PageText, versionId: string): Map<string, number
     }
   };
   walk(version.segments);
+  return out;
+}
+
+/**
+ * Where each segment stands on the scan: the boxes it is printed in, when
+ * the machine that read it kept them (`printed`), otherwise only its page,
+ * from the markers (scanPages), with nothing to highlight.
+ */
+export function scanPlaces(page: PageText, versionId: string): Map<string, { page: number; marks: PrintedPlace[] }> {
+  const pages = scanPages(page, versionId);
+  const out = new Map<string, { page: number; marks: PrintedPlace[] }>();
+  const version = page.versions.find((v) => v.id === versionId);
+  const walk = (list: readonly PageSegment[]) => {
+    for (const segment of list) {
+      const marks = segment.printed ?? [];
+      out.set(segment.id, { page: marks[0]?.page ?? pages.get(segment.id) ?? 1, marks });
+      if (segment.children) walk(segment.children);
+    }
+  };
+  walk(version?.segments ?? []);
   return out;
 }
 

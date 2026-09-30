@@ -440,7 +440,7 @@ describe('the wiki model', () => {
           url: 'https://drive.google.com/file/d/1mndi0ZWHOx10XXiLT2sS8rYgeFGrg1kU/view',
           segments: [
             { id: 't1', kind: 'heading', level: 2, text: [{ marker: 'סריקה 3' }, { text: 'אב ובן' }], origin: ocr },
-            { id: 't1.1', kind: 'paragraph', text: [{ text: '27', href: '/read?page=2&src=https://drive.google.com/open?id=x' }, { text: ' (בן ממשיך את אביו).' }], origin: ocr },
+            { id: 't1.1', kind: 'paragraph', text: [{ text: '27', href: '/read?page=2&src=https://drive.google.com/open?id=x' }, { text: ' (בן ממשיך את אביו).' }], origin: ocr, printed: [{ page: 3, box: [0.52, 0.11, 0.4, 0.03] }] },
           ],
         },
       ],
