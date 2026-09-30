@@ -457,6 +457,16 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Changed
 
+- **Words light up again as they are heard, in the listening view and
+  the editor.** A paragraph whose words were fixed (its own timings wait
+  for the nightly run) or a fix still waiting has each word's moment
+  estimated from where the paragraph starts and ends.
+- **A simpler transcript editor on a phone.** No yellow marks: the place
+  you stopped last time is no longer highlighted, the word being said is
+  marked in blue, and paragraphs no longer each carry a "not checked yet"
+  badge (one line at the top says the text is the machine's). The help,
+  the changelog and the training goal fold into small links, and the
+  paragraph's buttons are large, two to a row.
 - **Timing while listening.** **Timing** turns a tap on a paragraph into
   where it starts, and asks once before sending, so a stray tap never
   moves the sync; in the editor, **the sync of the whole recording is
