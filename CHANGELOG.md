@@ -20,6 +20,14 @@ any time. `@rebbehub/client` carries the API's version.
   in one request, the new `GET /v1/units/{id}/neighbours` (in
   `@rebbehub/client` as `unitNeighbours`).
 
+### Removed
+
+- **No timing button in the player.** The **תזמון** button, which let a
+  listener tap where a paragraph starts, is gone: the model's sync is
+  already good, and hand taps only moved it off. Words nobody is sure of
+  can still be talked over, and "the sync of the whole recording is
+  right" still marks it checked.
+
 ### Fixed
 
 - **Each volume's printings are on one page.** A sefer's volume page

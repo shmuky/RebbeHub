@@ -1286,13 +1286,7 @@ button.part.on:hover {
   font-weight: 600;
 }
 
-/* Timing tools and talking over unclear words (components/TimingTools.tsx). */
-.lyrics-edit.on {
-  background: rgba(255, 255, 255, 0.92);
-  color: #0b1024;
-}
-
-.lyrics-timing,
+/* Talking over unclear words (components/TimingTools.tsx). */
 .lyrics .tx-discuss {
   margin: 0 18px 6px;
   padding: 8px 12px;
@@ -1301,7 +1295,6 @@ button.part.on:hover {
   color: inherit;
 }
 
-.lyrics-timing .row-sub,
 .lyrics .tx-discuss .row-sub {
   margin: 0;
   color: rgba(255, 255, 255, 0.8);
@@ -1312,12 +1305,6 @@ button.part.on:hover {
   text-decoration: underline;
 }
 
-.tx-timing {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-}
 
 .tx-discuss {
   display: grid;
