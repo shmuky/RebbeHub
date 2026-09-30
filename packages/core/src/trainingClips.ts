@@ -264,17 +264,25 @@ export interface TrainingGoal {
   model: string;
   since: string;
   hours: { done: number; target: number };
-  farbrengens: { done: number; target: number };
+  /**
+   * `done` counts farbrengens checked through; `progress` also counts the
+   * part of each farbrengen checked so far (half checked is a half), so
+   * the bar moves with every paragraph and not only at a farbrengen's end.
+   */
+  farbrengens: { done: number; target: number; progress: number };
+  /** Paragraphs people checked since the last model. */
+  paragraphs: { checked: number };
   /** Transcribed farbrengens not yet fully checked, the most wanted first, then those nearest done. */
   next: GoalFarbrengen[];
 }
 
 /** Each transcribed farbrengen with how many of its transcripts' paragraphs a person has checked, in one query. */
-async function farbrengenProgress(catalog: Catalog): Promise<Array<GoalFarbrengen & { heldOut: boolean }>> {
-  const { rows } = await catalog.db.query<{ event: EntityId; path: string | null; title: GoalFarbrengen['title']; date: string | null; url: string | null; paragraphs: string | number; checked: string | number }>(
+async function farbrengenProgress(catalog: Catalog, since: string): Promise<Array<GoalFarbrengen & { heldOut: boolean; recent: number }>> {
+  const { rows } = await catalog.db.query<{ event: EntityId; path: string | null; title: GoalFarbrengen['title']; date: string | null; url: string | null; paragraphs: string | number; checked: string | number; recent: string | number }>(
     `SELECT ev.id AS event, ev.path, er.data->'title' AS title, er.data->>'date' AS date, rr.data->>'url' AS url,
             count(s.id) AS paragraphs,
-            count(s.id) FILTER (WHERE coalesce((sr.data->>'proofread')::int, 0) > 0 OR sr.data->'origin'->>'checked' = 'true') AS checked
+            count(s.id) FILTER (WHERE coalesce((sr.data->>'proofread')::int, 0) > 0 OR sr.data->'origin'->>'checked' = 'true') AS checked,
+            count(s.id) FILTER (WHERE (coalesce((sr.data->>'proofread')::int, 0) > 0 OR sr.data->'origin'->>'checked' = 'true') AND sr.created_at >= $1) AS recent
      FROM entity t JOIN revision tr ON tr.id = t.main_rev AND tr.data->>'kind' = 'transcript'
      JOIN entity rec ON rec.id = tr.data->>'recording' AND NOT rec.deleted JOIN revision rr ON rr.id = rec.main_rev
      JOIN entity ev ON ev.id = rr.data->>'event' AND NOT ev.deleted JOIN revision er ON er.id = ev.main_rev AND er.data->>'kind' = 'farbrengen'
@@ -282,15 +290,17 @@ async function farbrengenProgress(catalog: Catalog): Promise<Array<GoalFarbrenge
      JOIN entity s ON s.id = x.from_id AND s.type = 'segment' AND NOT s.deleted JOIN revision sr ON sr.id = s.main_rev
      WHERE t.type = 'text' AND NOT t.deleted
      GROUP BY ev.id, ev.path, er.data, rec.id, rr.data`,
+    [since],
   );
-  const byEvent = new Map<EntityId, GoalFarbrengen & { heldOut: boolean }>();
+  const byEvent = new Map<EntityId, GoalFarbrengen & { heldOut: boolean; recent: number }>();
   for (const r of rows) {
     const jem = r.url ? /\/jem-audio\/([^/?#]+)$/.exec(r.url) : null;
     const heldOut = Boolean(jem && HELD_OUT_AUDIO.includes(decodeURIComponent(jem[1]!)));
     const year = Number(r.date?.slice(0, 4));
-    const e = byEvent.get(r.event) ?? { event: r.event, path: r.path, title: r.title, date: r.date, paragraphs: 0, checked: 0, mostWanted: year > 0 && year < TRAINING_GOAL.mostWantedBefore, heldOut: false };
+    const e = byEvent.get(r.event) ?? { event: r.event, path: r.path, title: r.title, date: r.date, paragraphs: 0, checked: 0, mostWanted: year > 0 && year < TRAINING_GOAL.mostWantedBefore, heldOut: false, recent: 0 };
     e.paragraphs += Number(r.paragraphs);
     e.checked += Number(r.checked);
+    e.recent += Number(r.recent);
     e.heldOut ||= heldOut;
     byEvent.set(r.event, e);
   }
@@ -303,24 +313,28 @@ export async function trainingGoal(catalog: Catalog, all: { clips: TrainingClip[
   const counted = all.clips.filter((c) => c.checkedAt >= since && !c.audio.some((a) => HELD_OUT_AUDIO.includes(a)));
   const seconds = counted.reduce((t, c) => t + (c.end - c.start), 0);
   const recent = new Set(counted.map((c) => c.recording));
-  const farbrengens = (await farbrengenProgress(catalog)).filter((f) => !f.heldOut);
+  const farbrengens = (await farbrengenProgress(catalog, since)).filter((f) => !f.heldOut);
   // A farbrengen counts once every transcribed paragraph of it is checked, some of it since the last model.
   const recentEvents = new Set<EntityId>();
   if (recent.size) {
     const { rows } = await catalog.db.query<{ event: EntityId }>(`SELECT DISTINCT r.data->>'event' AS event FROM entity e JOIN revision r ON r.id = e.main_rev WHERE e.id = ANY($1::text[])`, [[...recent]]);
     for (const r of rows) recentEvents.add(r.event);
   }
-  const done = farbrengens.filter((f) => f.paragraphs > 0 && f.checked === f.paragraphs && recentEvents.has(f.event)).length;
+  const isDone = (f: (typeof farbrengens)[number]) => f.paragraphs > 0 && f.checked === f.paragraphs && (recentEvents.has(f.event) || f.recent > 0);
+  const done = farbrengens.filter(isDone).length;
+  // The farbrengens begun since the last model, each by how much of it is checked.
+  const begun = farbrengens.filter((f) => !isDone(f) && f.recent > 0).reduce((sum, f) => sum + f.checked / f.paragraphs, 0);
   const next = farbrengens
     .filter((f) => f.checked < f.paragraphs)
     .sort((a, b) => Number(b.mostWanted) - Number(a.mostWanted) || b.checked / b.paragraphs - a.checked / a.paragraphs || (a.date ?? '').localeCompare(b.date ?? ''))
     .slice(0, options.next ?? 5)
-    .map(({ heldOut: _h, ...f }) => f);
+    .map(({ heldOut: _h, recent: _r, ...f }) => f);
   return {
     model: TRAINING_GOAL.model,
     since: TRAINING_GOAL.since,
     hours: { done: Math.round(seconds / 36) / 100, target: TRAINING_GOAL.hours },
-    farbrengens: { done, target: TRAINING_GOAL.farbrengens },
+    farbrengens: { done, target: TRAINING_GOAL.farbrengens, progress: Math.min(TRAINING_GOAL.farbrengens, Math.round((done + begun) * 100) / 100) },
+    paragraphs: { checked: farbrengens.reduce((sum, f) => sum + f.recent, 0) },
     next,
   };
 }
