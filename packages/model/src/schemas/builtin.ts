@@ -108,6 +108,15 @@ const DEFS: Record<string, JsonSchema> = {
       text: arrayOf(ref('pageInline'), { maxItems: 5000 }),
       children: arrayOf(ref('pageSegment'), { maxItems: 20_000 }),
       origin: ref('machineOrigin'),
+      printed: arrayOf(
+        {
+          type: 'object',
+          properties: { page: int({ minimum: 1, maximum: 100_000 }), box: arrayOf({ type: 'number', minimum: 0, maximum: 1 }, { minItems: 4, maxItems: 4 }) },
+          required: ['page', 'box'],
+          additionalProperties: false,
+        },
+        { maxItems: 50 },
+      ),
     },
     required: ['id', 'kind'],
     additionalProperties: false,

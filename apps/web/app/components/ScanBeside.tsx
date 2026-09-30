@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { PrintedPlace } from '@rebbehub/model';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import { Link } from 'react-router';
 import { t, type Lang } from '../lib/i18n.js';
@@ -24,10 +25,13 @@ const WORDS = {
  * each segment is checked against the page itself. The file is loaded
  * once; turning pages and zooming only draw again. `file` is where its
  * bytes are read (a Drive file through RebbeHub's API), `src` its own
- * address, for the reader.
+ * address, for the reader. `marks` are the clicked segment's lines, drawn
+ * over the page they are on and scrolled into view.
  */
-export function ScanBeside({ file, src, title, page, lang, onPage }: { file: string; src: string; title: string; page: number; lang: Lang; onPage: (page: number) => void }) {
+export function ScanBeside({ file, src, title, page, marks = [], lang, onPage }: { file: string; src: string; title: string; page: number; marks?: PrintedPlace[]; lang: Lang; onPage: (page: number) => void }) {
   const box = useRef<HTMLDivElement>(null);
+  const sheet = useRef<HTMLDivElement>(null);
+  const [drawn, setDrawn] = useState<string | null>(null);
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
@@ -78,13 +82,26 @@ export function ScanBeside({ file, src, title, page, lang, onPage }: { file: str
       } catch {
         return;
       }
-      if (!cancelled) el.replaceChildren(canvas);
+      if (cancelled) return;
+      el.replaceChildren(canvas);
+      setDrawn(`${shown}:${zoom}`);
     })();
     return () => {
       cancelled = true;
       task?.cancel();
     };
   }, [doc, shown, zoom]);
+
+  const here = marks.filter((m) => m.page === shown);
+  // Once the page is drawn, bring the first highlighted line to the middle of the scan's box.
+  useEffect(() => {
+    const first = sheet.current?.querySelector<HTMLElement>('.scan-mark');
+    if (!first || !drawn) return;
+    const scroller = first.closest<HTMLElement>('.check-scan');
+    const across = first.closest<HTMLElement>('.scan-page');
+    if (scroller) scroller.scrollTo({ top: first.offsetTop + (sheet.current?.offsetTop ?? 0) - scroller.clientHeight / 2, behavior: 'smooth' });
+    if (across) across.scrollTo({ left: first.offsetLeft + first.offsetWidth / 2 - across.clientWidth / 2, behavior: 'smooth' });
+  }, [drawn, marks]);
 
   return (
     <div className="scan-beside" aria-label={WORDS.scan[lang]}>
@@ -112,7 +129,14 @@ export function ScanBeside({ file, src, title, page, lang, onPage }: { file: str
         </Link>
       </div>
       <div className="scan-page" dir="ltr">
-        <div ref={box} className="scan-canvas" />
+        <div ref={sheet} className="scan-sheet">
+          <div ref={box} className="scan-canvas" />
+          {doc && drawn
+            ? here.map((m, i) => (
+                <span key={i} className="scan-mark" aria-hidden style={{ left: `${m.box[0] * 100}%`, top: `${m.box[1] * 100}%`, width: `${m.box[2] * 100}%`, height: `${m.box[3] * 100}%` }} />
+              ))
+            : null}
+        </div>
         {!doc && !failed ? (
           <p className="subtle scan-note" role="status">
             {WORDS.loading[lang]}

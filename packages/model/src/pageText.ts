@@ -59,6 +59,14 @@ export interface PageSegment {
   children?: PageSegment[];
   /** Set when a machine made it; labelled until a person checks it. */
   origin?: MachineOrigin;
+  /** Where it is printed on its version's scan (the version's `url`), so a checker can show it there: one box per column or page it runs over. */
+  printed?: PrintedPlace[];
+}
+
+/** A place on a scan: its page, from 1, and x, y, width, height as fractions (0-1) of the page, as a text line's box. */
+export interface PrintedPlace {
+  page: number;
+  box: [number, number, number, number];
 }
 
 /** One version of a page's words: a language and edition, with its credit. */
