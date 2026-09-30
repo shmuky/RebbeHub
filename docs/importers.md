@@ -26,7 +26,7 @@ workflow crawls what it can first ([deploy](deploy.md)).
 | `hebrewbooks` | the checkout (`HEBREWBOOKS_SHELF` optional) | HebrewBooks' Chabad shelf, link-only |
 | `chabadlibrary` | `CHABADLIBRARY_TREE` | a page per chapter of chabadlibrary.org, with its words where `crawl-library --texts` kept them (the `chabad-library` profile), credited to the library |
 | `jem` | `JEM_DB` | JEM's recordings |
-| `sefaria` | `SEFARIA_DATA` | Sefaria's Chabad books Sichos-Kodesh does not publish |
+| `sefaria` | `SEFARIA_DATA` | Sefaria's Chabad books Sichos-Kodesh does not publish, and with `crawl-sefaria --daily` the texts of Chitas and the Rambam |
 | `igros` | `IGROS_DATA` | the letters' dates |
 | `archive` | `SK_ARCHIVE_DB` | Sichos-Kodesh's archive history, and the Missing board's Files lost |
 
@@ -107,9 +107,36 @@ and writes each chapter's texts to `<out>/texts/<sha256>.html` with a
 and keeps every answer in `--cache`, so a second run asks nothing twice.
 
 ```sh
-rebbehub crawl-sefaria --from ../Sichos-Kodesh --out ../sefaria --cache ../sefaria-cache [--only "Book Title"]
+rebbehub crawl-sefaria --from ../Sichos-Kodesh --out ../sefaria --cache ../sefaria-cache [--only "Book Title"] [--daily]
 SEFARIA_DATA=../sefaria rebbehub import sefaria --from ../Sichos-Kodesh --approve-as shmuly
 ```
+
+With `--daily` (or `SEFARIA_DAILY=1`), as the catalog import runs it,
+the crawl also reads the texts of the daily learning, Chitas and the
+Rambam, into a Set of their own, "חת״ת ורמב״ם / Chitas and Rambam"
+(`/sets/chitas-rambam`), not the Chabad books' Set or a Chabad kind's:
+
+| Books | Work paths | Hebrew version asked for |
+| --- | --- | --- |
+| Genesis … Deuteronomy | `/chumash/genesis` … | Tanach with Ta'amei Hamikra (public domain) |
+| Rashi on each | `/chumash/rashi-genesis` … | Rosenbaum and Silbermann, 1929-1934 (public domain; its English too) |
+| Psalms | `/tehillim` | Tanach with Ta'amei Hamikra |
+| Every book of the Mishneh Torah, with its introduction and list of the mitzvos | `/rambam/<book>` (`/rambam/kings-and-wars`) | Torat Emet 363 (public domain) |
+| Sefer HaMitzvot | `/sefer-hamitzvos` | Sefer HaMitzvot, Warsaw 1883 (public domain) |
+
+The crawl reads each book's versions from Sefaria
+(`/api/texts/versions/<title>`) and asks for the first of these that
+Sefaria has under a licence that lets its words be kept, else the most
+prominent Hebrew version that may be kept; Sefaria's first Hebrew
+Tanach, "Miqra according to the Masorah", is CC BY-SA and would be only
+a link. The English is Sefaria's primary one, kept when its licence lets
+it be (the JPS Tanakh and Touger's Mishneh Torah are CC BY-NC). Their
+keys are their own (`sefaria-daily-work:Genesis`,
+`sefaria-daily-unit:Genesis/1`). A unit is a chapter, its verses
+numbered as Sefaria numbers them, so a link to verse 5 is `#s-5`. Rashi,
+three levels deep, has a section for each verse with comments, whose id
+is the verse (`5`), and each comment under it (`5.1`, `5.2`); a verse
+without comments has none.
 
 Only a text whose licence lets it be kept (CC BY-NC, CC BY, CC0, public
 domain) is written; any other is a link to Sefaria. Each chapter's page

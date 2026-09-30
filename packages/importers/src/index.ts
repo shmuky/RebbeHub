@@ -24,11 +24,14 @@ export { ASHREINU, JEM_SET, jemDate, jemFilename, jemImporter, jemKind, jemPlaye
 export {
   SEFARIA,
   SEFARIA_SET,
+  DAILY_SET,
   bookLeaves,
   chabadTitles,
+  chooseVersion,
   cleanSegment,
   crawlBook,
   crawlSefaria,
+  dailyBooks,
   mayKeepText,
   readSefariaCrawl,
   renderSefariaText,
@@ -39,10 +42,12 @@ export {
   sefariaLicence,
   sefariaPage,
   sichosKodeshSefariaTitles,
+  type DailyBook,
   type SefariaClient,
   type SefariaCrawl,
   type SefariaIndex,
   type SefariaInput,
+  type SefariaVersionInfo,
 } from './sefaria.js';
 export { archiveImporter, archiveSourceRef, archiveTarget, readArchiveIndex, type ArchiveCommit, type ArchiveGap, type ArchiveIndex, type ArchiveRef } from './archive.js';
 export { rebbehubSetsImporter } from './rebbehubSets.js';

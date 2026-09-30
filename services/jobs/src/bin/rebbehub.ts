@@ -63,8 +63,9 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 chabadlibrary.org's contents, continuing an earlier crawl; --texts
                                                 keeps each page's text beside the tree, --keep stores them in R2
                                                 (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
-  rebbehub crawl-sefaria --from <Sichos-Kodesh checkout> --out <folder> [--cache <folder>] [--keep] [--only <title>]
-                                                Sefaria's Chabad books Sichos-Kodesh does not publish; --keep stores
+  rebbehub crawl-sefaria --from <Sichos-Kodesh checkout> --out <folder> [--cache <folder>] [--keep] [--only <title>] [--daily]
+                                                Sefaria's Chabad books Sichos-Kodesh does not publish; --daily (or
+                                                SEFARIA_DAILY=1) also Chitas and the Rambam; --keep stores
                                                 their texts in R2 (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
   rebbehub archive-gaps --db <index.sqlite>     the files Sichos-Kodesh's archive could not get, onto the Missing board
   rebbehub mirror --dir <folder> [--git] [--full] [--limit <n>]
@@ -201,6 +202,7 @@ const { values, positionals } = parseArgs({
     keep: { type: 'boolean' },
     texts: { type: 'boolean' },
     only: { type: 'string', multiple: true },
+    daily: { type: 'boolean' },
     db: { type: 'string' },
     'preservation-bucket': { type: 'string' },
     help: { type: 'boolean', short: 'h' },
@@ -249,7 +251,7 @@ try {
       await crawlLibraryCommand(ctx, { from: need(values.from, 'from'), out: need(values.out, 'out'), minutes: number(values.minutes), texts: values.texts, keep: values.keep, bucket: values.bucket });
       break;
     case 'crawl-sefaria':
-      await crawlSefariaCommand(ctx, { from: need(values.from, 'from'), out: need(values.out, 'out'), cache: values.cache, keep: values.keep, only: values.only, bucket: values.bucket });
+      await crawlSefariaCommand(ctx, { from: need(values.from, 'from'), out: need(values.out, 'out'), cache: values.cache, keep: values.keep, only: values.only, daily: values.daily, bucket: values.bucket });
       break;
     case 'archive-gaps':
       await archiveGapsCommand(ctx, { db: need(values.db, 'db') });
