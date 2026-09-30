@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
+import { QueueRow } from '../app/components/QueueRow.js';
 import { SuggestionCard, type ReviewDetail, type ReviewRow } from '../app/components/ReviewCard.js';
 import type { Lang } from '../app/lib/i18n.js';
 
@@ -115,5 +116,36 @@ describe("a bot's Suggestion of 500 items in the review queue", () => {
     const html = render({ ...detail, entries: detail.entries.slice(0, 3), total: 3, next: null, summary: [{ ...detail.summary![0]!, count: 3 }] });
     expect(html).not.toContain('Show more');
     expect(html).toContain('3 items');
+  });
+});
+
+describe('the review queue, as GitHub lists pull requests', () => {
+  const line = (r: ReviewRow, lang: Lang = 'en') =>
+    renderToStaticMarkup(createElement(MemoryRouter, null, createElement('ul', null, createElement(QueueRow, { row: r, person: { name: 'Drive links (relink bot)', bot: true }, lang }))));
+
+  it('lists a Suggestion by its title, with its #number, who sent it and how many items, and none of its changes', () => {
+    const html = line({ ...row, number: 12, kind: 'suggestion' });
+    expect(html).toContain('Drive links in place of the media proxy (1-500)');
+    expect(html).toContain('href="/suggestions/12?lang=en"');
+    expect(html).toContain('#12');
+    expect(html).toContain('Drive links (relink bot)');
+    expect(html).toContain('500 items');
+    expect(html).toContain('Not yet checked');
+    // The changes, their summary and Approve are on its own page.
+    expect(html).not.toContain(row.description!);
+    expect(html).not.toContain('What changes');
+    expect(html).not.toContain('Approve');
+    expect(html).not.toContain('class="diff"');
+  });
+
+  it('opens a Suggestion with no #number (an import) as its card in the queue', () => {
+    expect(line(row)).toContain('href="/review?s=7&amp;lang=en"');
+  });
+
+  it('reads in Hebrew too', () => {
+    const html = line({ ...row, number: 12 }, 'he');
+    expect(html).toContain('href="/suggestions/12"');
+    expect(html).toContain('500 פריטים');
+    expect(html).toContain('בוט');
   });
 });

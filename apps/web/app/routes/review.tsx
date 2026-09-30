@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import type { Route } from './+types/review';
+import { QueueRow } from '../components/QueueRow.js';
 import { TranscriptFixes } from '../components/TranscriptFixes.js';
 import { ReviewCard, suggestionCall as call, type ReviewDetail, type ReviewPerson, type ReviewRow } from '../components/ReviewCard.js';
 import { langFrom, t } from '../lib/i18n.js';
@@ -22,9 +23,13 @@ import '../styles/pages/contribute.css';
  * of them. Each may carry the reviewer's advice: a machine's summary,
  * labelled as such, which decides nothing. Filled in by the browser, since
  * who may approve is personal; the page itself is the same for everyone.
- * The queue is drawn from the list alone, and each Suggestion's changes
- * are read as it comes into view (components/ReviewCard.tsx), so a bot's
- * Suggestions of 500 items each do not hold the page up.
+ * The queue is a list of titles, as GitHub lists pull requests: one line
+ * each, with its #number, who sent it, when and how many items it
+ * changes. Its changes, a page of 25 at a time, and Approve are on its
+ * own page, so a queue of a bot's Suggestions of 500 items each opens at
+ * once and reads at a glance. A Suggestion with no #number (an import)
+ * has no page of its own: its line opens it here (`?s=`), whole, as its
+ * card (components/ReviewCard.tsx).
  */
 export function loader({ request }: Route.LoaderArgs) {
   return { lang: langFrom(request), siteUrl: new URL(request.url).origin };
@@ -56,8 +61,8 @@ const W = {
   noMine: { he: 'עוד לא הצעת תיקון שנסגר.', en: 'None of your suggestions has been closed yet.' },
   mineSignIn: { he: 'היכנסו כדי לראות את ההצעות שלכם.', en: 'Sign in to see your suggestions.' },
   yours: { he: 'את/ה יכול/ה לאשר', en: 'You can approve' },
-  cantApprove: { he: 'רק אחראי האוסף מאשרים', en: 'Only the keepers approve' },
 } as const;
+
 
 export default function Review() {
   const lang = useLang();
@@ -161,9 +166,19 @@ export default function Review() {
               <EmptyState icon={view === 'waiting' ? 'check' : 'suggest'} title={view === 'waiting' ? t(lang, 'nothingWaiting') : view === 'live' ? W.noLive[lang] : W.noMine[lang]} />
             )
           ) : null}
-          {shown.map((row) => (
-            <ReviewCard key={`${row.id}:${row.status}:${row.post_review}`} row={row} person={people[row.author]} lang={lang} onDone={load} open={row.id === focus} onDecidable={onDecidable} />
+          {/* The one asked for by `?s=` whole, with its changes and Approve; the rest as titles. */}
+          {shown.filter((row) => row.id === focus).map((row) => (
+            <ReviewCard key={`${row.id}:${row.status}:${row.post_review}`} row={row} person={people[row.author]} lang={lang} onDone={load} open onDecidable={onDecidable} />
           ))}
+          {shown.some((row) => row.id !== focus) ? (
+            <section className="box">
+              <ul className="rows issue-rows">
+                {shown.filter((row) => row.id !== focus).map((row) => (
+                  <QueueRow key={row.id} row={row} person={people[row.author]} lang={lang} />
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </div>
         <aside className="side" aria-label={W.howTitle[lang]}>
           {account === null ? (
@@ -187,10 +202,11 @@ export default function Review() {
           <section>
             <h4>{W.whoTitle[lang]}</h4>
             <p className="muted">{W.who[lang]}</p>
-            {waiting && account ? (
-              <p className={mayApproveAny ? 'rq-you yes' : 'rq-you'}>
-                <Icon name={mayApproveAny ? 'check' : 'lock'} size={14} />
-                {mayApproveAny ? W.yours[lang] : W.cantApprove[lang]}
+            {/* Known only for a Suggestion opened here; its own page says so for the rest. */}
+            {waiting && account && mayApproveAny ? (
+              <p className="rq-you yes">
+                <Icon name="check" size={14} />
+                {W.yours[lang]}
               </p>
             ) : null}
           </section>

@@ -20,7 +20,21 @@ any time. `@rebbehub/client` carries the API's version.
   has its source's address; a page merged from others (the full subject
   index, gathered from its printed books) is checked where its words came
   from.
-
+- **Checking a transcript: hear again, the speed, and the page follows
+  the words.** While checking, the player bar plays the last five
+  seconds again and slows down (0.5×, 0.75×) or speeds up (1.25×, 1.5×);
+  on leaving the editor the speed is back to normal, and the rest of the
+  site never offers it. The open paragraph's tools, and the fixing box's
+  Save, float at the foot of the screen however long the paragraph, and
+  the page keeps the word being said in view (a few seconds after you
+  scroll on your own, it follows again). Opening the editor while the
+  recording plays starts at the paragraph being heard.
+- **The home page's progress moves with every paragraph.** The bar
+  toward the next transcription model counts each farbrengen by how much
+  of it is checked, says how many paragraphs were checked so far, and
+  shows your own checks as soon as you are back on the page. API:
+  `/v1/machine/training`'s `goal` also has `farbrengens.progress` and
+  `paragraphs.checked`.
 - **The day's shiurim, Chitas and Rambam, on the daily page.** `/daily`
   opens with the day's shiurim at a glance: Chumash with Rashi (the
   week's parsha, an aliyah a day), Tehillim (the monthly cycle, with
@@ -78,6 +92,19 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Changed
 
+- **The review queue lists titles, as GitHub lists pull requests.**
+  `/review` shows one line per Suggestion: its title (to its own page),
+  its #number, who sent it, when, and how many items it changes. Its
+  changes, 25 at a time, and Approve are on its page; a Suggestion with
+  no #number (an import) opens whole in the queue (`/review?s=`). The
+  list of Reports (`/issues`) no longer carries each report's words to
+  the browser, only its title and facts: the words are on its own page.
+- **Tabs on a phone.** On a phone the main sections (Home, Library,
+  Farbrengens, Suggestions) and the menu are tabs along the bottom of the
+  screen, where a thumb reaches them, instead of hidden behind a button;
+  the bell is in the top bar. The player and messages sit just above the
+  tabs, and the menu's light/dark switch no longer spills out of it.
+
 - **The library by Rebbe.** The library page's shelves are now a shelf
   for each Rebbe, from the Baal Shem Tov to the Rebbe, then history,
   halacha, journals and the rest, in the order the catalog keeps them,
@@ -95,6 +122,19 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Fixed
 
+- **Checking a transcript.** "All exact" stays after you fix some of a
+  paragraph's words, so a paragraph can be checked in the same visit;
+  "Edit paragraph" is gone where your fix waits for approval (select the
+  words to change them, as everywhere). The diff of a fix waiting for
+  approval shows under the words on History only, with what was fixed
+  since the machine heard them. Words marked unclear (`[words?]`) are
+  all marked, not only the middle ones, and a fix no longer marks the
+  word after it.
+- **Previous and Next stay in their place.** The buttons above a sicha's
+  text stuck to the top of the screen and covered the words as you
+  scrolled, because they shared the site header's class name. They now
+  sit above and below the text only, each takes half the row, and a long
+  sicha name wraps to two lines instead of being cut.
 - **The synced player has its look back.** A stylesheet merged without
   one closing brace, so the lyrics player and the rest of the farbrengen
   page lost all their styling. A test now checks every stylesheet closes

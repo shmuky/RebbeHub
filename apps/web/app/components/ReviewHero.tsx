@@ -6,7 +6,7 @@ import { dateLabel } from '../lib/dates.js';
 import { nameOf, t, type Lang } from '../lib/i18n.js';
 import { num } from '../lib/i18nUi.js';
 import { href } from '../lib/links.js';
-import { get } from '../lib/transcript.js';
+import { get, trainingPath } from '../lib/transcript.js';
 import { Bar } from '../ui/primitives.js';
 
 /**
@@ -17,13 +17,17 @@ import { Bar } from '../ui/primitives.js';
  * (a farbrengen's `?review=1#transcript`, a page's edit page with the scan
  * beside it). The list comes with the page (one read, GET
  * /v1/machine/to-check); the training goal is asked for by the browser, so
- * the page costs no more to draw.
+ * the page costs no more to draw. The bar moves with every paragraph
+ * checked, not only when a whole farbrengen is done, and someone who has
+ * just checked sees their checks counted (lib/transcript.ts
+ * trainingPath), also on coming back to the page.
  */
 
 interface Goal {
   model: string;
   hours: { done: number; target: number };
-  farbrengens: { done: number; target: number };
+  farbrengens: { done: number; target: number; progress?: number };
+  paragraphs?: { checked: number };
   next: Array<{ event: string; path: string | null; title: { he: string; en?: string } | null; date: string | null; paragraphs: number; checked: number; mostWanted: boolean }>;
 }
 
@@ -48,6 +52,7 @@ const W = {
   paragraphs: { he: 'פסקאות לבדוק', en: 'paragraphs to check' },
   model: { he: 'לקראת {model}', en: 'Towards {model}' },
   modelOf: { he: '{done} מתוך {target} התוועדויות נבדקו', en: '{done} of {target} farbrengens checked' },
+  paragraphsChecked: { he: '{n} פסקאות נבדקו עד עכשיו', en: '{n} paragraphs checked so far' },
   start: { he: 'להתחיל לבדוק', en: 'Start checking' },
   all: { he: 'כל הרשימה', en: 'The whole list' },
   next: { he: 'לבדוק עכשיו', en: 'Check next' },
@@ -64,11 +69,17 @@ export function ReviewHero({ lang, list }: { lang: Lang; list: MachineToCheck })
   const [goal, setGoal] = useState<Goal | null>(null);
   useEffect(() => {
     let live = true;
-    void get<{ goal: Goal }>('machine/training')
-      .then((r) => live && setGoal(r.goal))
-      .catch(() => {});
+    const read = () =>
+      void get<{ goal: Goal }>(trainingPath())
+        .then((r) => live && setGoal(r.goal))
+        .catch(() => {});
+    read();
+    // Back from checking, the phone may show this page as it was left: read again.
+    const shown = (e: PageTransitionEvent) => e.persisted && read();
+    window.addEventListener('pageshow', shown);
     return () => {
       live = false;
+      window.removeEventListener('pageshow', shown);
     };
   }, []);
 
@@ -116,8 +127,9 @@ export function ReviewHero({ lang, list }: { lang: Lang; list: MachineToCheck })
                   <b>{w(lang, 'model').replace('{model}', goal.model)}</b>
                   {' · '}
                   {w(lang, 'modelOf').replace('{done}', num(goal.farbrengens.done, lang)).replace('{target}', num(goal.farbrengens.target, lang))}
+                  {goal.paragraphs?.checked ? ` · ${w(lang, 'paragraphsChecked').replace('{n}', num(goal.paragraphs.checked, lang))}` : ''}
                 </span>
-                <Bar value={goal.farbrengens.done} max={goal.farbrengens.target} label={w(lang, 'modelOf').replace('{done}', String(goal.farbrengens.done)).replace('{target}', String(goal.farbrengens.target))} />
+                <Bar value={goal.farbrengens.progress ?? goal.farbrengens.done} max={goal.farbrengens.target} label={w(lang, 'modelOf').replace('{done}', String(goal.farbrengens.done)).replace('{target}', String(goal.farbrengens.target))} />
               </>
             ) : null}
           </div>
