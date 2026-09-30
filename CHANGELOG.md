@@ -69,6 +69,12 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Changed
 
+- **Tabs on a phone.** On a phone the main sections (Home, Library,
+  Farbrengens, Suggestions) and the menu are tabs along the bottom of the
+  screen, where a thumb reaches them, instead of hidden behind a button;
+  the bell is in the top bar. The player and messages sit just above the
+  tabs, and the menu's light/dark switch no longer spills out of it.
+
 - **The library by Rebbe.** The library page's shelves are now a shelf
   for each Rebbe, from the Baal Shem Tov to the Rebbe, then history,
   halacha, journals and the rest, in the order the catalog keeps them,
