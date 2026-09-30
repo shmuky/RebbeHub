@@ -539,3 +539,14 @@
     font-size: 17px;
   }
 }
+
+/* A set inside a shelf, in the list of every sefer. */
+.lib-page .row.group a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.lib-page .row.group.sub {
+  padding-inline-start: 32px;
+  font-weight: 500;
+}
