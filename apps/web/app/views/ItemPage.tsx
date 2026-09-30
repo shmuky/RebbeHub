@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { isPageText, type LocalName } from '@rebbehub/model';
 import { AudioPlayer } from '../components/AudioPlayer.js';
+import { ChapterNav } from '../components/ChapterNav.js';
 import { EventPage } from './EventPage.js';
 import { AuthorPage, SetPage, WorkPage } from './LibraryPages.js';
 import { ItemLink, ItemList } from '../components/ItemLink.js';
@@ -249,8 +250,11 @@ function UnitBody({ entity, view, lang }: { entity: Entity; view: ItemView; lang
   // A chapter brought with its own words (a Sefaria page) has a text even with no text item.
   const body = (entity.data as { body?: unknown }).body;
   const hasWords = isPageText(body) && body.versions.some((v) => v.segments.length);
+  // The sichos before and after it in its sefer, above its words and below them.
+  const { previous = null, next = null } = view.neighbours ?? {};
   return (
     <>
+      <ChapterNav unit={entity} previous={previous} next={next} lang={lang} where="top" />
       {texts.length ? (
         // Its words, one language at a time, with its translations and "Add a translation".
         <UnitTexts unit={entity} texts={texts} segments={view.segments} lang={lang} />
@@ -261,6 +265,7 @@ function UnitBody({ entity, view, lang }: { entity: Entity; view: ItemView; lang
       )}
       {/* The chapter's own words come first; where they and other copies are from, after. */}
       <PageBody entity={entity} lang={lang} />
+      <ChapterNav unit={entity} previous={previous} next={next} lang={lang} where="bottom" />
     </>
   );
 }

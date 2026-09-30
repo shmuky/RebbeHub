@@ -516,6 +516,31 @@ export class Catalog {
   }
 
   /**
+   * The units just before and just after a unit in its work, in the order
+   * the work's contents use (`order`, then id, as `children` pages them),
+   * across volumes: a sicha's page's "previous" and "next" in one statement.
+   * Null at either end, and both for a unit of no work.
+   */
+  async unitNeighbours(unit: EntityId): Promise<{ previous: EntityView | null; next: EntityView | null }> {
+    const side = (dir: '<' | '>', sort: 'ASC' | 'DESC') =>
+      `(SELECT '${dir}' AS side, ${FACTS} FROM me JOIN entity_ref x ON x.to_id = me.work AND x.field = 'work'
+         JOIN entity e ON e.id = x.from_id AND e.type = 'unit' AND NOT e.deleted JOIN revision r ON r.id = e.main_rev
+        WHERE (coalesce(r.data->>'order', '') COLLATE "C", e.id COLLATE "C") ${dir} (me.ord COLLATE "C", $1::text COLLATE "C")
+        ORDER BY coalesce(r.data->>'order', '') COLLATE "C" ${sort}, e.id COLLATE "C" ${sort} LIMIT 1)`;
+    const { rows } = await this.db.query<RevisionRow & { side: '<' | '>' }>(
+      `WITH me AS (SELECT r.data->>'work' AS work, coalesce(r.data->>'order', '') AS ord FROM entity e JOIN revision r ON r.id = e.main_rev
+                   WHERE e.id = $1 AND e.type = 'unit' AND NOT e.deleted)
+       ${side('<', 'DESC')} UNION ALL ${side('>', 'ASC')}`,
+      [unit],
+    );
+    const view = (dir: '<' | '>') => {
+      const r = rows.find((x) => x.side === dir);
+      return r ? { id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! } : null;
+    };
+    return { previous: view('<'), next: view('>') };
+  }
+
+  /**
    * The community's page in numbers: the latest merges (who suggested,
    * who approved, how much changed), how many reports wait, how many
    * people have suggested anything, and what the catalog still lacks that
