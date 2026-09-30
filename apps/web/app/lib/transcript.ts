@@ -55,8 +55,10 @@ export function pendingRanges(content: string, after: string): Array<{ from: num
   const out: Array<{ from: number; to: number }> = [];
   let at = 0;
   for (const part of wordDiff(content, after)) {
-    if (part.kind === 'ins') out.push({ from: Math.max(0, at - 1), to: Math.min(content.length, at + 1) });
-    else {
+    // Words added where nothing was: the word just before is marked (or just after, at a space), not both.
+    if (part.kind === 'ins') {
+      if (part.text.trim()) out.push(at > 0 && !/\s/.test(content[at - 1]!) ? { from: at - 1, to: at } : { from: at, to: Math.min(content.length, at + 1) });
+    } else {
       if (part.kind === 'del') out.push({ from: at, to: at + part.text.length });
       at += part.text.length;
     }
@@ -92,6 +94,35 @@ export async function get<T>(path: string): Promise<T> {
   const json = (await response.json().catch(() => ({}))) as T & { message?: string };
   if (!response.ok) throw new Error(json.message ?? response.statusText);
   return json;
+}
+
+/*
+ * The training goal (how near the next model is) is kept ten minutes at
+ * the edge, so the home page does not ask the database for it on every
+ * visit. Someone who has just checked paragraphs wants to see them
+ * counted, so for an hour after a check this browser asks for its own
+ * copy, named by when it last checked.
+ */
+const CHECKED_AT = 'rebbehub.review.checkedAt';
+
+/** Marks that this browser just sent a fix or a check. */
+export function noteChecked() {
+  try {
+    localStorage.setItem(CHECKED_AT, String(Date.now()));
+  } catch {
+    // Not remembered: the progress shows within ten minutes all the same.
+  }
+}
+
+/** Where to read the training goal: its own fresh copy for an hour after this browser checked something. */
+export function trainingPath(): string {
+  try {
+    const at = Number(localStorage.getItem(CHECKED_AT));
+    if (at && Date.now() - at < 3_600_000) return `machine/training?fresh=${at}`;
+  } catch {
+    // No storage: the shared copy.
+  }
+  return 'machine/training';
 }
 
 export const within = (nowMs: number, p: { startMs: number | null; endMs: number | null }) => p.startMs !== null && p.endMs !== null && nowMs >= p.startMs && nowMs < p.endMs;

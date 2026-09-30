@@ -1221,8 +1221,23 @@ body:has(.player-bar) main#main {
 
 .player-end {
   display: flex;
+  align-items: center;
   gap: 4px;
   flex: none;
+}
+
+/* The speed, offered while a transcript is checked: a small pill the phone opens as its own list. */
+.player-speed select {
+  appearance: none;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg);
+  color: var(--text);
+  font: 600 13px var(--ui);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
 }
 
 .player-parts {
@@ -1267,6 +1282,10 @@ body:has(.player-bar) main#main {
     gap: 2px;
   }
   .player-scrub .player-time {
+    display: none;
+  }
+  /* Checking a transcript, hear again and the speed take the place of the parts' buttons (the list of parts is still there). */
+  .player-bar.checking .player-transport .icon-button {
     display: none;
   }
   .player-row {

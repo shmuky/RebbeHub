@@ -52,6 +52,12 @@ interface PlayerApi extends PlayerState {
   close: () => void;
   /** Where the audio is this moment, in seconds: finer than `time`, which the browser updates a few times a second. */
   now: () => number;
+  /** How fast it plays (1 as recorded). Only the transcript editor offers another speed, and puts it back when it closes. */
+  rate: number;
+  setRate: (rate: number) => void;
+  /** The transcript editor open: the bar offers another speed and "hear again" while it is (Shmuly: for checking text only). Closed, the speed is back to 1. */
+  speedOffered: boolean;
+  offerSpeed: (on: boolean) => void;
 }
 
 const PlayerContext = createContext<PlayerApi | null>(null);
@@ -88,6 +94,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const pendingSeek = useRef<number | null>(null);
   const autoplay = useRef(false);
   const lastSaved = useRef(0);
+  const [rate, setRateNow] = useState(1);
+  const [speedOffered, setSpeedOffered] = useState(false);
   const [state, setState] = useState<PlayerState>({ queue: [], index: 0, playing: false, loading: false, time: 0, duration: 0, error: false });
   const current = state.queue[state.index] ?? null;
   const account = useAccount();
@@ -206,7 +214,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [current, next, prev, seek, state.index, state.queue.length]);
 
   const now = useCallback(() => audio.current?.currentTime ?? 0, []);
-  const api = useMemo<PlayerApi>(() => ({ ...state, current, play, toggle, next, prev, seek, close, now }), [state, current, play, toggle, next, prev, seek, close, now]);
+  // A new part loads at the default rate, so the default is set too.
+  const setRate = useCallback((next: number) => {
+    const el = audio.current;
+    if (el) el.defaultPlaybackRate = el.playbackRate = next;
+    setRateNow(next);
+  }, []);
+  const offerSpeed = useCallback(
+    (on: boolean) => {
+      setSpeedOffered(on);
+      if (!on) setRate(1);
+    },
+    [setRate],
+  );
+  const api = useMemo<PlayerApi>(
+    () => ({ ...state, current, play, toggle, next, prev, seek, close, now, rate, setRate, speedOffered, offerSpeed }),
+    [state, current, play, toggle, next, prev, seek, close, now, rate, setRate, speedOffered, offerSpeed],
+  );
 
   return (
     <PlayerContext.Provider value={api}>

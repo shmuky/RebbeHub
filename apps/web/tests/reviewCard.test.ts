@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
+import { QueueRow } from '../app/components/QueueRow.js';
 import { SuggestionCard, UNDECIDED, decidedAs, type Decision, type ReviewDetail, type ReviewRow } from '../app/components/ReviewCard.js';
 import { reviewChoices } from '../app/ui/ReviewBox.js';
 import type { Lang } from '../app/lib/i18n.js';
@@ -172,5 +173,36 @@ describe('approving from the review queue', () => {
   it('on a suggestion’s own page, the approve choice says Merging… while it is sent', () => {
     expect(reviewChoices('en').find((c) => c.value === 'approve')?.working).toBe('Merging…');
     expect(reviewChoices('he').find((c) => c.value === 'approve')?.working).toBe('ממזג…');
+  });
+});
+
+describe('the review queue, as GitHub lists pull requests', () => {
+  const line = (r: ReviewRow, lang: Lang = 'en') =>
+    renderToStaticMarkup(createElement(MemoryRouter, null, createElement('ul', null, createElement(QueueRow, { row: r, person: { name: 'Drive links (relink bot)', bot: true }, lang }))));
+
+  it('lists a Suggestion by its title, with its #number, who sent it and how many items, and none of its changes', () => {
+    const html = line({ ...row, number: 12, kind: 'suggestion' });
+    expect(html).toContain('Drive links in place of the media proxy (1-500)');
+    expect(html).toContain('href="/suggestions/12?lang=en"');
+    expect(html).toContain('#12');
+    expect(html).toContain('Drive links (relink bot)');
+    expect(html).toContain('500 items');
+    expect(html).toContain('Not yet checked');
+    // The changes, their summary and Approve are on its own page.
+    expect(html).not.toContain(row.description!);
+    expect(html).not.toContain('What changes');
+    expect(html).not.toContain('Approve');
+    expect(html).not.toContain('class="diff"');
+  });
+
+  it('opens a Suggestion with no #number (an import) as its card in the queue', () => {
+    expect(line(row)).toContain('href="/review?s=7&amp;lang=en"');
+  });
+
+  it('reads in Hebrew too', () => {
+    const html = line({ ...row, number: 12 }, 'he');
+    expect(html).toContain('href="/suggestions/12"');
+    expect(html).toContain('500 פריטים');
+    expect(html).toContain('בוט');
   });
 });
