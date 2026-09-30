@@ -10,6 +10,16 @@ any time. `@rebbehub/client` carries the API's version.
 
 ## Unreleased
 
+### Added
+
+- **Back and forth between a sefer's sichos.** A sicha's page has
+  Previous and Next (הקודם / הבא) above its text and below it, to the
+  sicha before and after it in the sefer's contents, across volumes (the
+  last of one volume leads to the first of the next, named with its
+  volume). In Hebrew "previous" is on the right. The page asks for both
+  in one request, the new `GET /v1/units/{id}/neighbours` (in
+  `@rebbehub/client` as `unitNeighbours`).
+
 ### Fixed
 
 - **Each volume's printings are on one page.** A sefer's volume page
