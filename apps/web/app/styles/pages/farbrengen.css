@@ -1285,3 +1285,64 @@ button.part.on:hover {
   padding: 0;
   font-weight: 600;
 }
+
+/* Timing tools and talking over unclear words (components/TimingTools.tsx). */
+.lyrics-edit.on {
+  background: rgba(255, 255, 255, 0.92);
+  color: #0b1024;
+}
+
+.lyrics-timing,
+.lyrics .tx-discuss {
+  margin: 0 18px 6px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  color: inherit;
+}
+
+.lyrics-timing .row-sub,
+.lyrics .tx-discuss .row-sub {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.lyrics .tx-discuss a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.tx-timing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.tx-discuss {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--r);
+  background: var(--canvas);
+}
+
+.tx-discuss-head {
+  margin: 0;
+  font-weight: 600;
+}
+
+.tx-discuss textarea {
+  width: 100%;
+  font: inherit;
+}
+
+.tx-discuss .actions {
+  display: flex;
+  gap: 6px;
+}
+
+.w-unclear[data-u] {
+  cursor: help;
+}

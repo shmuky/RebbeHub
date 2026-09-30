@@ -369,6 +369,7 @@ export async function fixParagraph(catalog: Catalog, by: string, input: { segmen
 }
 
 const FIX_TITLE = 'תיקון תמלול';
+const SYNC_TITLE = 'תיקון סנכרון';
 
 /** A time moved by a fix: the piece between the fixed point and the next locked one is stretched to fit. */
 export function remapper(oldAt: number, newAt: number, nextLocked: number | null): (t: number) => number {
@@ -397,8 +398,29 @@ export async function anchorSync(
   input: { recording: EntityId; segment: EntityId; atMs: number; word?: number },
 ): Promise<ChangesetRow & { spans: Array<{ segment: EntityId; startMs: number; endMs: number; words: WordTiming[] | null; locked: boolean }> }> {
   if (!Number.isFinite(input.atMs) || input.atMs < 0) throw invalid('atMs is a time in the recording, in milliseconds');
-  const view = await recordingTranscript(catalog, input.recording);
+  let view = await recordingTranscript(catalog, input.recording);
   if (!view) throw notFound(`a transcript of ${input.recording}`);
+  // This listener's timing of the recording that still waits: a new tap goes on from it and joins it, so their timings never clash with each other.
+  const open = view.alignment
+    ? await one<{ id: number }>(
+        catalog.db,
+        `SELECT c.id FROM changeset c WHERE c.author = $1 AND c.status = 'open' AND c.kind = 'suggestion' AND c.title = $2
+           AND EXISTS (SELECT 1 FROM revision r WHERE r.changeset_id = c.id AND r.entity_type = 'alignment-span' AND r.data->>'alignment' = $3)
+           AND NOT EXISTS (SELECT 1 FROM revision r WHERE r.changeset_id = c.id AND r.entity_type <> 'alignment-span')
+         ORDER BY c.id DESC LIMIT 1`,
+        [by, SYNC_TITLE, view.alignment],
+      )
+    : null;
+  if (open) {
+    const mine = new Map((await catalog.proposals(open.id)).map((p) => [p.entityId, p.rev.data as unknown as SpanData | null]));
+    view = {
+      ...view,
+      paragraphs: view.paragraphs.map((p) => {
+        const d = p.span ? mine.get(p.span) : undefined;
+        return d ? { ...p, startMs: Number(d.startMs), endMs: Number(d.endMs), words: d.words?.length && d.words.every((w) => w.to <= p.content.length) ? d.words : null, locked: Boolean(d.locked) } : p;
+      }),
+    };
+  }
   const i = view.paragraphs.findIndex((p) => p.id === input.segment);
   const target = view.paragraphs[i];
   if (!target) throw notFound(`paragraph ${input.segment} in this transcript`);
@@ -435,12 +457,12 @@ export async function anchorSync(
     });
   }
 
-  const suggestion = await catalog.createChangeset(by, { title: 'תיקון סנכרון' });
+  const revisions: NewRevision[] = [];
   for (const [k, span] of changed) {
     const p = view.paragraphs[k]!;
     const current = (await catalog.get(p.span!))!.data as unknown as SpanData;
     const { words: _w, ...rest } = current;
-    await catalog.putRevision(suggestion.id, by, {
+    revisions.push({
       id: p.span!,
       type: 'alignment-span',
       data: {
@@ -452,11 +474,11 @@ export async function anchorSync(
       } as unknown as Json,
     });
   }
-  const submitted = await catalog.submit(suggestion.id, by);
-  return {
-    ...submitted,
-    spans: [...changed.entries()].sort((a, b) => a[0] - b[0]).map(([k, s]) => ({ segment: view.paragraphs[k]!.id, ...s, endMs: Math.max(s.startMs, s.endMs) })),
-  };
+  const spans = [...changed.entries()].sort((a, b) => a[0] - b[0]).map(([k, s]) => ({ segment: view.paragraphs[k]!.id, ...s, endMs: Math.max(s.startMs, s.endMs) }));
+  if (open && (await catalog.amend(open.id, by, revisions))) return { ...(await catalog.changeset(open.id)), spans };
+  const suggestion = await catalog.createChangeset(by, { title: SYNC_TITLE });
+  for (const revision of revisions) await catalog.putRevision(suggestion.id, by, revision);
+  return { ...(await catalog.submit(suggestion.id, by)), spans };
 }
 
 /**

@@ -1,15 +1,16 @@
-import { Maximize2, Minimize2, Pause, PenLine, Play, SkipBack, SkipForward, Undo2, LocateFixed, Loader2 } from 'lucide-react';
+import { Maximize2, Minimize2, Pause, PenLine, Play, Radio, SkipBack, SkipForward, Undo2, LocateFixed, Loader2 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { unclearRanges } from '@rebbehub/model';
 import { t, type Lang } from '../lib/i18n.js';
 import { clockOf, tn } from '../lib/i18nNetwork.js';
 import { href } from '../lib/links.js';
-import { get, pendingRanges, within, type Transcript, type Word } from '../lib/transcript.js';
+import { get, pendingRanges, within, type Span, type Transcript, type Word } from '../lib/transcript.js';
 import { useAccount } from '../lib/useAccount.js';
 import { clock, usePlayer, type Track } from '../player/PlayerProvider.js';
 import { MachineLabel } from '../ui/primitives.js';
 import { AskMachine } from './AskMachine.js';
+import { ConfirmTiming, DiscussUnclear, timingWords, withSpans } from './TimingTools.js';
 import { TranscriptEditor } from './TranscriptEditor.js';
 
 /**
@@ -24,7 +25,10 @@ import { TranscriptEditor } from './TranscriptEditor.js';
  * fixes a paragraph's words as they hear them. (A hanacha synced to the
  * recording is the farbrengen page's own text, EventPage's Words.)
  * A search hit opens here at its paragraph (`?at=`), lit up, with a
- * button to play from the moment it is heard.
+ * button to play from the moment it is heard. Signed in, "Timing" turns a
+ * tap on a paragraph into "the Rebbe starts it now" (asked once before it
+ * is sent), and a tap on words marked unclear opens a conversation about
+ * them on the recording's talk page.
  *
  * Listening comes first: the words are shown as a music app shows lyrics,
  * large and calm, the word being said lit and kept in view as the
@@ -69,7 +73,8 @@ function Plain({ content, lang, pending = [] }: { content: string; lang: Lang; p
     const from = m.index ?? 0;
     const to = from + m[0].length;
     if (from > at) out.push(content.slice(at, from));
-    out.push(<Marked key={from} text={m[0]} unclear={marks.some((x) => from < x.to && to > x.from)} waiting={pending.some((x) => from < x.to && to > x.from)} lang={lang} />);
+    const u = marks.findIndex((x) => from < x.to && to > x.from);
+    out.push(<Marked key={from} text={m[0]} unclear={u >= 0} u={u} waiting={pending.some((x) => from < x.to && to > x.from)} lang={lang} />);
     at = to;
   }
   if (at < content.length) out.push(content.slice(at));
@@ -77,11 +82,11 @@ function Plain({ content, lang, pending = [] }: { content: string; lang: Lang; p
 }
 
 /** A word as a reader sees it, marked when a listener was unsure of it, or a fix of it waits for approval. */
-function Marked({ text, unclear, waiting, lang, className, ms }: { text: string; unclear: boolean; waiting: boolean; lang: Lang; className?: string; ms?: number }) {
+function Marked({ text, unclear, waiting, lang, className, ms, u }: { text: string; unclear: boolean; waiting: boolean; lang: Lang; className?: string; ms?: number; u?: number }) {
   const classes = [className, unclear ? 'w-unclear' : '', waiting ? 'w-pending' : ''].filter(Boolean).join(' ');
   if (!classes) return <>{text}</>;
   return (
-    <span className={classes} data-ms={ms} title={[unclear ? t(lang, 'unclearWords') : '', waiting ? t(lang, 'pendingFix') : ''].filter(Boolean).join(' · ') || undefined}>
+    <span className={classes} data-ms={ms} data-u={unclear && u !== undefined && u >= 0 ? u : undefined} title={[unclear ? t(lang, 'unclearWords') : '', waiting ? t(lang, 'pendingFix') : ''].filter(Boolean).join(' · ') || undefined}>
       {text}
     </span>
   );
@@ -96,7 +101,8 @@ function Spoken({ content, words, nowMs, lang, pending = [] }: { content: string
     // Not `said`: that is the farbrengen page's "what was said" list, whose phone rule pulls it out to the screen's edges.
     const state = nowMs >= w.startMs && nowMs < Math.max(w.endMs, w.startMs + 1) ? 'w-now' : nowMs >= w.endMs ? 'w-past' : '';
     const hits = (list: Array<{ from: number; to: number }>) => list.some((m) => w.from < m.to && w.to > m.from);
-    out.push(<Marked key={i} text={content.slice(w.from, w.to)} className={['word', state].filter(Boolean).join(' ')} ms={w.startMs} unclear={hits(marks)} waiting={hits(pending)} lang={lang} />);
+    const u = marks.findIndex((m) => w.from < m.to && w.to > m.from);
+    out.push(<Marked key={i} text={content.slice(w.from, w.to)} className={['word', state].filter(Boolean).join(' ')} ms={w.startMs} unclear={u >= 0} u={u} waiting={hits(pending)} lang={lang} />);
     at = w.to;
   }
   if (at < content.length) out.push(content.slice(at));
@@ -136,6 +142,11 @@ export function Transcripts({ tracks, lang, onLoaded, only }: { tracks: Track[];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ids]);
+
+  // A timing fix, shown at once.
+  function anchored(recording: string, spans: Span[]) {
+    setTranscripts((all) => withSpans(all, recording, spans));
+  }
 
   // An approved fix, shown at once: its words, and whether the paragraph is now checked or only fixed in part.
   function fixed(recording: string, segment: string, content: string, complete: boolean) {
@@ -193,7 +204,7 @@ export function Transcripts({ tracks, lang, onLoaded, only }: { tracks: Track[];
   if (!reviewing)
     return (
       <section id="transcript" ref={section} className="transcripts">
-        <Lyrics transcripts={transcripts} tracks={tracks} lang={lang} nowMs={nowMs} found={found} machine={unchecked || syncUnchecked} onEdit={() => review(true)} />
+        <Lyrics transcripts={transcripts} tracks={tracks} lang={lang} nowMs={nowMs} found={found} machine={unchecked || syncUnchecked} signedIn={Boolean(account)} onEdit={() => review(true)} onAnchored={anchored} />
         {unchecked || syncUnchecked ? <p className="lyrics-foot row-sub">{t(lang, 'lyricsMachineHint')}</p> : null}
         {ask}
       </section>
@@ -210,6 +221,7 @@ export function Transcripts({ tracks, lang, onLoaded, only }: { tracks: Track[];
         account={account}
         onBack={() => review(false)}
         onFixed={fixed}
+        onAnchored={anchored}
       />
       {ask}
     </section>
@@ -225,8 +237,33 @@ const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.
  * word or paragraph plays from there. Scrolling by hand lets go of the
  * recording until "Back to now"; full screen hides the page around it.
  */
-function Lyrics({ transcripts, tracks, lang, nowMs, found, machine, onEdit }: { transcripts: Transcript[]; tracks: Track[]; lang: Lang; nowMs: number; found: string | null; machine: boolean; onEdit: () => void }) {
+function Lyrics({
+  transcripts,
+  tracks,
+  lang,
+  nowMs,
+  found,
+  machine,
+  signedIn,
+  onEdit,
+  onAnchored,
+}: {
+  transcripts: Transcript[];
+  tracks: Track[];
+  lang: Lang;
+  nowMs: number;
+  found: string | null;
+  machine: boolean;
+  signedIn: boolean;
+  onEdit: () => void;
+  onAnchored: (recording: string, spans: Span[]) => void;
+}) {
   const player = usePlayer();
+  // Timing: a tap on a paragraph says the Rebbe starts it now; the moment waits for Confirm.
+  const [timing, setTiming] = useState(false);
+  const [tap, setTap] = useState<{ segment: string; atMs: number } | null>(null);
+  const [timed, setTimed] = useState(false);
+  const [discuss, setDiscuss] = useState<{ words: string; atMs: number | null } | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const [follow, setFollow] = useState(true);
   const [full, setFull] = useState(false);
@@ -338,6 +375,22 @@ function Lyrics({ transcripts, tracks, lang, nowMs, found, machine, onEdit }: { 
           <PenLine size={16} aria-hidden />
           {t(lang, 'editTranscript')}
         </button>
+        {signedIn ? (
+          <button
+            type="button"
+            className={timing ? 'lyrics-edit on' : 'lyrics-edit'}
+            aria-pressed={timing}
+            onClick={() => {
+              setTiming((on) => !on);
+              setTap(null);
+              setTimed(false);
+            }}
+            title={timingWords.timingModeHint[lang]}
+          >
+            <Radio size={16} aria-hidden />
+            {timingWords.timingMode[lang]}
+          </button>
+        ) : null}
         <button type="button" className="lyrics-ib" onClick={() => setFull((f) => !f)} aria-label={t(lang, full ? 'exitFullScreen' : 'fullScreen')} title={t(lang, full ? 'exitFullScreen' : 'fullScreen')}>
           {full ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
         </button>
@@ -381,7 +434,16 @@ function Lyrics({ transcripts, tracks, lang, nowMs, found, machine, onEdit }: { 
               className={classes}
               dir="auto"
               onClick={(e) => {
-                const at = (e.target as HTMLElement).closest<HTMLElement>('[data-ms]')?.dataset.ms;
+                const target = e.target as HTMLElement;
+                const at = target.closest<HTMLElement>('[data-ms]')?.dataset.ms;
+                if (timing && playing && p.startMs !== null) {
+                  setTap({ segment: p.id, atMs: Math.round(player.now() * 1000) });
+                  setTimed(false);
+                  return;
+                }
+                const u = target.closest<HTMLElement>('[data-u]')?.dataset.u;
+                const mark = u !== undefined ? unclearRanges(p.content)[Number(u)] : undefined;
+                if (mark) setDiscuss({ words: p.content.slice(mark.from, mark.to), atMs: at ? Number(at) : p.startMs });
                 playFrom(at ? Number(at) : (p.startMs ?? 0));
               }}
             >
@@ -390,6 +452,27 @@ function Lyrics({ transcripts, tracks, lang, nowMs, found, machine, onEdit }: { 
           );
         })}
       </div>
+      {timing ? (
+        <div className="lyrics-timing">
+          {tap ? (
+            <ConfirmTiming
+              recording={shown.recording}
+              segment={tap.segment}
+              atMs={tap.atMs}
+              lang={lang}
+              onCancel={() => setTap(null)}
+              onDone={(spans) => {
+                setTap(null);
+                setTimed(true);
+                onAnchored(shown.recording, spans);
+              }}
+            />
+          ) : (
+            <p className="row-sub">{timed ? timingWords.syncFixed[lang] : timingWords.timingModeHint[lang]}</p>
+          )}
+        </div>
+      ) : null}
+      {discuss ? <DiscussUnclear recording={shown.recording} words={discuss.words} atMs={discuss.atMs} lang={lang} signedIn={signedIn} onClose={() => setDiscuss(null)} /> : null}
       {!follow && playing ? (
         <button type="button" className="lyrics-now" onClick={backToNow}>
           <LocateFixed size={16} aria-hidden />

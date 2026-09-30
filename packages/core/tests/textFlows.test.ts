@@ -243,6 +243,23 @@ describe('word-level sync and fixing it', () => {
     expect(view.map((e) => (e.after as { content: string }).content).sort()).toEqual(['לחיים, לחיים טובים', 'עס שטייט אין פסוק!']);
   });
 
+  it("puts one person's timing taps of a recording in one suggestion, each going on from the last", async () => {
+    const { catalog, set } = await freshCatalog();
+    const { recording, segments } = await transcribed(catalog, set);
+    const first = await anchorSync(catalog, 'chaim', { recording, segment: segments[1]!, atMs: 5000 });
+    const second = await anchorSync(catalog, 'chaim', { recording, segment: segments[2]!, atMs: 10000 });
+    expect(second.id).toBe(first.id);
+    // The second tap starts from the first: the line the first locked stays where it was put.
+    expect(second.spans.map((s) => [s.segment, s.startMs])).toEqual([[segments[2], 10000]]);
+    await catalog.merge(first.id, 'keeper');
+    const view = (await recordingTranscript(catalog, recording))!;
+    expect(view.paragraphs.map((p) => [p.startMs, p.locked])).toEqual([
+      [0, false],
+      [5000, true],
+      [10000, true],
+    ]);
+  });
+
   it('shows word fixes still waiting for approval, and lets them go once approved', async () => {
     const { catalog, set } = await freshCatalog();
     const { recording, segments } = await transcribed(catalog, set);
