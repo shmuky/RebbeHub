@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DailyLearning } from '../lib/api.js';
 import type { Lang } from '../lib/i18n.js';
+import { href } from '../lib/links.js';
 import { joinRefs, sefariaUrl } from '../lib/sefaria.js';
 import { labelOf } from '../lib/labels.js';
 
@@ -10,8 +11,9 @@ import { labelOf } from '../lib/labels.js';
  * tracks (three chapters, one chapter, Sefer HaMitzvos). Each has a box to
  * tick once it is learned; the ticks stay in this browser only, and the
  * card counts the days in a row on which everything ticked was learned.
- * Tanya goes to its words on this page; the others to Sefaria until
- * RebbeHub has their words.
+ * Tanya goes to its words on this page; the others to their pages on
+ * RebbeHub once the catalog has them (the Sefaria import's Chitas and
+ * Rambam), to Sefaria until then.
  */
 
 const W = {
@@ -71,8 +73,13 @@ function streak(store: Store, date: string, total: number): number {
 export function DailyShiurim({ day, lang }: { day: DailyLearning; lang: Lang }) {
   const t = (key: keyof typeof W) => W[key][lang];
   const rows: Row[] = [];
-  if (day.chumash) rows.push({ key: 'chumash', name: t('chumash'), pieces: [{ text: day.chumash.label, to: sefariaUrl(day.chumash.ref, { rashi: true }), external: true }] });
-  if (day.tehillim?.length) rows.push({ key: 'tehillim', name: t('tehillim'), pieces: day.tehillim.map((p) => ({ text: p.text.replace(/\.$/, ''), to: p.ref ? sefariaUrl(p.ref) : null, external: true })) });
+  // On RebbeHub once the catalog has the words, else on Sefaria.
+  const place = (path: string | null | undefined, ref: string | null, rashi = false) => (path ? { to: href(path, lang), external: false } : { to: ref ? sefariaUrl(ref, { rashi }) : null, external: true });
+  if (day.chumash) {
+    const rashi = day.chumash.rashi ? [{ text: 'רש״י', to: href(day.chumash.rashi, lang), external: false }] : [];
+    rows.push({ key: 'chumash', name: t('chumash'), pieces: [{ text: day.chumash.label, ...place(day.chumash.path, day.chumash.ref, true) }, ...rashi] });
+  }
+  if (day.tehillim?.length) rows.push({ key: 'tehillim', name: t('tehillim'), pieces: day.tehillim.map((p) => ({ text: p.text.replace(/\.$/, ''), ...place(p.path, p.ref) })) });
   if (day.tanya.length) rows.push({ key: 'tanya', name: t('tanya'), pieces: [{ text: day.tanya.map((p) => labelOf(p, 'he')).join(' – '), to: '#daily-tanya', external: false }] });
   const rambam = day.rambam;
   if (rambam) {
@@ -80,7 +87,7 @@ export function DailyShiurim({ day, lang }: { day: DailyLearning; lang: Lang }) 
       const s = rambam[key];
       if (!s) return;
       const ref = key === 'mitzvos' ? (s.refs[0] ?? null) : joinRefs(s.refs);
-      rows.push({ key, name: t(key), pieces: [{ text: s.label, to: ref ? sefariaUrl(ref) : null, external: true }] });
+      rows.push({ key, name: t(key), pieces: [{ text: s.label, ...place(s.paths?.[0], ref) }] });
     };
     shiur('three');
     shiur('one');

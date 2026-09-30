@@ -18,8 +18,10 @@ any time. `@rebbehub/client` carries the API's version.
   Elul's three more), Tanya, and the Rambam's three tracks (three
   chapters, one chapter, Sefer HaMitzvos), each a link to its words, with
   a box to tick once learned and a count of days in a row (kept in the
-  browser only). API: `/v1/daily` also names `chumash`, `tehillim` and
-  `rambam`, in Hebrew and by Sefaria's references.
+  browser only). Each goes to its page on RebbeHub once the catalog has
+  it (below), to Sefaria until then. API: `/v1/daily` also names
+  `chumash`, `tehillim` and `rambam`, in Hebrew, by Sefaria's references
+  and by their pages here (`path`, `paths`, null until imported).
 - **Hayom Yom's shiurim go to their words.** Each day's Chumash (with
   Rashi) and Tehillim line opens that day's portion on Sefaria, and its
   Tanya line opens its chapter on RebbeHub where the day starts. A day's

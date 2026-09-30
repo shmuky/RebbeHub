@@ -885,23 +885,32 @@ export interface Operations {
       chumash: {
         label: string;
         ref: string;
+        path: string | null;
+        rashi: string | null;
       } | null;
       tehillim: Array<{
         text: string;
         ref: string | null;
+        path: string | null;
       }>;
       rambam: {
         three: {
           label: string;
           refs: Array<string>;
+          /** Each reference's page on RebbeHub, null until the catalog has it */
+          paths: Array<string | null>;
         };
         one: {
           label: string;
           refs: Array<string>;
+          /** Each reference's page on RebbeHub, null until the catalog has it */
+          paths: Array<string | null>;
         };
         mitzvos: {
           label: string;
           refs: Array<string>;
+          /** Each reference's page on RebbeHub, null until the catalog has it */
+          paths: Array<string | null>;
         } | null;
       };
     };

@@ -1,6 +1,6 @@
 import { HDate } from '@hebcal/core';
 import { DAILY_WORKS, TANYA_YOMI, chitasChumash, dailyTehillim, dateKeyFromGregorian, dayOfLabel, monthOfLabel } from '@rebbehub/hebrew';
-import { isPageText, type EntityId, type PageInline, type PageSegment, type PageText } from '@rebbehub/model';
+import { isPageText, slugify, type EntityId, type PageInline, type PageSegment, type PageText } from '@rebbehub/model';
 import type { Catalog, EntityView } from './catalog.js';
 import { dailyRambam, type DailyRambam } from './rambam.js';
 
@@ -38,11 +38,36 @@ export interface DailyLearning {
   hebrew: string;
   tanya: DailyTanyaPart[];
   hayomYom: EntityView[];
-  /** The day's Chumash with Rashi: `בא, ראשון עם פירש״י` and `Exodus 10:1-11`. */
-  chumash: { label: string; ref: string } | null;
-  /** The day's Tehillim, each range with its reference. */
-  tehillim: Array<{ text: string; ref: string | null }>;
-  rambam: DailyRambam;
+  /** The day's Chumash with Rashi: `בא, ראשון עם פירש״י` and `Exodus 10:1-11`; where it starts on RebbeHub, and its Rashi, once the catalog has them. */
+  chumash: { label: string; ref: string; path: string | null; rashi: string | null } | null;
+  /** The day's Tehillim, each range with its reference, and its first chapter on RebbeHub once the catalog has it. */
+  tehillim: Array<{ text: string; ref: string | null; path: string | null }>;
+  /** The Rambam's three tracks; each chapter's page on RebbeHub (`paths`, in order) once the catalog has it. */
+  rambam: { three: DailyShiur; one: DailyShiur; mitzvos: DailyShiur | null };
+}
+
+export type DailyShiur = DailyRambam['three'] & { paths: Array<string | null> };
+
+/**
+ * Where a Sefaria reference is on RebbeHub, by the paths the Sefaria
+ * importer gives Chitas and the Rambam (importers' sefaria.ts, the daily
+ * books): `Exodus 10:1-11` is `/chumash/exodus/10#s-1`, `Psalms 119:97-176`
+ * `/tehillim/119#s-97`, `Mishneh Torah, Divorce 9` `/rambam/divorce/9`.
+ * The work's path and the page's; null for one it does not place.
+ */
+export function dailyPathOf(ref: string, options: { rashi?: boolean } = {}): { work: string; page: string } | null {
+  const m = /^(.*) (\d+)(?::(\d+))?(?:-[\d:]+)?$/.exec(ref);
+  if (!m) return null;
+  const [, book, chapter, verse] = m;
+  const at = verse && verse !== '1' ? `#s-${verse}` : '';
+  const TORAH = ['Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy'];
+  let work: string | null = null;
+  if (TORAH.includes(book!)) work = `/chumash/${options.rashi ? 'rashi-' : ''}${slugify(book!)}`;
+  else if (book === 'Psalms') work = '/tehillim';
+  else if (book!.startsWith('Mishneh Torah, ')) work = `/rambam/${slugify(book!.slice('Mishneh Torah, '.length))}`;
+  // Rashi's comments are a section for each verse: go to the verse's.
+  const anchor = options.rashi && verse ? `#s-${verse}` : at;
+  return work ? { work, page: `${work}/${chapter}${anchor}` } : null;
 }
 
 export { DAILY_WORKS };
@@ -150,13 +175,24 @@ export async function dailyLearning(catalog: Catalog, date: string): Promise<Dai
   const day = new HDate(new Date(y!, m! - 1, d!));
   const chumash = chitasChumash(day);
   const tehillim = dailyTehillim(hebrew.slice(5, hebrew.lastIndexOf('-')), day.getDate(), HDate.daysInMonth(day.getMonth(), day.getFullYear()));
+  const rambam = dailyRambam(date);
+  // Their pages on RebbeHub, the ones the catalog has (one read for all).
+  const places = (ref: string | null, rashi = false) => (ref ? dailyPathOf(ref, { rashi }) : null);
+  const bare = (page: string) => page.replace(/#.*$/, '');
+  const wanted = [places(chumash?.ref ?? null), places(chumash?.ref ?? null, true), ...tehillim.map((t) => places(t.ref)), ...[...rambam.three.refs, ...rambam.one.refs].map((r) => places(r))];
+  const have = await catalog.livePaths(wanted.filter((p) => p !== null).map((p) => bare(p.page)));
+  const page = (ref: string | null, rashi = false) => {
+    const found = places(ref, rashi);
+    return found && have.has(bare(found.page)) ? found.page : null;
+  };
+  const tracks = (s: DailyRambam['three']): DailyShiur => ({ ...s, paths: s.refs.map((r) => page(r)) });
   return {
     date,
     hebrew,
     tanya,
     hayomYom: hayomYomIds.map((id) => whole.get(id)).filter((v): v is EntityView => v !== undefined),
-    chumash: chumash ? { label: chumash.label, ref: chumash.ref } : null,
-    tehillim,
-    rambam: dailyRambam(date),
+    chumash: chumash ? { label: chumash.label, ref: chumash.ref, path: page(chumash.ref), rashi: page(chumash.ref, true) } : null,
+    tehillim: tehillim.map((t) => ({ ...t, path: page(t.ref) })),
+    rambam: { three: tracks(rambam.three), one: tracks(rambam.one), mitzvos: rambam.mitzvos ? { ...rambam.mitzvos, paths: rambam.mitzvos.refs.map(() => null) } : null },
   };
 }

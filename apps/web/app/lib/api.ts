@@ -836,6 +836,8 @@ export interface MirrorsInfo {
 export interface RambamShiur {
   label: string;
   refs: string[];
+  /** Each reference's page on RebbeHub, once the catalog has it. */
+  paths?: Array<string | null>;
 }
 
 export interface DailyLearning {
@@ -843,7 +845,7 @@ export interface DailyLearning {
   hebrew: string;
   tanya: Array<Entity & { from: string; to: string | null }>;
   hayomYom: Entity[];
-  chumash?: { label: string; ref: string } | null;
-  tehillim?: Array<{ text: string; ref: string | null }>;
+  chumash?: { label: string; ref: string; path?: string | null; rashi?: string | null } | null;
+  tehillim?: Array<{ text: string; ref: string | null; path?: string | null }>;
   rambam?: { three: RambamShiur; one: RambamShiur; mitzvos: RambamShiur | null };
 }
