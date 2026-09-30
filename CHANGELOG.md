@@ -12,6 +12,13 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Likkutei Sichos' whole subject index on one page** (`/mafteach`).
+  Every topic of the volumes' indexes once, by letter or by search (a
+  topic's name first, then words from its places). Under each topic, each
+  volume's pages, the index's words for each place, and links to the
+  sicha: its PDF open at the page, and its text here. Nothing is stored:
+  it is gathered from the index pages, so a fix there shows at once;
+  machine-read volumes stay labelled. `GET /v1/mafteach` gives the same.
 - **A recording's words have their own tab.** A farbrengen or recording
   with a transcript has a Text tab (`?tab=text`) where its words are
   checked and fixed; the main tab only plays and follows them, and its
