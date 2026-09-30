@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type Ref, type RefObject } from 'react';
 import { Clamp } from '../ui/Clamp.js';
 import { Link } from 'react-router';
 import { ChangeDiff } from './ChangeDiff.js';
+import { onlyInfo } from './ChangeTable.js';
 import { PlainWords } from './PlainWords.js';
 import type { ChangeGroup, SuggestionDetail } from '../lib/api.js';
 import { t, typeName, type Lang } from '../lib/i18n.js';
@@ -466,9 +467,12 @@ export function SuggestionCard({
           </p>
         ) : null}
         {grouped ? <ChangeSummary groups={grouped} total={total} lang={lang} /> : null}
-        {detail?.entries.map((entry) => {
+        {detail?.entries.map((entry, _, all) => {
+          const anyReal = all.some((e) => e.before === null || e.after === null || e.withheld || !onlyInfo(e.changes.flatMap(leafChanges)));
           const item = { id: entry.entityId, type: entry.type, data: (entry.after ?? entry.before ?? {}) as Record<string, unknown> };
           const name = labelOf(item as Parameters<typeof labelOf>[0], lang);
+          // Only its details changed (a paragraph re-timed because its words were fixed): nothing to show.
+          if (anyReal && entry.before !== null && entry.after !== null && !entry.withheld && onlyInfo(entry.changes.flatMap(leafChanges))) return null;
           if (entry.before === null && !entry.withheld) return <NewItem key={entry.entityId} data={item.data} files={detail.files} type={entry.type} lang={lang} />;
           return (
             <div key={entry.entityId}>

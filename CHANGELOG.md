@@ -21,7 +21,10 @@ any time. `@rebbehub/client` carries the API's version.
   each word is heard, which engine, how sure) are no longer shown as
   changes: one line counts them. A long value or description shows its
   beginning, with Show all. A suggestion's page reads 40 items,
-  and no longer a second full copy of 200 in the browser.
+  and no longer a second full copy of 200 in the browser. In a
+  suggestion that changes real words, an item whose only change is
+  re-timing, a date or a machine mark (a small text fix re-syncs the
+  words around it) is left out, so only the real edit shows.
 
 ### Added
 

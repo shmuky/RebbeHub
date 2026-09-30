@@ -78,7 +78,11 @@ const FOLD_AT = 4;
  * reviewer reads nothing in them (Shmuly: "not real text or file change,
  * just info change"), so they are counted in one line, not shown as changes.
  */
-export const isInfoOnly = (path: string) => /(^|\/)(words|origin|engine)(\/|$)|(^|\/)(startMs|endMs|durationMs|locked|confidence)$/.test(path);
+export const isInfoOnly = (path: string) =>
+  /(^|\/)(words|origin|engine)(\/|$)|(^|\/)(startMs|endMs|durationMs|locked|confidence|proofread|edited|[a-z]+At)$/.test(path);
+
+/** Whether a change to an item is only such details: a small fix to the words also re-times its paragraph, and that item is not shown as changed. */
+export const onlyInfo = (changes: ReadonlyArray<{ path: string }>) => changes.length > 0 && changes.every((c) => isInfoOnly(c.path));
 
 export function foldChanges(changes: ReadonlyArray<{ path: string; before?: unknown; after?: unknown }>, limit = 12): { rows: FoldedChange[]; hidden: number; info: number } {
   const groups = new Map<string, Array<{ path: string; before?: unknown; after?: unknown }>>();

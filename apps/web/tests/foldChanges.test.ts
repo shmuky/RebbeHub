@@ -38,3 +38,12 @@ describe('a change of many alike fields', () => {
     expect(valueText('/description', 'א'.repeat(1000), 'he')).toHaveLength(201);
   });
 });
+
+describe("a small fix to a transcript's words", () => {
+  it("counts the paragraph's re-timing and the machine's marks as details, not as a change", async () => {
+    const { onlyInfo } = await import('../app/components/ChangeTable.js');
+    expect(onlyInfo([{ path: '/words' }, { path: '/origin/edited' }, { path: '/proofread' }, { path: '/updatedAt' }])).toBe(true);
+    expect(onlyInfo([{ path: '/words' }, { path: '/content' }])).toBe(false);
+    expect(onlyInfo([])).toBe(false);
+  });
+});

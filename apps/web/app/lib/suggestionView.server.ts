@@ -1,5 +1,5 @@
 import type { LocalName } from '@rebbehub/model';
-import { foldChanges, foldedName, infoChanges, moreChanges, valueText } from '../components/ChangeTable.js';
+import { foldChanges, foldedName, infoChanges, moreChanges, onlyInfo, valueText } from '../components/ChangeTable.js';
 import type { Entity, RebbeHubApi, SuggestionDetail } from './api.js';
 import { nameOf, typeName, type Lang } from './i18n.js';
 import { labelOf } from './labels.js';
@@ -161,6 +161,8 @@ export async function suggestionView(api: RebbeHubApi, detail: SuggestionDetail,
   const targets = await describeTargets(api, entries, lang).catch(() => new Map());
 
   const views: EntryView[] = [];
+  // Items whose only change is their details are left out, unless that is all the suggestion is (a sync run).
+  const anyReal = entries.some((e) => e.before === null || e.after === null || e.withheld || !onlyInfo(e.changes));
   for (const e of entries) {
     const target = targets.get(e.entityId);
     const data = (e.after ?? e.before ?? {}) as D;
@@ -185,6 +187,8 @@ export async function suggestionView(api: RebbeHubApi, detail: SuggestionDetail,
       segment = { n, before, after, prev, next };
       if (before !== after) scan = await scanOf(api, data, before, after, lang).catch(() => null);
     }
+    // An item whose only change is its details (a paragraph re-timed because its words were fixed) is not a change to show.
+    if (anyReal && e.before !== null && e.after !== null && !e.withheld && !(segment && segment.before !== segment.after) && onlyInfo(e.changes.filter((c) => !(segment && (c.path === '/content' || c.path === 'content'))))) continue;
     const folded = foldChanges(e.changes.filter((c) => !(segment && (c.path === '/content' || c.path === 'content'))));
     const fields = folded.rows.map((c) => ({ path: c.path, name: foldedName(c, lang), before: valueText(c.path, c.before, lang), after: valueText(c.path, c.after, lang), count: c.count }));
     if (folded.hidden) fields.push({ path: '/…', name: moreChanges(folded.hidden, lang), before: '', after: '', count: folded.hidden });
