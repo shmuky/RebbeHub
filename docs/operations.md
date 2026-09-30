@@ -275,6 +275,13 @@ Suggestions. The dry run says the real numbers.
   hanacha (a `hanacha` text of a unit of the event), it is synced
   paragraph by paragraph by shared words. New transcripts get word
   timings straight away.
+- A fix of a paragraph's words keeps the word timings of the words it
+  left, and times the words it changed between them (model/timing.ts);
+  the span is marked `edited` until `align` times it from the audio again.
+  Fixes made before that let the timings go; `rebbehub restore-word-times
+  --approve-as <steward>` (the Upkeep workflow's `restore-word-times`,
+  with a dry run) gives them back from each span's history, one
+  suggestion of the alignment bot per recording. It reads no audio.
 - Projects of kind *sync* (recordings of a year to check) and
   *proofreading* (a scan's pages, to once or twice) hand out the next
   recording or page nobody holds; a claim lapses after three hours

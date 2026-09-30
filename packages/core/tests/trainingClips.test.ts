@@ -109,7 +109,7 @@ describe('training clips from checked transcripts', () => {
       [12, 40, 'silver'],
       [40, 52, 'silver'],
     ]);
-    // Corrected, the word timings are let go until the align run times the new words.
+    // Corrected, the word timings the fix carried over are no clip cuts: it waits for the align run to time the new words.
     await catalog.merge((await fixParagraph(catalog, 'chaim', { segment: segments[3]!, content: `${long} טוב` })).id, 'keeper');
     ({ clips, skipped } = await trainingClips(catalog));
     expect(clips).toEqual([]);

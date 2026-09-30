@@ -1,6 +1,7 @@
 export * from './works.js';
 export * from './entities.js';
 export * from './pageText.js';
+export { carryWordTimes, type WordTime } from './timing.js';
 export { UNCLEAR_MARK, hasUnclear, markUnclear, unclearRanges } from './unclear.js';
 export { canonicalJson, contentHash, sha256Hex, toHex } from './canonical.js';
 export { idFromSeed, isEntityId, newId, readId, type EntityId } from './ids.js';

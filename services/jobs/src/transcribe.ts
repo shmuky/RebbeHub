@@ -276,7 +276,8 @@ export async function recordingsToAlign(catalog: Catalog, options: { recording?:
   const params: unknown[] = [];
   const only = options.recording ? `AND e.id = $${params.push(options.recording)}` : '';
   const heardHere = "EXISTS (SELECT 1 FROM file f WHERE f.sha256 = r.data->>'file' AND f.storage_tier = 'public' AND f.rights_state IN ('open', 'credit'))";
-  const untimed = "NOT coalesce((spr.data->>'locked')::boolean, FALSE) AND NOT (spr.data ? 'words')";
+  // No word timings, or only those a fix carried over (core/sync.ts fixParagraph), waiting to be timed from the audio.
+  const untimed = "NOT coalesce((spr.data->>'locked')::boolean, FALSE) AND (NOT (spr.data ? 'words') OR spr.data->'origin'->>'edited' = 'true')";
   const { rows } = await catalog.db.query<{ id: EntityId; file: string | null; url: string | null; language: Language | null }>(
     `SELECT e.id, r.data->>'file' AS file, r.data->>'url' AS url, r.data->>'language' AS language
      FROM entity e JOIN revision r ON r.id = e.main_rev
