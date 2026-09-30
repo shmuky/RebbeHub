@@ -628,3 +628,55 @@ export async function transcriptHistory(catalog: Catalog, recording: EntityId, o
   }
   return [...commits.values()].filter((c) => c.changes.length);
 }
+
+/** A fix of a transcript's paragraph that is still waiting for approval (an open Suggestion). */
+export interface TranscriptPending {
+  segment: EntityId;
+  /** The paragraph as the fix would make it, and whether the person checked all of it. */
+  content: string;
+  complete: boolean;
+  author: string;
+  authorName: string | null;
+  at: string;
+  /** The Suggestion (`/suggestions/{number}`). */
+  suggestion: number | null;
+}
+
+/**
+ * Word fixes of a transcript that are waiting for approval, a Suggestion's
+ * together and in the transcript's order: what a listener sent and does
+ * not see on the site yet, and what others sent, so the editor shows the
+ * words as they will be and says who is waiting. One read, by the text's
+ * own index. Sync is left out: people check words, not timing.
+ */
+export async function transcriptPending(catalog: Catalog, view: Pick<TranscriptView, 'text' | 'paragraphs'>): Promise<TranscriptPending[]> {
+  const { rows } = await catalog.db.query<{ entity_id: EntityId; data: Record<string, unknown> | null; author: string; author_name: string | null; at: string | Date; number: number | string | null }>(
+    `SELECT DISTINCT ON (cs.id, r.entity_id) r.entity_id, r.data, cs.author, a.display_name AS author_name,
+            coalesce(cs.submitted_at, cs.created_at) AS at, cs.number
+     FROM revision r JOIN changeset cs ON cs.id = r.changeset_id AND cs.status IN ('open', 'sent_back')
+     LEFT JOIN account a ON a.id = cs.author
+     WHERE r.entity_type = 'segment' AND r.data->>'text' = $1
+     ORDER BY cs.id, r.entity_id, r.id DESC`,
+    [view.text],
+  );
+  const now = new Map(view.paragraphs.map((p) => [p.id, p]));
+  const out: TranscriptPending[] = [];
+  for (const r of rows) {
+    const d = r.data ?? {};
+    const p = now.get(r.entity_id);
+    // Only a change of words is shown; a check alone changes nothing a reader sees.
+    if (!p || typeof d.content !== 'string' || d.content === p.content) continue;
+    const origin = (d.origin ?? {}) as { checked?: boolean };
+    out.push({
+      segment: r.entity_id,
+      content: d.content,
+      complete: Number(d.proofread ?? 0) > 0 || Boolean(origin.checked),
+      author: r.author,
+      authorName: r.author_name,
+      at: new Date(r.at).toISOString(),
+      suggestion: r.number !== null ? Number(r.number) : null,
+    });
+  }
+  const at = new Map(view.paragraphs.map((p, i) => [p.id, i]));
+  return out.sort((a, b) => (a.suggestion ?? 0) - (b.suggestion ?? 0) || at.get(a.segment)! - at.get(b.segment)!);
+}

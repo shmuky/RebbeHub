@@ -1,3 +1,5 @@
+import { wordDiff } from './wordDiff.js';
+
 /**
  * A recording's transcript as the API gives it (GET
  * /v1/recordings/{id}/transcript), shared by the listening view and the
@@ -24,11 +26,42 @@ export interface Paragraph {
   syncChecked?: boolean;
 }
 
+/** A fix of a paragraph's words sent and not yet approved: the paragraph as it will be once it is. */
+export interface Pending {
+  segment: string;
+  content: string;
+  complete: boolean;
+  author: string;
+  authorName: string | null;
+  at: string;
+  suggestion: number | null;
+}
+
 export interface Transcript {
   recording: string;
   language: string;
   alignment?: string | null;
   paragraphs: Paragraph[];
+  /** Word fixes waiting for approval, so the words show as they will be and who is waiting. */
+  pending?: Pending[];
+}
+
+/**
+ * Where in a paragraph a waiting fix changes it: the words it takes out,
+ * and for words it only adds, the word beside them. Those words are marked
+ * in the text until the fix is approved or sent back.
+ */
+export function pendingRanges(content: string, after: string): Array<{ from: number; to: number }> {
+  const out: Array<{ from: number; to: number }> = [];
+  let at = 0;
+  for (const part of wordDiff(content, after)) {
+    if (part.kind === 'ins') out.push({ from: Math.max(0, at - 1), to: Math.min(content.length, at + 1) });
+    else {
+      if (part.kind === 'del') out.push({ from: at, to: at + part.text.length });
+      at += part.text.length;
+    }
+  }
+  return out;
 }
 
 /** A paragraph's sync as a fix left it (POST …/sync/anchor answers with the spans as they now stand). */

@@ -15,6 +15,7 @@ import {
   recordingTranscript,
   registerFile,
   transcriptHistory,
+  transcriptPending,
   scanProgress,
   scanText,
   suggestWords,
@@ -221,6 +222,19 @@ describe('word-level sync and fixing it', () => {
     expect(history[0]).toMatchObject({ author: 'mendy', changes: [{ segment: segments[1], kind: 'checked' }] });
     expect(history[1]).toMatchObject({ author: 'chaim', changes: [{ segment: segments[0], kind: 'words', after: 'לחיים, לחיים טובים', complete: false }] });
     expect(history.at(-1)!.changes.every((c) => c.kind === 'made')).toBe(true);
+  });
+
+  it('shows word fixes still waiting for approval, and lets them go once approved', async () => {
+    const { catalog, set } = await freshCatalog();
+    const { recording, segments } = await transcribed(catalog, set);
+    const fix = await fixParagraph(catalog, 'chaim', { segment: segments[0]!, content: 'לחיים, לחיים טובים', complete: false });
+    // Checked as it is: nothing a reader would see changes, so nothing is shown.
+    await fixParagraph(catalog, 'mendy', { segment: segments[1]!, content: ((await catalog.get(segments[1]!))!.data as { content: string }).content });
+    let view = (await recordingTranscript(catalog, recording))!;
+    expect(await transcriptPending(catalog, view)).toEqual([expect.objectContaining({ segment: segments[0], content: 'לחיים, לחיים טובים', complete: false, author: 'chaim' })]);
+    await catalog.merge(fix.id, 'keeper');
+    view = (await recordingTranscript(catalog, recording))!;
+    expect(await transcriptPending(catalog, view)).toEqual([]);
   });
 });
 

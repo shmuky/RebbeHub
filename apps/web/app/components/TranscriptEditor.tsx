@@ -5,8 +5,9 @@ import { markUnclear, spellingHints, unclearRanges } from '@rebbehub/model';
 import { t, type Lang } from '../lib/i18n.js';
 import { clockOf } from '../lib/i18nNetwork.js';
 import { href } from '../lib/links.js';
+import { useAccount } from '../lib/useAccount.js';
 import { postJson } from '../lib/post.js';
-import { get, tokensOf, wholeWords, within, type Paragraph, type Transcript, type TranscriptCommit } from '../lib/transcript.js';
+import { get, pendingRanges, tokensOf, wholeWords, within, type Paragraph, type Pending, type Transcript, type TranscriptCommit } from '../lib/transcript.js';
 import { wordDiff } from '../lib/wordDiff.js';
 import { usePlayer, type Track } from '../player/PlayerProvider.js';
 import { InlineDiff } from '../ui/Diff.js';
@@ -53,6 +54,10 @@ const W = {
   sent: { he: 'נשלח. יופיע באתר אחרי אישור.', en: 'Sent. It shows on the site once approved.' },
   saved: { he: 'נשמר.', en: 'Saved.' },
   yourFix: { he: 'התיקון שלך, מחכה לאישור', en: 'Your fix, waiting for approval' },
+  theirFix: { he: 'תיקון של {name}, מחכה לאישור', en: "{name}'s fix, waiting for approval" },
+  waitingTitle: { he: 'מחכים לאישור', en: 'Waiting for approval' },
+  reviewAll: { he: 'לעבור על כל התיקונים', en: 'Go through all the fixes' },
+  waitingCount: { he: '{n} תיקונים כאן מחכים לאישור, מסומנים בקו מקווקו', en: '{n} fixes here wait for approval, marked with a dashed line' },
   allChanges: { he: 'כל השינויים בתמלול', en: 'Every change to this transcript' },
   noChanges: { he: 'עוד אין שינויים מלבד שמיעת המחשב.', en: 'No changes yet besides what the machine heard.' },
   made: { he: 'המחשב שמע {n} פסקאות', en: 'The machine heard {n} paragraphs' },
@@ -238,6 +243,8 @@ function Para({
   onFixed,
   pickWords,
   numberOf,
+  waiting,
+  me,
 }: {
   n: number;
   recording: string;
@@ -257,6 +264,9 @@ function Para({
   onFixed: (content: string, complete: boolean, merged: boolean) => void;
   pickWords: { from: number; to: number; unclear?: boolean } | null;
   numberOf: (segment: string) => number;
+  /** Fixes of this paragraph's words that wait for approval, and who is signed in, to tell theirs from others'. */
+  waiting: Pending[];
+  me: string | null;
 }) {
   const player = usePlayer();
   const ref = useRef<HTMLLIElement>(null);
@@ -322,6 +332,9 @@ function Para({
 
   const tokens = tokensOf(paragraph);
   const marks = unclearRanges(paragraph.content);
+  // Fixes already sent by others, or by this listener before, and not yet approved: their words are shown as they will be, below.
+  const others = waiting.filter((x) => x.content !== sent?.content);
+  const changing = others.flatMap((x) => pendingRanges(paragraph.content, x.content));
   const text: React.ReactNode[] = [];
   let at = 0;
   for (const [i, tk] of tokens.entries()) {
@@ -330,8 +343,10 @@ function Para({
     const state = active && tk.ms !== null ? (nowMs >= tk.ms && nowMs < next ? ' w-now' : nowMs >= next ? ' w-past' : '') : '';
     const picked = editing?.kind === 'words' && tk.from < editing.to && tk.to > editing.from ? ' w-picked' : '';
     const unclear = marks.some((m) => tk.from < m.to && tk.to > m.from);
+    const pendingWord = changing.some((m) => tk.from < m.to && tk.to > m.from);
+    const title = [unclear ? t(lang, 'unclearWords') : '', pendingWord ? t(lang, 'pendingFix') : ''].filter(Boolean).join(' · ');
     text.push(
-      <span key={i} className={`word${state}${picked}${unclear ? ' w-unclear' : ''}`} data-ms={tk.ms ?? undefined} title={unclear ? t(lang, 'unclearWords') : undefined}>
+      <span key={i} className={`word${state}${picked}${unclear ? ' w-unclear' : ''}${pendingWord ? ' w-pending' : ''}`} data-ms={tk.ms ?? undefined} title={title || undefined}>
         {paragraph.content.slice(tk.from, tk.to)}
       </span>,
     );
@@ -340,6 +355,8 @@ function Para({
   if (at < paragraph.content.length) text.push(paragraph.content.slice(at));
 
   const pending = sent && !sent.merged ? sent : null;
+  // Editing again starts from this listener's own fix that still waits, so it is not typed twice.
+  const mine = pending ?? [...waiting].reverse().find((x) => x.author === me) ?? null;
   const status = paragraph.checked ? 'checked' : paragraph.edited ? 'partly' : 'machine';
   const classes = ['tx-para', open ? 'open' : '', active ? 'active' : '', found ? 'found' : '', `is-${status}`].filter(Boolean).join(' ');
 
@@ -378,6 +395,23 @@ function Para({
       >
         {text}
       </div>
+
+      {others.map((x) => (
+        <div key={`${x.suggestion}:${x.at}`} className="tx-pending">
+          <span className="row-sub">
+            {x.author === me ? w(lang, 'yourFix') : w(lang, 'theirFix').replace('{name}', x.authorName ?? x.author)}
+            {x.suggestion !== null ? (
+              <>
+                {' · '}
+                <Link to={href(`/suggestions/${x.suggestion}`, lang)}>#{x.suggestion}</Link>
+              </>
+            ) : null}
+          </span>
+          <p className="tx-diff" dir="auto">
+            <InlineDiff parts={wordDiff(paragraph.content, x.content)} />
+          </p>
+        </div>
+      ))}
 
       {pending ? (
         <div className="tx-pending">
@@ -445,7 +479,7 @@ function Para({
             </button>
           ) : null}
           {canFix && !pending ? (
-            <button type="button" className="tx-tool" onClick={() => setEditing({ kind: 'all', value: paragraph.content, complete: true })}>
+            <button type="button" className="tx-tool" onClick={() => setEditing({ kind: 'all', value: mine?.content ?? paragraph.content, complete: true })}>
               <Pencil size={16} aria-hidden />
               {w(lang, 'edit')}
             </button>
@@ -513,6 +547,8 @@ export function TranscriptEditor({
   const [history, setHistory] = useState<Record<string, TranscriptCommit[]>>({});
   const [showAll, setShowAll] = useState(false);
   const canFix = Boolean(account);
+  const me = useAccount()?.person.id ?? null;
+  const waitingAll = transcripts.flatMap((tr) => tr.pending ?? []);
 
   // The changelog of every part, read once, when it is first wanted.
   const wanted = showAll || open !== null;
@@ -589,6 +625,13 @@ export function TranscriptEditor({
           </ul>
         </details>
         <p className="note machine-note">{t(lang, 'lyricsMachineHint')}</p>
+        {waitingAll.length ? (
+          <p className="row-sub tx-waiting-note">
+            {w(lang, 'waitingCount').replace('{n}', waitingAll.length.toLocaleString(lang))}
+            {' · '}
+            <Link to={href('/review', lang, { view: 'transcripts' })}>{w(lang, 'reviewAll')}</Link>
+          </p>
+        ) : null}
         {canFix && checked < all.length ? <TrainingGoalBar lang={lang} /> : null}
         {!canFix ? (
           <p className="row-sub">
@@ -600,6 +643,31 @@ export function TranscriptEditor({
             <History size={15} aria-hidden />
             {w(lang, 'allChanges')}
           </summary>
+          {showAll && waitingAll.length ? (
+            <div className="tx-waiting">
+              <h4 className="row-sub">
+                {w(lang, 'waitingTitle')} · {waitingAll.length.toLocaleString(lang)}
+                {' · '}
+                <Link to={href('/review', lang, { view: 'transcripts' })}>{w(lang, 'reviewAll')}</Link>
+              </h4>
+              <ul>
+                {waitingAll.map((x) => (
+                  <li key={`${x.suggestion}:${x.segment}`}>
+                    <button type="button" className="tx-waiting-n" onClick={() => setOpen(x.segment)}>
+                      ¶{numberOf(x.segment)}
+                    </button>{' '}
+                    <span className="row-sub">
+                      {x.authorName ?? x.author}
+                      {x.suggestion !== null ? ` · #${x.suggestion}` : ''}
+                    </span>
+                    <p className="tx-diff" dir="auto">
+                      <InlineDiff parts={wordDiff(all.find((p) => p.id === x.segment)?.content ?? '', x.content)} />
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {showAll ? (
             transcripts.some((tr) => !history[tr.recording]) ? (
               <p className="row-sub">…</p>
@@ -647,6 +715,8 @@ export function TranscriptEditor({
                   onFixed={(content, complete) => onFixed(tr.recording, p.id, content, complete)}
                   pickWords={pick?.segment === p.id ? pick : null}
                   numberOf={numberOf}
+                  waiting={(tr.pending ?? []).filter((x) => x.segment === p.id)}
+                  me={me}
                 />
               ))}
             </ol>

@@ -543,6 +543,7 @@ const SCHEMAS: Record<string, Schema> = {
       alignment: nullable(idSchema),
       granularity: { enum: ['word', 'paragraph', null] },
       paragraphs: arr(obj({ id: idSchema, content: str(), startMs: nullable(int()), endMs: nullable(int()), words: nullable(arr(any())), locked: bool(), checked: bool('false: machine hearing nobody has checked'), edited: bool('a person fixed some words but did not check the whole paragraph'), syncChecked: bool() }, ['id', 'content', 'checked'])),
+      pending: arr(obj({ segment: idSchema, content: str('The paragraph as the fix would make it'), complete: bool('The person checked all of it'), author: str(), authorName: nullable(str()), at: str(), suggestion: nullable(int('Its #number')) }, ['segment', 'content', 'complete', 'author', 'at', 'suggestion']), 'Fixes of the words waiting for approval, a suggestion\'s together in the transcript\'s order'),
     },
     ['recording', 'text', 'paragraphs'],
   ),

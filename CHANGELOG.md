@@ -12,6 +12,14 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Fixes waiting for approval show in the transcript.** `GET
+  /v1/recordings/{id}/transcript` gives `pending`: each paragraph fix not
+  yet approved, as the paragraph would be, with who sent it and its
+  suggestion. The editor shows each under its paragraph (yours or
+  someone else's, with its #number) and starts editing from your own; the
+  words it changes are marked with a dashed line in the editor and while
+  listening; and the changelog lists them first, with a link to go
+  through them all.
 - **Transcript fixes, all together.** `/review?view=transcripts` lists
   every transcript fix waiting for approval, a farbrengen's together in the
   order heard: the words on the site beside the words sent, a tap to hear
