@@ -302,6 +302,8 @@ export function createApp(options: ApiOptions): Hono {
   // A work's volumes (its top-level parts) with how many units each holds, and one volume's units.
   app.get('/v1/works/:id/outline', async (c) => c.json({ parts: await catalog.workOutline(entityId(c.req.param('id'))) }));
   app.get('/v1/works/:id/parts/:part', async (c) => c.json({ items: await catalog.workPart(entityId(c.req.param('id')), c.req.param('part'), intParam(c.req.query('limit'), 'limit')) }));
+  // The units before and after a unit in its work's order (across volumes): a sicha's page's back and forth, one read.
+  app.get('/v1/units/:id/neighbours', async (c) => c.json(await catalog.unitNeighbours(entityId(c.req.param('id')))));
 
   // The day's learning, Chitas' Tanya and Hayom Yom, for a civil day: the daily page's one read (core/daily.ts).
   app.get('/v1/daily', async (c) => {

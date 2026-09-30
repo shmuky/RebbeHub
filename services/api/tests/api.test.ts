@@ -102,7 +102,20 @@ describe('browsing', () => {
       { value: '2', label: { he: 'חלק 2' }, units: 1 },
     ]);
     expect((await call('GET', `/v1/works/${work}/parts/2`)).body.items.map((i: { id: string }) => i.id)).toEqual([inTwo]);
-    expect((await call('GET', '/v1/refcounts?field=work&type=unit')).body.counts).toEqual({ [work]: 3 });
+    // A letter's back and forth, in the contents' order (by `order`, not by when it was added), across volumes.
+    const [first, second] = (await call('GET', `/v1/works/${work}/parts/1`)).body.items.map((i: { id: string }) => i.id);
+    const around = async (id: string) => (await call('GET', `/v1/units/${id}/neighbours`)).body as { previous: { id: string; data: { body?: unknown } } | null; next: { id: string } | null };
+    expect(await around(first)).toMatchObject({ previous: null, next: { id: second } });
+    expect(await around(second)).toMatchObject({ previous: { id: first }, next: { id: inTwo } });
+    expect(await around(inTwo)).toMatchObject({ previous: { id: second }, next: null });
+    expect((await around(second)).previous!.data.body).toBeUndefined();
+    // Units sharing an order go by id, as a work's children are paged; a unit of no work, and an item that is no unit, have none.
+    const twin = await add(catalog, 'mendy', 'keeper', 'unit', { work, position: [volume('1'), { level: 'letter', value: '2a' }], order: 'k', label: { he: 'ב*' } });
+    const [a, b] = [second, twin].sort();
+    expect(await around(a!)).toMatchObject({ next: { id: b } });
+    expect(await around(b!)).toMatchObject({ previous: { id: a }, next: { id: inTwo } });
+    expect(await around(work)).toEqual({ previous: null, next: null });
+    expect((await call('GET', '/v1/refcounts?field=work&type=unit')).body.counts).toEqual({ [work]: 4 });
     expect(await call('GET', '/v1/refcounts?field=1;drop')).toMatchObject({ status: 400 });
   });
 

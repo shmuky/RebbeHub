@@ -54,6 +54,8 @@ export interface ItemView {
   event?: EventView;
   /** A day of Hayom Yom's: the head the book prints over it (weekday, year, shiurim), to set it as printed. */
   hayomYom?: HayomYomShiurim | null;
+  /** A sicha's: the units before and after it in its sefer, for its back and forth buttons. */
+  neighbours?: { previous: Entity | null; next: Entity | null };
 }
 
 /** A text's paragraphs, all of them, a page at a time (a hanacha may have up to 2,000; a sefer's text more). */
@@ -149,7 +151,12 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
     }
     case 'unit': {
       [...ids(d.work), ...ids(d.events)].forEach((id) => wanted.add(id));
-      const texts = await linkedItems(api, entity.id, 'unit', 'text');
+      // Its back and forth, asked for beside its texts: one request, one statement.
+      const [texts, neighbours] = await Promise.all([
+        linkedItems(api, entity.id, 'unit', 'text'),
+        typeof d.work === 'string' ? orNone(api.unitNeighbours(entity.id), { previous: null, next: null }) : { previous: null, next: null },
+      ]);
+      view.neighbours = neighbours;
       view.lists.texts = texts;
       const segments = await Promise.all(texts.map((text) => allSegments(api, text.id)));
       texts.forEach((text, i) => (view.segments[text.id] = segments[i]!));

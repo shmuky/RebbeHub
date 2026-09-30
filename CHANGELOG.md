@@ -10,6 +10,33 @@ any time. `@rebbehub/client` carries the API's version.
 
 ## Unreleased
 
+### Added
+
+- **Back and forth between a sefer's sichos.** A sicha's page has
+  Previous and Next (הקודם / הבא) above its text and below it, to the
+  sicha before and after it in the sefer's contents, across volumes (the
+  last of one volume leads to the first of the next, named with its
+  volume). In Hebrew "previous" is on the right. The page asks for both
+  in one request, the new `GET /v1/units/{id}/neighbours` (in
+  `@rebbehub/client` as `unitNeighbours`).
+
+### Changed
+
+- **The library by Rebbe.** The library page's shelves are now a shelf
+  for each Rebbe, from the Baal Shem Tov to the Rebbe, then history,
+  halacha, journals and the rest, in the order the catalog keeps them,
+  each with the sets inside it. "Every sefer" lists each sefer under its
+  shelf instead of by kind, and the sources the sefarim came from
+  (HebrewBooks, Otzros, Sefaria) are no longer shown as shelves.
+
+### Removed
+
+- **No timing button in the player.** The **תזמון** button, which let a
+  listener tap where a paragraph starts, is gone: the model's sync is
+  already good, and hand taps only moved it off. Words nobody is sure of
+  can still be talked over, and "the sync of the whole recording is
+  right" still marks it checked.
+
 ### Fixed
 
 - **Hayom Yom is set as the book prints it.** Each day now has the

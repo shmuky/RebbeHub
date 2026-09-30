@@ -545,6 +545,11 @@ export class RebbeHubApi {
     return (await this.get<{ items: Entity[] }>(`/v1/works/${encodeURIComponent(id)}/parts/${encodeURIComponent(part)}`)).items;
   }
 
+  /** The units just before and after a unit in its work's order, across volumes: a sicha's back and forth. */
+  unitNeighbours(id: string) {
+    return this.get<{ previous: Entity | null; next: Entity | null }>(`/v1/units/${encodeURIComponent(id)}/neighbours`);
+  }
+
   /** One group of what points at each of several items, a few of each, in one request (a sefer's sichos' texts): by item, in the group's order. */
   async linkedOfEach(ids: readonly string[], options: { field: string; type?: string; limit?: number }): Promise<Map<string, Entity[]>> {
     const unique = [...new Set(ids)].filter((id) => /^rh-[0-9a-z]+$/.test(id));
