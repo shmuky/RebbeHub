@@ -10,6 +10,15 @@ any time. `@rebbehub/client` carries the API's version.
 
 ## Unreleased
 
+### Changed
+
+- **The library by Rebbe.** The library page's shelves are now a shelf
+  for each Rebbe, from the Baal Shem Tov to the Rebbe, then history,
+  halacha, journals and the rest, in the order the catalog keeps them,
+  each with the sets inside it. "Every sefer" lists each sefer under its
+  shelf instead of by kind, and the sources the sefarim came from
+  (HebrewBooks, Otzros, Sefaria) are no longer shown as shelves.
+
 ### Removed
 
 - **No timing button in the player.** The **תזמון** button, which let a
