@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Clamp } from '../ui/Clamp.js';
 import { data, Link, redirect, useSearchParams } from 'react-router';
 import type { Route } from './+types/suggestion';
 import { Composer } from '../components/threads/Composer.js';
@@ -53,7 +54,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   let view: SuggestionView | null = null;
   let people: People = {};
   if (thread) {
-    const detail = await api.suggestion(thread.id, { limit: 200, summary: true }).catch(() => null);
+    const detail = await api.suggestion(thread.id, { limit: 40 }).catch(() => null);
     if (detail) {
       view = await suggestionView(api, detail, lang);
       const found = await api.peopleByIds([detail.changeset.author, ...detail.reviews.map((r) => r.reviewer)]);
@@ -172,7 +173,7 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
   const load = useCallback(async () => {
     if (id === null) return setMissing(true);
     try {
-      const [d, c] = await Promise.all([threads<ClientDetail>(`suggestions/${id}?limit=200`), threads<ConversationData>(`suggestions/${id}/conversation`)]);
+      const [d, c] = await Promise.all([threads<ClientDetail>(`suggestions/${id}?limit=1&brief=1`), threads<ConversationData>(`suggestions/${id}/conversation`)]);
       setDetail(d);
       setTalk(c);
       // A title or description just changed here: the page says so without a reload.
@@ -210,7 +211,7 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
     return [e?.label ?? a.entity, f?.name ?? (a.field === '/content' ? (lang === 'he' ? 'הטקסט' : 'the words') : a.field)].join(' › ');
   };
   const here = (t: Tab) => href(`/suggestions/${number}`, lang, t === 'conversation' ? {} : { tab: t });
-  const changeCount = view.entries.reduce((n, e) => n + (e.segment ? 1 : 0) + e.fields.length, 0);
+  const changeCount = view.entries.reduce((n, e) => n + (e.segment ? 1 : 0) + e.fields.reduce((m, f) => m + f.count, 0), 0);
   const comments = talk ? talk.timeline.filter((i) => i.type === 'comment').length : null;
   const scans = view.entries.filter((e) => e.scan);
 
@@ -592,7 +593,7 @@ function Description({ view, lang, mayEdit, id, onSave }: { view: SuggestionView
     );
   return (
     <div className="words">
-      {view.description ? <RichText text={view.description} lang={lang} /> : <p className="subtle">{tt(lang, 'noDescription')}</p>}
+      {view.description ? <Clamp text={view.description} lang={lang} render={(text) => <RichText text={text} lang={lang} />} /> : <p className="subtle">{tt(lang, 'noDescription')}</p>}
       {mayEdit ? (
         <button type="button" className="icon-btn edit-own" onClick={() => (setValue(view.description ?? ''), setEditing(true))} aria-label={tt(lang, 'edit')} title={tt(lang, 'edit')}>
           <Icon name="pencil" size={13} />

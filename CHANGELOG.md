@@ -10,6 +10,22 @@ any time. `@rebbehub/client` carries the API's version.
 
 ## Unreleased
 
+### Fixed
+
+- **A bot's suggestion of thousands of alike changes opens.** A sync
+  bot's change of every word timing in a recording was a row for each
+  (thousands) and stopped phones. Changes that differ only by their place
+  in a list are now one row, with how many there are, the first as the
+  example, and by how much they all moved when they moved alike; at most
+  12 rows an item, the rest counted. Timings and machine details (where
+  each word is heard, which engine, how sure) are no longer shown as
+  changes: one line counts them. A long value or description shows its
+  beginning, with Show all. A suggestion's page reads 40 items,
+  and no longer a second full copy of 200 in the browser. In a
+  suggestion that changes real words, an item whose only change is
+  re-timing, a date or a machine mark (a small text fix re-syncs the
+  words around it) is left out, so only the real edit shows.
+
 ### Added
 
 - **Fixes waiting for approval show in the transcript.** `GET
