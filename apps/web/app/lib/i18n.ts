@@ -19,8 +19,11 @@ export const dir = (lang: Lang) => (lang === 'he' ? 'rtl' : 'ltr');
 /** A name in the page's language, falling back to Hebrew. */
 export function nameOf(name: LocalName | undefined | null, lang: Lang): string {
   if (!name) return '';
-  return (lang === 'en' ? name.en : name.he) || name.he || name.en || '';
+  return untagged((lang === 'en' ? name.en : name.he) || name.he || name.en || '');
 }
+
+/** A name as its source titled it, without the source's own tags: chabadlibrary.org's headings came as `<h3>ד שבט</h3>`. */
+const untagged = (text: string) => (text.includes('<') ? text.replace(/<\/?[a-z][a-z0-9]*(\s[^<>]*)?>/gi, '').trim() : text);
 
 const STRINGS = {
   siteName: { he: 'RebbeHub', en: 'RebbeHub' },

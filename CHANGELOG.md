@@ -39,6 +39,15 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Fixed
 
+- **Hayom Yom is set as the book prints it.** Each day now has the
+  book's head: the weekday, the day and the year (5703 or 5704) in one
+  bold row, and the day's shiurim under "שיעורים." (Chumash with its
+  portion, Tehillim, Elul's added chapters and Yom Kippur's by their
+  times, and the Tanya chapter), then the words justified between heavy
+  rules, on the daily page and each day's own page. The weekday, year,
+  Chumash and Tehillim are worked out from the calendar of 5703 and match
+  the print on every day read from its scan. Names brought from
+  chabadlibrary.org no longer show their tags (`<h3>ד שבט</h3>`).
 - **Word by word again after a fix.** Fixing a paragraph's words used to
   throw away all its word timings until the audio was timed again, which
   for JEM's recordings never came, so the lyrics lit such a paragraph as

@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { data, Link, useNavigate } from 'react-router';
 import type { Route } from './+types/daily';
+import { hayomYomShiurimOf } from '@rebbehub/hebrew';
+import { HayomYomDay } from '../components/HayomYomDay.js';
 import { PageWords } from '../components/PageWords.js';
 import { isPageText } from '@rebbehub/model';
 import type { Entity } from '../lib/api.js';
@@ -62,7 +64,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (asked !== null && (!ISO.test(asked) || Number.isNaN(Date.parse(asked)) || shift(asked, 0) !== asked)) throw data('not found', { status: 404 });
   const date = asked ?? todayIn('America/New_York');
   const day = await api.daily(date);
-  return { lang, siteUrl, date, asked: asked !== null, hebrew: day.hebrew, tanya: day.tanya, hayomYom: day.hayomYom };
+  // Each Hayom Yom entry with the head the book prints over it: weekday, year and shiurim.
+  const hayomYom = day.hayomYom.map((entry) => ({ entry, shiurim: hayomYomShiurimOf(entry.data) }));
+  return { lang, siteUrl, date, asked: asked !== null, hebrew: day.hebrew, tanya: day.tanya, hayomYom };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -72,9 +76,6 @@ export function meta({ loaderData }: Route.MetaArgs) {
 }
 
 export const handle = { phone: { title: W.title, up: '/' } };
-
-/** A Hayom Yom entry's title as its source wrote it (`<h3>א טבת ר"ח</h3>`), without the tags. */
-const plain = (text: string) => text.replace(/<[^>]*>/g, '').trim();
 
 function Words({ item, lang }: { item: Entity; lang: Lang }) {
   const body = (item.data as { body?: unknown }).body;
@@ -154,19 +155,26 @@ export default function Daily({ loaderData }: Route.ComponentProps) {
             {w(lang, 'hayomYom')}
           </h2>
           {hayomYom.length ? (
-            hayomYom.map((entry) => (
-              <article key={entry.id} className="daily-part">
-                <header className="daily-part-head">
-                  <h3 className="torah" lang="he">
-                    {plain(labelOf(entry, 'he'))}
-                  </h3>
-                  <Link className="small" to={href(itemPath(entry), lang)}>
-                    {w(lang, 'wholeEntry')}
-                  </Link>
-                </header>
-                <Words item={entry} lang={lang} />
-              </article>
-            ))
+            hayomYom.map(({ entry, shiurim }) =>
+              entry.withheld ? (
+                <p key={entry.id} className="subtle">
+                  {w(lang, 'withheld')}
+                </p>
+              ) : (
+                <HayomYomDay
+                  key={entry.id}
+                  title={labelOf(entry, 'he')}
+                  body={(entry.data as { body?: unknown }).body}
+                  shiurim={shiurim}
+                  lang={lang}
+                  actions={
+                    <Link className="small" to={href(itemPath(entry), lang)}>
+                      {w(lang, 'wholeEntry')}
+                    </Link>
+                  }
+                />
+              ),
+            )
           ) : (
             <p className="subtle">{w(lang, 'noHayomYom')}</p>
           )}
