@@ -72,6 +72,12 @@ checks that the dump reads back before it uploads, and that every part is
 there at its size. It can also be started by hand (Actions, Backup, Run
 workflow), for example just before a big import.
 
+It writes the bucket through Cloudflare's REST API when the repository has
+`CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (R2 edit rights), else
+through `R2_ENDPOINT`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`, whose
+R2 token then needs Object Read & Write on `rebbehub-preservation` (the
+first runs, 2026-10-01, found the key read-only and the token unset).
+
 To restore, never over the live database first: make a Neon branch (or an
 empty database), restore into it, check it, and only then point the site
 at it or copy back what was lost.

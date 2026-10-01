@@ -10,8 +10,10 @@ name: Backup
 # one request) and SHA256SUMS. A night's copy is kept 35 days; the one of
 # the 1st of each month is kept.
 #
-# Needs DATABASE_URL, CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (R2 edit
-# rights on rebbehub-preservation), as the upkeep's covers have.
+# Needs DATABASE_URL, and a way to write rebbehub-preservation: either
+# CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (R2 edit rights, as the
+# upkeep's covers need), or R2_ENDPOINT, R2_ACCESS_KEY_ID and
+# R2_SECRET_ACCESS_KEY of an R2 token with Object Read & Write on the bucket.
 on:
   schedule:
     - cron: "17 6 * * *"
@@ -34,15 +36,22 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
       BUCKET: rebbehub-preservation
       KEEP_DAYS: "35"
     steps:
       - name: Check it is configured
         run: |
           if [ -z "$DATABASE_URL" ]; then echo "::error::Add the DATABASE_URL repository secret (see docs/deploy.md)."; exit 1; fi
-          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "::error::Add CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (R2 edit rights; see docs/deploy.md)."; exit 1
+          if [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && [ -n "$CLOUDFLARE_API_TOKEN" ]; then echo "VIA=rest" >> "$GITHUB_ENV"
+          elif [ -n "$R2_ENDPOINT" ] && [ -n "$AWS_ACCESS_KEY_ID" ]; then echo "VIA=s3" >> "$GITHUB_ENV"
+          else
+            echo "::error::Add CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN, or R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY (see the top of this file)."; exit 1
           fi
+      - uses: actions/checkout@v7
       - name: Install pg_dump as new as the server
         run: |
           sudo install -d /usr/share/postgresql-common/pgdg
@@ -68,28 +77,23 @@ jobs:
           echo "$(du -h dump | cut -f1) in $(ls out/dump.part* | wc -l) parts, $tables tables" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Upload
         run: |
-          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/$BUCKET/objects"
-          for file in out/*; do
-            name=$(basename "$file")
-            curl -fsS --retry 4 --retry-all-errors -X PUT -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-              -H 'Content-Type: application/octet-stream' --data-binary "@$file" "$api/backups/db/$DAY/$name" > /dev/null
-          done
+          source .github/backup-r2.sh
+          for file in out/*; do put "$file" "backups/db/$DAY/$(basename "$file")"; done
           # Checked there, not only sent: every part, at its size.
-          curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api?prefix=backups/db/$DAY/&per_page=1000" \
-            | jq -r '.result[] | "\(.key | split("/") | last) \(.size)"' | sort > there.txt
+          list "backups/db/$DAY/" | sed 's|^backups/db/[^/]*/||' | sort > there.txt
           (cd out && for f in *; do echo "$f $(stat -c %s "$f")"; done) | sort > sent.txt
           if ! diff sent.txt there.txt; then echo "::error::What is in R2 is not what was sent."; exit 1; fi
           echo "Kept at $BUCKET/backups/db/$DAY/" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Forget old nights
         run: |
-          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/$BUCKET/objects"
+          source .github/backup-r2.sh
           cutoff=$(date -u -d "-$KEEP_DAYS days" +%F)
-          curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api?prefix=backups/db/&per_page=1000" | jq -r '.result[].key' | while read -r key; do
+          list backups/db/ | while read -r key size; do
             day=$(cut -d/ -f3 <<<"$key")
             [[ "$day" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || continue
             # The 1st of each month stays.
             if [[ "$day" < "$cutoff" ]] && [ "${day:8:2}" != "01" ]; then
-              curl -fsS -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/$key" > /dev/null
+              forget "$key"
               echo "forgot $key"
             fi
           done
