@@ -9,6 +9,7 @@ import { describe, labelOf } from '../lib/labels.js';
 import { href, itemPath } from '../lib/links.js';
 import { tracksOf } from '../lib/tracks.js';
 import { Icon } from '../ui/Icon.js';
+import { Logo } from '../ui/Logo.js';
 import '../styles/pages/info.css';
 
 /**
@@ -68,9 +69,7 @@ export default function Embed({ loaderData }: Route.ComponentProps) {
         </ol>
       ) : null}
       <p className="embed-foot">
-        <span className="mark" aria-hidden="true">
-          ר
-        </span>
+        <Logo size={16} name={false} />
         <a href={link} target="_blank" rel="noreferrer">
           {t(lang, 'onRebbeHub')}
         </a>

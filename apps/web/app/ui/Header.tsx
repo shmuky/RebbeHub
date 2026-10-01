@@ -6,6 +6,7 @@ import { href } from '../lib/links.js';
 import { refreshAccount, useAccount } from '../lib/useAccount.js';
 import { CommandPalette } from './CommandPalette.js';
 import { Icon, type IconName } from './Icon.js';
+import { Logo } from './Logo.js';
 import { Avatar } from './primitives.js';
 import { setTheme, useTheme, type Theme } from './theme.js';
 
@@ -253,10 +254,7 @@ export function Header({ lang }: { lang: Lang }) {
     <>
       <header className="top">
         <Link to={href('/', lang)} className="brand" aria-label="RebbeHub">
-          <span className="mark" aria-hidden="true">
-            ר
-          </span>
-          RebbeHub
+          <Logo size={24} />
         </Link>
         <nav className="nav" aria-label={tu(lang, 'mainNav')}>
           {NAV.map((n) => (
@@ -320,9 +318,7 @@ export function Header({ lang }: { lang: Lang }) {
       <header className="mtop">
         {home ? (
           <Link to={href('/', lang)} className="brand" aria-label="RebbeHub">
-            <span className="mark" aria-hidden="true">
-              ר
-            </span>
+            <Logo size={23} />
           </Link>
         ) : (
           <Link
@@ -366,10 +362,7 @@ export function Header({ lang }: { lang: Lang }) {
           <div className="sheet" role="dialog" aria-label={tu(lang, 'menu')}>
             <div className="sheet-h">
               <Link to={href('/', lang)} className="brand">
-                <span className="mark" aria-hidden="true">
-                  ר
-                </span>
-                RebbeHub
+                <Logo size={23} />
               </Link>
               <button
                 type="button"

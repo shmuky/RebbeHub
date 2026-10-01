@@ -3,7 +3,8 @@
  * licences) so pages set the same offline as online: Noto Sans and Noto
  * Sans Hebrew for everything around the texts, Frank Ruhl Libre for the
  * few titles that carry a page, and Frank Ruehl CLM for the words of the
- * Torah themselves, as Sichos-Kodesh's reader sets them. David CLM and
+ * Torah themselves, as Sichos-Kodesh's reader sets them. Newsreader sets
+ * the name RebbeHub in the logo and nowhere else. David CLM and
  * Noto Serif Hebrew are there for readers who choose them.
  */
 
@@ -55,6 +56,15 @@
   font-display: swap;
   src: url('/fonts/frank-ruhl-libre-latin-700.woff2') format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Newsreader';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/newsreader-latin-600.woff2') format('woff2');
+  unicode-range: U+0020-007E;
 }
 
 @font-face {

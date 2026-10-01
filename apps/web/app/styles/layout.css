@@ -56,16 +56,40 @@ main#main {
   text-decoration: none;
 }
 
-.mark {
-  width: 26px;
-  height: 26px;
-  border-radius: 5px;
-  background: var(--strong);
+/*
+ * The logo (ui/Logo.tsx), drawn from one width, --w, as the guidelines
+ * give it: the book 4 wide by 5 high, its outer (start) edge rounder, the
+ * R in the page colour; the name 0.83 of the book's width, 0.4 of it away,
+ * set a little low so it sits centred on the book.
+ */
+.logo {
+  --w: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--w) * 0.4);
+  flex: none;
+}
+
+.logo-book {
+  width: var(--w);
+  height: calc(var(--w) * 1.25);
+  border-start-start-radius: calc(var(--w) / 3);
+  border-end-start-radius: calc(var(--w) / 3);
+  border-start-end-radius: calc(var(--w) / 5);
+  border-end-end-radius: calc(var(--w) / 5);
+  background: var(--accent);
   color: var(--bg);
   display: grid;
   place-items: center;
-  font: 700 15px / 1 var(--display);
+  font: 700 calc(var(--w) * 0.74) / 1 var(--display);
   flex: none;
+}
+
+.logo-name {
+  font: 600 calc(var(--w) * 0.83) / 1 var(--brand);
+  letter-spacing: -0.015em;
+  padding-top: 0.21em;
+  color: var(--text);
 }
 
 .nav {
@@ -1009,13 +1033,6 @@ dl.facts dd {
   gap: 8px;
 }
 
-.site-footer .brand .mark {
-  width: 20px;
-  height: 20px;
-  font-size: 12px;
-  border-radius: 4px;
-}
-
 .site-footer p {
   flex: 1 1 320px;
 }
@@ -1337,12 +1354,6 @@ body.embedded {
   font-size: var(--fs-md);
   border-top: 1px solid var(--border);
   padding-top: 10px;
-}
-
-.embed-foot .mark {
-  width: 20px;
-  height: 20px;
-  font-size: 12px;
 }
 
 /* The phone's tabs: the main sections along the bottom, and the menu. */
