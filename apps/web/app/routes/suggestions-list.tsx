@@ -12,7 +12,7 @@ import { useAccount } from '../lib/useAccount.js';
 import { useLang } from '../lib/useLang.js';
 import { Icon } from '../ui/Icon.js';
 import { TokenSearch } from '../ui/TokenSearch.js';
-import { AgentBy, Avatar, EmptyState, RelativeTime, Skeleton, StateIcon, StatusBadge, cx } from '../ui/primitives.js';
+import { AgentBy, Avatar, EmptyState, RelativeTime, Skeleton, cx } from '../ui/primitives.js';
 
 /**
  * Suggestions as pull requests are listed: open (waiting for review, or
@@ -22,6 +22,11 @@ import { AgentBy, Avatar, EmptyState, RelativeTime, Skeleton, StateIcon, StatusB
  * line is the filter (`מצב:פתוח בודק:@me`); "asked of me" is a keeper's
  * queue. Read on the server, so the list works before script; a signed-in
  * reader's `@me` is filled in by the browser.
+ *
+ * As design/ draws it (3h): who it is for on top (what waits for my review,
+ * what I sent, everything), then each suggestion as a line with a dot in
+ * the colour of where it stands and, under where it is, what happened to it
+ * in words (waiting for review, sent back with a note, approved).
  */
 
 const KEYS: TokenKey[] = [
@@ -117,6 +122,13 @@ const W = {
   merged: { he: 'אושרה', en: 'Approved' },
   withdrawn: { he: 'בוטלה', en: 'Withdrawn' },
   sentBackBadge: { he: 'הוחזרה', en: 'Sent back' },
+  everything: { he: 'הכול', en: 'All' },
+  forReview: { he: 'לבדיקה', en: 'To review' },
+  iSent: { he: 'ששלחתי', en: 'I sent' },
+  waiting: { he: 'ממתינה לבדיקה', en: 'Waiting for review' },
+  sentBackNote: { he: 'הוחזרה עם הערה', en: 'Sent back with a note' },
+  mergedIn: { he: 'אושרה ונכנסה לספרייה', en: 'Approved and in the library' },
+  draft: { he: 'טיוטה', en: 'Draft' },
   signIn: { he: 'כדי לראות את ההצעות שלכם צריך להיכנס.', en: 'Sign in to see your own suggestions.' },
 } as const;
 const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
@@ -174,20 +186,23 @@ export default function Suggestions({ loaderData }: Route.ComponentProps) {
     return list;
   }, [listing, query.sort]);
   const people = listing?.people ?? {};
+const filtered = Object.keys(query.parsed.filters).some((k) => k !== 'state') || Boolean(query.text);
+  // Whose suggestions, as the design's switch on top: everyone's, what waits for my review, what I sent.
   const presets = [
+    { name: w(lang, 'everything'), line: lang === 'he' ? 'מצב:פתוחה' : 'state:open' },
     ...(account
       ? [
-          { name: w(lang, 'askedOfMe'), line: lang === 'he' ? 'מצב:פתוחה בודק:@me' : 'state:open reviewer:@me' },
-          { name: w(lang, 'mine'), line: lang === 'he' ? 'מצב:פתוחה מציע:@me' : 'state:open author:@me' },
+          { name: w(lang, 'forReview'), line: lang === 'he' ? 'מצב:פתוחה בודק:@me' : 'state:open reviewer:@me' },
+          { name: w(lang, 'iSent'), line: lang === 'he' ? 'מצב:פתוחה מציע:@me' : 'state:open author:@me' },
         ]
       : []),
-    { name: w(lang, 'closed'), line: lang === 'he' ? 'מצב:סגורה' : 'state:closed' },
   ];
-  const filtered = Object.keys(query.parsed.filters).some((k) => k !== 'state') || Boolean(query.text);
-
+  // Which of them the line now is, whatever the state asked for.
+  const whose = query.reviewer === '@me' ? 1 : query.author === '@me' ? 2 : !filtered ? 0 : -1;
+  
   return (
     <>
-      <div className="phead flat">
+      <div className="phead flat sg-head">
         <div className="wrap">
           <div className="phead-row list-head">
             <div>
@@ -203,19 +218,18 @@ export default function Suggestions({ loaderData }: Route.ComponentProps) {
             </div>
           </div>
           <TokenSearch lang={lang} keys={KEYS} defaultValue={line} action={href('/suggestions', lang)} label={w(lang, 'search')} placeholder={w(lang, 'placeholder')} />
-          <nav className="saved-row" aria-label={w(lang, 'saved')}>
-            <span className="subtle">{w(lang, 'saved')}</span>
-            {presets.map((s) => (
-              <span key={s.line} className="saved-item">
-                <Link to={to(s.line)} aria-current={s.line === line ? 'true' : undefined}>
+          {presets.length > 1 ? (
+            <nav className="sg-whose" aria-label={w(lang, 'saved')}>
+              {presets.map((s, i) => (
+                <Link key={s.line} to={to(s.line)} aria-current={i === whose ? 'true' : undefined}>
                   {s.name}
                 </Link>
-              </span>
-            ))}
-          </nav>
+              ))}
+            </nav>
+          ) : null}
         </div>
       </div>
-      <div className="wrap page list-page">
+      <div className="wrap page list-page sg-list">
         <section className="box issues" aria-label={w(lang, 'title')}>
           <header className="box-h list-bar">
             <Link to={set('state', 'open')} className={cx('st-tab', query.state === 'open' && 'on')} aria-current={query.state === 'open' ? 'true' : undefined}>
@@ -258,26 +272,13 @@ export default function Suggestions({ loaderData }: Route.ComponentProps) {
                 const author = people[s.author];
                 const state = s.status === 'merged' ? 'approved' : s.status === 'withdrawn' || s.status === 'draft' ? 'closed' : 'open';
                 return (
-                  <li key={s.number} className="row issue-row">
-                    <StateIcon kind="suggestion" state={state} label={s.status} />
+                  <li key={s.number} className={`row issue-row sg-${s.status}`}>
+                    <span className="sg-dot" aria-hidden="true" />
                     <div className="grow">
                       <div className="row-line">
                         <Link className="row-title" to={href(`/suggestions/${s.number}`, lang)} dir="auto">
                           {s.title}
                         </Link>
-                        {s.status === 'sent_back' ? (
-                          <StatusBadge state="closed" size="sm" icon="back">
-                            {w(lang, 'sentBackBadge')}
-                          </StatusBadge>
-                        ) : s.status === 'merged' ? (
-                          <StatusBadge state="approved" size="sm" icon="check">
-                            {w(lang, 'merged')}
-                          </StatusBadge>
-                        ) : s.status === 'withdrawn' ? (
-                          <StatusBadge state="closed" size="sm">
-                            {w(lang, 'withdrawn')}
-                          </StatusBadge>
-                        ) : null}
                       </div>
                       <div className="row-sub">
                         <span className="num">#{s.number}</span> · {w(lang, 'opened')} <RelativeTime at={s.submittedAt ?? s.createdAt} lang={lang} /> {w(lang, 'by')}{' '}
@@ -302,6 +303,7 @@ export default function Suggestions({ loaderData }: Route.ComponentProps) {
                           </>
                         ) : null}
                       </div>
+                      <div className="sg-where">{w(lang, s.status === 'merged' ? 'mergedIn' : s.status === 'sent_back' ? 'sentBackNote' : s.status === 'withdrawn' ? 'withdrawn' : s.status === 'draft' ? 'draft' : 'waiting')}</div>
                     </div>
                     <div className="row-side">
                       <span />
