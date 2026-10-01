@@ -31,73 +31,17 @@
   text-decoration: none;
 }
 
-.vol-more,
 .vol-as {
   position: relative;
 }
 
-.vol-more > summary,
 .vol-as > summary {
   list-style: none;
   cursor: pointer;
 }
 
-.vol-more > summary::-webkit-details-marker,
 .vol-as > summary::-webkit-details-marker {
   display: none;
-}
-
-.vol-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  inset-inline-end: 0;
-  z-index: 30;
-  min-width: 240px;
-  padding: 6px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--overlay);
-  box-shadow: var(--shadow-pop);
-  display: flex;
-  flex-direction: column;
-}
-
-.vol-menu a {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
-  border-radius: 8px;
-  color: var(--text);
-}
-
-.vol .grow {
-  flex: 1;
-}
-
-.vol-menu a:hover {
-  background: var(--sunken);
-  text-decoration: none;
-}
-
-.vol-menu-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 4px 2px;
-  margin-top: 4px;
-  border-top: 1px solid var(--border);
-}
-
-.vol-menu-actions a,
-.vol-menu-actions a:hover {
-  padding: 0;
-  background: none;
-}
-
-.vol-menu-actions .btn,
-.vol-menu-actions a.btn:hover {
-  padding: 0 12px;
 }
 
 .vol-head {
