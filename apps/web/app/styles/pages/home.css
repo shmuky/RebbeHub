@@ -1,0 +1,381 @@
+/*
+ * The home page (routes/home.tsx), as design/ draws it: on a wide screen
+ * two columns, the day and where you stopped at the start, the day's
+ * learning and where to help at the end; on a phone one column, the
+ * learning as cards to swipe through.
+ */
+
+.hm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 40px;
+  padding-block: 36px 56px;
+  align-items: start;
+}
+
+.hm-col {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  min-width: 0;
+}
+
+.hm-day p {
+  color: var(--subtle);
+  font-size: var(--fs-md);
+}
+
+.hm-day h1 {
+  font: 700 34px / 1.2 var(--display);
+  letter-spacing: 0;
+  margin-top: 2px;
+}
+
+/* A section's heading: small, quiet, above its content. */
+.hm-h {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 10px;
+  letter-spacing: 0;
+}
+
+.hm-h-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.hm-h-row .hm-h {
+  margin: 0;
+}
+
+.hm-h-row a {
+  font-size: var(--fs-md);
+}
+
+.hm-count {
+  font-weight: 400;
+  color: var(--subtle);
+}
+
+.hm-narrow {
+  display: none;
+}
+
+.hm-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hm-kicker,
+.hm-where {
+  color: var(--subtle);
+  font-size: var(--fs-md);
+}
+
+.hm-card-title {
+  font: 700 24px / 1.3 var(--display);
+  color: var(--text);
+}
+
+.hm-card-title:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.hm-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.hm-progress .btn {
+  height: 38px;
+  padding: 0 18px;
+  border-radius: var(--r-lg);
+  font-weight: 700;
+}
+
+.hm-pct {
+  color: var(--subtle);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.hm-track {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--sunken);
+  overflow: hidden;
+}
+
+.hm-track i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+/* The day's learning: a tick, the shiur's name, and today's portion. */
+.hm-shiurim li {
+  display: grid;
+  grid-template-columns: 26px 9rem minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.hm-tick {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  background: none;
+  color: var(--bg);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  cursor: pointer;
+}
+
+.done .hm-tick {
+  background: var(--text);
+  border-color: var(--text);
+}
+
+.hm-shiur-name {
+  color: var(--subtle);
+}
+
+.hm-shiurim li:not(.done) .hm-shiur-name {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.hm-shiur-what {
+  font-size: 17px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hm-shiur-what a {
+  color: var(--text);
+}
+
+.done .hm-shiur-what,
+.done .hm-shiur-what a {
+  color: var(--subtle);
+  font-weight: 400;
+}
+
+/* Where to help: a row each, the machine's quiet dot beside what it read. */
+.hm-help-list {
+  border-top: 1px solid var(--border);
+}
+
+.hm-help-list a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.hm-help-list a:hover {
+  text-decoration: none;
+}
+
+.hm-help-list a:hover b {
+  color: var(--accent);
+}
+
+.hm-help-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.hm-help-main span {
+  color: var(--subtle);
+  font-size: var(--fs-md);
+}
+
+.hm-machine {
+  color: var(--machine);
+  margin-inline: -2px;
+}
+
+.hm-go {
+  flex: none;
+}
+
+.hm-listen-card {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+}
+
+.hm-listen-card .pp {
+  width: 40px;
+  height: 40px;
+  background: var(--sunken);
+  color: var(--text);
+}
+
+.hm-listen-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  color: var(--text);
+}
+
+.hm-listen-main:hover {
+  text-decoration: none;
+}
+
+.hm-listen-main:hover b {
+  color: var(--accent);
+}
+
+.hm-listen-main span {
+  color: var(--subtle);
+  font-size: var(--fs-sm);
+}
+
+.hm-more {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: var(--fs-md);
+}
+
+/*
+ * A phone: one column, in the design's order (the day, where you stopped,
+ * the learning, where to help, something to hear), and the learning as
+ * cards side by side that scroll.
+ */
+@media (max-width: 860px) {
+  .hm {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 26px;
+    padding-block: 18px 32px;
+  }
+  .hm-col {
+    display: contents;
+  }
+  .hm-day {
+    order: 1;
+  }
+  .hm-continue {
+    order: 2;
+  }
+  .hm-daily {
+    order: 3;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .hm-help {
+    order: 4;
+  }
+  .hm-listen {
+    order: 5;
+  }
+  .hm-day h1 {
+    font-size: 28px;
+  }
+  .hm-card {
+    padding: 18px 20px;
+  }
+  .hm-card-title {
+    font-size: 21px;
+  }
+  .hm-wide {
+    display: none;
+  }
+  .hm-narrow {
+    display: inline;
+  }
+  .hm-h-row {
+    border: 0;
+    padding: 0;
+    margin-bottom: 10px;
+  }
+  .hm-count {
+    display: none;
+  }
+  .hm-shiurim {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    margin-inline: calc(var(--gutter) * -1);
+    padding-inline: var(--gutter);
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .hm-shiurim::-webkit-scrollbar {
+    display: none;
+  }
+  .hm-shiurim li {
+    flex: 0 0 auto;
+    min-width: 104px;
+    max-width: 180px;
+    scroll-snap-align: start;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas: 'name tick' 'what what';
+    gap: 4px 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card);
+  }
+  .hm-tick {
+    grid-area: tick;
+    width: 18px;
+    height: 18px;
+    border: 0;
+    color: var(--subtle);
+  }
+  .hm-shiurim li:not(.done) .hm-tick {
+    border: 1.5px solid var(--border-strong);
+  }
+  .done .hm-tick {
+    background: none;
+  }
+  .hm-shiur-name,
+  .hm-shiurim li:not(.done) .hm-shiur-name {
+    grid-area: name;
+    font-size: var(--fs-sm);
+    color: var(--subtle);
+    font-weight: 400;
+  }
+  .hm-shiur-what {
+    grid-area: what;
+    font-size: 15px;
+  }
+  .done .hm-shiur-what,
+  .done .hm-shiur-what a {
+    color: var(--text);
+    font-weight: 700;
+  }
+}

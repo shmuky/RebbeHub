@@ -36,8 +36,13 @@ main#main {
   background: var(--bg);
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 0 24px;
+  gap: 8px;
+  padding: 0 var(--gutter);
+}
+
+/* The sections start 28px after the logo's name. */
+.top > .brand {
+  margin-inline-end: 20px;
 }
 
 .brand {
@@ -94,14 +99,14 @@ main#main {
 
 .nav {
   display: flex;
-  gap: 2px;
+  gap: 4px;
 }
 
 .nav a {
   color: var(--muted);
-  padding: 6px 10px;
-  border-radius: var(--r);
-  font-weight: 500;
+  padding: 7px 12px;
+  border-radius: var(--r-lg);
+  font-size: var(--fs-lg);
   white-space: nowrap;
   text-decoration: none;
 }
@@ -112,8 +117,9 @@ main#main {
 }
 
 .nav a[aria-current='page'] {
-  color: var(--text);
-  background: var(--sunken);
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 700;
 }
 
 .search-trigger {
@@ -151,13 +157,13 @@ main#main {
 
 /* Without JavaScript the search box is a plain form to the search page. */
 .search-form {
-  flex: 1;
-  max-width: 520px;
-  min-width: 180px;
-  height: 34px;
+  flex: 0 1 300px;
+  min-width: 160px;
+  margin-inline-start: auto;
+  height: 38px;
   border: 1px solid var(--border);
-  border-radius: var(--r);
-  background: var(--canvas);
+  border-radius: var(--r-lg);
+  background: var(--card);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -167,7 +173,7 @@ main#main {
 
 .search-form:focus-within {
   border-color: var(--accent);
-  background: var(--bg);
+  background: var(--card);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
@@ -186,43 +192,34 @@ main#main {
 }
 
 .top-end {
-  margin-inline-start: auto;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
+  margin-inline-start: 8px;
   color: var(--muted);
   flex: none;
 }
 
 .lang {
-  font-size: 13px;
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  padding: 3px 8px;
-  color: var(--muted);
+  font-size: var(--fs-sm);
+  color: var(--subtle);
   white-space: nowrap;
   text-decoration: none;
-  line-height: 1.4;
+  padding: 4px 6px;
 }
 
 .lang:hover {
-  border-color: var(--border-strong);
   text-decoration: none;
   color: var(--text);
-}
-
-.lang b {
-  color: var(--text);
-  font-weight: 600;
 }
 
 .icon-link {
   color: var(--muted);
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--r);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-lg);
   background: none;
   border: 0;
   padding: 0;
@@ -273,14 +270,14 @@ main#main {
 }
 
 .ib {
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--border);
-  border-radius: var(--r);
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: var(--r-lg);
   display: grid;
   place-items: center;
   color: var(--muted);
-  background: var(--bg);
+  background: none;
   flex: none;
   padding: 0;
   text-decoration: none;
@@ -301,7 +298,8 @@ main#main {
 }
 
 @media (max-width: 1020px) {
-  .top .nav a:nth-child(n + 5) {
+  .top .nav a:nth-child(n + 5),
+  .top .lang {
     display: none;
   }
 }
@@ -317,20 +315,26 @@ main#main {
     height: var(--header-h);
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 0 var(--gutter);
-    border-bottom: 1px solid var(--border);
+    gap: 2px;
+    padding-inline: var(--gutter) 8px;
+    border-bottom: 1px solid var(--border-muted);
     background: var(--bg);
+  }
+  /* Back is a 40px button like the icons, its arrow lined up with the page's text. */
+  .mtop > .ib:first-child {
+    margin-inline-start: -12px;
+  }
+  .mtop > .brand {
+    margin-inline-end: 8px;
   }
   .mtop .t {
     flex: 1;
-    font-weight: 600;
-    font-size: 15px;
+    font-size: var(--fs-md);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--text);
+    color: var(--subtle);
     text-decoration: none;
   }
 }
@@ -1424,8 +1428,8 @@ body.embedded {
     display: none;
   }
   .mtop .icon-link {
-    width: 34px;
-    height: 34px;
+    width: 40px;
+    height: 40px;
     display: grid;
     place-items: center;
     position: relative;
