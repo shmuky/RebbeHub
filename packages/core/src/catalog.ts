@@ -645,13 +645,15 @@ export class Catalog {
   }
 
   /** Full text search over names, labels, text and dates on main. */
-  async search(query: string, options: { type?: EntityType; limit?: number } = {}): Promise<EntityView[]> {
+  async search(query: string, options: { type?: EntityType; work?: EntityId; limit?: number } = {}): Promise<EntityView[]> {
     const tsQuery = toTsQuery(query);
     if (!tsQuery) return [];
     const params: unknown[] = [tsQuery];
     // The words as kept (search_tsv, migration 0024): matched and ranked from the column, never read again from the text.
     const where = ["e.search_tsv @@ to_tsquery('simple', $1)", 'NOT e.deleted', 'e.main_rev IS NOT NULL'];
     if (options.type) where.push(`e.type = $${params.push(options.type)}`);
+    // One sefer's items alone: its many printings share its name, so a search over the whole catalog fills its limit before it reaches them all.
+    if (options.work) where.push(`r.data->>'work' = $${params.push(options.work)}`);
     const { rows } = await this.db.query<RevisionRow>(
       `SELECT ${FACTS} FROM entity e JOIN revision r ON r.id = e.main_rev WHERE ${where.join(' AND ')}
        ORDER BY ts_rank(e.search_tsv, to_tsquery('simple', $1)) DESC, e.path

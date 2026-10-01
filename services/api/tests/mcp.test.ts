@@ -50,6 +50,7 @@ describe('the MCP server', () => {
       'search',
       'get_item',
       'list_children',
+      'list_printings',
       'get_text',
       'suggest_fix',
       'get_shaar',
@@ -157,6 +158,40 @@ describe('the MCP server', () => {
     expect(library.content[0].text).toBe('חצי יום בכולל\n\nוהרבי השיב\n\nספריית ליובאוויטש (https://chabadlibrary.org/books/1)');
     expect(library.structuredContent).toMatchObject({ unit: page, language: 'he', paragraphs: [{ id: 'h1' }, { id: 'p1' }] });
     expect((await tool('get_text', { id: page, language: 'en' })).isError).toBe(true);
+  });
+
+  it("lists every printing of a sefer with its volume and sources, those without a path too", async () => {
+    const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'לקוטי שיחות' }, slug: 'ls', authors: [], genre: 'sichos', levels: ['sicha'], sets: [set] });
+    const unit = await add(catalog, 'mendy', 'keeper', 'unit', { work, position: [{ level: 'sicha', value: '1' }], order: 'V', label: { he: 'א' } });
+    // Many printings of one name, as HebrewBooks' are; a search stops at its limit before it reaches the one with no path.
+    const printed = [];
+    for (let n = 1; n <= 12; n++) {
+      printed.push(await add(catalog, 'mendy', 'keeper', 'publication', { kind: 'book-volume', work, title: { he: `לקוטי שיחות - ${n}` }, volume: String(n), sources: [{ source: 'hebrewbooks', sourceId: String(14923 + n), url: `https://hebrewbooks.org/${14923 + n}` }] }, `/hebrewbooks/${14923 + n}`));
+    }
+    const hb30 = await add(catalog, 'mendy', 'keeper', 'publication', { kind: 'book-volume', work, title: { he: 'לקוטי שיחות - ל (בראשית)' }, volume: 'ל (בראשית)', sources: [{ source: 'hebrewbooks', url: 'https://hebrewbooks.org/14953' }] }, '/hebrewbooks/14953');
+    const drive30 = await add(catalog, 'mendy', 'keeper', 'publication', { kind: 'book-volume', work, title: { he: 'לקוטי שיחות - ל (בראשית)' }, volume: '30', sources: [{ source: 'other', note: 'אוצרות הרבי', url: 'https://drive.google.com/file/d/x/view' }] });
+
+    const searched = await tool('search', { query: 'לקוטי שיחות', type: 'publication', limit: 10 });
+    expect(searched.content[0].text).toMatch(/list_printings/);
+    expect(searched.structuredContent.results[0]).toMatchObject({ volume: expect.any(String), sources: [{ source: 'hebrewbooks' }] });
+    // Within one sefer, and with a volume, search reaches it.
+    const inWork = await tool('search', { query: 'לקוטי שיחות 30', type: 'publication', work });
+    expect(inWork.structuredContent.results.map((r: { id: string }) => r.id)).toEqual([drive30]);
+    expect(inWork.content[0].text).toContain('from אוצרות הרבי');
+
+    const all = await tool('list_printings', { id: work });
+    expect(all.isError).toBe(false);
+    expect(all.structuredContent.printings.map((p: { id: string }) => p.id)).toEqual([...printed, hb30, drive30]);
+    expect(all.content[0].text).toContain('14 printings of לקוטי שיחות');
+    expect(all.content[0].text).toContain('אוצרות הרבי https://drive.google.com/file/d/x/view');
+
+    // One volume, as a number or as printed, found from a sicha of the sefer.
+    for (const volume of ['30', 'ל']) {
+      const one = await tool('list_printings', { id: unit, volume });
+      expect(one.structuredContent.printings.map((p: { id: string }) => p.id)).toEqual([hb30, drive30]);
+      expect(one.structuredContent.printings[1]).toMatchObject({ path: null, volume: '30', sources: [{ source: 'other', note: 'אוצרות הרבי' }] });
+    }
+    expect((await tool('list_printings', { id: event })).isError).toBe(true);
   });
 
   it('suggests a fix only with a write token, as its person, for review', async () => {
