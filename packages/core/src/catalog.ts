@@ -1108,10 +1108,10 @@ export class Catalog {
       await tx.query('SELECT pg_advisory_xact_lock($1)', [MERGE_LOCK]);
       const cs = await this.changeset(changesetId, tx);
       if (cs.status !== 'open') throw badState(cs.status === 'draft' ? 'send the suggestion for review first' : `this suggestion is ${cs.status}`);
-      if (!options.skipPermission) await this.assertMayApprove(tx, cs, by);
+      const proposals = await this.proposals(cs.id, tx);
+      if (!options.skipPermission) await this.assertMayApprove(tx, cs, by, proposals);
       const failed = cs.checks.filter((c) => c.status === 'fail' && BLOCKING_CHECKS.has(c.check));
       if (failed.length > 0) throw invalid(`failed checks: ${failed.map((c) => c.message).join('; ')}`, failed);
-      const proposals = await this.proposals(cs.id, tx);
       if (!options.skipPermission) {
         const review = await one<{ id: number }>(tx, "INSERT INTO review (changeset_id, reviewer, verdict, body, via) VALUES ($1, $2, 'approve', $3, $4) RETURNING id", [cs.id, by, options.note ?? null, viaColumn()]);
         await reviewGiven(tx, { changesetId: cs.id, by, verdict: 'approve', reviewId: Number(review!.id), body: options.note });
@@ -1160,9 +1160,16 @@ export class Catalog {
     }
   }
 
-  private async assertMayApprove(tx: Db, cs: ChangesetRow, by: string): Promise<void> {
+  private async assertMayApprove(tx: Db, cs: ChangesetRow, by: string, read?: Proposal[]): Promise<void> {
     const reviewer = await this.requireAccount(by, tx);
-    const proposals = await this.proposals(cs.id, tx);
+    // A steward approves any suggestion, so its items and the sets above them are not read: for a Suggestion of hundreds of
+    // items that was a read per item's set, seconds before its page showed Approve and again before a merge began.
+    if (reviewer.is_steward) {
+      const decision = canApprove(reviewer, { author: cs.author, types: new Set(), sets: [] });
+      if (!decision.ok) throw forbidden(decision.reason);
+      return;
+    }
+    const proposals = read ?? (await this.proposals(cs.id, tx));
     const sets = await this.setsOfProposals(tx, proposals);
     let projectKeepers: string[] | undefined;
     if (cs.project_id !== null) {

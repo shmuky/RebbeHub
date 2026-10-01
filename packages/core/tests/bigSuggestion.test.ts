@@ -108,6 +108,12 @@ describe("a bot's Suggestion of 500 items", () => {
     expect(queries).toBeLessThan(20);
   });
 
+  it("asks whether a steward may approve it without reading its items at all", async () => {
+    const { result, queries } = await counting(catalog.db, () => catalog.mayApprove(bulk, 'shmuly'));
+    expect(result).toEqual({ ok: true });
+    expect(queries).toBeLessThanOrEqual(2);
+  });
+
   it('still finds clashes where main has moved on since', async () => {
     const cs = await catalog.createChangeset('chaim', { title: 'A new title' });
     const main = await catalog.get(ids[0]!);
