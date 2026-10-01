@@ -839,6 +839,8 @@ export interface Profile {
   person: { id: string; username: string; displayName: string; since: string; steward: boolean; admin: boolean; trust: 'contributor' | 'trusted'; suspended: boolean };
   movedFrom?: string;
   counts: { suggestions: number; merged: number; reviews: number; issues: number; comments: number };
+  /** Each day's count of the last 12 weeks; absent from an API older than the squares. */
+  days?: Record<string, number>;
   activity: Array<{
     kind: 'suggestion' | 'review' | 'issue' | 'comment';
     at: string;
