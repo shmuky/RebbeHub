@@ -1,5 +1,5 @@
 import { normalizeSearchText } from '@rebbehub/hebrew';
-import type { EntityId, TextLine } from '@rebbehub/model';
+import type { EntityId, RightsState, TextData, TextLine } from '@rebbehub/model';
 import type { Catalog, EntityView } from './catalog.js';
 import { ExportGate } from './gate.js';
 import { toTsQuery } from './searchText.js';
@@ -96,6 +96,8 @@ interface PageRow {
   layer_kind: string;
   scan: EntityId;
   publication: EntityId | null;
+  /** The rights of the scan's file, null when it has none: whether its pages' words may be shown. */
+  rights: RightsState | null;
 }
 
 interface SegmentRow {
@@ -105,6 +107,8 @@ interface SegmentRow {
   proofread: number;
   checked: boolean | null;
   text_kind: string;
+  /** The text's licence: whether its words may be shown. */
+  licence: string | null;
   unit: EntityId | null;
   recording: EntityId | null;
   event: EntityId | null;
@@ -128,10 +132,11 @@ async function pageRows(catalog: Catalog, ids: readonly EntityId[]): Promise<Pag
   if (ids.length === 0) return [];
   const { rows } = await catalog.db.query<PageRow>(
     `SELECT p.id, pr.data->>'layer' AS layer, (pr.data->>'page')::int AS page, pr.data->'lines' AS lines,
-            lr.data->>'kind' AS layer_kind, lr.data->>'scan' AS scan, sr.data->>'publication' AS publication
+            lr.data->>'kind' AS layer_kind, lr.data->>'scan' AS scan, sr.data->>'publication' AS publication, f.rights_state AS rights
      FROM entity p JOIN revision pr ON pr.id = p.main_rev
      JOIN entity l ON l.id = pr.data->>'layer' JOIN revision lr ON lr.id = l.main_rev
      LEFT JOIN entity s ON s.id = lr.data->>'scan' LEFT JOIN revision sr ON sr.id = s.main_rev
+     LEFT JOIN file f ON f.sha256 = sr.data->>'file'
      WHERE p.id = ANY($1::text[]) AND p.type = 'text-page' AND NOT p.deleted`,
     [ids],
   );
@@ -143,7 +148,7 @@ async function segmentRows(catalog: Catalog, ids: readonly EntityId[]): Promise<
   if (ids.length === 0) return [];
   const { rows } = await catalog.db.query<SegmentRow>(
     `SELECT s.id, sr.data->>'text' AS text, sr.data->>'content' AS content, coalesce((sr.data->>'proofread')::int, 0) AS proofread,
-            (sr.data->'origin'->>'checked')::boolean AS checked, tr.data->>'kind' AS text_kind,
+            (sr.data->'origin'->>'checked')::boolean AS checked, tr.data->>'kind' AS text_kind, tr.data->>'licence' AS licence,
             tr.data->>'unit' AS unit, tr.data->>'recording' AS recording, rr.data->>'event' AS event,
             (SELECT spr.data->>'startMs' FROM entity_ref y JOIN entity sp ON sp.id = y.from_id AND sp.type = 'alignment-span' AND NOT sp.deleted
                JOIN revision spr ON spr.id = sp.main_rev WHERE y.to_id = s.id AND y.field = 'segment' LIMIT 1) AS start_ms
@@ -158,7 +163,7 @@ async function segmentRows(catalog: Catalog, ids: readonly EntityId[]): Promise<
 }
 
 async function pageMoment(row: PageRow, words: readonly string[], gate: ExportGate): Promise<ScanLineMoment | null> {
-  if (await gate.layerWithheld(row.layer)) return null;
+  if (await gate.layerWithheld(row.layer, row.rights)) return null;
   const lines = row.lines ?? [];
   const best = bestLine(lines, words) ?? (lines[0] ? { line: lines[0], hits: [] } : null);
   if (!best) return null;
@@ -175,7 +180,7 @@ async function pageMoment(row: PageRow, words: readonly string[], gate: ExportGa
 }
 
 async function segmentMoment(row: SegmentRow, words: readonly string[], gate: ExportGate): Promise<ParagraphMoment | null> {
-  if (await gate.textWithheld(row.text)) return null;
+  if (await gate.textWithheld(row.text, { licence: row.licence ?? undefined } as TextData)) return null;
   return {
     kind: 'paragraph',
     id: row.id,
