@@ -19,6 +19,12 @@ any time. `@rebbehub/client` carries the API's version.
   again), which the site and the MCP tools pass on. The nightly jobs wait
   and save when it is done.
 
+- **Reading suggestions from an agent.** The MCP tools `list_suggestions`
+  (open ones, or by author, reviewer, item or title) and `get_suggestion`
+  (whether you may approve it, its failed checks, and what it changes, a
+  page at a time) let an agent find and read a suggestion before it
+  approves, closes or sends it back.
+
 - **JEM's recordings link to JEM's own player.** The farbrengens'
   recordings from Sichos-Kodesh's catalog now carry their link to the
   Ashreinu app and their JEM ids (`externalIds['jem-recording']`,
