@@ -1,4 +1,5 @@
 import type { Context, Hono } from 'hono';
+import { parseHebrewNumeral } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, allSegments, inlineText, isPageText } from '@rebbehub/model';
 import { mcpChallenge } from './oauth.js';
 import { mcpInnerCalls, tokenGrantOf } from './tokens.js';
@@ -99,6 +100,20 @@ function nameOf(item: { id: string; type: string; data?: any }): string {
   return item.id;
 }
 
+/** A volume as a number, whether printed "30" or "ל (בראשית)", so a sefer's printings sort and match by volume. */
+export function volumeNumber(volume: unknown): number | null {
+  if (typeof volume !== 'string') return null;
+  const digits = /^\s*(\d+)/.exec(volume);
+  if (digits) return Number(digits[1]);
+  const first = volume.trim().split(/[\s(,-]/)[0] ?? '';
+  return parseHebrewNumeral(first) || null;
+}
+
+/** Where a printing's scans or PDF come from, one line: "hebrewbooks https://hebrewbooks.org/14953", "אוצרות הרבי https://drive.google.com/…". */
+function sourcesOf(data: any): Array<{ source: string; note: string | null; url: string | null }> {
+  return (Array.isArray(data?.sources) ? data.sources : []).map((s: any) => ({ source: String(s.source ?? ''), note: s.note ?? null, url: s.url ?? null }));
+}
+
 /**
  * Which children an item has, by its type: the field that points at it and
  * the type of the children. A set lists its items instead.
@@ -133,6 +148,7 @@ function tools(siteUrl: string): Tool[] {
           query: { type: 'string', minLength: 1, maxLength: 500 },
           where: { enum: ['names', 'words'], default: 'names', description: 'names: items by their names and dates; words: inside texts, scans and transcripts' },
           type: { enum: [...ENTITY_TYPES], description: 'Only items of this type (names only)' },
+          work: { ...ID, description: "Only items of this sefer, rh-… (names only): its printings, its sichos" },
           limit: { type: 'integer', minimum: 1, maximum: 50, default: 10 },
         },
         required: ['query'],
@@ -154,15 +170,20 @@ function tools(siteUrl: string): Tool[] {
           return { text: moments.length ? `${lines.join('\n')}\n\n${moments.some((m) => m.machine) ? MACHINE_NOTE : ''}`.trim() : 'Nothing found inside the texts.', structured: { query, moments } };
         }
         const type = typeof args.type === 'string' ? `&type=${encodeURIComponent(args.type)}` : '';
-        const found = await need(call, 'GET', `/v1/search?q=${encodeURIComponent(query)}&limit=${limit}${type}`);
-        const results = (found.results as any[]).map(summary);
+        const work = typeof args.work === 'string' ? `&work=${encodeURIComponent(args.work)}` : '';
+        const found = await need(call, 'GET', `/v1/search?q=${encodeURIComponent(query)}&limit=${limit}${type}${work}`);
+        // A printing says its volume and where it comes from: two printings of one volume share a name, and only these tell them apart.
+        const results = (found.results as any[]).map((item) => (item.type === 'publication' ? { ...summary(item), volume: item.data?.volume ?? null, sources: sourcesOf(item.data) } : summary(item)));
+        const line = (r: any) => `- ${r.name} (${r.type}, ${r.id}) ${r.url}${r.type === 'publication' ? `${r.volume ? `, volume ${r.volume}` : ''}${r.sources.length ? `, from ${r.sources.map((s: any) => s.note ?? s.source).join('; ')}` : ''}` : ''}`;
         const date = found.date ? `The query names the date ${found.date.en} (${found.date.he}, key ${found.date.key}).\n` : '';
         // An addition to a sefer says so, and to which: the official sefarim are what the tree is built of.
         const added = (r: any) => {
           const a = (found.results as any[]).find((x) => x.id === r.id)?.data?.addition;
           return a ? ` [addition: ${a.kind}${a.to ? ` to ${a.to}` : ''}]` : '';
         };
-        return { text: results.length ? `${date}${results.map((r) => `- ${r.name} (${r.type}, ${r.id})${added(r)} ${r.url}`).join('\n')}` : `${date}Nothing found.`, structured: { query, date: found.date, results } };
+        // Many printings of one sefer share its name and tie; the list stops at the limit before it reaches them all.
+        const more = results.length === limit && results.some((r) => r.type === 'publication') ? `\n\nThe list stopped at ${limit}; more may match. list_printings gives every printing of a sefer in one call, or add a volume to the query ("לקוטי שיחות 30").` : '';
+        return { text: results.length ? `${date}${results.map((r) => `${line(r)}${added(r)}`).join('\n')}${more}` : `${date}Nothing found.`, structured: { query, date: found.date, results } };
       },
     },
     {
@@ -227,6 +248,43 @@ function tools(siteUrl: string): Tool[] {
           const more = found.next ? `\nMore: call again with cursor "${found.next}".` : '';
           return { text: items.length ? `${what}:\n${items.map((i) => `- ${i.name} (${i.type}, ${i.id})${i.withheld ? ' [withheld]' : ''}`).join('\n')}${more}` : `No ${what}.`, structured: { items, next: found.next } };
         }
+      },
+    },
+    {
+      name: 'list_printings',
+      title: "List a sefer's printings",
+      description:
+        "Every printing of a sefer in one call, in volume order: each with its volume, its kind, its path if it has one, and where its scans or PDF come from (HebrewBooks, a Drive file of אוצרות הרבי…), with the links. Printings without a readable path are here too, though a search by name may stop before it reaches them. Give the sefer, or one of its sichos or printings; `volume` (30 or ל) keeps one volume.",
+      inputSchema: {
+        type: 'object',
+        properties: { id: ID, path: { type: 'string', description: 'A readable path, starting with /' }, volume: { type: 'string', description: 'Only this volume, as a number (30) or as printed (ל)' } },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      async run(args, call) {
+        let id = typeof args.id === 'string' ? args.id : undefined;
+        if (!id && typeof args.path === 'string') id = (await need(call, 'GET', `/v1/resolve?path=${encodeURIComponent(args.path)}`)).id;
+        if (!id) throw new ToolError('give the id or path of a sefer');
+        const item = await need(call, 'GET', `/v1/entities/${encodeURIComponent(id)}`);
+        const workId = item.type === 'work' ? item.id : typeof item.data?.work === 'string' ? item.data.work : null;
+        if (!workId) throw new ToolError(`${item.id} is a ${item.type} of no sefer; give a sefer, or one of its sichos or printings`);
+        const work = item.type === 'work' ? item : await need(call, 'GET', `/v1/entities/${encodeURIComponent(workId)}`);
+        const found = await need(call, 'GET', `/v1/entities/${encodeURIComponent(workId)}/children?field=work&type=publication&limit=1000`);
+        const wanted = typeof args.volume === 'string' && args.volume.trim() ? args.volume.trim() : null;
+        const wantedNumber = wanted ? volumeNumber(wanted) : null;
+        const printings = (found.items as any[])
+          .map((p) => ({ ...summary(p), kind: p.data?.kind ?? null, volume: p.data?.volume ?? null, volumeNumber: volumeNumber(p.data?.volume), publisher: p.data?.publisher ?? null, pageCount: p.data?.pageCount ?? null, sources: sourcesOf(p.data) }))
+          .filter((p) => !wanted || (wantedNumber !== null ? p.volumeNumber === wantedNumber : p.volume === wanted))
+          // By volume; within one volume, printings with a path first, as the site shows them.
+          .sort((a, b) => (a.volumeNumber ?? Infinity) - (b.volumeNumber ?? Infinity) || Number(a.path === null) - Number(b.path === null) || a.id.localeCompare(b.id));
+        const more = found.next ? '\nThe sefer has more than 1000 printings; these are the first 1000.' : '';
+        const line = (p: (typeof printings)[number]) =>
+          `- ${p.volume ? `volume ${p.volume}: ` : ''}${p.name} (${p.id}) ${p.url}${p.sources.length ? `\n  from ${p.sources.map((s) => [s.note ?? s.source, s.url].filter(Boolean).join(' ')).join('; ')}` : ''}`;
+        const what = `printings of ${nameOf(work)}${wanted ? `, volume ${wanted}` : ''}`;
+        return {
+          text: printings.length ? `${printings.length} ${what}:\n${printings.map(line).join('\n')}${more}` : `No ${what}.`,
+          structured: { work: summary(work), printings, truncated: Boolean(found.next) },
+        };
       },
     },
     {

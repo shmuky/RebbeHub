@@ -2235,6 +2235,8 @@ export interface Operations {
       q: string;
       /** Only this type */
       type?: string;
+      /** Only items of this sefer (its printings, its sichos) */
+      work?: string;
       /** How many (at most 100) */
       limit?: number;
     };
@@ -2867,7 +2869,7 @@ export const OPERATIONS = {
   scanPages: {"method":"GET","path":"/v1/scans/{id}/pages","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   scanProgress: {"method":"GET","path":"/v1/scans/{id}/progress","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   scanText: {"method":"GET","path":"/v1/scans/{id}/text","pathParams":["id"],"query":["page"],"body":null,"answer":"json"},
-  search: {"method":"GET","path":"/v1/search","pathParams":[],"query":["q","type","limit"],"body":null,"answer":"json"},
+  search: {"method":"GET","path":"/v1/search","pathParams":[],"query":["q","type","work","limit"],"body":null,"answer":"json"},
   searchMoments: {"method":"GET","path":"/v1/search/moments","pathParams":[],"query":["q","limit"],"body":null,"answer":"json"},
   searchPeople: {"method":"GET","path":"/v1/people","pathParams":[],"query":["q","ids","thread","limit"],"body":null,"answer":"json"},
   searchSimilar: {"method":"GET","path":"/v1/search/similar","pathParams":[],"query":["q","types","limit"],"body":null,"answer":"json"},

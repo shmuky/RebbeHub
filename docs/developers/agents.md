@@ -39,6 +39,7 @@ stream. It has one address, `https://api.rebbehub.org/mcp`:
 | `search` | items by name or Hebrew date (`where: "names"`), or the lines and paragraphs that hold the words (`where: "words"`) |
 | `get_item` | one item by id or path, with all its data |
 | `list_children` | what an item holds, in order: a sefer's sichos, a text's paragraphs, a farbrengen's recordings, a set's items; a page at a time |
+| `list_printings` | every printing of a sefer in one call, in volume order, each with its volume and where its scans come from (HebrewBooks, אוצרות הרבי…) with the links; printings without a readable path too |
 | `get_text` | the words of a sicha, a scan's page or a recording's transcript; machine words marked `[machine]` |
 | `suggest_fix` | a correction to one item, as a suggestion for review, under your name (`write`) |
 | `get_shaar` | a sefer's shaar file, the README of a sefer ([the shaar](../shaar.md)); one the catalog made is marked `[machine]` |

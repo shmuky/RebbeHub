@@ -809,7 +809,8 @@ export function createApp(options: ApiOptions): Hono {
     const type = c.req.query('type');
     if (type && !(await catalog.registry()).has(type)) throw new HttpError(400, `unknown type "${type}"`);
     const date = parseDateText(q);
-    const results = await catalog.search(q, { type: type as EntityType | undefined, limit: intParam(c.req.query('limit'), 'limit') });
+    const work = c.req.query('work');
+    const results = await catalog.search(q, { type: type as EntityType | undefined, work: work ? entityId(work) : undefined, limit: intParam(c.req.query('limit'), 'limit') });
     return c.json({ query: q, date: date.ok ? { key: date.key, he: describeDateKey(date.key, 'he'), en: describeDateKey(date.key, 'en') } : null, results: await redact(results) });
   });
 
