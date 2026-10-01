@@ -61,6 +61,8 @@ export interface ReviewDetail {
   unchanged?: number;
   reviews: Array<{ reviewer: string; verdict: 'approve' | 'send_back'; body: string | null; created_at: string }>;
   names: Record<string, string>;
+  /** The items its changes point at, by what they are called (a part moved to another sefer reads as that sefer's name). */
+  items?: Record<string, { type: string; data: Record<string, unknown> }>;
   files: Record<string, { url: string | null; mime: string; bytes: number; rights: string; similar?: Array<{ kind: 'same' | 'shares'; matched?: number; of?: number; items: Array<{ id: string; type: string; path: string | null }> }> }>;
   mayApprove: boolean;
   mine: boolean;
@@ -465,7 +467,7 @@ export function ReviewCard({ row, person, lang, open, onDone, onDecidable }: { r
     setLoading(true);
     try {
       const page = await call<ReviewDetail>(`/${row.id}?offset=${detail.next}&limit=${REVIEW_PAGE}`);
-      setDetail((d) => (d ? { ...d, entries: [...d.entries, ...page.entries], files: { ...d.files, ...page.files }, next: page.next ?? null } : d));
+      setDetail((d) => (d ? { ...d, entries: [...d.entries, ...page.entries], files: { ...d.files, ...page.files }, items: { ...d.items, ...page.items }, next: page.next ?? null } : d));
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -624,8 +626,10 @@ export function SuggestionCard({
               ) : (
                 <ChangeDiff
                   title={<Link to={href(`/${entry.entityId}`, lang)}>{name}</Link>}
-                  where={typeName(entry.type, lang)}
-                  changes={entry.changes.flatMap(leafChanges)}
+                  where={entry.after === null ? t(lang, 'itemDeleted') : typeName(entry.type, lang)}
+                  // An item taken out (merged into another) is said by its header alone: its old fields are nothing to read.
+                  changes={entry.after === null ? [] : entry.changes.flatMap(leafChanges)}
+                  items={detail.items}
                   lang={lang}
                   icon={entry.type === 'recording' ? 'audio' : entry.type === 'event' ? 'cal' : 'file'}
                 />

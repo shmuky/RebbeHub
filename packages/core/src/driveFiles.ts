@@ -60,14 +60,6 @@ export function driveFilesOf(data: Json | null): DriveFileLink[] {
   return [...found.values()];
 }
 
-/** Records an item's Drive files as main now has it (within the merge's transaction). */
-export async function indexDriveFiles(tx: Db, entityId: string, data: Json | null): Promise<void> {
-  await tx.query('DELETE FROM drive_file WHERE entity_id = $1', [entityId]);
-  for (const file of driveFilesOf(data)) {
-    await tx.query('INSERT INTO drive_file (file_id, entity_id, resource_key) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [file.id, entityId, file.resourceKey]);
-  }
-}
-
 /** A Drive file the catalog links to, with its resource key; null when no item on main links to it. */
 export async function knownDriveFile(db: Db, fileId: string): Promise<DriveFileLink | null> {
   if (!DRIVE_ID.test(fileId)) return null;

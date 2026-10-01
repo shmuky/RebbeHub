@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { summarizeChanges, type Catalog, type ChangeEntry, type Json } from '@rebbehub/core';
-import type { Db } from '@rebbehub/db';
+import { Catalog, summarizeChanges, type ChangeEntry, type Json } from '@rebbehub/core';
+import { measured, type Db } from '@rebbehub/db';
 import type { EntityId } from '@rebbehub/model';
 import { freshCatalog } from './helpers.js';
 
@@ -43,7 +43,7 @@ beforeAll(async () => {
   await catalog.merge(setup.id, 'keeper');
   await catalog.createAccount({ id: 'bot:relink-drive', displayName: 'Drive links (relink bot)', isBot: true });
   const cs = await catalog.createChangeset('bot:relink-drive', { title: `Drive links in place of the media proxy (1-${N})`, kind: 'import' });
-  for (let i = 0; i < N; i++) await catalog.putRevision(cs.id, 'bot:relink-drive', { id: ids[i], type: 'event', data: event(i, `https://drive.google.com/file/d/file${i}/view`) });
+  for (let i = 0; i < N; i++) await catalog.putRevision(cs.id, 'bot:relink-drive', { id: ids[i], type: 'event', data: event(i, `https://drive.google.com/file/d/drivefile${String(i).padStart(4, '0')}/view`) });
   await catalog.submit(cs.id, 'bot:relink-drive');
   bulk = cs.id;
 }, 240_000);
@@ -118,6 +118,20 @@ describe("a bot's Suggestion of 500 items", () => {
     const moved = (await catalog.review(bulk)).entries.find((e) => e.entityId === ids[0])!;
     expect(moved.conflicts.length).toBeGreaterThan(0);
     expect(view.total).toBe(N);
+  });
+
+  it('lands in a few dozen queries, not a few per item, with every link and Drive file recorded', async () => {
+    // Counted with the transaction's statements, which a plain count of db.query misses.
+    const cost = { statements: 0, ms: 0 };
+    const result = await new Catalog(measured(catalog.db, cost)).merge(bulk, 'keeper', { '*': { '*': { take: 'theirs' } } });
+    expect(result.commit).not.toBeNull();
+    expect(cost.statements).toBeLessThan(60);
+    expect((await catalog.changeset(bulk)).status).toBe('merged');
+    const { rows } = await catalog.db.query<{ n: number }>('SELECT count(*)::int AS n FROM drive_file WHERE entity_id = ANY($1::text[])', [ids]);
+    expect(rows[0]!.n).toBe(N);
+    const refs = await catalog.db.query<{ n: number }>("SELECT count(*)::int AS n FROM entity_ref WHERE from_id = ANY($1::text[]) AND field = 'sets'", [ids]);
+    expect(refs.rows[0]!.n).toBe(N);
+    expect(JSON.stringify((await catalog.get(ids[1]!))!.data)).toContain('drive.google.com');
   });
 });
 

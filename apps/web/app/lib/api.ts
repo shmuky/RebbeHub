@@ -369,6 +369,8 @@ export interface SuggestionDetail {
   entries: SuggestionEntry[];
   reviews: Array<{ reviewer: string; verdict: 'approve' | 'send_back' | 'comment'; body: string | null; created_at: string }>;
   names: Record<string, string>;
+  /** The items its changes point at (a part moved to another sefer), by what they are called. */
+  items?: Record<string, { type: string; data: Record<string, unknown> }>;
   files: Record<string, { url: string | null; mime: string; bytes: number; rights: string; similar?: Array<{ kind: 'same' | 'shares'; matched?: number; of?: number; items: Array<{ id: string; type: string; path: string | null }> }> }>;
   mayApprove: boolean;
   mayApproveReason?: string | null;
