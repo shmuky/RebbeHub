@@ -30,7 +30,7 @@ const W = {
   kept: { he: 'נשמר בדפדפן זה בלבד', en: 'Kept in this browser only' },
 } as const;
 
-interface Row {
+export interface ShiurRow {
   key: string;
   name: string;
   /** Each piece of the shiur: its words, and where it is learned. */
@@ -59,8 +59,9 @@ const dayBefore = (iso: string) => {
 };
 
 /** Days in a row, ending at `date` (or the day before, while today is not done), on which every shiur of the day was ticked. */
-function streak(store: Store, date: string, total: number): number {
-  const full = (d: string) => (store[d]?.length ?? 0) >= total;
+function streak(store: Store, date: string, keys: string[]): number {
+  if (!keys.length) return 0;
+  const full = (d: string) => keys.every((k) => store[d]?.includes(k));
   let day = full(date) ? date : dayBefore(date);
   let n = 0;
   while (full(day)) {
@@ -70,9 +71,14 @@ function streak(store: Store, date: string, total: number): number {
   return n;
 }
 
-export function DailyShiurim({ day, lang }: { day: DailyLearning; lang: Lang }) {
+/**
+ * The day's shiurim as rows, each with where it is learned. Tanya is
+ * learned on the daily page (`tanya`, its words' place there); `rambam`
+ * says which of the Rambam's tracks to list.
+ */
+export function shiurRows(day: DailyLearning, lang: Lang, { tanya = '#daily-tanya', rambam: tracks = ['three', 'one', 'mitzvos'] }: { tanya?: string; rambam?: Array<'three' | 'one' | 'mitzvos'> } = {}): ShiurRow[] {
   const t = (key: keyof typeof W) => W[key][lang];
-  const rows: Row[] = [];
+  const rows: ShiurRow[] = [];
   // On RebbeHub once the catalog has the words, else on Sefaria.
   const place = (path: string | null | undefined, ref: string | null, rashi = false) => (path ? { to: href(path, lang), external: false } : { to: ref ? sefariaUrl(ref, { rashi }) : null, external: true });
   if (day.chumash) {
@@ -80,7 +86,7 @@ export function DailyShiurim({ day, lang }: { day: DailyLearning; lang: Lang }) 
     rows.push({ key: 'chumash', name: t('chumash'), pieces: [{ text: day.chumash.label, ...place(day.chumash.path, day.chumash.ref, true) }, ...rashi] });
   }
   if (day.tehillim?.length) rows.push({ key: 'tehillim', name: t('tehillim'), pieces: day.tehillim.map((p) => ({ text: p.text.replace(/\.$/, ''), ...place(p.path, p.ref) })) });
-  if (day.tanya.length) rows.push({ key: 'tanya', name: t('tanya'), pieces: [{ text: day.tanya.map((p) => labelOf(p, 'he')).join(' – '), to: '#daily-tanya', external: false }] });
+  if (day.tanya.length) rows.push({ key: 'tanya', name: t('tanya'), pieces: [{ text: day.tanya.map((p) => labelOf(p, 'he')).join(' – '), to: tanya, external: false }] });
   const rambam = day.rambam;
   if (rambam) {
     const shiur = (key: 'three' | 'one' | 'mitzvos') => {
@@ -89,26 +95,38 @@ export function DailyShiurim({ day, lang }: { day: DailyLearning; lang: Lang }) 
       const ref = key === 'mitzvos' ? (s.refs[0] ?? null) : joinRefs(s.refs);
       rows.push({ key, name: t(key), pieces: [{ text: s.label, ...place(s.paths?.[0], ref) }] });
     };
-    shiur('three');
-    shiur('one');
-    shiur('mitzvos');
+    for (const track of tracks) shiur(track);
   }
+  return rows;
+}
 
+/**
+ * Which of a day's shiurim are ticked as learned, kept in this browser
+ * (the daily page and the home page share them), and how many days in a
+ * row everything in `rows` was.
+ */
+export function useLearned(date: string, rows: ShiurRow[]) {
   const [store, setStore] = useState<Store>({});
   useEffect(() => setStore(read()), []);
-  const ticked = new Set(store[day.date] ?? []);
+  const ticked = new Set(store[date] ?? []);
   const toggle = (key: string) => {
     const next = read();
-    const set = new Set(next[day.date] ?? []);
+    const set = new Set(next[date] ?? []);
     if (set.has(key)) set.delete(key);
     else set.add(key);
-    next[day.date] = [...set].filter((k) => rows.some((r) => r.key === k));
+    next[date] = [...set];
     write(next);
     setStore(next);
   };
+  return { ticked, toggle, inARow: streak(store, date, rows.map((r) => r.key)) };
+}
+
+export function DailyShiurim({ day, lang }: { day: DailyLearning; lang: Lang }) {
+  const t = (key: keyof typeof W) => W[key][lang];
+  const rows = shiurRows(day, lang);
+  const { ticked, toggle, inARow } = useLearned(day.date, rows);
   if (!rows.length) return null;
   const count = rows.filter((r) => ticked.has(r.key)).length;
-  const inARow = streak(store, day.date, rows.length);
 
   return (
     <section className="daily-shiurim" aria-labelledby="daily-shiurim">

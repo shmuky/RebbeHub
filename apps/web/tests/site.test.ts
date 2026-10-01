@@ -79,13 +79,13 @@ const get = async (path: string, headers: Record<string, string> = {}) => {
 };
 
 describe('the public site', () => {
-  it('renders the home page in Hebrew, right to left, with the week, the tabs and the community', async () => {
+  it("renders the home page in Hebrew, right to left, with the day, its learning and the tabs", async () => {
     const page = await get('/');
     expect(page.status).toBe(200);
     expect(page.html).toContain('<html lang="he" dir="rtl">');
-    expect(page.html).toContain('class="daybar"'); // the day, its chag or the coming parsha
-    expect(page.html).toContain('התוועדויות'); // the farbrengens tab
-    expect(page.html).toContain('class="box needs"'); // what the community can help with
+    expect(page.html).toContain('class="hm-day"'); // the day, its chag or the coming parsha
+    expect(page.html).toContain('class="hm-shiurim"'); // the day's learning, each with a tick
+    expect(page.html).toContain('לימוד יומי'); // the daily learning tab
     expect(page.html).toContain('href="/help"');
   });
 
