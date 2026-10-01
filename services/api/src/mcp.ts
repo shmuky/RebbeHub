@@ -706,7 +706,7 @@ function machineTools(site: string): Tool[] {
         for (const key of ['kind', 'item', 'status']) if (typeof args[key] === 'string') params.set(key, args[key] as string);
         const [{ requests }, summary] = await Promise.all([need(call, 'GET', `/v1/machine/requests?${params}`), args.item ? null : need(call, 'GET', '/v1/machine')]);
         const head = summary
-          ? [`OCR: ${summary.ocr.waiting} waiting, ${summary.ocr.backlog} served scans not read yet.`, `Transcripts: ${summary.transcript.waiting} waiting, ${summary.transcript.backlog} served recordings not transcribed yet.`]
+          ? [`OCR: ${summary.ocr.waiting} waiting, ${summary.ocr.backlog} served scans not read yet.`, `Transcripts: ${summary.transcript.waiting} waiting, ${summary.transcript.backlog} recordings not transcribed yet.`]
           : [];
         return { text: [...head, ...(requests as any[]).map(line)].join('\n') || 'No requests.', structured: { requests, ...(summary ? { summary } : {}) } };
       },
