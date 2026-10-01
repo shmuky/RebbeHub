@@ -340,7 +340,7 @@ const JOINED = /^(\S(?:.*?\S)?)-(\S.*)$/;
  * then named within it (שיחה א, כ׳ מ״ח), as the design shows a volume. A
  * name that says neither stays whole in the group before it.
  */
-function byParsha(groups: TocGroup[], lang: Lang): TocGroup[] {
+function byParsha(groups: TocGroup[], lang: Lang, sichos: boolean): TocGroup[] {
   if (groups.length !== 1 || groups[0]!.label) return groups;
   const rows = groups[0]!.rows;
   if (rows.filter((r) => LETTER.test(r.title)).length < rows.length / 2) return groups;
@@ -350,12 +350,13 @@ function byParsha(groups: TocGroup[], lang: Lang): TocGroup[] {
     const letter = joined ? null : LETTER.exec(r.title);
     const key = joined ? joined[1]! : letter ? letter[1]! : (out[out.length - 1]?.label ?? null);
     // "הוספות - שיחות ומכתבים א" holds letters as well as sichos: its rows are their letter alone.
-    const title = joined ? joined[2]! : letter ? (letter[1]!.includes(' - ') ? letter[2]! : `${lang === 'he' ? 'שיחה' : 'Sicha'} ${letter[2]}`) : r.title;
+    const title = joined ? joined[2]! : letter && sichos ? (letter[1]!.includes(' - ') ? letter[2]! : `${lang === 'he' ? 'שיחה' : 'Sicha'} ${letter[2]}`) : r.title;
     const last = out[out.length - 1];
     if (last && last.label === key) last.rows.push({ ...r, title });
     else out.push({ label: key, from: null, to: null, rows: [{ ...r, title }] });
   }
-  return out;
+  // One group is no grouping (Tanya's פרק א, פרק ב…): the list stays as it was.
+  return out.length > 1 ? out : groups;
 }
 
 /**
@@ -370,7 +371,7 @@ function VolumePage({ entity, view, lang, part, title, partLabel }: { entity: En
   const slots = useContext(ItemSlots);
   useHashPanels();
   const toc = view.toc!;
-  const groups = byParsha(toc.groups.filter((g) => g.rows.length), lang);
+  const groups = byParsha(toc.groups.filter((g) => g.rows.length), lang, (entity.data as D).genre === 'sichos');
   // From the first parsha to the last ("בראשית – ויחי"); a section like "הוספות - שיחות ומכתבים" is not one.
   const named = groups.map((g) => g.label).filter((x): x is string => Boolean(x) && !x!.includes(' - '));
   const span = named.length > 1 ? `${named[0]} – ${named[named.length - 1]}` : named[0] ?? null;
@@ -546,7 +547,7 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
   ].filter((f): f is NonNullable<typeof f> => f !== null);
 
   // A volume of a sefer of many opens as the design's volume page; its other tabs keep the full page.
-  if (partLabel && part && tab === 'contents' && toc) return <VolumePage entity={entity} view={view} lang={lang} part={part} title={title} partLabel={partLabel} />;
+  if (partLabel && part && tab === 'contents' && toc?.groups.some((g) => g.rows.length)) return <VolumePage entity={entity} view={view} lang={lang} part={part} title={title} partLabel={partLabel} />;
 
   return (
     <ItemShell
