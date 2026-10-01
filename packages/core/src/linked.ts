@@ -89,21 +89,23 @@ export async function linkedOfEach(db: Db, ids: readonly EntityId[], options: { 
 /**
  * What a list says of each of several texts without reading their words:
  * how many paragraphs each has (headings aside) and how many of them a
- * person checked (`proofread`). One statement.
+ * person checked (`proofread`), and how many a machine made that no person
+ * checked yet (the quiet dot beside a sicha in a list). One statement.
  */
-export async function textsProgress(db: Db, texts: readonly EntityId[]): Promise<Map<EntityId, { paragraphs: number; checked: number }>> {
-  const out = new Map<EntityId, { paragraphs: number; checked: number }>();
+export async function textsProgress(db: Db, texts: readonly EntityId[]): Promise<Map<EntityId, { paragraphs: number; checked: number; machine: number }>> {
+  const out = new Map<EntityId, { paragraphs: number; checked: number; machine: number }>();
   const wanted = [...new Set(texts)].slice(0, 200);
   if (!wanted.length) return out;
-  const { rows } = await db.query<{ text: EntityId; paragraphs: number; checked: number }>(
+  const { rows } = await db.query<{ text: EntityId; paragraphs: number; checked: number; machine: number }>(
     `SELECT x.to_id AS text,
             count(*) FILTER (WHERE coalesce(r.data->>'kind', '') <> 'heading')::int AS paragraphs,
-            count(*) FILTER (WHERE coalesce(r.data->>'kind', '') <> 'heading' AND coalesce((r.data->>'proofread')::int, 0) >= 1)::int AS checked
+            count(*) FILTER (WHERE coalesce(r.data->>'kind', '') <> 'heading' AND coalesce((r.data->>'proofread')::int, 0) >= 1)::int AS checked,
+            count(*) FILTER (WHERE coalesce(r.data->>'kind', '') <> 'heading' AND r.data->'origin' IS NOT NULL AND coalesce((r.data->'origin'->>'checked')::boolean, false) = false)::int AS machine
      FROM entity_ref x JOIN entity e ON e.id = x.from_id AND e.type = 'segment' AND NOT e.deleted AND e.main_rev IS NOT NULL JOIN revision r ON r.id = e.main_rev
      WHERE x.to_id = ANY($1::text[]) AND x.field = 'text' GROUP BY x.to_id`,
     [wanted],
   );
-  for (const r of rows) out.set(r.text, { paragraphs: r.paragraphs, checked: r.checked });
+  for (const r of rows) out.set(r.text, { paragraphs: r.paragraphs, checked: r.checked, machine: r.machine });
   return out;
 }
 

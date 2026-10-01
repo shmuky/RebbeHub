@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { Form, Link, useSearchParams } from 'react-router';
 import { hasShaar, type LocalName, type WorkData } from '@rebbehub/model';
 import { CoverChoice } from '../components/CoverChoice.js';
@@ -11,19 +11,20 @@ import { ShaarFile, shaarOf } from '../components/ShaarFile.js';
 import type { Entity } from '../lib/api.js';
 import { dateLabel } from '../lib/dates.js';
 import { languageName, nameOf, t, type Lang } from '../lib/i18n.js';
-import { num } from '../lib/i18nUi.js';
+import { num, tu } from '../lib/i18nUi.js';
 import type { ItemView } from '../lib/itemData.server.js';
 import { href, itemPath } from '../lib/links.js';
 import { additionOf } from '../lib/shelves.js';
 import { labelOf } from '../lib/labels.js';
-import type { TocRow } from '../lib/workView.server.js';
-import { Icon } from '../ui/Icon.js';
+import type { TocGroup, TocRow } from '../lib/workView.server.js';
+import { Icon, type IconName } from '../ui/Icon.js';
 import { readHref } from '../routes/read.js';
-import { ItemShell } from '../ui/ItemShell.js';
+import { ItemShell, ItemSlots, useHashPanels } from '../ui/ItemShell.js';
 import { EmptyState, MachineLabel } from '../ui/primitives.js';
 import { Shaar } from '../ui/Shaar.js';
 import { commonTabs, p, SideActivity, SideDetails, SideKeepers, SideSection, SideSources, ThreadRows } from './itemParts.js';
 import { ofVolume } from '../lib/volumes.js';
+import '../styles/pages/volume.css';
 
 /**
  * The library's own pages. A sefer (and each of its volumes) as the design
@@ -98,6 +99,13 @@ const W = {
   organize: { he: 'סידור', en: 'Organize' },
   additions: { he: 'הוספות', en: 'Additions' },
   additionTo: { he: 'הוספה ל', en: 'An addition to' },
+  readAs: { he: 'איך לקרוא', en: 'How to read it' },
+  asText: { he: 'טקסט', en: 'Text' },
+  asTextHint: { he: 'ברירת המחדל · עם הערות וחיפוש', en: 'The default · with notes and search' },
+  asScan: { he: 'דף סרוק', en: 'Scanned page' },
+  asScanHint: { he: 'PDF של הדפוס, עמוד מול עמוד', en: 'The printing as PDF, page by page' },
+  thisVolume: { he: 'הדפסות של חלק זה', en: 'Printings of this volume' },
+  more: { he: 'עוד', en: 'More' },
 } as const;
 
 /** The kinds of addition to a sefer, in the order its page lists them (WorkData.addition). */
@@ -321,6 +329,180 @@ function Contents({ entity, view, lang, part }: { entity: Entity; view: ItemView
   );
 }
 
+/** A sicha's letter at the end of its name: בראשית א, נח ב׳. */
+const LETTER = /^(.+?)\s+([א-ת]{1,3}[׳״'"]?)$/;
+/** A sicha said on a day within a parsha's week, joined without spaces: וירא-כ׳ מ״ח. */
+const JOINED = /^(\S(?:.*?\S)?)-(\S.*)$/;
+
+/**
+ * A volume whose sichos are named for their parsha (בראשית א, בראשית ב,
+ * נח א, וירא-כ׳ מ״ח) and not grouped yet is grouped by parsha, each row
+ * then named within it (שיחה א, כ׳ מ״ח), as the design shows a volume. A
+ * name that says neither stays whole in the group before it.
+ */
+function byParsha(groups: TocGroup[], lang: Lang, sichos: boolean): TocGroup[] {
+  if (groups.length !== 1 || groups[0]!.label) return groups;
+  const rows = groups[0]!.rows;
+  if (rows.filter((r) => LETTER.test(r.title)).length < rows.length / 2) return groups;
+  const out: TocGroup[] = [];
+  for (const r of rows) {
+    const joined = JOINED.exec(r.title);
+    const letter = joined ? null : LETTER.exec(r.title);
+    const key = joined ? joined[1]! : letter ? letter[1]! : (out[out.length - 1]?.label ?? null);
+    // "הוספות - שיחות ומכתבים א" holds letters as well as sichos: its rows are their letter alone.
+    const title = joined ? joined[2]! : letter && sichos ? (letter[1]!.includes(' - ') ? letter[2]! : `${lang === 'he' ? 'שיחה' : 'Sicha'} ${letter[2]}`) : r.title;
+    const last = out[out.length - 1];
+    if (last && last.label === key) last.rows.push({ ...r, title });
+    else out.push({ label: key, from: null, to: null, rows: [{ ...r, title }] });
+  }
+  // One group is no grouping (Tanya's פרק א, פרק ב…): the list stays as it was.
+  return out.length > 1 ? out : groups;
+}
+
+/**
+ * A volume, as the design draws it (3b, and 3c its sheet): its name, how
+ * to read it (the text, the printed page, the other printings) behind one
+ * button, and its sichos grouped by parsha, each with a quiet dot when a
+ * machine made some of its words and nobody checked them yet. Everything
+ * else a sefer's page has (printings, recordings, suggestions, talk,
+ * history, editing) is behind the one ⋯.
+ */
+function VolumePage({ entity, view, lang, part, title, partLabel }: { entity: Entity; view: ItemView; lang: Lang; part: string; title: string; partLabel: string }) {
+  const slots = useContext(ItemSlots);
+  useHashPanels();
+  const toc = view.toc!;
+  const groups = byParsha(toc.groups.filter((g) => g.rows.length), lang, (entity.data as D).genre === 'sichos');
+  // From the first parsha to the last ("בראשית – ויחי"); a section like "הוספות - שיחות ומכתבים" is not one.
+  const named = groups.map((g) => g.label).filter((x): x is string => Boolean(x) && !x!.includes(' - '));
+  const span = named.length > 1 ? `${named[0]} – ${named[named.length - 1]}` : named[0] ?? null;
+  const here = href(itemPath(entity), lang, { part });
+  const tabTo = (tab: string) => href(itemPath(entity), lang, { part, tab });
+  const scanTo = toc.read.scanUrl ? readHref({ url: toc.read.scanUrl, title: `${title}, ${partLabel}`, sub: toc.printing?.label }, lang) : null;
+  const more: Array<{ to: string; icon: IconName; label: string; count?: number }> = [
+    { to: tabTo('printings'), icon: 'layers', label: w(lang, 'printingsTab'), count: toc.stats.printings || undefined },
+    ...(toc.stats.withAudio ? [{ to: tabTo('recordings'), icon: 'audio' as const, label: w(lang, 'recordings'), count: toc.stats.withAudio }] : []),
+    { to: tabTo('suggestions'), icon: 'suggest', label: p(lang, 'suggestions') },
+    ...commonTabs(entity, view, lang).map((x) => ({ to: x.to!, icon: x.icon!, label: String(x.label), count: typeof x.count === 'number' ? x.count : undefined })),
+    ...(toc.read.scanFile ? [{ to: href(`/files/${toc.read.scanFile}`, lang), icon: 'down' as const, label: w(lang, 'download') }] : []),
+    // Organizing the sefer (its EditSheet) is on the sefer's own page; the volume's menu edits its details.
+    { to: href(`/edit/${entity.id}`, lang), icon: 'pencil', label: p(lang, 'edit') },
+  ];
+  return (
+    <div className="wrap vol">
+      <div className="vol-top">
+        <Link className="vol-back" to={href(itemPath(entity), lang)}>
+          <Icon name="back" size={18} />
+          <span className="torah">{title}</span>
+        </Link>
+        <details className="vol-more">
+          <summary className="ib" aria-label={w(lang, 'more')} title={w(lang, 'more')}>
+            <Icon name="more" />
+          </summary>
+          <div className="vol-menu" role="list">
+            {more.map((x) => (
+              <Link key={x.to} role="listitem" to={x.to}>
+                <Icon name={x.icon} size={18} className="subtle" />
+                <span className="grow">{x.label}</span>
+                {x.count ? <span className="subtle num">{num(x.count, lang)}</span> : null}
+              </Link>
+            ))}
+            <div className="vol-menu-actions">
+              {slots?.actions}
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <header className="vol-head">
+        <div>
+          <h1 className="torah">{partLabel}</h1>
+          {span ? <p>{span}</p> : null}
+        </div>
+        <details className="vol-as">
+          <summary className="btn">
+            <Icon name="file" size={16} />
+            {w(lang, 'asText')}
+            <Icon name="chevd" size={14} className="subtle" />
+          </summary>
+          <div className="vol-sheet" role="dialog" aria-label={`${partLabel} · ${w(lang, 'readAs')}`}>
+            <h2>
+              {partLabel} · {w(lang, 'readAs')}
+            </h2>
+            <Link className="vol-opt on" to={here} replace preventScrollReset aria-current="true">
+              <Icon name="file" size={18} />
+              <span className="grow">
+                <b>{w(lang, 'asText')}</b>
+                <span>{w(lang, 'asTextHint')}</span>
+              </span>
+              <Icon name="check" size={18} />
+            </Link>
+            {scanTo ? (
+              <Link className="vol-opt" to={scanTo}>
+                <Icon name="scan" size={18} />
+                <span className="grow">
+                  <b>{w(lang, 'asScan')}</b>
+                  <span>{w(lang, 'asScanHint')}</span>
+                </span>
+              </Link>
+            ) : null}
+            {toc.editions.length ? (
+              <>
+                <h3>{w(lang, 'thisVolume')}</h3>
+                {toc.editions.map((x) => (
+                  <Link key={x.id} className="vol-opt" to={href(x.path, lang)}>
+                    <Icon name="layers" size={18} />
+                    <span className="grow">
+                      <b className="torah">{x.title || title}</b>
+                      {x.label ? <span>{x.label}</span> : null}
+                    </span>
+                  </Link>
+                ))}
+              </>
+            ) : null}
+          </div>
+        </details>
+      </header>
+
+      {groups.length ? (
+        groups.map((g, gi) => (
+          <section key={gi} className="vol-group" aria-label={g.label ?? undefined}>
+            {g.label ? <h2>{g.label}</h2> : null}
+            <ul>
+              {g.rows.map((r) => (
+                <li key={r.id}>
+                  <Link to={href(r.path, lang)}>
+                    <span className="grow">
+                      <b className="torah">{r.title}</b>
+                      {r.sub ? <span className="vol-when">{r.sub}</span> : null}
+                    </span>
+                    {r.machine ? (
+                      <span className="vol-machine">
+                        <Icon name="dot" size={16} />
+                        {tu(lang, 'machineUnchecked')}
+                      </span>
+                    ) : null}
+                    <Icon name="chev" size={16} className="subtle flip-ltr" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))
+      ) : (
+        <EmptyState icon="book" title={t(lang, 'noContentsYet')} />
+      )}
+      {view.next ? (
+        <p className="more-row">
+          <Link className="btn" to={href(itemPath(entity), lang, { part, after: view.next })}>
+            {t(lang, 'more')}
+          </Link>
+        </p>
+      ) : null}
+      {slots?.below ? <div className="below">{slots.below}</div> : null}
+    </div>
+  );
+}
+
 export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang: Lang }) {
   const d = entity.data as D;
   const [params] = useSearchParams();
@@ -363,6 +545,9 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
     toc?.stats.withAudio ? { icon: 'audio' as const, children: <><b>{num(toc.stats.withAudio, lang)}</b> {w(lang, 'withAudio')}</> } : null,
     toc && toc.stats.checked !== null ? { icon: 'check' as const, children: <>{w(lang, 'checked')}: <b>{toc.stats.checked}%</b></> } : null,
   ].filter((f): f is NonNullable<typeof f> => f !== null);
+
+  // A volume of a sefer of many opens as the design's volume page; its other tabs keep the full page.
+  if (partLabel && part && tab === 'contents' && toc?.groups.some((g) => g.rows.length)) return <VolumePage entity={entity} view={view} lang={lang} part={part} title={title} partLabel={partLabel} />;
 
   return (
     <ItemShell

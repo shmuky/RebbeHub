@@ -86,9 +86,12 @@ describe('all that belongs to an item', () => {
     const empty = await add(catalog, 'mendy', 'keeper', 'text', { kind: 'hanacha', unit, language: 'he' });
     await add(catalog, 'mendy', 'keeper', 'segment', { text, order: 'a', kind: 'heading', content: 'כותרת', proofread: 1 });
     for (const [order, proofread] of [['b', 1], ['c', 0], ['d', 2]] as const) await add(catalog, 'mendy', 'keeper', 'segment', { text, order, kind: 'paragraph', content: `פסקה ${order}`, proofread });
+    // Two a machine made: one a person checked since, one nobody did (the list's quiet dot).
+    await add(catalog, 'mendy', 'keeper', 'segment', { text, order: 'e', kind: 'paragraph', content: 'פסקה e', proofread: 1, origin: { by: 'ocr:kraken@5', checked: true } });
+    await add(catalog, 'mendy', 'keeper', 'segment', { text, order: 'f', kind: 'paragraph', content: 'פסקה f', proofread: 0, origin: { by: 'ocr:kraken@5' } });
     const progress = await get(`/v1/texts/batch/progress?ids=${text},${empty}`);
     expect(progress.status).toBe(200);
-    expect(progress.body.progress).toEqual({ [text]: { paragraphs: 3, checked: 2 } });
+    expect(progress.body.progress).toEqual({ [text]: { paragraphs: 5, checked: 3, machine: 1 } });
   });
 });
 

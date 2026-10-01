@@ -72,6 +72,8 @@ beforeAll(async () => {
   for (const [i, u] of units.slice(0, 4).entries()) {
     const edition = await add(catalog, 'mendy', 'keeper', 'text', { kind: 'edition', unit: u, language: 'he' });
     for (let p = 0; p < 4; p++) await add(catalog, 'mendy', 'keeper', 'segment', { text: edition, order: `V${p}`, kind: 'paragraph', content: `פסקה ${p} של שיחה ${i + 1}`, proofread: p === 0 ? 1 : 0 });
+    // The first sicha's last paragraph a machine read, and nobody checked it yet.
+    if (i === 0) await add(catalog, 'mendy', 'keeper', 'segment', { text: edition, order: 'V4', kind: 'paragraph', content: 'פסקה 4 של שיחה 1', proofread: 0, origin: { by: 'ocr:kraken@5' } });
     if (i === 0) {
       const english = await add(catalog, 'mendy', 'keeper', 'text', { kind: 'translation', unit: u, language: 'en', translationOf: edition });
       await add(catalog, 'mendy', 'keeper', 'segment', { text: english, order: 'V0', kind: 'paragraph', content: 'Paragraph 0 of sicha 1', proofread: 0 });
@@ -204,6 +206,15 @@ describe("each page's statements and API calls stay within its ceiling", () => {
     // and its thirty sichos' words (four kilobytes each) are listed with none of them, or it would be twice the size.
     within(await page('/igros-sample?part=1'), 'a volume', { statements: 45, calls: 28, kB: 100 });
     within(await page(await pathOf(ids.unit)), 'a sicha', { statements: 40, calls: 22, kB: 70 });
+  });
+  it("draws a volume as the design does: its name, how to read it, and its sichos with the machine's quiet dot", async () => {
+    const html = await (await handle(new Request(`${SITE}/igros-sample?part=1`))).text();
+    expect(html).toContain('class="vol-head"');
+    expect(html).toContain('class="vol-sheet"');
+    expect(html).toMatch(/שיחה 1<\/b>.*?class="vol-machine"/s);
+    expect(html.match(/class="vol-machine"/g)).toHaveLength(1);
+    // Its other tabs keep the sefer's full page.
+    expect(await (await handle(new Request(`${SITE}/igros-sample?part=1&tab=printings`))).text()).not.toContain('class="vol-head"');
   });
   it('a printing and its scan', async () => {
     within(await page(await pathOf(ids.pub)), 'a printing', { statements: 40, calls: 20, kB: 60 });
