@@ -1002,43 +1002,102 @@ dl.facts dd {
 
 /* ------------------------------------------------------------ footer */
 
+/* The foot of every page (ui/Footer.tsx): what RebbeHub is beside three short columns of its pages, then one quiet line. */
 .site-footer {
+  margin-top: 48px;
   border-top: 1px solid var(--border);
   background: var(--canvas);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 13.5px;
   padding-bottom: calc(var(--player-h));
 }
 
-.site-footer .wrap {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 28px;
-  align-items: center;
-  padding-block: 20px;
+.foot-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr);
+  gap: 32px 56px;
+  padding-block: 40px 28px;
 }
 
-.site-footer nav {
+.foot-brand {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 320px;
+}
+
+.foot-logo {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.foot-logo:hover {
+  text-decoration: none;
+}
+
+.foot-brand p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.foot-cols {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px 32px;
+}
+
+.foot-col h2 {
+  margin: 0 0 4px;
+  font: 700 12px / 1.4 var(--ui);
+  color: var(--text);
+  letter-spacing: 0.04em;
+}
+
+.foot-col {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 8px;
 }
 
 .site-footer a {
   color: var(--muted);
+  text-decoration: none;
 }
 
 .site-footer a:hover {
   color: var(--accent);
 }
 
-.site-footer .brand {
-  font-size: 13.5px;
-  gap: 8px;
+.foot-base {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-block: 14px 18px;
+  border-top: 1px solid var(--border-muted);
+  font-size: 12.5px;
+  color: var(--subtle);
 }
 
-.site-footer p {
-  flex: 1 1 320px;
+.foot-base a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* A narrow screen: the name above, the columns two to a row. */
+@media (max-width: 860px) {
+  .foot-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+    padding-block: 28px 20px;
+  }
+
+  .foot-cols {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* ------------------------------------------------------------ the player bar */
