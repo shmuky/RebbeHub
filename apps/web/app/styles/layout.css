@@ -1367,7 +1367,7 @@ body.embedded {
 
 @media (max-width: 860px) {
   :root {
-    --tabs-h: calc(58px + env(safe-area-inset-bottom, 0px));
+    --tabs-h: calc(62px + env(safe-area-inset-bottom, 0px));
   }
   .mtabs {
     position: fixed;
@@ -1375,10 +1375,19 @@ body.embedded {
     bottom: 0;
     z-index: 48;
     height: var(--tabs-h);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding: 0 6px env(safe-area-inset-bottom, 0px);
     display: flex;
     border-top: 1px solid var(--border);
     background: var(--bg);
+    box-shadow: 0 -6px 20px rgb(0 0 0 / 5%);
+  }
+  /* Where the browser can blur what scrolls under it, the bar lets the page show through a little. */
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .mtabs {
+      background: color-mix(in srgb, var(--bg) 92%, transparent);
+      -webkit-backdrop-filter: blur(16px) saturate(1.4);
+      backdrop-filter: blur(16px) saturate(1.4);
+    }
   }
   .mtabs a,
   .mtabs button {
@@ -1388,15 +1397,32 @@ body.embedded {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 3px;
-    padding: 6px 2px;
+    gap: 2px;
+    padding: 4px 2px 2px;
     border: 0;
     background: none;
     color: var(--muted);
     font-size: 11px;
     font-weight: 500;
+    letter-spacing: 0.01em;
     text-decoration: none;
     cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Each icon sits in a pill; the current section's pill is filled, as an app's tabs mark it. */
+  .mtabs .i {
+    box-sizing: border-box;
+    width: 58px;
+    height: 30px;
+    padding: 4px 18px;
+    border-radius: 15px;
+    transition:
+      background-color 0.18s var(--ease, ease),
+      transform 0.12s var(--ease, ease);
+  }
+  .mtabs a:active .i,
+  .mtabs button:active .i {
+    transform: scale(0.92);
   }
   .mtabs span {
     max-width: 100%;
@@ -1406,7 +1432,20 @@ body.embedded {
   }
   .mtabs [aria-current='page'] {
     color: var(--accent);
-    font-weight: 600;
+    font-weight: 700;
+  }
+  .mtabs [aria-current='page'] .i {
+    background: var(--accent-soft);
+    stroke-width: 1.9;
+  }
+  .mtabs a:focus-visible,
+  .mtabs button:focus-visible {
+    outline: none;
+  }
+  .mtabs a:focus-visible .i,
+  .mtabs button:focus-visible .i {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
   }
   /* Nothing at the page's end (the footer) is left under the tabs. */
   body {
