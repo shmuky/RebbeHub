@@ -59,6 +59,28 @@ Production is Postgres on Neon. The revision table is partitioned by time;
 `ensureRevisionPartitions(db, [2026, 2027])` (in `@rebbehub/db`) adds
 yearly partitions ahead of time.
 
+### Backups
+
+Neon keeps one day of history, so the Backup workflow
+(`.github/workflows/backup.yml`) copies the whole database every night at
+06:17 UTC into the private bucket `rebbehub-preservation`, as
+`backups/db/<yyyy-mm-dd>.dump` (pg_dump's custom format, with its
+`.sha256`). Each night's copy is kept 35 days and the one from the 1st of
+each month is kept for good. It is never served. A run checks that the
+dump reads back before it uploads, and that the upload is there. It can
+also be started by hand (Actions, Backup, Run workflow), for example just
+before a big import.
+
+To restore, never over the live database first: make a Neon branch (or an
+empty database), restore into it, check it, and only then point the site
+at it or copy back what was lost.
+
+```sh
+aws s3 cp s3://rebbehub-preservation/backups/db/2026-10-01.dump . --endpoint-url "$R2_ENDPOINT"
+sha256sum -c 2026-10-01.dump.sha256      # after fetching the .sha256 the same way
+pg_restore --no-owner --no-privileges --dbname "$BRANCH_URL" 2026-10-01.dump
+```
+
 ## Seeding
 
 ```sh
@@ -432,6 +454,16 @@ ninety days of it and the latest incidents.
   page that grows heavier shows before anyone is refused.
 - If `checkedAt` is more than twenty minutes old, the page says the
   checks have stopped: the API's scheduled run is not running.
+
+### Being told
+
+The Watch workflow (`.github/workflows/watch.yml`) looks every ten
+minutes from outside Cloudflare: the site's /about, and the report at
+/v1/status (any check `down`, or a report over twenty minutes old). When
+something is still wrong a minute later, it opens one GitHub issue
+labelled `outage` that mentions @shmuky, so GitHub emails him. It adds to
+the issue only when what is wrong changes, and closes it once all is up.
+Nothing needs configuring; to tell someone else, change `NOTIFY` there.
 
 ## The site
 
