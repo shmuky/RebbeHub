@@ -12,6 +12,13 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **A sefer's printings in one call.** The MCP tool `list_printings`
+  lists every printing of a sefer by volume, each with its volume and
+  where its scans come from (HebrewBooks, a Drive file of אוצרות הרבי),
+  with the links; printings without a readable path too. `search` takes
+  `work` (`/v1/search?work=rh-…`: one sefer's items alone) and names each
+  printing's volume and source, since printings of one volume share a
+  name.
 - **Likkutei Sichos' whole subject index on one page** (`/mafteach`).
   Every topic of the volumes' indexes once, by letter or by search (a
   topic's name first, then words from its places). Under each topic, each
