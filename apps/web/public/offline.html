@@ -10,24 +10,27 @@
   /* A page on its own, kept by the service worker: it cannot load the site's
      styles, so it carries the few tokens it uses (the values of tokens.css). */
   :root {
-    --bg: #ffffff; --canvas: #f6f7f8; --border: #e2e4e8; --text: #15181d;
-    --muted: #545b66; --subtle: #6b727d; --accent: #1d4ed8; --strong: #15181d;
+    --bg: #f7f3ea; --canvas: #f0eadd; --card: #fffdf8; --border: #dcd2bf; --text: #1f1a13;
+    --muted: #4e463a; --subtle: #6b6253; --accent: #8a2c1e; --strong: #1f1a13;
     --ui: 'Noto Sans Hebrew', 'Noto Sans', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
     --display: 'Frank Ruhl Libre', 'FrankRuehlCLM', 'Noto Serif Hebrew', Georgia, serif;
+    --brand: 'Newsreader', 'Frank Ruhl Libre', Georgia, serif;
     --r: 6px; --r-lg: 8px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #15171a; --canvas: #0f1113; --border: #2b3037; --text: #e8eaed;
-      --muted: #a4abb6; --subtle: #8b929d; --accent: #7ea6ff; --strong: #e8eaed;
+      --bg: #16130e; --canvas: #1c1812; --card: #1f1b15; --border: #3a3329; --text: #ede5d5;
+      --muted: #bcb19e; --subtle: #948a78; --accent: #e2957f; --strong: #ede5d5;
     }
   }
+  @font-face { font-family: 'Newsreader'; font-weight: 600; src: url('/fonts/newsreader-latin-600.woff2') format('woff2'); }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--canvas); color: var(--text); font: 14px/1.6 var(--ui); }
-  header { display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 24px; background: var(--bg); border-bottom: 1px solid var(--border); font-weight: 700; font-size: 16px; }
-  .mark { width: 26px; height: 26px; border-radius: 5px; background: var(--strong); color: var(--bg); display: grid; place-items: center; font: 700 15px/1 var(--display); }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.6 var(--ui); }
+  header { display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 24px; border-bottom: 1px solid var(--border); }
+  .book { width: 24px; height: 30px; border-start-start-radius: 8px; border-end-start-radius: 8px; border-start-end-radius: 5px; border-end-end-radius: 5px; background: var(--accent); color: var(--bg); display: grid; place-items: center; font: 700 18px/1 var(--display); }
+  .name { font: 600 20px/1 var(--brand); letter-spacing: -0.015em; padding-top: 0.21em; }
   main { max-width: 34rem; margin: 48px auto; padding: 0 16px; }
-  .box { background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 28px 24px; text-align: center; }
+  .box { background: var(--card); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 28px 24px; text-align: center; }
   .icon { width: 40px; height: 40px; margin: 0 auto 12px; color: var(--subtle); }
   h1 { font-size: 20px; font-weight: 600; margin: 0 0 6px; }
   p { margin: 0 0 16px; color: var(--muted); }
@@ -40,7 +43,7 @@
 </style>
 </head>
 <body>
-<header><span class="mark" aria-hidden="true">ר</span>RebbeHub</header>
+<header><span class="book" aria-hidden="true">R</span><span class="name" dir="ltr">RebbeHub</span></header>
 <main>
   <div class="box">
     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8.5a15 15 0 0 1 20 0"/><path d="M5.5 12a10 10 0 0 1 13 0"/><path d="M9 15.5a5 5 0 0 1 6 0"/><path d="M12 19h.01"/><path d="M3 3l18 18"/></svg>

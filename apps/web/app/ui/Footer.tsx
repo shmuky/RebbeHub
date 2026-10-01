@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import type { Lang } from '../lib/i18n.js';
 import { tu } from '../lib/i18nUi.js';
 import { href } from '../lib/links.js';
+import { Logo } from './Logo.js';
 
 /** The foot of every page: what RebbeHub is, and where its code, copies and rules are. */
 export function Footer({ lang }: { lang: Lang }) {
@@ -9,9 +10,7 @@ export function Footer({ lang }: { lang: Lang }) {
     <footer className="site-footer">
       <div className="wrap">
         <div className="foot-brand">
-          <span className="mark" aria-hidden="true">
-            ר
-          </span>
+          <Logo size={16} name={false} />
           <p>{tu(lang, 'footOpen')}</p>
         </div>
         <nav aria-label={lang === 'he' ? 'קישורים' : 'Links'}>
