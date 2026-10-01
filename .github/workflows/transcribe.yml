@@ -134,7 +134,7 @@ jobs:
         run: python3 -m pip install 'faster-whisper==1.2.1' 'av<19'
       - name: Keep the Whisper model between runs
         if: env.ENGINE == 'local'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/huggingface
           key: whisper-yi-whisper-large-v3-turbo-ct2
@@ -154,7 +154,7 @@ jobs:
           fi
       - name: Keep the Rebbe model between runs
         if: env.ENGINE == 'local'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/${{ env.REBBE_MODEL }}
           key: ${{ env.REBBE_MODEL }}
