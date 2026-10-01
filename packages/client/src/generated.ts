@@ -182,11 +182,18 @@ export type TreeNode = {
   children?: Array<TreeNode>;
   /** Children left out past the limit */
   more?: number;
+  /** A sefer that is an addition, not an official sefer: its kind, and the official sefer it belongs to */
+  addition?: {
+    kind: "commentary" | "index" | "about" | "collection" | "other";
+    /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+    to?: string;
+  };
 };
 
-/** One step of a plan. Items are ids (rh-…), or new:<key> for a set made earlier in the same plan. Positions are "start", "end", { after: id } or { before: id }. - move { items, to, from?, mode?: add | only, position? }: into a set (a sefer joins it, leaving `from` when given); `to: null` with `from` takes it out; a set under a set or to the top (to: null); a unit to another work, a printing to a work, a scan to a printing, a recording to an event. - move-up { items, from? }: a set to its parent's parent; an item out of a set into that set's parent. - rename { item, name?: { he?, en? }, slug?, path? }: old paths redirect, and paths made from it (a sefer's units) move along. - reorder { items, parent?, position? }: without position, the items take the places they hold in the order given. - create-set { key?, name: { he, en? }, slug, parent?, description?, items? } - delete-set { item }: only a set that holds nothing. - merge { from, into }: everything under or pointing at `from` moves to `into`; `from` is deleted and its paths lead to `into`. - split { work, units? | range: { from, to }, title: { he, en? }, slug }: units into a new sefer. */
+/** One step of a plan. Items are ids (rh-…), or new:<key> for a set made earlier in the same plan. Positions are "start", "end", { after: id } or { before: id }. - move { items, to, from?, mode?: add | only, position? }: into a set (a sefer joins it, leaving `from` when given); `to: null` with `from` takes it out; a set under a set or to the top (to: null); a unit to another work, a printing to a work, a scan to a printing, a recording to an event. - move-up { items, from? }: a set to its parent's parent; an item out of a set into that set's parent. - rename { item, name?: { he?, en? }, slug?, path? }: old paths redirect, and paths made from it (a sefer's units) move along. - reorder { items, parent?, position? }: without position, the items take the places they hold in the order given. - create-set { key?, name: { he, en? }, slug, parent?, description?, items? } - delete-set { item }: only a set that holds nothing. - merge { from, into }: everything under or pointing at `from` moves to `into`; `from` is deleted and its paths lead to `into`. - split { work, units? | range: { from, to }, title: { he, en? }, slug }: units into a new sefer. - addition { item, to?, kind: commentary | index | about | collection | other }: a sefer is not one of the official sefarim the tree is built of but an addition, listed on the page of the official sefer `to` (or, without it, apart at the end of its shelf). - official { item }: an addition becomes an official sefer again. */
 export type OrganizeOperation = {
-  op: "move" | "move-up" | "rename" | "reorder" | "create-set" | "delete-set" | "merge" | "split";
+  op: "move" | "move-up" | "rename" | "reorder" | "create-set" | "delete-set" | "merge" | "split" | "addition" | "official";
+  kind?: "commentary" | "index" | "about" | "collection" | "other";
   items?: Array<string>;
   item?: string;
   to?: string | null;
@@ -1468,6 +1475,12 @@ export interface Operations {
       type?: string;
       /** Only items in this set */
       set?: string;
+      /** What a shelf lists: leaves out the additions to a sefer (a work's addition.to), which are listed on that sefer's page */
+      shelf?: boolean;
+      /** true: only the official sefarim the tree is built of (no additions); false: only additions */
+      official?: boolean;
+      /** Only the additions to this sefer */
+      "additions-of"?: string;
       /** Deprecated: the same as cursor */
       after?: string;
       /** How many (at most 500) */
@@ -1488,7 +1501,7 @@ export interface Operations {
   listLinked: {
     input: {
       id: string;
-      /** The field that points here (work, event, sets…) */
+      /** The field that points here (work, event, sets…; addition.to for the additions to a sefer) */
       field: string;
       /** Only items of this type */
       type?: string;
@@ -2800,7 +2813,7 @@ export const OPERATIONS = {
   listEvents: {"method":"GET","path":"/v1/events","pathParams":[],"query":["within","day","dates","missing","brief","limit"],"body":null,"answer":"json"},
   listFollows: {"method":"GET","path":"/v1/follows","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
   listIssues: {"method":"GET","path":"/v1/issues","pathParams":[],"query":["state","label","type","set","entity","assignee","author","q","before","limit","cursor"],"body":null,"answer":"json","items":"items"},
-  listItems: {"method":"GET","path":"/v1/entities","pathParams":[],"query":["type","set","after","limit","cursor"],"body":null,"answer":"json","items":"items"},
+  listItems: {"method":"GET","path":"/v1/entities","pathParams":[],"query":["type","set","shelf","official","additions-of","after","limit","cursor"],"body":null,"answer":"json","items":"items"},
   listLabels: {"method":"GET","path":"/v1/labels","pathParams":[],"query":[],"body":null,"answer":"json"},
   listLinked: {"method":"GET","path":"/v1/entities/{id}/linked","pathParams":["id"],"query":["field","type","after","limit","cursor"],"body":null,"answer":"json","items":"items"},
   listPlaces: {"method":"GET","path":"/v1/places","pathParams":[],"query":["kind","key","limit"],"body":null,"answer":"json"},

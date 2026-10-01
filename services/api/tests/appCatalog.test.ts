@@ -4,7 +4,7 @@ import type { Hono } from 'hono';
 import type { Catalog } from '@rebbehub/core';
 import { idForKey, runImport, sichosKodeshOccasionsImporter, sichosKodeshWorksImporter, type CatalogEntry, type SichosKodeshWorksInput } from '@rebbehub/importers';
 import { createApp } from '../src/app.js';
-import { driveFileOf, occasionDateKey } from '../src/appCatalog.js';
+import { appWorks, driveFileOf, occasionDateKey } from '../src/appCatalog.js';
 import { add, freshCatalog } from '../../../packages/core/tests/helpers.js';
 
 /**
@@ -284,6 +284,18 @@ describe("the apps' catalog.json", () => {
     expect(latest.headers.get('Location')).toBe('https://api.sk.shmuky.dev/v1/app/android/latest.json');
     const apk = await app.request('https://api.rebbehub.test/v1/app/v1/app/android/download/universal');
     expect(apk.headers.get('Location')).toBe('https://api.sk.shmuky.dev/v1/app/android/download/universal');
+  });
+});
+
+describe('official sefarim and additions in the works', () => {
+  it('lists the official sefarim first, then the additions, each naming the sefer it belongs to', () => {
+    const work = (id: string, slug: string, extra: Record<string, unknown> = {}) => ({ id, path: `/${slug}`, data: { title: { he: slug }, slug, authors: [], genre: 'chassidus', levels: [], ...extra } as never });
+    const out = appWorks([], [work('rh-a', 'biur', { addition: { kind: 'commentary', to: 'rh-t' } }), work('rh-l', 'loose', { addition: { kind: 'other' } }), work('rh-t', 'tanya', { externalIds: { 'sichos-kodesh-work': 'tanya' } })], []);
+    expect(out.works.map((w) => [w.id, w.addition ?? null])).toEqual([
+      ['tanya', null],
+      ['biur', { kind: 'commentary', to: 'tanya' }],
+      ['loose', { kind: 'other' }],
+    ]);
   });
 });
 

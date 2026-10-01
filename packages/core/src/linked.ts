@@ -37,7 +37,8 @@ export async function linkedCounts(db: Db, id: EntityId): Promise<LinkGroup[]> {
 const SORT_KEY = `(coalesce(r.data->>'order', '') || chr(1) || coalesce(r.data->>'date', '') || chr(1) || lpad(coalesce(r.data->>'part', ''), 6, '0') || chr(1)
   || lpad(coalesce(r.data->'pages'->>'from', r.data->>'page', ''), 6, '0') || chr(1) || coalesce(e.path, '') || chr(1) || e.id) COLLATE "C"`;
 
-const FIELD = /^[a-z][a-zA-Z]{0,40}$/;
+/** A field, or a field inside one (`addition.to`, the official sefer an addition belongs under). */
+const FIELD = /^[a-z][a-zA-Z]{0,40}(\.[a-z][a-zA-Z]{0,40})?$/;
 
 /** A cursor is the last item's sort key, carried in links as base64url (without Node's Buffer: the API runs on Workers too). */
 const encode = (key: string) =>

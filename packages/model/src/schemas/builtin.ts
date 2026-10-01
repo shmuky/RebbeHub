@@ -1,4 +1,4 @@
-import { EVENT_LINK_KINDS, type EntityType, type LocalName } from '../entities.js';
+import { ADDITION_KINDS, EVENT_LINK_KINDS, type EntityType, type LocalName } from '../entities.js';
 import { PAGE_HREF_PATTERN, PAGE_ID_PATTERN, PAGE_MARKS, PAGE_SEGMENT_KINDS, TEXT_PROFILES } from '../pageText.js';
 import { SHAAR_SECTIONS, SHAAR_SECTION_MAX } from '../shaar.js';
 import { EDITION_KINDS, GENRES, LICENCES, SOURCE_IDS } from '../works.js';
@@ -247,8 +247,10 @@ const fractionalOrder = str({ pattern: '^[0-9A-Za-z]+$', maxLength: 64 });
  * 10: a page segment's `printed`, where it stands on its version's scan (PR #83 added it
  * to the schema without this, so live catalogs kept refusing it).
  * 11: a sefer's `shaar` (shaar.ts), its title page's words and its sections, read and written as one file.
+ * 12: a sefer's `addition`, marking a work that is not one of the official sefarim the tree is built of
+ * (a commentary, an index, a book about one) and the official sefer it belongs under.
  */
-export const BUILTIN_SCHEMA_VERSION = 11;
+export const BUILTIN_SCHEMA_VERSION = 12;
 
 export const BUILTIN_SCHEMAS: Record<EntityType, JsonSchema> = {
   set: entitySchema(
@@ -308,6 +310,13 @@ export const BUILTIN_SCHEMAS: Record<EntityType, JsonSchema> = {
           },
           origin: ref('machineOrigin'),
         },
+        additionalProperties: false,
+      },
+      // An addition to an official sefer (entities.ts, WorkAddition); without it, the work is an official sefer.
+      addition: {
+        type: 'object',
+        properties: { to: ref('entityId'), kind: enumOf(ADDITION_KINDS) },
+        required: ['kind'],
         additionalProperties: false,
       },
     },

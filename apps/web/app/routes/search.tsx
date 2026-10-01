@@ -86,7 +86,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     return { ...empty, similar, refs };
   }
   const moments = await api.moments(words, 20).catch(() => [] as Moment[]);
-  const refs = Object.fromEntries(await api.entities(momentRefs(moments)));
 
   const smart = parseSmartQuery(words);
   const understood =
@@ -114,6 +113,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       const named = (e: EventItem) => rest.every((w) => JSON.stringify(eventData(e).title ?? '').includes(w));
       if (events.length) events = events.filter(named);
       results = (await api.search(smart.rest, { limit: 50 })).results;
+    } else {
+      // Words read as a date may be a name too: the names they match are found as well, a sefer named so first (the API's
+      // search puts it there), so a date reading never hides the sefer.
+      results = (await api.search(words, { limit: 50 })).results;
     }
   } else {
     const found = await api.search(words, { limit: 50 });
@@ -125,6 +128,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       events = (await api.events({ within, limit: 500 })).filter((e) => !parts.day || eventData(e).date === found.date!.key);
     }
   }
+  // The items the moments name, and the sefer each addition found belongs to, in one request.
+  const additionTos = results.flatMap((r) => (r.type === 'work' && typeof (r.data as { addition?: { to?: unknown } }).addition?.to === 'string' ? [(r.data as { addition: { to: string } }).addition.to] : []));
+  const refs = Object.fromEntries(await api.entities([...momentRefs(moments), ...additionTos]));
   // Farbrengens show once, in their own section.
   const shown = new Set(events.map((e) => e.id));
   results = results.filter((r) => !shown.has(r.id));
@@ -144,6 +150,8 @@ const W = {
   lede: { he: 'ספרים, שיחות, התוועדויות ותאריכים — וגם המילים שבתוך הסריקות והתמלולים.', en: 'Sefarim, sichos, farbrengens and dates — and the words inside the scans and transcripts.' },
   all: { he: 'הכול', en: 'All' },
   kinds: { he: 'סוגי תוצאות', en: 'Kinds of result' },
+  addition: { he: 'הוספה', en: 'Addition' },
+  additionTo: { he: 'הוספה ל:', en: 'An addition to' },
   placeholder: { he: 'פרשה, תאריך, שנה, שם של ספר או מילים מתוך הטקסט', en: 'A parsha, a date, a year, a sefer’s name or words from the text' },
   hint: { he: 'אפשר לסנן: סוג:התוועדות שנה:תשמ״ב', en: 'Filter with type:farbrengen year:5742' },
   understood: { he: 'הובן מהחיפוש', en: 'Understood' },
@@ -253,19 +261,30 @@ export default function Search({ loaderData }: Route.ComponentProps) {
                     {t(lang, 'tabLibrary')} <span className="count">{num(results.length, lang)}</span>
                   </h2>
                   <ul className="box">
-                    {results.map((r) => (
-                      <li key={r.id}>
-                        <Link className="row hover" to={href(itemPath(r), lang)}>
-                          <Icon name={TYPE_ICON[r.type] ?? 'file'} className="subtle" />
-                          <span className="row-main">
-                            <span className="row-title torah">{labelOf(r, lang)}</span>
-                          </span>
-                          <Label tone={TYPE_TONE[r.type] ?? 'meta'} size="sm">
-                            {typeName(r.type, lang)}
-                          </Label>
-                        </Link>
-                      </li>
-                    ))}
+                    {(results as Entity[]).map((r) => {
+                      // An addition to a sefer says so, and to which: the official sefarim are what the tree is built of.
+                      const addition = r.type === 'work' ? (r.data as { addition?: { to?: string } }).addition : undefined;
+                      const to = addition?.to ? (refs as Record<string, Entity>)[addition.to] : undefined;
+                      return (
+                        <li key={r.id}>
+                          <Link className="row hover" to={href(itemPath(r), lang)}>
+                            <Icon name={TYPE_ICON[r.type] ?? 'file'} className="subtle" />
+                            <span className="row-main">
+                              <span className="row-title torah">{labelOf(r, lang)}</span>
+                              {to ? <span className="row-sub">{`${w(lang, 'additionTo')} ${labelOf(to, lang)}`}</span> : null}
+                            </span>
+                            {addition ? (
+                              <Label tone="meta" size="sm">
+                                {w(lang, 'addition')}
+                              </Label>
+                            ) : null}
+                            <Label tone={TYPE_TONE[r.type] ?? 'meta'} size="sm">
+                              {typeName(r.type, lang)}
+                            </Label>
+                          </Link>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </section>
               ) : null}

@@ -12,6 +12,32 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **The catalog's tree is the official sefarim; everything else is an
+  addition to one.** The shelves are the Rebbeim, their sefarim and the
+  other official sets, each sefer in its place. A commentary, an index, a
+  book about a sefer or a collection from it is an addition (a work's
+  `addition`: `{ kind, to? }`, built-in schemas version 12): it is listed
+  on that sefer's page under "Additions", grouped by kind, and its own page
+  leads back there; one that belongs to no sefer is kept apart, closed, at
+  the end of its shelf. Shelves, a Rebbe's page and the library count only
+  official sefarim. Another scan or format of the same book is no addition:
+  it is merged into the sefer. Every addition hangs on an official sefer
+  (the checks refuse one on itself or on another addition). Books the
+  HebrewBooks, Otzros and Sefaria importers bring that match no official
+  sefer come in as additions, until people place them. `GET /v1/entities`
+  takes `shelf`, `official` and `additions-of`; `/v1/entities/{id}/linked`
+  takes `field=addition.to`; the tree (`/v1/tree`, `get_tree`) lists
+  official sefarim first and marks additions; organizing takes `addition {
+  item, to?, kind }` and `official { item }`, and the MCP tool
+  `mark_addition` does the same; the apps' works list official sefarim
+  first, each addition naming its sefer.
+- **Search finds a sefer by its name first.** A sefer or set whose name is
+  the query comes first, then those whose name starts with it, then those
+  whose name holds every word, an official sefer before an addition, and
+  only then everything that mentions it: searching "תניא" now finds the
+  Tanya first, where the chapters that name it used to fill the page. An
+  addition in the results says so, and to which sefer.
+
 - **A sefer's printings in one call.** The MCP tool `list_printings`
   lists every printing of a sefer by volume, each with its volume and
   where its scans come from (HebrewBooks, a Drive file of אוצרות הרבי),

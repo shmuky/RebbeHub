@@ -1,5 +1,5 @@
 import { migrate, one, type Db } from '@rebbehub/db';
-import { validateDateKey } from '@rebbehub/hebrew';
+import { normalizeSearchText, validateDateKey } from '@rebbehub/hebrew';
 import {
   BUILTIN_SCHEMAS,
   BUILTIN_SCHEMA_VERSION,
@@ -7,6 +7,7 @@ import {
   SchemaRegistry,
   contentHash,
   idFromSeed,
+  isAddition,
   isEntityId,
   isEntityPath,
   newId,
@@ -22,7 +23,7 @@ import { indexDriveFiles } from './driveFiles.js';
 import { withStructuredBody } from './legacyWords.js';
 import { diffData, threeWayMerge, resolveConflicts, UnresolvedConflictError, type Conflict, type FieldChange, type Json, type Resolution } from './merge.js';
 import { canApprove, canSuggest, earnedTrust, mayGoLive, type Account, type SetInfo } from './permissions.js';
-import { searchTextOf, toTsQuery } from './searchText.js';
+import { searchTextOf, searchTierSql, toTsQuery } from './searchText.js';
 import { focusCounts } from './projectWork.js';
 import { commented, reportOpened, reportStateChanged, reviewGiven, suggestionMerged, suggestionReverted, suggestionStarted, suggestionReopened, suggestionSubmitted, suggestionWithdrawn } from './threads.js';
 import { viaColumn, type Via } from './via.js';
@@ -386,12 +387,23 @@ export class Catalog {
     return new Set(rows.map((r) => r.path));
   }
 
-  /** Items of a type on main, optionally in a set, in path order, a page at a time. */
-  async list(options: { type?: EntityType; set?: EntityId; limit?: number; after?: string }): Promise<EntityView[]> {
+  /**
+   * Items of a type on main, optionally in a set, in path order, a page at
+   * a time. `shelf` leaves out the additions that belong on another
+   * sefer's page (WorkData.addition with `to`): what a shelf shows is its
+   * official sefarim, and only the additions that belong to none of them.
+   * `official` leaves out every addition (true) or keeps only additions
+   * (false); `additionsOf` lists the additions to one sefer.
+   */
+  async list(options: { type?: EntityType; set?: EntityId; limit?: number; after?: string; shelf?: boolean; official?: boolean; additionsOf?: EntityId }): Promise<EntityView[]> {
     const params: unknown[] = [];
     const where = ['e.main_rev IS NOT NULL', 'NOT e.deleted'];
     if (options.type) where.push(`e.type = $${params.push(options.type)}`);
     if (options.set) where.push(`EXISTS (SELECT 1 FROM entity_ref s WHERE s.from_id = e.id AND s.field = 'sets' AND s.to_id = $${params.push(options.set)})`);
+    if (options.shelf) where.push(`NOT (e.type = 'work' AND coalesce(r.data->'addition' ? 'to', FALSE))`);
+    if (options.official === true) where.push(`NOT (e.type = 'work' AND r.data ? 'addition')`);
+    if (options.official === false) where.push(`e.type = 'work' AND r.data ? 'addition'`);
+    if (options.additionsOf) where.push(`EXISTS (SELECT 1 FROM entity_ref a WHERE a.from_id = e.id AND a.field = 'addition.to' AND a.to_id = $${params.push(options.additionsOf)})`);
     if (options.after) where.push(`(coalesce(e.path, '') || e.id) > $${params.push(options.after)}`);
     const limit = Math.min(Math.max(options.limit ?? 50, 1), 500);
     const { rows } = await this.db.query<RevisionRow>(
@@ -644,11 +656,15 @@ export class Catalog {
     return rows.map(({ data, prev, has_prev, ...entry }) => ({ ...entry, created: !has_prev, changes: has_prev ? diffData(prev, data) : [] }));
   }
 
-  /** Full text search over names, labels, text and dates on main. */
+  /**
+   * Full text search over names, labels, text and dates on main. A sefer
+   * or a set the query names comes first, an official sefer before an
+   * addition to one (searchTierSql); then the rest, by how well they match.
+   */
   async search(query: string, options: { type?: EntityType; work?: EntityId; limit?: number } = {}): Promise<EntityView[]> {
     const tsQuery = toTsQuery(query);
     if (!tsQuery) return [];
-    const params: unknown[] = [tsQuery];
+    const params: unknown[] = [tsQuery, normalizeSearchText(query)];
     // The words as kept (search_tsv, migration 0024): matched and ranked from the column, never read again from the text.
     const where = ["e.search_tsv @@ to_tsquery('simple', $1)", 'NOT e.deleted', 'e.main_rev IS NOT NULL'];
     if (options.type) where.push(`e.type = $${params.push(options.type)}`);
@@ -656,7 +672,7 @@ export class Catalog {
     if (options.work) where.push(`r.data->>'work' = $${params.push(options.work)}`);
     const { rows } = await this.db.query<RevisionRow>(
       `SELECT ${FACTS} FROM entity e JOIN revision r ON r.id = e.main_rev WHERE ${where.join(' AND ')}
-       ORDER BY ts_rank(e.search_tsv, to_tsquery('simple', $1)) DESC, e.path
+       ORDER BY ${searchTierSql('$2', '$1')}, ts_rank(e.search_tsv, to_tsquery('simple', $1)) DESC, e.path
        LIMIT ${Math.min(options.limit ?? 20, 100)}`,
       params,
     );
@@ -1872,6 +1888,13 @@ export class Catalog {
         }
         if (type === null) checks.push({ check: 'references', status: 'fail', entityId: id, path: ref.field, message: `${ref.field} points at ${ref.id}, which is not in the catalog` });
         else if (ref.expected.length > 0 && !ref.expected.includes(type as EntityType)) checks.push({ check: 'references', status: 'fail', entityId: id, path: ref.field, message: `${ref.field} should be a ${ref.expected.join(' or ')}, but ${ref.id} is a ${type}` });
+      }
+      // The tree is built of official sefarim: an addition hangs on one of them, never on itself or on another addition.
+      const additionTo = p.type === 'work' ? (p.rev.data as { addition?: { to?: EntityId } }).addition?.to : undefined;
+      if (additionTo === id) checks.push({ check: 'references', status: 'fail', entityId: id, path: 'addition.to', message: 'a sefer is not an addition to itself' });
+      else if (additionTo) {
+        const target = inChange.get(additionTo)?.rev.data ?? (await one<{ data: unknown }>(tx, 'SELECT r.data FROM entity e JOIN revision r ON r.id = e.main_rev WHERE e.id = $1 AND NOT e.deleted', [additionTo]))?.data;
+        if (target && isAddition(target)) checks.push({ check: 'references', status: 'fail', entityId: id, path: 'addition.to', message: `addition.to should be an official sefer, but ${additionTo} is itself an addition` });
       }
       for (const [field, value] of dateFields(p.rev.data)) {
         const check = validateDateKey(value);

@@ -8,7 +8,7 @@ import { langFrom, nameOf, t, type Lang } from '../lib/i18n.js';
 import { num } from '../lib/i18nUi.js';
 import { href, itemPath, setPath } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
-import { everyWork, shelvesOf, type Shelf } from '../lib/shelves.js';
+import { additionOf, everyAddition, everyWork, shelvesOf, type Shelf } from '../lib/shelves.js';
 import { Icon } from '../ui/Icon.js';
 import { Avatar, EmptyState } from '../ui/primitives.js';
 import { Shaar } from '../ui/Shaar.js';
@@ -22,14 +22,17 @@ import '../styles/pages/browse.css';
  * look for first as their title pages; every sefer in its shelf's order;
  * and the Rebbeim with how many of their sefarim are here. The sources the
  * sefarim came from are not shelves (lib/shelves.ts); a search from here is
- * the site's search.
+ * the site's search. The shelves and their counts are the official sefarim:
+ * an addition to a sefer is on that sefer's page, and one that belongs to
+ * none is kept apart at the end of its shelf.
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { api, siteUrl } = siteOf(context);
   const lang = langFrom(request);
   const [sets, works, authors, units, stats] = await Promise.all([
     api.list({ type: 'set', limit: 500 }),
-    api.list({ type: 'work', limit: 500 }),
+    // What the shelves list: the additions to a sefer are on its own page, not here.
+    api.list({ type: 'work', limit: 500, shelf: true }),
     api.list({ type: 'author', limit: 100 }),
     api.refCounts('work', 'unit'),
     api.stats(),
@@ -78,6 +81,7 @@ const GENRES: Record<string, { he: string; en: string }> = {
 const W = {
   lede: { he: 'ספרי רבותינו נשיאינו, השיחות, האגרות וההתוועדויות — כל מדף עם מה שיש בו.', en: 'The sefarim of the Rebbeim, the sichos, the letters and the farbrengens — each shelf with what it holds.' },
   addSefer: { he: 'הוספת ספר', en: 'Add a sefer' },
+  additions: { he: 'הוספות', en: 'Additions' },
   searchLabel: { he: 'חיפוש בספרייה', en: 'Search the library' },
   allSeforim: { he: 'כל הספרים', en: 'Every sefer' },
   other: { he: 'אחר', en: 'Other' },
@@ -111,10 +115,12 @@ export default function Library({ loaderData }: Route.ComponentProps) {
   const isFarbrengens = (set: Entity) => set.path === '/sets/farbrengens';
   // A shelf for each Rebbe, then the others, as the catalog orders them.
   const shelves = shelvesOf(sets, works, (x) => titleOf(x, lang), isFarbrengens);
+  // The official sefarim are what the library counts; additions are not sefarim of the tree.
+  const official = works.filter((wk) => !additionOf(wk));
   // Every sefer under its shelf; those on no shelf last.
-  const shelved = new Set(shelves.flatMap((sh) => everyWork(sh).map((wk) => wk.id)));
-  const unshelved = works.filter((wk) => !shelved.has(wk.id)).sort((a, b) => titleOf(a, lang).localeCompare(titleOf(b, lang), lang === 'he' ? 'he' : 'en'));
-  const countOf = (rebbe: Entity) => works.filter((wk) => ((wk.data as { authors?: string[] }).authors ?? []).includes(rebbe.id)).length;
+  const shelved = new Set(shelves.flatMap((sh) => [...everyWork(sh), ...everyAddition(sh)].map((wk) => wk.id)));
+  const unshelved = works.filter((wk) => !shelved.has(wk.id) && !additionOf(wk)?.to).sort((a, b) => titleOf(a, lang).localeCompare(titleOf(b, lang), lang === 'he' ? 'he' : 'en'));
+  const countOf = (rebbe: Entity) => official.filter((wk) => ((wk.data as { authors?: string[] }).authors ?? []).includes(rebbe.id)).length;
 
   return (
     <div className="lib-page">
@@ -140,7 +146,7 @@ export default function Library({ loaderData }: Route.ComponentProps) {
             <span>
               <Icon name="book" className="subtle" />
               <span>
-                <b>{num(works.length, lang)}</b> {t(lang, 'seforim')}
+                <b>{num(official.length, lang)}</b> {t(lang, 'seforim')}
               </span>
             </span>
             {counts.unit ? (
@@ -240,11 +246,11 @@ export default function Library({ loaderData }: Route.ComponentProps) {
           {works.length ? (
             <section aria-labelledby="all-seforim">
               <h2 className="h-block" id="all-seforim">
-                {w(lang, 'allSeforim')} <span className="count">{num(works.length, lang)}</span>
+                {w(lang, 'allSeforim')} <span className="count">{num(official.length, lang)}</span>
               </h2>
               <div className="box">
                 {shelves
-                  .filter((sh) => sh.total)
+                  .filter((sh) => sh.total || everyAddition(sh).length)
                   .map((sh) => (
                     <ShelfGroup key={sh.set.id} shelf={sh} depth={0} lang={lang} units={units} authorsOf={authorsOf} />
                   ))}
@@ -290,7 +296,7 @@ export default function Library({ loaderData }: Route.ComponentProps) {
             <dl>
               <dt>{t(lang, 'tabLibrary')}</dt>
               <dd>
-                {num(works.length, lang)} {t(lang, 'seforim')}
+                {num(official.length, lang)} {t(lang, 'seforim')}
               </dd>
               {counts.unit ? (
                 <>
@@ -343,7 +349,7 @@ function SeferRow({ work, lang, units, authorsOf }: { work: Entity; lang: Lang; 
   );
 }
 
-/** A shelf in the list of every sefer: its own sefarim, then each set inside it under its name. */
+/** A shelf in the list of every sefer: its own sefarim, then each set inside it under its name, then its additions apart and closed. */
 function ShelfGroup({ shelf, depth, lang, units, authorsOf }: { shelf: Shelf<Entity>; depth: number; lang: Lang; units: Units; authorsOf: (wk: Entity) => Entity[] }) {
   const name = nameOf((shelf.set.data as { name?: LocalName }).name, lang);
   return (
@@ -358,6 +364,14 @@ function ShelfGroup({ shelf, depth, lang, units, authorsOf }: { shelf: Shelf<Ent
       {shelf.sets.map((sh) => (
         <ShelfGroup key={sh.set.id} shelf={sh} depth={depth + 1} lang={lang} units={units} authorsOf={authorsOf} />
       ))}
+      {shelf.additions.length ? (
+        <details>
+          <summary className="row group sub">{`${w(lang, 'additions')} (${num(shelf.additions.length, lang)})`}</summary>
+          {shelf.additions.map((wk) => (
+            <SeferRow key={wk.id} work={wk} lang={lang} units={units} authorsOf={authorsOf} />
+          ))}
+        </details>
+      ) : null}
     </div>
   );
 }

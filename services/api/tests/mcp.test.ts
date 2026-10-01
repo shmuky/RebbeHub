@@ -78,6 +78,7 @@ describe('the MCP server', () => {
       'create_set',
       'delete_set',
       'merge_items',
+      'mark_addition',
     ]);
     expect(tools.find((t: { name: string }) => t.name === 'merge_items').annotations.destructiveHint).toBe(true);
     expect(tools.find((t: { name: string }) => t.name === 'suggest_fix').annotations.readOnlyHint).toBe(false);
@@ -334,5 +335,17 @@ describe('the MCP server', () => {
     expect((await tool('reorder_children', { items: [work, event], parent: set }, token)).content[0].text).toMatch(/not beside|no order/);
     const plan = await tool('organize', { operations: [{ op: 'rename', item: other, name: { en: 'Talks' } }], title: 'Name the set' }, token);
     expect(plan.structuredContent).toMatchObject({ status: 'open', summary: ['Rename שיחות / Sichos to שיחות / Talks'] });
+
+    // A commentary is an addition to the official sefer, not a sefer of the tree; marked, and made official again, as suggestions.
+    const commentary = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'ביאור לחיבור' }, slug: 'biur', authors: [], genre: 'sichos', levels: ['sicha'], sets: [set] }, '/biur');
+    const marked = await tool('mark_addition', { item: commentary, to: work, kind: 'commentary' }, token);
+    expect(marked.isError).toBe(false);
+    expect(marked.structuredContent).toMatchObject({ status: 'open', summary: ['Mark ביאור לחיבור as an addition (commentary) to חיבור'] });
+    const proposed = await catalog.proposals(marked.structuredContent.suggestion);
+    expect(proposed.find((p) => p.entityId === commentary)?.rev.data).toMatchObject({ addition: { kind: 'commentary', to: work } });
+    expect((await tool('mark_addition', { item: commentary }, token)).content[0].text).toMatch(/give kind/);
+    expect((await tool('mark_addition', { item: commentary, official: true }, token)).content[0].text).toMatch(/already an official sefer/);
+    const viaPlan = await tool('preview_organize', { operations: [{ op: 'addition', item: commentary, kind: 'index' }] });
+    expect(viaPlan.content[0].text).toMatch(/Mark ביאור לחיבור as an addition \(index\)/);
   });
 });

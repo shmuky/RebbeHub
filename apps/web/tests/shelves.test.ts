@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { everyWork, shelvesOf, type ShelfItem } from '../app/lib/shelves.js';
+import { everyAddition, everyWork, shelvesOf, type ShelfItem } from '../app/lib/shelves.js';
 
 const set = (id: string, name: string, extra: Record<string, unknown> = {}, path = `/sets/${id}`): ShelfItem => ({ id, path, data: { name, ...extra } });
 const work = (id: string, sets: string[], order?: string): ShelfItem => ({ id, path: `/${id}`, data: { title: id, sets, order } });
@@ -29,5 +29,23 @@ describe('the library shelves', () => {
     expect(rebbe.sets[0]!.works.map((w) => w.id)).toEqual(['lsw', 'otzar']);
     expect(rebbe.total).toBe(3);
     expect(everyWork(rebbe).map((w) => w.id)).toEqual(['lsw', 'otzar', 'letters']);
+  });
+
+  it('lists only the official sefarim on a shelf: an addition to a sefer is not on it, one that belongs to none is kept apart', () => {
+    const withAdditions = [
+      ...works,
+      { id: 'biur', path: '/biur', data: { title: 'biur', sets: ['ls'], addition: { kind: 'commentary', to: 'lsw' } } },
+      { id: 'likkut', path: '/likkut', data: { title: 'likkut', sets: ['ls'], addition: { kind: 'collection' } } },
+      { id: 'only-extra', path: '/only-extra', data: { title: 'only-extra', sets: ['empty'], addition: { kind: 'other' } } },
+    ];
+    const shelves = shelvesOf(sets, withAdditions, name);
+    const rebbe = shelves.find((s) => s.set.id === 'rebbe')!;
+    expect(rebbe.total).toBe(3);
+    expect(everyWork(rebbe).map((w) => w.id)).toEqual(['lsw', 'otzar', 'letters']);
+    expect(rebbe.sets[0]!.additions.map((w) => w.id)).toEqual(['likkut']);
+    expect(everyAddition(rebbe).map((w) => w.id)).toEqual(['likkut']);
+    // A shelf that holds only additions is still shown, with no sefer counted.
+    const empty = shelves.find((s) => s.set.id === 'empty')!;
+    expect([empty.total, empty.works.length, empty.additions.map((w) => w.id)]).toEqual([0, 0, ['only-extra']]);
   });
 });
