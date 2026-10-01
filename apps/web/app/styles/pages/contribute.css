@@ -1391,6 +1391,62 @@
   background: var(--accent);
 }
 
+/* Any two versions picked to compare (4f): their dots carry א and ב, and the comparison stands at the top. */
+.hist2 > li.picked .hist-dot {
+  inset-inline-start: -4px;
+  top: 1px;
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  border-color: var(--strong);
+  background: var(--strong);
+  color: var(--on-strong);
+  font: 700 11px / 1 var(--ui);
+}
+
+.hist-pick {
+  float: inline-end;
+  margin-inline-start: 8px;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+  font: 500 12px / 1.6 var(--ui);
+  cursor: pointer;
+}
+
+.hist-pick:hover {
+  border-color: var(--accent-line);
+  color: var(--accent-strong);
+}
+
+.hist-pick[aria-pressed='true'] {
+  border-color: var(--strong);
+  background: var(--strong);
+  color: var(--on-strong);
+}
+
+.hist-hint {
+  margin: 0 0 12px;
+  font-size: var(--fs-sm);
+}
+
+.hist-compare-h {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 8px;
+  font-size: var(--fs-sm);
+}
+
+.hist-compare-h h2 {
+  margin: 0;
+  color: var(--text);
+}
+
 .hist-title {
   margin: 0;
   font-family: var(--display);

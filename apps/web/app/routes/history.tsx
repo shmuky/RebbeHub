@@ -10,6 +10,7 @@ import { href } from '../lib/links.js';
 import { personName } from '../lib/people.js';
 import { pageMeta } from '../lib/seo.js';
 import { useAccount } from '../lib/useAccount.js';
+import { between } from '../lib/versions.js';
 import { Icon } from '../ui/Icon.js';
 import { AgentBy, Avatar, EmptyState, RelativeTime } from '../ui/primitives.js';
 import { ItemSubpage } from '../views/ItemSubpage.js';
@@ -60,6 +61,14 @@ const W = {
   inText: { he: 'בתוך הטקסט', en: 'In the text' },
   before: { he: 'לפני', en: 'Before' },
   after: { he: 'אחרי', en: 'After' },
+  pickTwo: { he: 'בחרו שתי גרסאות כדי להשוות. א׳ ישנה, ב׳ חדשה.', en: 'Pick two versions to compare. A is the older, B the newer.' },
+  compare: { he: 'להשוואה', en: 'Compare' },
+  older: { he: 'א׳', en: 'A' },
+  newer: { he: 'ב׳', en: 'B' },
+  changes: { he: 'שינויים', en: 'changes' },
+  none: { he: 'אין הבדל בין שתי הגרסאות.', en: 'The two versions are the same.' },
+  cannot: { he: 'את שתי הגרסאות האלה אי אפשר להשוות כאן; השינויים של כל גרסה פתוחים ברשימה.', en: "These two versions can't be compared here; each version's changes are in the list." },
+  clearPick: { he: 'סגירת ההשוואה', en: 'Close the comparison' },
 } as const;
 
 function RestoreButton({ entityId, rev, lang }: { entityId: string; rev: number; lang: Lang }) {
@@ -107,6 +116,13 @@ export default function History({ loaderData }: Route.ComponentProps) {
   const account = useAccount();
   // As design/ draws versions (4f): a change read side by side, before and after, or one above the other.
   const [side, setSide] = useState(true);
+  // Any two versions picked to compare (4f), read from the history already here: no request.
+  const [pick, setPick] = useState<number[]>([]);
+  const toggle = (rev: number) => setPick((was) => (was.includes(rev) ? was.filter((r) => r !== rev) : [...was.slice(-1), rev]));
+  const order = (rev: number) => history.findIndex((h) => h.rev === rev);
+  const [older, newer] = pick.length === 2 ? [...pick].sort((a, b) => order(b) - order(a)) : [];
+  const compared = older !== undefined && newer !== undefined ? between(history, older, newer) : undefined;
+  const whenOf = (rev: number) => history.find((h) => h.rev === rev);
   // Everyone who changed it, most changes first.
   const people = new Map<string, { name: string; bot: boolean; n: number }>();
   for (const h of history) {
@@ -169,7 +185,23 @@ export default function History({ loaderData }: Route.ComponentProps) {
               </button>
             </div>
           ) : null}
-          {latest ? (
+          {history.length > 1 ? <p className="hist-hint subtle">{W.pickTwo[lang]}</p> : null}
+          {older !== undefined && newer !== undefined ? (
+            <section className={side ? 'hist-latest hist-compare side' : 'hist-latest hist-compare'} style={{ ['--was' as string]: `"${W.older[lang]}"`, ['--now' as string]: `"${W.newer[lang]}"` }} aria-live="polite">
+              <div className="hist-compare-h">
+                <h2>
+                  {W.older[lang]} <RelativeTime at={whenOf(older)!.at} lang={lang} /> · {W.newer[lang]} <RelativeTime at={whenOf(newer)!.at} lang={lang} />
+                </h2>
+                {compared?.length ? <span className="subtle">{wordsStat(compared, lang) ?? `${num(compared.length, lang)} ${W.changes[lang]}`}</span> : null}
+                <span className="grow" />
+                {account && order(older) > 0 ? <RestoreButton entityId={entity.id} rev={older} lang={lang} /> : null}
+                <button type="button" className="ib" aria-label={W.clearPick[lang]} title={W.clearPick[lang]} onClick={() => setPick([])}>
+                  <Icon name="x" />
+                </button>
+              </div>
+              {compared === null ? <p className="subtle">{W.cannot[lang]}</p> : compared?.length ? <ChangeRows changes={compared} lang={lang} /> : <p className="subtle">{W.none[lang]}</p>}
+            </section>
+          ) : latest ? (
             <section className={side ? 'hist-latest side' : 'hist-latest'} style={{ ['--was' as string]: `"${W.before[lang]}"`, ['--now' as string]: `"${W.after[lang]}"` }}>
               <h2>{W.latest[lang]}</h2>
               <ChangeRows changes={latest.changes} lang={lang} />
@@ -180,9 +212,17 @@ export default function History({ loaderData }: Route.ComponentProps) {
               const author = personName(h.author, h.authorName, lang);
               const approver = personName(h.mergedBy, h.mergedByName, lang);
               const stat = h.created || h.deleted ? null : wordsStat(h.changes, lang);
+              const mark = h.rev === older ? W.older[lang] : h.rev === newer ? W.newer[lang] : null;
               return (
-                <li key={h.commit} id={`v${h.rev}`} className={i === 0 ? 'now' : undefined}>
-                  <span className="hist-dot" aria-hidden="true" />
+                <li key={h.commit} id={`v${h.rev}`} className={[i === 0 ? 'now' : '', pick.includes(h.rev) ? 'picked' : ''].filter(Boolean).join(' ') || undefined}>
+                  <span className="hist-dot" aria-hidden="true">
+                    {mark}
+                  </span>
+                  {history.length > 1 ? (
+                    <button type="button" className="hist-pick" aria-pressed={pick.includes(h.rev)} onClick={() => toggle(h.rev)}>
+                      {mark ?? W.compare[lang]}
+                    </button>
+                  ) : null}
                   <h3 className="hist-title">
                     <bdi>{h.message || `${W.version[lang]} ${num(history.length - i, lang)}`}</bdi>
                   </h3>
