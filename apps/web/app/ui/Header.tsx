@@ -11,22 +11,29 @@ import { Avatar } from './primitives.js';
 import { setTheme, useTheme, type Theme } from './theme.js';
 
 /**
- * The frame's header. On a wide screen: the mark, the six sections, the
- * search box (Ctrl K opens the command palette; without script it is a
- * plain form to the search page), the language, what you follow, and you.
- * On a phone: back, the section's name, search, the bell and a menu sheet
- * at the top, and the main sections as tabs along the bottom, where a
- * thumb reaches them.
+ * The frame's header, as the redesign draws it (design/README.md). On a wide
+ * screen: the logo, the five sections, the search box (Ctrl K opens the
+ * command palette; without script it is a plain form to the search page),
+ * the bell and you; Reports, Projects and the language are in your menu.
+ * On a phone: the logo on the home page, or back and the page's name
+ * elsewhere, with search and the bell; the five sections are tabs along the
+ * bottom, where a thumb reaches them, the last one the menu.
  */
 
 /** The sections a phone keeps as tabs at the bottom; the rest are in the menu. */
-const TABS = ['/', '/sets', '/calendar', '/suggestions'];
+const TABS = ['/', '/sets', '/daily', '/calendar'];
 
+/** The sections in the header and the phone's tabs. Listening is the farbrengens, where the recordings are. */
 const NAV: Array<{ to: string; key: UiKey; icon: IconName }> = [
   { to: '/', key: 'navHome', icon: 'home' },
   { to: '/sets', key: 'navLibrary', icon: 'book' },
-  { to: '/calendar', key: 'navFarbrengens', icon: 'cal' },
+  { to: '/daily', key: 'navDaily', icon: 'cal' },
+  { to: '/calendar', key: 'navListen', icon: 'audio' },
   { to: '/suggestions', key: 'navSuggestions', icon: 'suggest' },
+];
+
+/** The rest of the site's sections, in the menu. */
+const MORE: Array<{ to: string; key: UiKey; icon: IconName }> = [
   { to: '/issues', key: 'navReports', icon: 'report' },
   { to: '/projects', key: 'navProjects', icon: 'target' },
 ];
@@ -34,6 +41,7 @@ const NAV: Array<{ to: string; key: UiKey; icon: IconName }> = [
 /** Which section a page belongs to: a farbrengen to Farbrengens, any other item to the Library. */
 export function sectionOf(pathname: string): string {
   if (pathname === '/') return '/';
+  if (pathname.startsWith('/daily')) return '/daily';
   if (pathname.startsWith('/calendar') || pathname.startsWith('/events') || pathname.startsWith('/sets/farbrengens')) return '/calendar';
   if (pathname.startsWith('/review') || pathname.startsWith('/suggestions')) return '/suggestions';
   if (pathname.startsWith('/issues')) return '/issues';
@@ -185,6 +193,13 @@ function AccountMenu({ lang }: { lang: Lang }) {
             </Link>
           ) : null}
           <hr />
+          {MORE.map((n) => (
+            <Link key={n.to} role="menuitem" to={href(n.to, lang)}>
+              <Icon name={n.icon} />
+              {tu(lang, n.key)}
+            </Link>
+          ))}
+          <hr />
           <div className="menu-sec">{tu(lang, 'theme')}</div>
           <ThemeSwitch lang={lang} />
           <hr />
@@ -213,7 +228,7 @@ export function Header({ lang }: { lang: Lang }) {
     if (sheet.current) sheet.current.open = false;
   }, [pathname, search]);
 
-  // Keyboard: Ctrl/⌘ K or / for the palette, ? for the shortcuts, g then h/l/f/s/r/p to go.
+  // Keyboard: Ctrl/⌘ K or / for the palette, ? for the shortcuts, g then h/l/d/f/s/r/p to go.
   useEffect(() => {
     let g = 0;
     const onKey = (e: KeyboardEvent) => {
@@ -233,7 +248,7 @@ export function Header({ lang }: { lang: Lang }) {
         setPalette({ open: true, initial: '?' });
       } else if (e.key === 'g') g = Date.now();
       else if (Date.now() - g < 1200) {
-        const to = { h: '/', l: '/sets', f: '/calendar', s: '/suggestions', r: '/issues', i: '/inbox', p: '/projects' }[e.key];
+        const to = { h: '/', l: '/sets', d: '/daily', f: '/calendar', s: '/suggestions', r: '/issues', i: '/inbox', p: '/projects' }[e.key];
         g = 0;
         if (to) navigate(href(to, lang));
       }
@@ -281,7 +296,7 @@ export function Header({ lang }: { lang: Lang }) {
             type="search"
             defaultValue={q}
             key={q}
-            placeholder={tu(lang, 'searchPlaceholder')}
+            placeholder={tu(lang, 'searchLibrary')}
             aria-label={tu(lang, 'searchShort')}
             onFocus={(e) => {
               if (e.currentTarget.dataset.typed) return;
@@ -293,22 +308,10 @@ export function Header({ lang }: { lang: Lang }) {
             }}
           />
           {lang === 'en' ? <input type="hidden" name="lang" value="en" /> : null}
-          <span className="kbds" aria-hidden="true">
-            <kbd>Ctrl</kbd>
-            <kbd>K</kbd>
-          </span>
         </form>
         <div className="top-end">
-          <a className="lang" href={other} hrefLang={lang === 'he' ? 'en' : 'he'} aria-label={tu(lang, 'language')}>
-            {lang === 'he' ? (
-              <>
-                <b>עב</b> · EN
-              </>
-            ) : (
-              <>
-                עב · <b>EN</b>
-              </>
-            )}
+          <a className="lang" href={other} hrefLang={lang === 'he' ? 'en' : 'he'} lang={lang === 'he' ? 'en' : 'he'} aria-label={tu(lang, 'language')} title={tu(lang, 'language')}>
+            {lang === 'he' ? 'English' : 'עברית'}
           </a>
           {account ? <InboxLink lang={lang} first={account.unread ?? 0} /> : null}
           <AccountMenu lang={lang} />
@@ -336,7 +339,7 @@ export function Header({ lang }: { lang: Lang }) {
             <Icon name="back" />
           </Link>
         )}
-        <span className="t">{phoneTitle}</span>
+        <span className="t">{home ? null : phoneTitle}</span>
         <Link
           className="ib"
           to={href('/search', lang)}
@@ -376,7 +379,7 @@ export function Header({ lang }: { lang: Lang }) {
               </button>
             </div>
             <nav aria-label={tu(lang, 'mainNav')}>
-              {NAV.map((n) => (
+              {[...NAV, ...MORE].map((n) => (
                 <Link key={n.to} to={href(n.to, lang)} aria-current={section === n.to ? 'page' : undefined}>
                   <Icon name={n.icon} />
                   {tu(lang, n.key)}
