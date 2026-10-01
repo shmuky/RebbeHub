@@ -1436,3 +1436,145 @@ body.embedded {
     flex: none;
   }
 }
+
+/* ------------------------------------------------------------ the menu, as design/ draws it (4b) */
+
+/* On a phone the menu is a whole page: its name, you, then its parts under small headings. */
+@media (max-width: 720px) {
+  .sheet {
+    width: 100vw;
+    box-shadow: none;
+  }
+}
+
+.sheet .sheet-h {
+  border-bottom: 0;
+  height: auto;
+  padding: 18px 20px 8px;
+}
+
+.sheet-title {
+  flex: 1;
+  margin: 0;
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.me-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 8px 16px 6px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.me-card .grow,
+.menu-row .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.me-card b {
+  display: block;
+  font-family: var(--display);
+  font-size: 18px;
+}
+
+.me-card .grow > span {
+  font-size: var(--fs-sm);
+  color: var(--subtle);
+}
+
+.me-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--sunken);
+  color: var(--muted);
+}
+
+.me-card > .i:last-child,
+.menu-row > .i:last-child {
+  color: var(--faint);
+}
+
+.menu-group h3 {
+  margin: 0;
+  padding: 18px 20px 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--subtle);
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 20px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-md);
+  text-align: start;
+  text-decoration: none;
+}
+
+.menu-group > :last-child {
+  border-bottom: 1px solid var(--border);
+}
+
+.menu-row:hover {
+  background: var(--canvas);
+}
+
+.menu-row.static:hover {
+  background: none;
+}
+
+.menu-row[aria-current='page'] {
+  background: var(--sunken);
+}
+
+.menu-row > .i:first-child {
+  color: var(--muted);
+}
+
+.menu-value {
+  font-size: var(--fs-sm);
+  color: var(--subtle);
+}
+
+.menu-badge {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 11px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.menu-row .theme-switch > button {
+  padding: 5px 8px;
+}
+
+.menu-row .theme-switch > button > span {
+  display: none;
+}
+
+.sheet > .menu-group:last-child {
+  padding-bottom: 24px;
+}
