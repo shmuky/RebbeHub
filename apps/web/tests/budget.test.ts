@@ -210,6 +210,13 @@ describe("each page's statements and API calls stay within its ceiling", () => {
     within(await page('/igros-sample?part=1'), 'a volume', { statements: 45, calls: 28, kB: 100 });
     within(await page(await pathOf(ids.unit)), 'a sicha', { statements: 40, calls: 22, kB: 70 });
   });
+  it('sends a volume typed as a path (/igros-sample/1) to its page, and what is not a volume on to 404', async () => {
+    const volume = await handle(new Request(`${SITE}/igros-sample/1`));
+    expect(volume.status).toBe(302);
+    expect(volume.headers.get('location')).toBe('/igros-sample?part=1');
+    expect((await handle(new Request(`${SITE}/igros-sample/999`))).status).toBe(404);
+    expect((await handle(new Request(`${SITE}/no-such-sefer/1`))).status).toBe(404);
+  });
   it("draws a volume as the design does: its name, how to read it, and its sichos with the machine's quiet dot", async () => {
     const html = await (await handle(new Request(`${SITE}/igros-sample?part=1`))).text();
     expect(html).toContain('class="vol-head"');

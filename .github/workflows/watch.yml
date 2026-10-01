@@ -1,0 +1,84 @@
+name: Watch
+
+# Tells someone when RebbeHub is down (docs/operations.md, "Status"). The API
+# checks itself every five minutes and keeps a report, but nobody heard about
+# it. From outside Cloudflare, every ten minutes, this asks the site and the
+# report; when something is down twice a minute apart, it opens one issue
+# labelled `outage` (GitHub emails the people it mentions and who watch the
+# repository), adds to it while it lasts, and closes it once all is up again.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SITE: https://rebbehub.org
+      API: https://api.rebbehub.org
+      # The site turns away bots that do not say they are a browser (docs/operations.md, "Traffic and crawlers").
+      UA: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36 RebbeHub-watch"
+      NOTIFY: "@shmuky"
+    steps:
+      - name: Look
+        id: look
+        run: |
+          look() {
+            problems=()
+            code=$(curl -s -o /dev/null -w '%{http_code}' -A "$UA" -H 'Cache-Control: no-cache' --max-time 30 "$SITE/about?watch=$(date +%s)" || true)
+            [ "$code" = "200" ] || problems+=("The site answered $code for /about.")
+            if curl -sf -A "$UA" --max-time 30 "$API/v1/status" -o status.json; then
+              # The report is kept by the API's own five-minute checks; an old one means they stopped.
+              age=$(( $(date +%s) - $(date -d "$(jq -r '.report.checkedAt // empty' status.json)" +%s 2>/dev/null || echo 0) ))
+              [ "$age" -le 1200 ] || problems+=("The API's own checks have not run for $((age / 60)) minutes.")
+              while IFS= read -r line; do [ -n "$line" ] && problems+=("$line"); done < <(
+                jq -r '.report.checks[]? | select(.state == "down") | "\(.id) is down\(if .detail then ": " + .detail else "" end)"' status.json)
+            else
+              problems+=("The API did not answer /v1/status.")
+            fi
+          }
+          look
+          if [ ${#problems[@]} -gt 0 ]; then
+            # Once more a minute later: one slow answer is not an outage.
+            sleep 60
+            look
+          fi
+          {
+            echo 'problems<<EOF'
+            for p in "${problems[@]}"; do echo "- $p"; done
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+          if [ ${#problems[@]} -gt 0 ]; then printf '%s\n' "${problems[@]}"; else echo "All up."; fi
+      - name: Tell
+        env:
+          PROBLEMS: ${{ steps.look.outputs.problems }}
+        run: |
+          gh label create outage --color B60205 --description "RebbeHub is down (opened and closed by the Watch workflow)" 2>/dev/null || true
+          open=$(gh issue list --label outage --state open --json number --jq '.[0].number // empty')
+          now=$(date -u '+%Y-%m-%d %H:%M UTC')
+          if [ -n "$PROBLEMS" ]; then
+            if [ -z "$open" ]; then
+              gh issue create --label outage --title "RebbeHub is down ($now)" \
+                --body "$(printf '%s\n\n%s\n\nFound by the Watch workflow from outside Cloudflare; details at %s/status. This issue closes itself when all is up again.\n\n%s' "Since $now:" "$PROBLEMS" "$SITE" "$NOTIFY")"
+            else
+              # Only when what is wrong changed, so a long outage is not an email every ten minutes.
+              last=$(gh issue view "$open" --json comments,body --jq '(.comments | last | .body) // .body')
+              if ! grep -qF -- "$(printf '%s' "$PROBLEMS" | head -1)" <<<"$last"; then
+                gh issue comment "$open" --body "$(printf '%s:\n\n%s' "$now" "$PROBLEMS")"
+              fi
+            fi
+          elif [ -n "$open" ]; then
+            gh issue close "$open" --comment "All up again at $now. $NOTIFY"
+          fi

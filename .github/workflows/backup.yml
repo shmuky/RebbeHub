@@ -1,0 +1,84 @@
+name: Backup
+
+# The whole database (the catalog, accounts and sessions, everything), every
+# night, into the private preservation bucket: Neon keeps only a day of
+# history, so a bad import or merge noticed later could not be undone
+# without this. Never served; restoring is in docs/operations.md, "Backups".
+#
+# backups/db/<yyyy-mm-dd>.dump is pg_dump's custom format (compressed).
+# A night's copy is kept 35 days; the one of the 1st of each month is kept.
+#
+# Needs DATABASE_URL, R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY
+# (an R2 token that can write rebbehub-preservation), as the transcription has.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Database to R2
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      BUCKET: rebbehub-preservation
+      KEEP_DAYS: "35"
+    steps:
+      - name: Check it is configured
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "::error::Add the DATABASE_URL repository secret (see docs/deploy.md)."; exit 1; fi
+          if [ -z "$R2_ENDPOINT" ] || [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+            echo "::error::Add R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY (see docs/deploy.md)."; exit 1
+          fi
+      - name: Install pg_dump as new as the server
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSo /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
+      - name: Dump
+        run: |
+          # pg_dump wants one session of its own: Neon's pooler (-pooler in the host) is left out.
+          url="${DATABASE_URL/-pooler./.}"
+          day=$(date -u +%F)
+          echo "DAY=$day" >> "$GITHUB_ENV"
+          pg_dump --format=custom --compress=9 --no-owner --no-privileges --file "$day.dump" "$url"
+          # A dump that cannot be read back is no backup.
+          pg_restore --list "$day.dump" > toc.txt
+          tables=$(grep -c ' TABLE DATA ' toc.txt || true)
+          if [ "$tables" -lt 10 ]; then echo "::error::The dump lists only $tables tables' data."; exit 1; fi
+          sha256sum "$day.dump" > "$day.dump.sha256"
+          echo "$(du -h "$day.dump" | cut -f1), $tables tables" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Upload
+        run: |
+          aws s3 cp "$DAY.dump" "s3://$BUCKET/backups/db/$DAY.dump" --endpoint-url "$R2_ENDPOINT" --only-show-errors
+          aws s3 cp "$DAY.dump.sha256" "s3://$BUCKET/backups/db/$DAY.dump.sha256" --endpoint-url "$R2_ENDPOINT" --only-show-errors
+          # Checked there, not only sent.
+          aws s3 ls "s3://$BUCKET/backups/db/$DAY.dump" --endpoint-url "$R2_ENDPOINT"
+      - name: Forget old nights
+        run: |
+          cutoff=$(date -u -d "-$KEEP_DAYS days" +%F)
+          aws s3 ls "s3://$BUCKET/backups/db/" --endpoint-url "$R2_ENDPOINT" | awk '{print $4}' | while read -r name; do
+            day="${name%%.dump*}"
+            [[ "$day" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || continue
+            # The 1st of each month stays.
+            if [[ "$day" < "$cutoff" ]] && [ "${day:8:2}" != "01" ]; then
+              aws s3 rm "s3://$BUCKET/backups/db/$name" --endpoint-url "$R2_ENDPOINT" --only-show-errors
+              echo "forgot $name"
+            fi
+          done

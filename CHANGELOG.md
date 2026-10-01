@@ -204,6 +204,8 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Fixed
 
+- **A volume's address can be typed.** `/likkutei-sichos/30` now opens
+  volume 30 (`/likkutei-sichos?part=30`) instead of saying not found.
 - **Signing in with Google shows again for someone signed out.** The
   site answers reads as nobody in its own Worker, which has no sign-in
   routes, so `/_/auth/me` answered 404 on every page and `/signin` hid
