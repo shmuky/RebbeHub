@@ -1,0 +1,342 @@
+/*
+ * The library (routes/sets.tsx), as design/ draws it: the shelves down the
+ * start side and the chosen shelf's sefarim as cards beside them on a wide
+ * screen; on a phone the shelves are a row of names that scrolls, and the
+ * cards are one column.
+ */
+
+.lb {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 40px;
+  padding-block: 32px 56px;
+  align-items: start;
+}
+
+.lb-shelves {
+  position: sticky;
+  top: calc(var(--header-h) + 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lb-side-h {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--subtle);
+  padding-inline: 14px;
+  margin: 0 0 4px;
+  letter-spacing: 0;
+}
+
+.lb-shelves ul + .lb-side-h {
+  margin-top: 18px;
+}
+
+.lb-shelves a {
+  display: block;
+  padding: 9px 14px;
+  border-radius: var(--r-lg);
+  color: var(--muted);
+  font-size: var(--fs-lg);
+  text-decoration: none;
+}
+
+.lb-shelves a:hover {
+  background: var(--canvas);
+  color: var(--text);
+}
+
+.lb-shelves a[aria-current='page'] {
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 700;
+}
+
+.lb-main {
+  min-width: 0;
+}
+
+.lb-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-bottom: 24px;
+}
+
+.lb-head h1 {
+  font: 700 34px / 1.2 var(--display);
+  letter-spacing: 0;
+}
+
+.lb-head h1 a {
+  color: var(--text);
+}
+
+.lb-head p {
+  color: var(--subtle);
+}
+
+.lb-cards {
+  columns: 2 340px;
+  column-gap: 24px;
+}
+
+.lb-card {
+  break-inside: avoid;
+  display: block;
+  margin-bottom: 24px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px;
+}
+
+.lb-card-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lb-card-h h2 {
+  font: 700 24px / 1.25 var(--display);
+  letter-spacing: 0;
+}
+
+.lb-card-h h2 a {
+  color: var(--text);
+}
+
+.lb-card-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--fs-md);
+  white-space: nowrap;
+}
+
+.lb-sub {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--subtle);
+  margin: 18px 0 10px;
+  letter-spacing: 0;
+}
+
+.lb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 6px;
+}
+
+.lb-grid a {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: 700 15px / 1 var(--display);
+  text-decoration: none;
+}
+
+.lb-grid a:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Parts with names (Tanya's ליקוטי אמרים…) are a list, not squares. */
+.lb-parts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px;
+}
+
+.lb-parts a {
+  display: block;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--display);
+}
+
+.lb-parts a:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.lb-with {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.lb-with a {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  height: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.lb-with a:hover {
+  border-color: var(--border-strong);
+}
+
+.lb-with b {
+  font-size: var(--fs-md);
+}
+
+.lb-with span {
+  font-size: var(--fs-sm);
+  color: var(--subtle);
+}
+
+/* A closed card: its name, how it is divided, and a way in. */
+.lb-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 24px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.lb-row:hover {
+  text-decoration: none;
+  border-color: var(--border-strong);
+}
+
+.lb-row b {
+  flex: 1;
+  font: 700 19px / 1.3 var(--display);
+}
+
+.lb-row span {
+  color: var(--subtle);
+  font-size: var(--fs-md);
+}
+
+.lb-loose summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.lb-loose summary::-webkit-details-marker {
+  display: none;
+}
+
+.lb-loose summary b {
+  flex: 1;
+  font: 700 19px / 1.3 var(--display);
+}
+
+.lb-loose summary span {
+  color: var(--subtle);
+}
+
+.lb-loose ul {
+  margin-top: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.lb-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--subtle);
+  font-size: var(--fs-md);
+  margin-top: 8px;
+}
+
+@media (max-width: 860px) {
+  .lb {
+    display: block;
+    padding-block: 0 32px;
+  }
+  .lb-shelves {
+    position: static;
+    flex-direction: row;
+    gap: 8px;
+    overflow-x: auto;
+    margin-inline: calc(var(--gutter) * -1);
+    padding: 14px var(--gutter);
+    border-bottom: 1px solid var(--border-muted);
+    scrollbar-width: none;
+  }
+  .lb-shelves::-webkit-scrollbar {
+    display: none;
+  }
+  .lb-shelves ul {
+    display: contents;
+  }
+  .lb-side-h {
+    display: none;
+  }
+  .lb-shelves a {
+    white-space: nowrap;
+    padding: 7px 16px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: var(--fs-md);
+    background: var(--card);
+  }
+  .lb-shelves a[aria-current='page'] {
+    border-color: var(--text);
+  }
+  .lb-head {
+    margin: 18px 0 14px;
+  }
+  .lb-head h1 {
+    font-size: 26px;
+  }
+  .lb-head p {
+    font-size: var(--fs-md);
+  }
+  .lb-cards {
+    columns: auto;
+    margin-inline: calc(var(--gutter) * -1);
+  }
+  .lb-card {
+    margin: 0;
+    border-radius: 0;
+    border-width: 0 0 1px;
+    padding: 20px var(--gutter);
+  }
+  .lb-card.open {
+    border-top-width: 1px;
+  }
+  .lb-row {
+    background: none;
+    padding-block: 16px;
+  }
+  .lb-card-h h2 {
+    font-size: 21px;
+  }
+  .lb-grid {
+    grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  }
+  .lb-with {
+    grid-template-columns: 1fr 1fr;
+  }
+  .lb-foot {
+    margin-top: 20px;
+  }
+}

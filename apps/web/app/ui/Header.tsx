@@ -12,7 +12,7 @@ import { setTheme, useTheme, type Theme } from './theme.js';
 
 /**
  * The frame's header, as the redesign draws it (design/README.md). On a wide
- * screen: the logo, the five sections, the search box (Ctrl K opens the
+ * screen: the logo, which is the way home, the other four sections, the search box (Ctrl K opens the
  * command palette; without script it is a plain form to the search page),
  * the bell and you; Reports, Projects and the language are in your menu.
  * On a phone: the logo on the home page, or back and the page's name
@@ -272,7 +272,7 @@ export function Header({ lang }: { lang: Lang }) {
           <Logo size={24} />
         </Link>
         <nav className="nav" aria-label={tu(lang, 'mainNav')}>
-          {NAV.map((n) => (
+          {NAV.filter((n) => n.to !== '/').map((n) => (
             <Link key={n.to} to={href(n.to, lang)} aria-current={section === n.to ? 'page' : undefined}>
               {tu(lang, n.key)}
             </Link>
