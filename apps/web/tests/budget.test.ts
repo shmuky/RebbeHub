@@ -39,12 +39,14 @@ let catalog: Catalog;
 let api: ReturnType<typeof createApp>;
 let handle: (request: Request) => Promise<Response>;
 const ids = {} as Record<'set' | 'work' | 'unit' | 'pub' | 'scan' | 'event' | 'recording', EntityId>;
+let secondSicha: EntityId;
 let suggestion = 0;
 const counts = { statements: 0, calls: 0, shapes: new Map<string, number>(), routes: new Map<string, number>() };
 const measured: Array<{ what: string; statements: number; calls: number; kB: number; status: number; routes: string[] }> = [];
 
 /** A sicha's words as Sichos-Kodesh's import keeps them in the sicha itself (pageText.ts), about four kilobytes like a real one. */
-const words = (i: number) => ({ profile: 'sichos-kodesh', versions: [{ id: 'he', language: 'he', credit: 'לדוגמה', segments: [{ id: 'p1', kind: 'paragraph', text: [{ text: `דברי שיחה ${i} `.repeat(300) }] }] }] });
+// The second sicha's words carry a note, as Likkutei Sichos's do.
+const words = (i: number): Json => ({ profile: 'sichos-kodesh', versions: [{ id: 'he', language: 'he', credit: 'לדוגמה', segments: [{ id: 'p1', kind: 'paragraph', text: [{ text: `דברי שיחה ${i} `.repeat(300) }, ...(i === 2 ? [{ note: 'n1' }] : [])] }], ...(i === 2 ? { notes: [{ id: 'n1', kind: 'note', text: [{ text: 'מקור ההערה' }] }] } : {}) }] });
 
 const reset = () => {
   counts.statements = 0;
@@ -69,6 +71,7 @@ beforeAll(async () => {
   for (let i = 1; i <= 30; i++) units.push(await add(catalog, 'mendy', 'keeper', 'unit', { work: ids.work, position: [volume(1), { level: 'sicha', value: String(i) }], order: `a${String(i).padStart(2, '0')}`, label: { he: `שיחה ${i}` }, body: words(i) }));
   for (let i = 1; i <= 3; i++) await add(catalog, 'mendy', 'keeper', 'unit', { work: ids.work, position: [volume(2), { level: 'sicha', value: String(i) }], order: `b${String(i).padStart(2, '0')}`, label: { he: `שיחה ${i}` } });
   ids.unit = units[0]!;
+  secondSicha = units[1]!;
   for (const [i, u] of units.slice(0, 4).entries()) {
     const edition = await add(catalog, 'mendy', 'keeper', 'text', { kind: 'edition', unit: u, language: 'he' });
     for (let p = 0; p < 4; p++) await add(catalog, 'mendy', 'keeper', 'segment', { text: edition, order: `V${p}`, kind: 'paragraph', content: `פסקה ${p} של שיחה ${i + 1}`, proofread: p === 0 ? 1 : 0 });
@@ -215,6 +218,15 @@ describe("each page's statements and API calls stay within its ceiling", () => {
     expect(html.match(/class="vol-machine"/g)).toHaveLength(1);
     // Its other tabs keep the sefer's full page.
     expect(await (await handle(new Request(`${SITE}/igros-sample?part=1&tab=printings`))).text()).not.toContain('class="vol-head"');
+  });
+  it('sets a sicha beside the rest of its volume, its notes beside its words (3l)', async () => {
+    const html = await (await handle(new Request(`${SITE}${await pathOf(secondSicha)}`))).text();
+    expect(html).toContain('class="rd-toc"');
+    expect(html.match(/class="rd-toc".*?<\/nav>/s)?.[0].match(/<li/g)?.length).toBeGreaterThanOrEqual(30);
+    expect(html).toMatch(/aria-current="page"[^>]*>שיחה 2</);
+    expect(html).toMatch(/class="words-side"[^>]*><p><b>1<\/b> (<!-- -->)?מקור ההערה/);
+    // Every note stands beside its paragraph, so the list at the foot is for a narrow screen only.
+    expect(html).toContain('class="words-notes placed"');
   });
   it('a printing and its scan', async () => {
     within(await page(await pathOf(ids.pub)), 'a printing', { statements: 40, calls: 20, kB: 60 });

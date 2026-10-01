@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from 'react';
+import { createContext, Fragment, useContext, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { toHebrewNumeral } from '@rebbehub/hebrew';
 import { allSegments, type PageInline, type PageSegment, type PageText, type PageVersion, type TextProfile } from '@rebbehub/model';
@@ -30,6 +30,14 @@ const RTL = new Set(['he', 'yi', 'ar']);
 const dirOf = (language: string) => (RTL.has(language) ? 'rtl' : 'ltr');
 const MARK_TAGS = { b: 'b', i: 'i', u: 'u', small: 'small', sup: 'sup', sub: 'sub' } as const;
 
+/**
+ * On the reading page a paragraph's notes also stand beside it, in the
+ * margin, as design/ 3l sets a sicha on a wide screen (reading.css shows
+ * them only there, and then the notes at the foot only when some are not
+ * beside their paragraph).
+ */
+export const SideNotes = createContext(false);
+
 /** A segment's anchor in the page: `#s-3.14` links to it. */
 export const segmentAnchor = (id: string) => `s-${id}`;
 
@@ -49,6 +57,26 @@ interface Context {
   rowAnchors?: boolean;
   /** The text's first paragraph, whose first word is set large, as a sefer opens. */
   lead?: string;
+  /** Its notes by id, to set each beside the paragraph that points to it. */
+  side?: Map<string, PageSegment>;
+}
+
+/** The notes a segment's words point to, in order. */
+const noteIds = (segment: PageSegment) => (segment.text ?? []).flatMap((run) => ('note' in run ? [run.note] : []));
+
+/** A paragraph's notes beside it: a copy of the ones at the foot, for the eye only. */
+function SideOf({ segment, ctx }: { segment: PageSegment; ctx: Context }) {
+  const notes = ctx.side ? noteIds(segment).flatMap((id) => (ctx.side!.has(id) ? [ctx.side!.get(id)!] : [])) : [];
+  if (!notes.length) return null;
+  return (
+    <aside className="words-side" aria-hidden="true">
+      {notes.map((note) => (
+        <p key={note.id}>
+          <b>{ctx.noteLabel(note.id)}</b> <Runs runs={note.text} ctx={ctx} />
+        </p>
+      ))}
+    </aside>
+  );
 }
 
 /** The words of one segment: runs in their marks, links, footnote marks, source markers, line breaks. Never HTML. */
@@ -321,13 +349,16 @@ function Segment({ segment, depth, ctx }: { segment: PageSegment; depth: number;
       return null; // drawn with the notes
     default:
       return (
-        <p id={id} className={`words-p${segment.end ? ' end' : ''}${machine}`}>
-          {/* The paragraph's number in the margin: its own when it has one, else counted in order (words.css). */}
-          <a className="words-anchor" href={`#${anchor}`} aria-label={WORDS.segmentLink[ctx.lang]}>
-            {segment.n !== undefined ? numberIn(segment.n, ctx.version.language) : null}
-          </a>
-          <Words segment={segment} ctx={ctx} />
-        </p>
+        <>
+          <SideOf segment={segment} ctx={ctx} />
+          <p id={id} className={`words-p${segment.end ? ' end' : ''}${machine}`}>
+            {/* The paragraph's number in the margin: its own when it has one, else counted in order (words.css). */}
+            <a className="words-anchor" href={`#${anchor}`} aria-label={WORDS.segmentLink[ctx.lang]}>
+              {segment.n !== undefined ? numberIn(segment.n, ctx.version.language) : null}
+            </a>
+            <Words segment={segment} ctx={ctx} />
+          </p>
+        </>
       );
   }
 }
@@ -335,8 +366,11 @@ function Segment({ segment, depth, ctx }: { segment: PageSegment; depth: number;
 function Notes({ ctx }: { ctx: Context }) {
   const notes = ctx.version.notes ?? [];
   if (!notes.length) return null;
+  // Every note already stands beside its paragraph: the list at the foot is for a narrow screen only.
+  const beside = ctx.side ? new Set([...allSegments(ctx.version.segments)].flatMap((x) => (x.kind === 'paragraph' ? noteIds(x) : []))) : null;
+  const placed = beside && notes.every((n) => beside.has(n.id));
   return (
-    <aside className="words-notes" aria-label={WORDS.notes[ctx.lang]}>
+    <aside className={`words-notes${placed ? ' placed' : ''}`} aria-label={WORDS.notes[ctx.lang]}>
       <ol>
         {notes.map((note) => (
           <li key={note.id} id={`n-${ctx.version.id}-${note.id}`}>
@@ -404,7 +438,8 @@ const LICENCES: Record<string, string> = { 'cc-by-nc': 'CC BY-NC', 'cc-by': 'CC 
 
 function VersionView({ version, profile, lang, edit }: { version: PageVersion; profile: TextProfile; lang: Lang; edit?: EditState }) {
   const lead = [...allSegments(version.segments)].find((x) => x.kind === 'paragraph')?.id;
-  const ctx: Context = { lang, profile, version, noteLabel: noteLabels(version), edit, lead };
+  const side = useContext(SideNotes) && !edit && version.notes?.length ? new Map(version.notes.map((n) => [n.id, n])) : undefined;
+  const ctx: Context = { lang, profile, version, noteLabel: noteLabels(version), edit, lead, side };
   return (
     <div className={`words words-${profile}${version.origin && !version.origin.checked ? ' machine' : ''}`} lang={version.language} dir={dirOf(version.language)}>
       <Segments list={version.segments} depth={0} ctx={ctx} />
