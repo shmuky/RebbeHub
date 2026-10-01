@@ -253,6 +253,12 @@ describe("each page's statements and API calls stay within its ceiling", () => {
     expect(html.indexOf('class="sg-review"')).toBeGreaterThan(-1);
     expect(html.indexOf('class="sg-review"')).toBeLessThan(html.indexOf('id="description"'));
   });
+  it('draws the menu as the design does (4b): its name, then its parts under small headings', async () => {
+    const html = await (await handle(new Request(`${SITE}/`))).text();
+    expect(html).toContain('<h2 class="sheet-title">תפריט</h2>');
+    expect(html).toMatch(/<section class="menu-group"><h3>קריאה<\/h3>/);
+    expect(html).toMatch(/class="menu-row" href="\/help"/);
+  });
   it('search, suggestions and review', async () => {
     within(await page(`/search?q=${encodeURIComponent('שיחה')}`), 'search', { statements: 15, calls: 6, kB: 110 });
     within(await page('/suggestions'), '/suggestions', { statements: 8, calls: 3, kB: 35 });

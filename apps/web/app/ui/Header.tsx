@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useMatches, useNavigate } from 'react-router';
 import type { Lang } from '../lib/i18n.js';
 import { tu, type UiKey } from '../lib/i18nUi.js';
@@ -123,6 +123,28 @@ function InboxLink({ lang, first }: { lang: Lang; first: number }) {
     <Link className="icon-link" to={href('/inbox', lang)} aria-label={label} title={label}>
       <Icon name="bell" />
       {unread ? <span className="dot-count">{unread > 99 ? '99+' : unread}</span> : null}
+    </Link>
+  );
+}
+
+/** One part of the phone's menu, under its small heading (design/ 4b). */
+function MenuGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="menu-group">
+      <h3>{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+/** A line of the menu: its icon and words, a count when something waits, and the arrow on. */
+function MenuRow({ to, icon, label, badge, current, chevron }: { to: string; icon: IconName; label: string; badge?: number; current?: boolean; chevron: IconName }) {
+  return (
+    <Link className="menu-row" to={to} aria-current={current ? 'page' : undefined}>
+      <Icon name={icon} />
+      <span className="grow">{label}</span>
+      {badge ? <span className="menu-badge">{badge > 99 ? '99+' : badge}</span> : null}
+      <Icon name={chevron} />
     </Link>
   );
 }
@@ -259,6 +281,8 @@ export function Header({ lang }: { lang: Lang }) {
 
   const openPalette = (initial = '') => setPalette({ open: true, initial });
   const other = otherLangHref(lang, pathname, search);
+  // The menu's arrows point on, toward the end of the line: left in Hebrew.
+  const chevron: IconName = lang === 'he' ? 'chev' : 'chevr';
   const navItem = NAV.find((n) => n.to === section);
   // A page kept under another section's tab (what is missing, the catalog's health) is still called by its own name.
   const ownTitle = pathname.startsWith('/missing') ? tu(lang, 'missing') : pathname.startsWith('/health') ? tu(lang, 'health') : pathname.startsWith('/help') ? tu(lang, 'waysToHelp') : null;
@@ -364,9 +388,7 @@ export function Header({ lang }: { lang: Lang }) {
           />
           <div className="sheet" role="dialog" aria-label={tu(lang, 'menu')}>
             <div className="sheet-h">
-              <Link to={href('/', lang)} className="brand">
-                <Logo size={23} />
-              </Link>
+              <h2 className="sheet-title">{tu(lang, 'menu')}</h2>
               <button
                 type="button"
                 className="ib"
@@ -378,59 +400,67 @@ export function Header({ lang }: { lang: Lang }) {
                 <Icon name="x" />
               </button>
             </div>
-            <nav aria-label={tu(lang, 'mainNav')}>
-              {[...NAV, ...MORE].map((n) => (
-                <Link key={n.to} to={href(n.to, lang)} aria-current={section === n.to ? 'page' : undefined}>
-                  <Icon name={n.icon} />
-                  {tu(lang, n.key)}
-                </Link>
-              ))}
-              <Link to={href('/search', lang)}>
-                <Icon name="search" />
-                {tu(lang, 'searchShort')}
-              </Link>
-            </nav>
-            <hr />
-            <nav aria-label={tu(lang, 'account')}>
-              {account ? (
-                <>
-                  <Link to={href('/account', lang)}>
-                    <Avatar name={account.person.displayName} id={account.person.id} size="sm" />
-                    {account.person.displayName}
-                  </Link>
-                  <Link to={href('/inbox', lang)}>
-                    <Icon name="bell" />
-                    {tu(lang, 'notifications')}
-                  </Link>
-                  {account.person.steward ? (
-                    <Link to={href('/admin', lang)}>
-                      <Icon name="shield" />
-                      {tu(lang, 'admin')}
-                    </Link>
-                  ) : null}
-                </>
-              ) : account === null ? (
-                <Link to={href('/signin', lang, { return: `${pathname}${search}` })}>
-                  <Icon name="user" />
-                  {tu(lang, 'signIn')}
-                </Link>
-              ) : null}
-              <a href={other} hrefLang={lang === 'he' ? 'en' : 'he'}>
-                <Icon name="globe" />
-                {lang === 'he' ? 'English' : 'עברית'}
-              </a>
-            </nav>
-            <div className="sheet-sec">{tu(lang, 'theme')}</div>
-            <div className="sheet-theme">
-              <ThemeSwitch lang={lang} />
-            </div>
             {account ? (
-              <nav>
-                <button type="button" onClick={signOut}>
+              <Link className="me-card" to={href(account.person.username ? `/u/${account.person.username}` : '/account', lang)}>
+                <Avatar name={account.person.displayName} id={account.person.id} />
+                <span className="grow">
+                  <b>{account.person.displayName}</b>
+                  <span>{tu(lang, 'myProfile')}</span>
+                </span>
+                <Icon name={chevron} />
+              </Link>
+            ) : account === null ? (
+              <Link className="me-card" to={href('/signin', lang, { return: `${pathname}${search}` })}>
+                <span className="me-icon">
+                  <Icon name="user" />
+                </span>
+                <span className="grow">
+                  <b>{tu(lang, 'signIn')}</b>
+                  <span>{tu(lang, 'signInWhy')}</span>
+                </span>
+                <Icon name={chevron} />
+              </Link>
+            ) : null}
+            {account ? (
+              <MenuGroup title={tu(lang, 'menuMine')}>
+                <MenuRow to={href('/suggestions', lang, { q: lang === 'he' ? 'מצב:פתוחה מציע:@me' : 'state:open author:@me' })} icon="suggest" label={tu(lang, 'mySuggestions')} chevron={chevron} />
+                <MenuRow to={href('/suggestions', lang, { q: lang === 'he' ? 'מצב:פתוחה בודק:@me' : 'state:open reviewer:@me' })} icon="check" label={tu(lang, 'toReview')} chevron={chevron} />
+                <MenuRow to={href('/inbox', lang)} icon="bell" label={tu(lang, 'notifications')} badge={account.unread || undefined} chevron={chevron} />
+                <MenuRow to={href('/account', lang)} icon="user" label={tu(lang, 'account')} chevron={chevron} />
+                {account.person.steward ? <MenuRow to={href('/admin', lang)} icon="shield" label={tu(lang, 'admin')} chevron={chevron} /> : null}
+              </MenuGroup>
+            ) : null}
+            <MenuGroup title={tu(lang, 'menuReading')}>
+              <div className="menu-row static">
+                <Icon name="sun" />
+                <span className="grow">{tu(lang, 'theme')}</span>
+                <ThemeSwitch lang={lang} />
+              </div>
+              <a className="menu-row" href={other} hrefLang={lang === 'he' ? 'en' : 'he'}>
+                <Icon name="globe" />
+                <span className="grow">{tu(lang, 'language')}</span>
+                <span className="menu-value">{lang === 'he' ? 'עברית · English' : 'English · עברית'}</span>
+                <Icon name={chevron} />
+              </a>
+              <MenuRow to={href('/daily', lang)} icon="cal" label={tu(lang, 'navDaily')} chevron={chevron} />
+            </MenuGroup>
+            <MenuGroup title={tu(lang, 'menuSite')}>
+              {[...NAV.filter((n) => !TABS.includes(n.to)), ...MORE].map((n) => (
+                <MenuRow key={n.to} to={href(n.to, lang)} icon={n.icon} label={tu(lang, n.key)} current={section === n.to} chevron={chevron} />
+              ))}
+              <MenuRow to={href('/search', lang)} icon="search" label={tu(lang, 'searchShort')} chevron={chevron} />
+            </MenuGroup>
+            <MenuGroup title={tu(lang, 'menuHelp')}>
+              <MenuRow to={href('/help', lang)} icon="pencil" label={tu(lang, 'navHelp')} chevron={chevron} />
+              <MenuRow to={href('/about', lang)} icon="info" label={tu(lang, 'about')} chevron={chevron} />
+            </MenuGroup>
+            {account ? (
+              <div className="menu-group">
+                <button type="button" className="menu-row" onClick={signOut}>
                   <Icon name="logout" />
-                  {tu(lang, 'signOut')}
+                  <span className="grow">{tu(lang, 'signOut')}</span>
                 </button>
-              </nav>
+              </div>
             ) : null}
           </div>
         </details>
