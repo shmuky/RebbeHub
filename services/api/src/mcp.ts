@@ -157,7 +157,12 @@ function tools(siteUrl: string): Tool[] {
         const found = await need(call, 'GET', `/v1/search?q=${encodeURIComponent(query)}&limit=${limit}${type}`);
         const results = (found.results as any[]).map(summary);
         const date = found.date ? `The query names the date ${found.date.en} (${found.date.he}, key ${found.date.key}).\n` : '';
-        return { text: results.length ? `${date}${results.map((r) => `- ${r.name} (${r.type}, ${r.id}) ${r.url}`).join('\n')}` : `${date}Nothing found.`, structured: { query, date: found.date, results } };
+        // An addition to a sefer says so, and to which: the official sefarim are what the tree is built of.
+        const added = (r: any) => {
+          const a = (found.results as any[]).find((x) => x.id === r.id)?.data?.addition;
+          return a ? ` [addition: ${a.kind}${a.to ? ` to ${a.to}` : ''}]` : '';
+        };
+        return { text: results.length ? `${date}${results.map((r) => `- ${r.name} (${r.type}, ${r.id})${added(r)} ${r.url}`).join('\n')}` : `${date}Nothing found.`, structured: { query, date: found.date, results } };
       },
     },
     {
@@ -709,9 +714,9 @@ const OPERATIONS = {
   type: 'array',
   minItems: 1,
   maxItems: 200,
-  items: { type: 'object', properties: { op: { enum: ['move', 'move-up', 'rename', 'reorder', 'create-set', 'delete-set', 'merge', 'split'] } }, required: ['op'], additionalProperties: true },
+  items: { type: 'object', properties: { op: { enum: ['move', 'move-up', 'rename', 'reorder', 'create-set', 'delete-set', 'merge', 'split', 'addition', 'official'] } }, required: ['op'], additionalProperties: true },
   description:
-    'Done in order; items are ids, or new:<key> for a set made earlier in the plan. move { items, to, from?, mode?, position? }, move-up { items, from? }, rename { item, name?, slug?, path? }, reorder { items, parent?, position? }, create-set { key?, name, slug, parent?, items? }, delete-set { item }, merge { from, into }, split { work, units? or range: { from, to }, title, slug }.',
+    'Done in order; items are ids, or new:<key> for a set made earlier in the plan. move { items, to, from?, mode?, position? }, move-up { items, from? }, rename { item, name?, slug?, path? }, reorder { items, parent?, position? }, create-set { key?, name, slug, parent?, items? }, delete-set { item }, merge { from, into }, split { work, units? or range: { from, to }, title, slug }, addition { item, to?, kind } (a sefer is an addition to the official sefer `to`, not an official sefer: kind commentary, index, about, collection or other), official { item } (an addition becomes an official sefer again).',
 };
 
 /**
@@ -749,7 +754,7 @@ function organizeTools(site: string): Tool[] {
       name: 'get_tree',
       title: 'See the tree',
       description:
-        "The catalog as a tree, for organizing it: the top sets (no root), or one set or sefer, with the sets under it, the sefarim and other items in it (sefarim first, in their order) and how much each holds (sets, items, units). depth goes further down (a set's sefarim's units at depth 2).",
+        "The catalog as a tree, for organizing it: the top sets (no root), or one set or sefer, with the sets under it, the sefarim and other items in it (official sefarim first, in their order, then additions, marked {addition: kind to id}) and how much each holds (sets, items, units). depth goes further down (a set's sefarim's units at depth 2). The tree is built of the official sefarim; a commentary, an index or a book about one is an addition to it (mark_addition).",
       inputSchema: { type: 'object', properties: { root: { ...ID, description: 'A set or sefer; left out, the top sets' }, depth: { type: 'integer', minimum: 0, maximum: 4, default: 1 }, limit: { type: 'integer', minimum: 1, maximum: 500, default: 100 } }, additionalProperties: false },
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
       async run(args, call) {
@@ -761,7 +766,7 @@ function organizeTools(site: string): Tool[] {
         const lines: string[] = [];
         const walk = (nodes: any[], indent: string) => {
           for (const n of nodes) {
-            lines.push(`${indent}- ${label(n)} (${n.type}, ${n.id}${n.path ? `, ${n.path}` : ''})${counts(n) ? ` [${counts(n)}]` : ''}`);
+            lines.push(`${indent}- ${label(n)} (${n.type}, ${n.id}${n.path ? `, ${n.path}` : ''})${n.addition ? ` {addition: ${n.addition.kind}${n.addition.to ? ` to ${n.addition.to}` : ''}}` : ''}${counts(n) ? ` [${counts(n)}]` : ''}`);
             if (n.children) walk(n.children, `${indent}  `);
             if (n.more) lines.push(`${indent}  … ${n.more} more`);
           }
@@ -873,6 +878,23 @@ function organizeTools(site: string): Tool[] {
         return send(call, [{ op: 'merge', from: args.from, into: args.into }], args);
       },
     },
+    {
+      name: 'mark_addition',
+      title: 'Mark a sefer as an addition, or official',
+      description: `The catalog's tree is built of the official sefarim (the Rebbeim's sefarim and the other official sets); any other book is an addition to one: a commentary, an index, a book about it, a collection from it. Mark a sefer as an addition (kind, and to: the official sefer it belongs to, listed there under Additions; without to, it is shown apart at the end of its shelf), or with official: true make it an official sefer again. Another scan or format of the same book is no addition: merge it into that sefer (merge_items).${ORGANIZE_NOTE}`,
+      inputSchema: {
+        type: 'object',
+        properties: { item: ID, to: { ...ID, description: 'The official sefer it belongs to' }, kind: { enum: ['commentary', 'index', 'about', 'collection', 'other'] }, official: { type: 'boolean', description: 'Make it an official sefer again (clears the addition)' }, ...SUGGESTION_WORDS },
+        required: ['item'],
+        additionalProperties: false,
+      },
+      annotations: WRITE,
+      async run(args, call) {
+        if (args.official === true) return send(call, [{ op: 'official', item: args.item }], args);
+        if (typeof args.kind !== 'string') throw new ToolError('give kind (commentary, index, about, collection or other), or official: true');
+        return send(call, [{ op: 'addition', item: args.item, to: args.to, kind: args.kind }], args);
+      },
+    },
   ];
 }
 
@@ -903,7 +925,7 @@ export function mcpRoutes(app: Hono, options: { siteUrl: string; version: string
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: MCP_SERVER_NAME, title: 'RebbeHub', version: options.version, websiteUrl: `${options.siteUrl.replace(/\/+$/, '')}/developers` },
           instructions:
-            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix (write scope; you will be asked to connect your RebbeHub account) makes a suggestion under the connected person\'s account that people review before anything changes; suggest_items (write scope) adds, changes or deletes many items in one suggestion, approve_suggestion approves one when you may, and combine_suggestions makes several of your own into one; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into. ask_machine (write scope) asks for a scan to be read by OCR or a recording transcribed; machine_queue shows where those requests stand, machine_to_check what the machines wrote that nobody checked yet, and training_data how much training data people\'s checking has made for the next transcription model. To organize the catalog, get_tree shows it; move_items, move_up, rename_item, reorder_children, create_set, delete_set, merge_items and organize (write scope) each make one suggestion that people review; preview_organize shows the change first.',
+            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix (write scope; you will be asked to connect your RebbeHub account) makes a suggestion under the connected person\'s account that people review before anything changes; suggest_items (write scope) adds, changes or deletes many items in one suggestion, approve_suggestion approves one when you may, and combine_suggestions makes several of your own into one; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into. ask_machine (write scope) asks for a scan to be read by OCR or a recording transcribed; machine_queue shows where those requests stand, machine_to_check what the machines wrote that nobody checked yet, and training_data how much training data people\'s checking has made for the next transcription model. To organize the catalog, get_tree shows it; move_items, move_up, rename_item, reorder_children, create_set, delete_set, merge_items, mark_addition and organize (write scope) each make one suggestion that people review; preview_organize shows the change first. The tree is built of the official sefarim; other books are additions to one.',
         };
       }
       case 'ping':

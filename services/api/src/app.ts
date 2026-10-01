@@ -253,7 +253,20 @@ export function createApp(options: ApiOptions): Hono {
     const limit = Math.min(Math.max(intParam(c.req.query('limit'), 'limit') ?? 50, 1), 500);
     const raw = c.req.query('cursor') ?? c.req.query('after');
     const after = cursor.decode(raw)?.[0] ?? raw;
-    const items = await catalog.list({ type: type as EntityType | undefined, set: set ? entityId(set) : undefined, after: after === undefined ? undefined : String(after), limit });
+    // The tree is built of official sefarim; the rest are additions to one (core additions.ts). `shelf=1`: what a shelf
+    // lists, without the additions that belong on a sefer's page; `official=1` (or 0): only official sefarim (or only
+    // additions); `additions-of=<id>`: the additions to one sefer.
+    const yes = (name: string) => (c.req.query(name) === undefined ? undefined : c.req.query(name) === '1' || c.req.query(name) === 'true');
+    const additionsOf = c.req.query('additions-of');
+    const items = await catalog.list({
+      type: type as EntityType | undefined,
+      set: set ? entityId(set) : undefined,
+      after: after === undefined ? undefined : String(after),
+      limit,
+      shelf: yes('shelf') === true,
+      official: yes('official'),
+      additionsOf: additionsOf ? entityId(additionsOf) : undefined,
+    });
     const last = items[items.length - 1];
     const next = last && items.length === limit ? cursor.encode([`${last.path ?? ''}${last.id}`]) : null;
     nextLink(c, next);

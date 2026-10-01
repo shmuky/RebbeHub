@@ -14,6 +14,7 @@ import { languageName, nameOf, t, type Lang } from '../lib/i18n.js';
 import { num } from '../lib/i18nUi.js';
 import type { ItemView } from '../lib/itemData.server.js';
 import { href, itemPath } from '../lib/links.js';
+import { additionOf } from '../lib/shelves.js';
 import { labelOf } from '../lib/labels.js';
 import type { TocRow } from '../lib/workView.server.js';
 import { Icon } from '../ui/Icon.js';
@@ -95,7 +96,18 @@ const W = {
   addIt: { he: 'הוסיפו אותה', en: 'Add it' },
   tellUs: { he: 'ספרו לנו', en: 'Tell us' },
   organize: { he: 'סידור', en: 'Organize' },
+  additions: { he: 'הוספות', en: 'Additions' },
+  additionTo: { he: 'הוספה ל', en: 'An addition to' },
 } as const;
+
+/** The kinds of addition to a sefer, in the order its page lists them (WorkData.addition). */
+const ADDITION_KIND_NAMES: Record<string, { he: string; en: string }> = {
+  commentary: { he: 'ביאורים', en: 'Commentaries' },
+  index: { he: 'מפתחות', en: 'Indexes' },
+  about: { he: 'על הספר', en: 'About it' },
+  collection: { he: 'ליקוטים', en: 'Collections' },
+  other: { he: 'אחר', en: 'Other' },
+};
 
 const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
 
@@ -121,7 +133,9 @@ function HelpNote({ lang, title, to, action }: { lang: Lang; title: string; to: 
 export function SetPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang: Lang }) {
   const d = entity.data as D;
   const members = view.lists.members ?? [];
-  const works = members.filter((m) => m.type === 'work');
+  // The shelf is its official sefarim; the additions that belong to no sefer are kept apart, closed, after them.
+  const works = members.filter((m) => m.type === 'work' && !additionOf(m));
+  const loose = members.filter((m) => m.type === 'work' && additionOf(m));
   const others = members.filter((m) => m.type !== 'work');
   // How many there are in all: the page lists the first of them (itemData.server.ts).
   const othersTotal = view.linked.filter((g) => g.field === 'sets' && g.type !== 'work').reduce((n, g) => n + g.count, 0) || others.length;
@@ -159,7 +173,13 @@ export function SetPage({ entity, view, lang }: { entity: Entity; view: ItemView
           action={(wk) => <RowEdit lang={lang} target={{ id: wk.id, type: 'work', label: nameOf((wk.data as D).title, lang), parent: entity.id }} />}
         />
       ) : null}
-      <SeeAll id={entity.id} group={view.linked.find((g) => g.field === 'sets' && g.type === 'work')} shown={works.length} lang={lang} />
+      {loose.length ? (
+        <details className="stack">
+          <summary className="h-sec">{`${w(lang, 'additions')} (${num(loose.length, lang)})`}</summary>
+          <ItemList items={loose} after={(o) => <RowEdit lang={lang} target={{ id: o.id, type: o.type, label: labelOf(o, lang), parent: entity.id }} />} />
+        </details>
+      ) : null}
+      <SeeAll id={entity.id} group={view.linked.find((g) => g.field === 'sets' && g.type === 'work')} shown={works.length + loose.length} lang={lang} />
       {others.length ? (
         <section className="stack">
           <h2 className="h-sec">{t(lang, 'moreInShelf')}</h2>
@@ -330,8 +350,12 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
   const readTo = toc?.read.scanUrl ? null : toc?.read.unit ? href(toc.read.unit, lang) : null;
   // Its shaar, the README of a sefer (components/ShaarFile): what its title page says, and its sections under the contents.
   const shaar = shaarOf(d as WorkData);
+  // An addition belongs under an official sefer, and its page leads back there; an official sefer lists its additions.
+  const additionTo = typeof d.addition?.to === 'string' ? view.refs[d.addition.to] : undefined;
+  const additions = view.lists.additions ?? [];
 
   const facts = [
+    additionTo ? { icon: 'book' as const, children: <>{w(lang, 'additionTo')}{lang === 'he' ? '' : ' '}<Link to={href(itemPath(additionTo), lang)}>{nameOf((additionTo.data as D).title, lang)}</Link></> } : null,
     first ? { icon: 'cal' as const, children: <>{w(lang, 'firstPrinted')} <b>{[fd.publisher, firstYear].filter(Boolean).join(', ')}</b></> } : null,
     toc?.stats.pages ? { icon: 'file' as const, children: <><b>{num(toc.stats.pages, lang)}</b> {w(lang, 'pages')}</> } : null,
     ofPart.length ? { icon: 'layers' as const, children: <><b>{num(ofPart.length, lang)}</b> {w(lang, 'printings')}</> } : null,
@@ -344,7 +368,11 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
     <ItemShell
       lang={lang}
       head={{
-        crumbs: [...libraryCrumbs(view, d, lang), ...(partLabel ? [{ label: title, to: href(itemPath(entity), lang) }, { label: partLabel }] : [{ label: title }])],
+        crumbs: [
+          ...libraryCrumbs(view, d, lang),
+          ...(additionTo ? [{ label: nameOf((additionTo.data as D).title, lang), to: href(itemPath(additionTo), lang) }] : []),
+          ...(partLabel ? [{ label: title, to: href(itemPath(entity), lang) }, { label: partLabel }] : [{ label: title }]),
+        ],
         cover: (
           <Shaar
             kind={lang === 'he' ? 'ספר' : 'Sefer'}
@@ -511,6 +539,20 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
             <Link to={href('/suggestions', lang)}>{w(lang, 'allSuggestions')}</Link>
           </p>
         </div>
+      ) : null}
+      {tab === 'contents' && !part && additions.length ? (
+        <section className="stack" aria-label={w(lang, 'additions')}>
+          <h2 className="h-sec">{w(lang, 'additions')}</h2>
+          {Object.keys(ADDITION_KIND_NAMES)
+            .map((kind) => [kind, additions.filter((x) => additionOf(x)?.kind === kind)] as const)
+            .filter(([, list]) => list.length)
+            .map(([kind, list]) => (
+              <div key={kind}>
+                <h3 className="h-side">{ADDITION_KIND_NAMES[kind]![lang]}</h3>
+                <ItemList items={list} />
+              </div>
+            ))}
+        </section>
       ) : null}
       {tab === 'contents' && !part && hasShaar(d as WorkData) ? <ShaarFile work={entity} lang={lang} /> : null}
       <HelpNote lang={lang} title={w(lang, 'knowPrinting')} to={href('/add', lang, { what: 'sefer', for: entity.id })} action={w(lang, 'addIt')} />

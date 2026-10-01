@@ -682,8 +682,12 @@ export function sefariaImporter(input: SefariaInput | (() => Promise<SefariaInpu
           key: workKey,
           type: 'work',
           path: joinPath(...place),
+          ...(book.daily ? {} : { keep: ['addition'] }),
           data: {
             title: { he: book.heTitle.slice(0, 500), en: book.title.slice(0, 500) },
+            // A Chabad book Sichos-Kodesh does not publish is no official sefer of the tree until people say so: an addition.
+            // The daily learning's books (Chumash, Tehillim, the Rambam) are the texts of their own Set.
+            ...(book.daily ? {} : { addition: { kind: 'other' } }),
             slug: (book.daily ? slug : `sefaria-${slug}`).slice(0, 100).replace(/-+$/, ''),
             authors: bookAuthors.map((a) => ref(`sichos-kodesh-author:${a}`)),
             genre,

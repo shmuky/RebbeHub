@@ -495,8 +495,10 @@ export class RebbeHubApi {
     return out;
   }
 
-  list(options: { type?: string; set?: string; after?: string; limit?: number }) {
-    return this.get<{ items: Entity[]; next: string | null }>('/v1/entities', options);
+  /** `shelf`: what a shelf lists, without the additions that belong on a sefer's page (core additions.ts). */
+  list(options: { type?: string; set?: string; after?: string; limit?: number; shelf?: boolean }) {
+    const { shelf, ...rest } = options;
+    return this.get<{ items: Entity[]; next: string | null }>('/v1/entities', { ...rest, shelf: shelf ? 1 : undefined });
   }
 
   children(id: string, field: string, type: string, options: { after?: string; limit?: number } = {}) {

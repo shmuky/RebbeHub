@@ -58,6 +58,8 @@ describe("Otzros HaRebbe's Drive library", () => {
     const records = await recordsOf(await library());
     const work = records.find((r) => r.key === 'otzros-work:lks')!;
     expect(work.data).toMatchObject({ title: { he: 'לקוטי שיחות' }, genre: 'sichos', description: { he: '1. תורת כ"ק אד"ש' } });
+    // Not an official sefer of the tree until a person places it: an addition.
+    expect(work.data).toMatchObject({ addition: { kind: 'other' } });
     const units = records.filter((r) => r.type === 'unit' && refs([(r.data as { work: unknown }).work])[0] === 'otzros-work:lks');
     expect(units.map((u) => (u.data as { label: { he: string } }).label.he)).toEqual(['02', '10']); // in number order; not the .txt
     // The file's own Drive link; the site's reader opens it through RebbeHub's API.
@@ -133,6 +135,8 @@ describe('the Otzros import, run again', () => {
     await personChanges(otzrosFolderSetKey('maamarim'), (d) => ({ ...d, parent: undefined }));
     // A third takes a page off (a duplicate, say).
     await personChanges('otzros-unit:f10', () => null);
+    // A fourth says the ma'amarim's folder is an official sefer, not an addition.
+    await personChanges('otzros-work:y5711', ({ addition: _addition, ...d }) => d);
 
     const again = await runImport(catalog, driveLibraryImporter(tree), { approveAs: 'shmuly' });
     expect(again.created).toBe(0);
@@ -141,5 +145,6 @@ describe('the Otzros import, run again', () => {
     expect(lks.path).toBe('/likkutei-sichos-otzros');
     expect((await catalog.get(await idForKey(otzrosFolderSetKey('maamarim'))))!.data).not.toHaveProperty('parent');
     expect(await catalog.get(await idForKey('otzros-unit:f10'))).toBeNull();
+    expect((await catalog.get(await idForKey('otzros-work:y5711')))!.data).not.toHaveProperty('addition');
   });
 });

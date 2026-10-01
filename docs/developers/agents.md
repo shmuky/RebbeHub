@@ -65,6 +65,7 @@ stream. It has one address, `https://api.rebbehub.org/mcp`:
 | `create_set` | a new set, under another or at the top, with items moved in at once (needs `write`) |
 | `delete_set` | remove a set that holds nothing (needs `write`) |
 | `merge_items` | merge a duplicate into the item kept: its children and links move over, its paths redirect (needs `write`) |
+| `mark_addition` | mark a sefer as an addition (a commentary, index, book about or collection) to an official sefer, or make it official again (needs `write`) |
 
 Every tool calls the API itself, as you, so an agent reads exactly what
 anyone reads: words withheld for rights stay withheld, and a fix it

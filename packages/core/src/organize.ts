@@ -1,4 +1,4 @@
-import { isEntityId, isEntityPath, isOrderKey, newId, orderBetween, slugify, type EntityId, type EntityType, type LocalName } from '@rebbehub/model';
+import { ADDITION_KINDS, isEntityId, isEntityPath, isOrderKey, newId, orderBetween, slugify, type AdditionKind, type EntityId, type EntityType, type LocalName } from '@rebbehub/model';
 import type { Catalog, ChangesetRow, EntityView } from './catalog.js';
 import { invalid, notFound } from './errors.js';
 import { diffData, type FieldChange, type Json } from './merge.js';
@@ -61,7 +61,16 @@ export type OrganizeOperation =
    */
   | { op: 'merge'; from: OrganizeRef; into: OrganizeRef }
   /** Moves some of a sefer's units (a list, or a range from one to another) into a new sefer beside it. */
-  | { op: 'split'; work: OrganizeRef; units?: OrganizeRef[]; range?: { from: OrganizeRef; to: OrganizeRef }; title: { he: string; en?: string }; slug: string; path?: string };
+  | { op: 'split'; work: OrganizeRef; units?: OrganizeRef[]; range?: { from: OrganizeRef; to: OrganizeRef }; title: { he: string; en?: string }; slug: string; path?: string }
+  /**
+   * Marks a sefer as an addition (WorkData.addition): not one of the
+   * official sefarim the tree is built of, but a commentary, an index, a
+   * book about one, a collection: listed on the page of the official sefer
+   * it belongs to (`to`), or, without one, apart at the end of its shelf.
+   */
+  | { op: 'addition'; item: OrganizeRef; to?: OrganizeRef | null; kind: AdditionKind }
+  /** Makes an addition an official sefer again, listed on its shelves in their order. */
+  | { op: 'official'; item: OrganizeRef };
 
 export interface OrganizePlan {
   /** The suggestion's title; made from the operations when left out. */
@@ -125,7 +134,7 @@ const ORDERED: ReadonlySet<EntityType> = new Set(['unit', 'segment', 'set', 'wor
 const ORDER_REQUIRED: ReadonlySet<EntityType> = new Set(['unit', 'segment']);
 
 /** Fields a merge never takes from the duplicate: where it sits and what it is called in paths. */
-const MERGE_KEEP: ReadonlySet<string> = new Set(['parent', 'order', 'slug', 'position', 'work', 'publication', 'event', 'text', 'unit', 'layer', 'scan', 'policy', 'within', 'broader']);
+const MERGE_KEEP: ReadonlySet<string> = new Set(['addition', 'parent', 'order', 'slug', 'position', 'work', 'publication', 'event', 'text', 'unit', 'layer', 'scan', 'policy', 'within', 'broader']);
 
 const NAME_FIELDS = ['name', 'title', 'label'] as const;
 
@@ -544,8 +553,12 @@ async function run(ws: Workspace, operation: OrganizeOperation): Promise<void> {
       return merge(ws, operation);
     case 'split':
       return split(ws, operation);
+    case 'addition':
+      return addition(ws, operation);
+    case 'official':
+      return official(ws, operation);
     default:
-      throw invalid(`unknown operation "${(operation as { op?: string })?.op}": move, move-up, rename, reorder, create-set, delete-set, merge or split`);
+      throw invalid(`unknown operation "${(operation as { op?: string })?.op}": move, move-up, rename, reorder, create-set, delete-set, merge, split, addition or official`);
   }
 }
 
@@ -861,6 +874,35 @@ async function split(ws: Workspace, op: Extract<OrganizeOperation, { op: 'split'
   ws.summary.push(`Split ${chosen.length} units of ${ws.name(work)} into a new sefer ${ws.name(entry)}`);
 }
 
+async function addition(ws: Workspace, op: Extract<OrganizeOperation, { op: 'addition' }>): Promise<void> {
+  const entry = await ws.load(ws.ref(op.item, 'sefer to mark as an addition'));
+  if (entry.type !== 'work') throw invalid(`${ws.name(entry)} is a ${entry.type}; only a sefer (work) is an addition`);
+  if (!(ADDITION_KINDS as readonly string[]).includes(op.kind)) throw invalid(`say what kind of addition it is: ${ADDITION_KINDS.join(', ')}`);
+  let to: Entry | null = null;
+  if (op.to !== undefined && op.to !== null) {
+    to = await ws.load(ws.ref(op.to, 'sefer it belongs to (to)'));
+    if (to.id === entry.id) throw invalid('a sefer is not an addition to itself');
+    if (to.type !== 'work') throw invalid(`${ws.name(to)} is a ${to.type}; an addition belongs to a sefer (work)`);
+    // The tree is built of official sefarim: an addition hangs on one of them, never on another addition.
+    if (to.data!.addition) throw invalid(`${ws.name(to)} is itself an addition; give the official sefer it belongs to`);
+  }
+  entry.data!.addition = { kind: op.kind, ...(to ? { to: to.id } : {}) };
+  const { rows } = await ws.catalog.db.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM entity_ref x JOIN entity e ON e.id = x.from_id AND ${LIVE} WHERE x.to_id = $1 AND x.field = 'addition.to'`,
+    [entry.id],
+  );
+  if (rows[0]?.n) ws.warnings.push(`${rows[0].n} addition${rows[0].n === 1 ? '' : 's'} to ${ws.name(entry)} now hang on an addition; move them to the official sefer`);
+  ws.summary.push(`Mark ${ws.name(entry)} as an addition (${op.kind})${to ? ` to ${ws.name(to)}` : ''}`);
+}
+
+async function official(ws: Workspace, op: Extract<OrganizeOperation, { op: 'official' }>): Promise<void> {
+  const entry = await ws.load(ws.ref(op.item, 'sefer to make official'));
+  if (entry.type !== 'work') throw invalid(`${ws.name(entry)} is a ${entry.type}; only a sefer (work) is official`);
+  if (!entry.data!.addition) throw invalid(`${ws.name(entry)} is already an official sefer`);
+  delete entry.data!.addition;
+  ws.summary.push(`Make ${ws.name(entry)} an official sefer`);
+}
+
 // ------------------------------------------------------------------ the tree
 
 export interface TreeNode {
@@ -874,12 +916,16 @@ export interface TreeNode {
   children?: TreeNode[];
   /** Children left out past the limit. */
   more?: number;
+  /** For a sefer that is an addition, not an official sefer: its kind, and the official sefer it belongs to. */
+  addition?: { kind: AdditionKind; to?: EntityId };
 }
 
 function nodeOf(view: { id: EntityId; type: EntityType; path: string | null; data: unknown }): TreeNode {
   const data = (view.data ?? {}) as Data;
   const field = nameFieldOf(data);
-  return { id: view.id, type: view.type, path: view.path, name: field ? (data[field] as LocalName) : null, order: typeof data.order === 'string' ? data.order : null, counts: {} };
+  const node: TreeNode = { id: view.id, type: view.type, path: view.path, name: field ? (data[field] as LocalName) : null, order: typeof data.order === 'string' ? data.order : null, counts: {} };
+  if (view.type === 'work' && data.addition && typeof data.addition === 'object') node.addition = data.addition as TreeNode['addition'];
+  return node;
 }
 
 const LIVE = 'NOT e.deleted AND e.main_rev IS NOT NULL';
@@ -888,6 +934,8 @@ const LIVE = 'NOT e.deleted AND e.main_rev IS NOT NULL';
  * The catalog as a tree, for people and agents organizing it: the top
  * sets (or one set or sefer) with the sets under them, the items in them
  * and how much each holds, `depth` levels down, `limit` children a level.
+ * A set's official sefarim come first, in their order, then the additions
+ * in it (each says so), then everything else.
  */
 export async function catalogTree(catalog: Catalog, options: { root?: EntityId | null; depth?: number; limit?: number } = {}): Promise<{ root: TreeNode | null; children: TreeNode[]; more: number }> {
   const depth = Math.min(Math.max(options.depth ?? 1, 0), 4);
@@ -905,7 +953,7 @@ export async function catalogTree(catalog: Catalog, options: { root?: EntityId |
       if (level >= depth) return;
       const sets = await rows(`SELECT r.entity_id, r.entity_type, e.path, r.data FROM entity_ref x JOIN entity e ON e.id = x.from_id AND ${LIVE} JOIN revision r ON r.id = e.main_rev WHERE x.to_id = $1 AND x.field = 'parent' AND e.type = 'set' ${ORDER} LIMIT ${limit}`, [node.id]);
       const items = await rows(
-        `SELECT r.entity_id, r.entity_type, e.path, r.data FROM entity_ref x JOIN entity e ON e.id = x.from_id AND ${LIVE} JOIN revision r ON r.id = e.main_rev WHERE x.to_id = $1 AND x.field = 'sets' ORDER BY (e.type <> 'work'), coalesce(r.data->>'order', '~') COLLATE "C", coalesce(e.path, '') || e.id LIMIT ${limit}`,
+        `SELECT r.entity_id, r.entity_type, e.path, r.data FROM entity_ref x JOIN entity e ON e.id = x.from_id AND ${LIVE} JOIN revision r ON r.id = e.main_rev WHERE x.to_id = $1 AND x.field = 'sets' ORDER BY (e.type <> 'work'), (r.data ? 'addition'), coalesce(r.data->>'order', '~') COLLATE "C", coalesce(e.path, '') || e.id LIMIT ${limit}`,
         [node.id],
       );
       node.children = [...sets, ...items];

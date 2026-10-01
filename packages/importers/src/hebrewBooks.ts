@@ -21,7 +21,8 @@ import { GENRE_NAMES } from './sichosKodeshWorks.js';
  *
  * A series Sichos-Kodesh placed with a sefer it knows is printings of that
  * sefer; any other series becomes a sefer of its own, so its volumes are
- * found together.
+ * found together, as an addition (WorkData.addition): the catalog's tree is
+ * built of the official sefarim, and people place the rest.
  */
 
 export const HEBREWBOOKS = 'https://hebrewbooks.org';
@@ -141,8 +142,12 @@ export function hebrewBooksImporter(input: HebrewBooksInput | (() => Promise<Heb
               key: workKey,
               type: 'work',
               path: `/hebrewbooks/series/${id}`,
+              // Once a person makes it official, or says which sefer it belongs to, it stays as they said.
+              keep: ['addition'],
               data: {
                 title: { he: clip(series.title) },
+                // A series placed with no sefer of the registry is no official sefer of the tree: an addition, until people place it.
+                addition: { kind: 'other' },
                 slug: `hebrewbooks-${id}`,
                 authors: author.authorId && authors.has(author.authorId) ? [ref(`sichos-kodesh-author:${author.authorId}`)] : [],
                 genre,

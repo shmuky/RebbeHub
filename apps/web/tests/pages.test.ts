@@ -39,6 +39,11 @@ beforeAll(async () => {
   await registerFile(catalog.db, { sha256: sha('d'), bytes: 900, mime: 'audio/mpeg', source: 'jem', licence: 'unknown', fileClass: 'recording', held: true });
   ids.rec1 = await add(catalog, 'mendy', 'keeper', 'recording', { event: ids.event, title: { he: 'חלק א' }, part: 1, file: sha('d'), durationMs: 3_725_000, sources: [{ source: 'jem', sourceId: '12345', url: 'https://www.chabad.org/multimedia/media_cdo/aid/12345' }] });
   ids.rec2 = await add(catalog, 'mendy', 'keeper', 'recording', { event: ids.event, title: { he: 'חלק ב' }, part: 2 });
+  // An addition to the sefer (a commentary on it), and one that belongs to no sefer, both on the sefer's shelf.
+  ids.biur = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'ביאור לספר השער' }, slug: 'biur-sample', authors: [], genre: 'sichos', levels: [], sets: [set], addition: { kind: 'commentary', to: ids.work } }, '/biur-sample');
+  ids.likkut = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'ליקוט לדוגמה' }, slug: 'likkut-sample', authors: [], genre: 'sichos', levels: [], sets: [set], addition: { kind: 'collection' } }, '/likkut-sample');
+  ids.tanya = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'תניא' }, slug: 'tanya-sample', authors: [], genre: 'chassidus', levels: [], sets: [set] }, '/tanya-sample');
+  ids.tanyaIndex = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'תניא - מפתח' }, slug: 'tanya-index-sample', authors: [], genre: 'chassidus', levels: [], sets: [set], addition: { kind: 'index', to: ids.tanya } }, '/tanya-index-sample');
   ids.person = await add(catalog, 'mendy', 'keeper', 'person', { name: { he: 'ר׳ יואל כהן' }, externalIds: { wikidata: 'Q1' }, sets: [set] });
 
   const api = createApp({ catalog, reportSalt: 'test', filesBaseUrl: 'https://files.rebbehub.test', siteUrl: SITE });
@@ -63,6 +68,28 @@ describe("every item's own page", () => {
     const shelf = await get(new URL(moved.headers.get('location') ?? `/${ids.set}`, SITE).pathname);
     expect(shelf.status).toBe(200);
     expect(shelf.html).toContain(`https://files.rebbehub.test/objects/${sha('c')}`);
+  });
+
+  it("lists a sefer's additions on its page, not on its shelf, and leads from an addition back to its sefer", async () => {
+    const sefer = (await get('/shaar-sample')).html;
+    expect(sefer).toContain('הוספות');
+    expect(sefer).toMatch(/ביאורים.*?href="\/biur-sample".*?ביאור לספר השער/s);
+    const moved = await handle(new Request(`${SITE}/${ids.set}`));
+    const shelf = (await get(new URL(moved.headers.get('location') ?? `/${ids.set}`, SITE).pathname)).html;
+    expect(shelf).not.toContain('ביאור לספר השער');
+    // The addition that belongs to no sefer is apart, closed, after the sefarim.
+    expect(shelf).toMatch(/<details[^>]*><summary[^>]*>הוספות \(1\)<\/summary>.*?ליקוט לדוגמה/s);
+    const library = (await get('/sets')).html;
+    expect(library).not.toContain('ביאור לספר השער');
+    const biur = (await get('/biur-sample')).html;
+    expect(biur).toMatch(/הוספה ל.*?href="\/shaar-sample"/s);
+  });
+
+  it('finds a sefer by its title even where the title reads as a date, before its additions, which say what they are', async () => {
+    // `תניא` is also the year 5461, and names the sefer: the sefer is found first, and its index after it, labelled an addition to it.
+    const found = (await get(`/search?q=${encodeURIComponent('תניא')}`)).html;
+    expect(found).toMatch(/href="\/tanya-sample".*?href="\/tanya-index-sample"/s);
+    expect(found).toMatch(/href="\/tanya-index-sample".*?הוספה ל: תניא.*?הוספה/s);
   });
 
   it("goes back and forth between a sefer's sichos, above the text and below it", async () => {

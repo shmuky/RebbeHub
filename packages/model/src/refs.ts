@@ -9,7 +9,7 @@ import { isEntityId, type EntityId } from './ids.js';
  */
 export const REFERENCE_FIELDS: Partial<Record<EntityType, Record<string, readonly EntityType[]>>> = {
   set: { parent: ['set'] },
-  work: { authors: ['author'] },
+  work: { authors: ['author'], 'addition.to': ['work'] },
   unit: { work: ['work'], events: ['event'] },
   event: { place: ['place'], people: ['person'] },
   publication: { work: ['work'], reprintOf: ['publication'] },
