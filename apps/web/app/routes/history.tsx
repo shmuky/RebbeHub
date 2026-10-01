@@ -11,8 +11,7 @@ import { personName } from '../lib/people.js';
 import { pageMeta } from '../lib/seo.js';
 import { useAccount } from '../lib/useAccount.js';
 import { Icon } from '../ui/Icon.js';
-import { AgentBy, Avatar, EmptyState, Label, RelativeTime } from '../ui/primitives.js';
-import { Timeline, TimelineComment } from '../ui/Timeline.js';
+import { AgentBy, Avatar, EmptyState, RelativeTime } from '../ui/primitives.js';
 import { ItemSubpage } from '../views/ItemSubpage.js';
 import '../styles/pages/contribute.css';
 
@@ -51,6 +50,11 @@ const W = {
   restoring: { he: 'שולח…', en: 'Sending…' },
   wrote: { he: 'שינה', en: 'changed it' },
   bot: { he: 'ייבוא', en: 'import' },
+  latest: { he: 'השינוי האחרון', en: 'The latest change' },
+  approver: { he: 'אישר:', en: 'Approved by' },
+  by: { he: 'הצעה של', en: 'suggested by' },
+  shown: { he: 'הגרסה שמוצגת עכשיו', en: 'The version shown now' },
+  what: { he: 'מה השתנה', en: 'What changed' },
 } as const;
 
 function RestoreButton({ entityId, rev, lang }: { entityId: string; rev: number; lang: Lang }) {
@@ -103,13 +107,15 @@ export default function History({ loaderData }: Route.ComponentProps) {
     people.set(h.author, { name: personName(h.author, h.authorName, lang), bot: h.authorIsBot, n: (was?.n ?? 0) + 1 });
   }
   const who = [...people.entries()].sort((a, b) => b[1].n - a[1].n);
+  // The last change, open at the top as design/ draws it (4c); the older ones open on asking.
+  const latest = history[0] && !history[0].created && !history[0].deleted ? history[0] : null;
   return (
     <ItemSubpage
       entity={entity}
       lang={lang}
       current="history"
       here={t(lang, 'history')}
-      sub={t(lang, 'historyIntro')}
+      sub={`${num(history.length, lang)} ${W.versions[lang]}`}
       side={
         <>
           <section>
@@ -145,70 +151,63 @@ export default function History({ loaderData }: Route.ComponentProps) {
       {history.length === 0 ? (
         <EmptyState icon="history" title={W.empty[lang]} />
       ) : (
-        <Timeline className="hist" label={t(lang, 'history')}>
-          {history.map((h, i) => {
-            const author = personName(h.author, h.authorName, lang);
-            const approver = personName(h.mergedBy, h.mergedByName, lang);
-            const stat = h.created || h.deleted ? null : wordsStat(h.changes, lang);
-            return (
-              <TimelineComment
-                key={h.commit}
-                id={`v${h.rev}`}
-                author={author}
-                authorId={h.author}
-                bot={h.authorIsBot || Boolean(h.via)}
-                header={
-                  <>
+        <>
+          {latest ? (
+            <section className="hist-latest">
+              <h2>{W.latest[lang]}</h2>
+              <ChangeRows changes={latest.changes} lang={lang} />
+            </section>
+          ) : null}
+          <ol className="hist2" aria-label={t(lang, 'history')}>
+            {history.map((h, i) => {
+              const author = personName(h.author, h.authorName, lang);
+              const approver = personName(h.mergedBy, h.mergedByName, lang);
+              const stat = h.created || h.deleted ? null : wordsStat(h.changes, lang);
+              return (
+                <li key={h.commit} id={`v${h.rev}`} className={i === 0 ? 'now' : undefined}>
+                  <span className="hist-dot" aria-hidden="true" />
+                  <h3 className="hist-title">
+                    <bdi>{h.message || `${W.version[lang]} ${num(history.length - i, lang)}`}</bdi>
+                  </h3>
+                  <p className="hist-by">
+                    {h.mergedBy !== h.author ? (
+                      <>
+                        {W.approver[lang]} {approver} ·{' '}
+                      </>
+                    ) : null}
+                    <RelativeTime at={h.at} lang={lang} /> ·{' '}
                     <AgentBy via={h.via} lang={lang} who={author}>
-                      <b>{author}</b>
+                      {h.mergedBy !== h.author ? `${W.by[lang]} ${author}` : author}
                     </AgentBy>
-                    <span className="hist-msg">{h.message}</span>
-                    <span className="subtle">
-                      · <RelativeTime at={h.at} lang={lang} />
-                    </span>
-                  </>
-                }
-                role={
-                  <>
-                    {stat}
-                    {i === 0 ? <Label tone="sync">{t(lang, 'currentVersion')}</Label> : <a className="hist-rev num" href={`#v${h.rev}`}>{`${W.version[lang]} ${num(history.length - i, lang)}`}</a>}
-                  </>
-                }
-                footer={
-                  (h.mergedBy !== h.author || (i > 0 && account && !h.deleted)) ? (
-                    <>
-                      {h.mergedBy !== h.author ? (
-                        <span className="hist-approved">
-                          <Icon name="check" size={14} />
-                          {t(lang, 'approvedBy')} <b>{approver}</b>
-                        </span>
-                      ) : null}
-                      {i > 0 && account && !h.deleted ? (
-                        <span className="end">
-                          <RestoreButton entityId={entity.id} rev={h.rev} lang={lang} />
-                        </span>
-                      ) : null}
-                    </>
-                  ) : undefined
-                }
-              >
-                {h.created ? (
-                  <p className="hist-note">
-                    <Icon name="plus" /> {t(lang, 'versionCreated')}
+                    {stat ? <> · {stat}</> : null}
                   </p>
-                ) : h.deleted ? (
-                  <p className="hist-note">
-                    <Icon name="trash" /> {t(lang, 'versionDeleted')}
-                  </p>
-                ) : (
-                  <div className="hist-changes">
-                    <ChangeRows changes={h.changes} lang={lang} />
-                  </div>
-                )}
-              </TimelineComment>
-            );
-          })}
-        </Timeline>
+                  {i === 0 ? <p className="hist-current">{W.shown[lang]}</p> : null}
+                  {h.created ? (
+                    <p className="hist-note">
+                      <Icon name="plus" /> {t(lang, 'versionCreated')}
+                    </p>
+                  ) : h.deleted ? (
+                    <p className="hist-note">
+                      <Icon name="trash" /> {t(lang, 'versionDeleted')}
+                    </p>
+                  ) : i > 0 || !latest ? (
+                    <details className="hist-what">
+                      <summary>{W.what[lang]}</summary>
+                      <div className="hist-changes">
+                        <ChangeRows changes={h.changes} lang={lang} />
+                      </div>
+                    </details>
+                  ) : null}
+                  {i > 0 && account && !h.deleted ? (
+                    <div className="hist-acts">
+                      <RestoreButton entityId={entity.id} rev={h.rev} lang={lang} />
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+        </>
       )}
     </ItemSubpage>
   );
