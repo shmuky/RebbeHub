@@ -63,22 +63,30 @@ yearly partitions ahead of time.
 
 Neon keeps one day of history, so the Backup workflow
 (`.github/workflows/backup.yml`) copies the whole database every night at
-06:17 UTC into the private bucket `rebbehub-preservation`, as
-`backups/db/<yyyy-mm-dd>.dump` (pg_dump's custom format, with its
-`.sha256`). Each night's copy is kept 35 days and the one from the 1st of
-each month is kept for good. It is never served. A run checks that the
-dump reads back before it uploads, and that the upload is there. It can
-also be started by hand (Actions, Backup, Run workflow), for example just
-before a big import.
+06:17 UTC into the private bucket `rebbehub-preservation`, under
+`backups/db/<yyyy-mm-dd>/`: pg_dump's custom format in parts of 90 MB
+(`dump.part00`, `dump.part01`…, what Cloudflare's REST API takes in one
+request) and `SHA256SUMS`. Each night's copy is kept 35 days and the one
+from the 1st of each month is kept for good. It is never served. A run
+checks that the dump reads back before it uploads, and that every part is
+there at its size. It can also be started by hand (Actions, Backup, Run
+workflow), for example just before a big import.
+
+It writes the bucket through Cloudflare's REST API when the repository has
+`CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (R2 edit rights), else
+through `R2_ENDPOINT`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`, whose
+R2 token then needs Object Read & Write on `rebbehub-preservation` (the
+first runs, 2026-10-01, found the key read-only and the token unset).
 
 To restore, never over the live database first: make a Neon branch (or an
 empty database), restore into it, check it, and only then point the site
 at it or copy back what was lost.
 
 ```sh
-aws s3 cp s3://rebbehub-preservation/backups/db/2026-10-01.dump . --endpoint-url "$R2_ENDPOINT"
-sha256sum -c 2026-10-01.dump.sha256      # after fetching the .sha256 the same way
-pg_restore --no-owner --no-privileges --dbname "$BRANCH_URL" 2026-10-01.dump
+# the parts and SHA256SUMS of a night, from the dashboard or wrangler, then:
+sha256sum -c --ignore-missing SHA256SUMS
+cat dump.part* > dump && sha256sum -c --ignore-missing SHA256SUMS
+pg_restore --no-owner --no-privileges --dbname "$BRANCH_URL" dump
 ```
 
 ## Seeding
