@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { isPageText, type LocalName } from '@rebbehub/model';
 import { AudioPlayer } from '../components/AudioPlayer.js';
@@ -9,6 +9,7 @@ import { ItemLink, ItemList } from '../components/ItemLink.js';
 import { Linked, Sources } from '../components/Linked.js';
 import { HayomYomDay } from '../components/HayomYomDay.js';
 import { PageBody } from '../components/PageBody.js';
+import { SideNotes } from '../components/PageWords.js';
 import { Relations } from '../components/Relations.js';
 import { Printings } from '../components/Printings.js';
 import { ScanViewer } from '../components/ScanViewer.js';
@@ -190,8 +191,9 @@ function TextSize({ lang }: { lang: Lang }) {
  * line back to its volume, the text size and one ⋯ for everything else
  * (suggestions, talk, history, comparing printings, the scan, following,
  * editing); its name centred over an ornament; its words as the sefer sets
- * them, notes at their foot; and the one before and after it above the
- * words (quietly) and below them.
+ * them, notes at their foot (beside their paragraphs on a wide screen); the
+ * one before and after it above the words (quietly) and below them; and on a
+ * wide screen the others in its volume in a column beside it (3l).
  * What the page's side used to hold is folded away under "about this page".
  */
 function ReadingPage({ entity, view, lang, about }: { entity: Entity; view: ItemView; lang: Lang; about: ReactNode }) {
@@ -224,32 +226,67 @@ function ReadingPage({ entity, view, lang, about }: { entity: Entity; view: Item
     { to: href(itemPath(entity), lang, { tab: 'suggestions' }), icon: 'suggest', label: w(lang, 'suggestions'), count: suggestions || undefined },
     ...commonTabs(entity, view, lang).map((x) => ({ to: x.to!, icon: x.icon!, label: String(x.label), count: typeof x.count === 'number' ? x.count : undefined })),
   ];
+  // On a wide screen, the rest of its volume in a column beside it, this one marked.
+  const lines = view.volume ?? [];
+  const tocRef = useRef<HTMLElement>(null);
+  // A long volume's column opens at this sicha, without moving the page.
+  useEffect(() => {
+    const nav = tocRef.current;
+    const at = nav?.querySelector<HTMLElement>('[aria-current]');
+    if (nav && at) nav.scrollTop = at.offsetTop - nav.clientHeight / 2;
+  }, [entity.id]);
+  const toc =
+    lines.length > 1 ? (
+      <nav className="rd-toc" ref={tocRef} aria-label={volumeName ?? undefined}>
+        {work ? <p className="rd-toc-work">{labelOf(work, lang)}</p> : null}
+        {volumeName ? (
+          <Link className="rd-toc-volume" to={back}>
+            {volumeName}
+          </Link>
+        ) : null}
+        <ol>
+          {lines.map((x, i) => (
+            <li key={x.path}>
+              {x.group && x.group !== lines[i - 1]?.group ? <span className="rd-toc-group">{x.group}</span> : null}
+              <Link to={href(x.path, lang)} aria-current={x.current ? 'page' : undefined}>
+                {x.label}
+              </Link>
+            </li>
+          ))}
+        </ol>
+      </nav>
+    ) : null;
   return (
-    <div className={`wrap rd${titled ? ' rd-titled' : ''}`}>
-      <div className="rd-top">
-        <Link className="rd-back" to={back}>
-          <Icon name="back" size={18} />
-          <span>{backLabel}</span>
-        </Link>
-        <span className="rd-tools">
-          <TextSize lang={lang} />
-          <MoreMenu links={links} actions={slots?.actions} lang={lang} />
-        </span>
-      </div>
-      <header className="rd-head">
-        {kicker && kicker !== title ? <p className="rd-kicker">{kicker}</p> : null}
-        <h1 className="torah">{title}</h1>
-        <span className="rd-orn" aria-hidden="true" />
-      </header>
-      <UnitBody entity={entity} view={view} lang={lang} />
-      {slots?.below ? <div className="below">{slots.below}</div> : null}
-      <details className="rd-about">
-        <summary>{lang === 'he' ? 'על הדף' : 'About this page'}</summary>
-        <div className="side">
-          {about}
-          {slots?.side}
+    <div className={`wrap rd${titled ? ' rd-titled' : ''}${toc ? ' rd-with-toc' : ''}`}>
+      {toc}
+      <div className="rd-main">
+        <div className="rd-top">
+          <Link className="rd-back" to={back}>
+            <Icon name="back" size={18} />
+            <span>{backLabel}</span>
+          </Link>
+          <span className="rd-tools">
+            <TextSize lang={lang} />
+            <MoreMenu links={links} actions={slots?.actions} lang={lang} />
+          </span>
         </div>
-      </details>
+        <header className="rd-head">
+          {kicker && kicker !== title ? <p className="rd-kicker">{kicker}</p> : null}
+          <h1 className="torah">{title}</h1>
+          <span className="rd-orn" aria-hidden="true" />
+        </header>
+        <SideNotes.Provider value={true}>
+          <UnitBody entity={entity} view={view} lang={lang} />
+        </SideNotes.Provider>
+        {slots?.below ? <div className="below">{slots.below}</div> : null}
+        <details className="rd-about">
+          <summary>{lang === 'he' ? 'על הדף' : 'About this page'}</summary>
+          <div className="side">
+            {about}
+            {slots?.side}
+          </div>
+        </details>
+      </div>
     </div>
   );
 }

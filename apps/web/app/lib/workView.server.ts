@@ -174,3 +174,46 @@ async function firstScanFile(api: RebbeHubApi, printing: string): Promise<string
   const scan = [...scans.values()].sort((a, b) => Number(Boolean((b.data as D).preferred)) - Number(Boolean((a.data as D).preferred)))[0];
   return scan ? String((scan.data as D).file ?? '') || null : null;
 }
+
+/** One line of the column beside a sicha: a sicha in its volume, under its parsha's name where the volume has them. */
+export interface VolumeLine {
+  group: string | null;
+  label: string;
+  path: string;
+  current: boolean;
+}
+
+/**
+ * The column beside a sicha on a wide screen (design/ 3l): the rest of its
+ * volume, under the names of the levels between (a parsha, Tanya's הסכמות).
+ * Where a sicha is kept in pieces numbered 1, 2, 3 (Likkutei Sichos 30 keeps
+ * each section as its own page) the column lists the sichos, each going to
+ * its first piece. A name that repeats its volume's (חלק ראשון; ליקוטי
+ * אמרים, פרק א׳) is shortened to its own last part (פרק א׳).
+ */
+export function volumeLines(units: readonly Entity[], me: Entity, lang: Lang): VolumeLine[] {
+  type Step = { value: string; label?: LocalName };
+  const stepsOf = (u: Entity) => ((u.data as { position?: Step[] }).position ?? []) as Step[];
+  const name = (s: Step | undefined) => (s ? nameOf(s.label, lang) || s.value : '');
+  const pieces = (u: Entity, steps: Step[]) => steps.length >= 3 && /^\d+$/.test(labelOf(u, lang));
+  const keyOf = (steps: Step[]) => steps.slice(1, -1).map((s) => s.value).join('/');
+  const mine = stepsOf(me);
+  const myKey = pieces(me, mine) ? keyOf(mine) : null;
+  const seen = new Set<string>();
+  const out: VolumeLine[] = [];
+  for (const u of units) {
+    const steps = stepsOf(u);
+    if (pieces(u, steps)) {
+      const key = keyOf(steps);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ group: steps.length > 3 ? name(steps[1]) : null, label: name(steps[steps.length - 2]), path: itemPath(u), current: key === myKey });
+      continue;
+    }
+    const label = labelOf(u, lang);
+    const volume = name(steps[0]);
+    const short = volume && label.startsWith(volume) && label.includes(', ') ? label.slice(label.lastIndexOf(', ') + 2) : label;
+    out.push({ group: steps.length > 2 ? name(steps[steps.length - 2]) : null, label: short, path: itemPath(u), current: u.id === me.id });
+  }
+  return out;
+}

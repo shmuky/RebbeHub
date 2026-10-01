@@ -20,9 +20,14 @@ type Step = { level: string; value: string; label?: LocalName };
  * (the last sicha of חלק א leads to the first of חלק ב).
  */
 export function neighbourLabel(neighbour: Pick<Entity, 'id' | 'type' | 'data'>, current: Pick<Entity, 'data'>, lang: Lang): string {
-  const name = labelOf(neighbour, lang);
   const steps = ((neighbour.data as { position?: Step[] }).position ?? []) as Step[];
   const here = ((current.data as { position?: Step[] }).position ?? []) as Step[];
+  const own = labelOf(neighbour, lang);
+  // A sicha kept in pieces numbered 1, 2, 3 (Likkutei Sichos 30): a piece is called by its sicha, and by its number within the same one.
+  const between = steps.slice(1, -1);
+  const pieceOf = /^\d+$/.test(own) && between.length ? between.map((s) => nameOf(s.label, lang) || s.value) : null;
+  const sameSicha = pieceOf && here.length === steps.length && here.slice(0, -1).every((s, i) => s.value === steps[i]!.value);
+  const name = !pieceOf ? own : sameSicha ? `${pieceOf[pieceOf.length - 1]} (${own})` : pieceOf.join(', ');
   const volume = steps.length > 1 ? steps[0] : undefined;
   if (!volume || (here.length > 1 && here[0]!.value === volume.value)) return name;
   return `${nameOf(volume.label, lang) || volume.value}, ${name}`;

@@ -323,3 +323,129 @@
 .rd .chapter-nav-top .chapter-nav-text > .subtle {
   display: none;
 }
+
+/* ------------------------------------------------------------ a wide screen (3l) */
+
+/*
+ * The others in its volume in a column at its side, this one marked; and
+ * each paragraph's notes beside it in the other margin. The notes float
+ * there, each under the last, so a long one pushes the next down rather
+ * than over it. Narrower, both stay out of the way: the volume is one tap
+ * back and the notes are at the foot.
+ */
+.rd-toc,
+.words-side {
+  display: none;
+}
+
+@media (min-width: 1180px) {
+  .rd.rd-with-toc {
+    max-width: var(--wrap);
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 40px;
+    align-items: start;
+  }
+
+  .rd-with-toc .rd-main {
+    width: 100%;
+    max-width: 760px;
+    margin-inline: auto;
+  }
+
+  /* Room in the other margin for the notes beside the text. */
+  .rd-main:has(.words-side) {
+    max-width: 1000px;
+    padding-inline-end: 240px;
+  }
+
+  .rd-toc {
+    display: block;
+    position: sticky;
+    top: 76px;
+    max-height: calc(100vh - 92px);
+    overflow-y: auto;
+    padding: 4px 0 16px;
+    font-size: var(--fs-md);
+  }
+
+  .rd-toc-work {
+    color: var(--subtle);
+    font-size: var(--fs-sm);
+  }
+
+  .rd-toc-volume {
+    display: block;
+    font: 700 19px / 1.35 var(--display);
+    color: var(--text);
+    margin: 2px 0 12px;
+  }
+
+  .rd-toc ol {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 2px;
+  }
+
+  .rd-toc-group {
+    display: block;
+    font: 700 var(--fs-sm) / 1.4 var(--ui);
+    color: var(--subtle);
+    padding: 10px 10px 2px;
+  }
+
+  .rd-toc ol a {
+    display: block;
+    padding: 6px 10px;
+    border-radius: 8px;
+    color: var(--muted);
+  }
+
+  .rd-toc ol a:hover {
+    background: var(--sunken);
+    text-decoration: none;
+  }
+
+  .rd-toc ol a[aria-current='page'] {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .rd .words-side {
+    display: block;
+    float: inline-end;
+    clear: inline-end;
+    width: 200px;
+    margin-inline-end: -240px;
+    margin-top: 0.35em;
+    font: 400 var(--fs-sm) / 1.6 var(--ui);
+    color: var(--muted);
+    text-align: start;
+  }
+
+  .rd .words-side p {
+    margin: 0 0 10px;
+    padding: 4px 8px;
+    border-radius: 6px;
+  }
+
+  .rd .words-side b {
+    color: var(--accent);
+    margin-inline-end: 4px;
+  }
+
+  .rd .words-notes.placed {
+    display: none;
+  }
+}
+
+@media (min-width: 1180px) {
+  /* A page with notes and no volume column still keeps its text its width. */
+  .rd:not(.rd-with-toc):has(.words-side) {
+    max-width: 1000px;
+    padding-inline-end: calc(var(--gutter) + 240px);
+  }
+}

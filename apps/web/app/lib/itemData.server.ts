@@ -1,6 +1,6 @@
 import { DAILY_WORKS, hayomYomShiurimOf, type HayomYomShiurim } from '@rebbehub/hebrew';
 import { threadsAbout, type AboutThread } from './about.server.js';
-import { workToc, type WorkToc } from './workView.server.js';
+import { volumeLines, workToc, type VolumeLine, type WorkToc } from './workView.server.js';
 import { eventView, type EventView } from './eventView.server.js';
 import { eventRow } from '../components/EventRow.js';
 import type { Backlink, Cover, Entity, FileInfo, LinkGroup, RebbeHubApi, RelationLink, ScanPages, WorkCover } from './api.js';
@@ -56,6 +56,8 @@ export interface ItemView {
   hayomYom?: HayomYomShiurim | null;
   /** A sicha's: the units before and after it in its sefer, for its back and forth buttons. */
   neighbours?: { previous: Entity | null; next: Entity | null };
+  /** A sicha's: the rest of its volume, for the column beside it on a wide screen. */
+  volume?: VolumeLine[];
 }
 
 /** A text's paragraphs, all of them, a page at a time (a hanacha may have up to 2,000; a sefer's text more). */
@@ -168,12 +170,15 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
     }
     case 'unit': {
       [...ids(d.work), ...ids(d.events)].forEach((id) => wanted.add(id));
-      // Its back and forth, asked for beside its texts: one request, one statement.
-      const [texts, neighbours] = await Promise.all([
+      // Its back and forth, and the others in its volume, asked for beside its texts.
+      const volume = Array.isArray(d.position) && d.position.length > 1 ? (d.position[0] as { value?: unknown }).value : undefined;
+      const [texts, neighbours, siblings] = await Promise.all([
         linkedItems(api, entity.id, 'unit', 'text'),
         typeof d.work === 'string' ? orNone(api.unitNeighbours(entity.id), { previous: null, next: null }) : { previous: null, next: null },
+        typeof d.work === 'string' && typeof volume === 'string' ? orNone(api.workPart(d.work, volume), []) : [],
       ]);
       view.neighbours = neighbours;
+      view.volume = volumeLines(siblings, entity, url.searchParams.get('lang') === 'en' ? 'en' : 'he');
       view.lists.texts = texts;
       const segments = await Promise.all(texts.map((text) => allSegments(api, text.id)));
       texts.forEach((text, i) => (view.segments[text.id] = segments[i]!));

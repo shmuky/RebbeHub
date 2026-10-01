@@ -15,4 +15,10 @@ describe("a sicha's back and forth", () => {
     expect(neighbourLabel(unit('2', '1'), unit('1', '30'), 'he')).toBe('חלק 2, שיחה 1');
     expect(neighbourLabel(unit('2', '1'), unit('1', '30'), 'en')).toBe('Volume 2, שיחה 1');
   });
+
+  it('calls a piece of a sicha kept in numbered pieces by its sicha', () => {
+    const piece = (parsha: string, sicha: string, n: string) => ({ id: `rh-${parsha}${sicha}${n}`, type: 'unit', data: { label: { he: n }, position: [volume('30'), { level: 'parsha', value: parsha, label: { he: parsha === '1' ? 'בראשית' : 'נח' } }, { level: 'sicha', value: sicha, label: { he: `שיחה ${sicha}` } }, { level: 'piece', value: n }] } });
+    expect(neighbourLabel(piece('1', 'א', '2'), piece('1', 'א', '1'), 'he')).toBe('שיחה א (2)');
+    expect(neighbourLabel(piece('2', 'א', '1'), piece('1', 'ב', '8'), 'he')).toBe('נח, שיחה א');
+  });
 });
