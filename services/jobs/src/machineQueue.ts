@@ -1,4 +1,4 @@
-import { CatalogError, checkMachineWork, finishMachineWork, takeMachineRequests, type Catalog, type MachineKind } from '@rebbehub/core';
+import { CatalogError, checkMachineWork, finishMachineWork, settleMachineWork, takeMachineRequests, type Catalog, type MachineKind } from '@rebbehub/core';
 import type { EntityId } from '@rebbehub/model';
 
 /**
@@ -56,7 +56,7 @@ export async function machineRun<T extends { id: EntityId }>(
     try {
       const outcome = await input.work(target);
       if (outcome) {
-        await finishMachineWork(catalog, kind, target.id, { status: 'failed', note: outcome.skipped });
+        await settleMachineWork(catalog, kind, target.id, { status: 'failed', note: outcome.skipped });
         input.log(`${target.id}: ${outcome.skipped}`);
         continue;
       }
@@ -64,7 +64,7 @@ export async function machineRun<T extends { id: EntityId }>(
       done.push(target.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await finishMachineWork(catalog, kind, target.id, { status: 'failed', note: message });
+      await settleMachineWork(catalog, kind, target.id, { status: 'failed', note: message });
       input.log(`${target.id}: failed: ${message}`);
       failed.push({ item: target.id, error: message });
     }

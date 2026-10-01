@@ -51,4 +51,20 @@ describe('the machine queue in the jobs', () => {
     const text = await catalog.list({ type: 'text-layer' });
     expect(text.some((l) => (l.data as { scan: string }).scan === ids[1])).toBe(true);
   });
+
+  it('remembers a scan the sweep failed on and moves past it, until someone asks for it again', async () => {
+    const { catalog, ids } = await scans(2);
+    const fetchFile = async () => new Uint8Array([1]);
+    const failing: OcrEngine = { ...engine(), pages: async () => Promise.reject(new Error('cannot render')) };
+    // The newest scan cannot be read: the sweep keeps that, as the system's own request.
+    await expect(readScans(catalog, { approveAs: 'shmuly', engine: failing, limit: 1, fetchFile })).rejects.toThrow(/cannot render/);
+    expect((await machineRequests(catalog, { item: ids[1]! }))[0]).toMatchObject({ status: 'failed', requestedBy: 'system', note: 'cannot render' });
+    // The next night goes on to the one after it, instead of failing on the same scan again.
+    const next = await readScans(catalog, { approveAs: 'shmuly', engine: engine(), limit: 1, fetchFile });
+    expect(next.map((d) => d.scan)).toEqual([ids[0]]);
+    // Asked for by name, it is tried again at once.
+    await requestMachineWork(catalog, 'chaim', { kind: 'ocr', item: ids[1]! });
+    const asked = await readScans(catalog, { approveAs: 'shmuly', engine: engine(), requestedOnly: true, fetchFile });
+    expect(asked.map((d) => d.scan)).toEqual([ids[1]]);
+  });
 });

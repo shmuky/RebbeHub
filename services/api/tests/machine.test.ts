@@ -62,7 +62,7 @@ describe('asking the machines over the API', () => {
     const list = await call('GET', `/v1/machine/requests?items=${scan},${recording}`);
     expect(list.body.requests.map((r: any) => r.item).sort()).toEqual([scan, recording].sort());
     const summary = await call('GET', '/v1/machine');
-    expect(summary.body).toMatchObject({ ocr: { waiting: 1, backlog: 1 }, transcript: { waiting: 1, backlog: 0 }, startsAtOnce: true });
+    expect(summary.body).toMatchObject({ ocr: { waiting: 1, backlog: 1 }, transcript: { waiting: 1, backlog: 1 }, startsAtOnce: true });
   });
 
   it('says why not: a scan it may not copy, the wrong kind of item, work already done', async () => {

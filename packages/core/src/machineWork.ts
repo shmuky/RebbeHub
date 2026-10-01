@@ -170,8 +170,9 @@ export async function machineRequests(
 
 /**
  * What waits for the machines and what is left for them: requests waiting
- * and running, and the served scans and recordings they have not done
- * yet (the backlog they work through on their own, newest first).
+ * and running, and the served scans and the recordings (served, or heard
+ * at another site) they have not done yet: the backlog the nightly runs
+ * work through on their own, newest first.
  */
 export async function machineSummary(catalog: Catalog): Promise<Record<MachineKind, { waiting: number; running: number; doneLastWeek: number; failedLastWeek: number; backlog: number }>> {
   const { rows } = await catalog.db.query<{ kind: MachineKind; waiting: string; running: string; done: string; failed: string }>(
@@ -188,7 +189,7 @@ export async function machineSummary(catalog: Catalog): Promise<Record<MachineKi
        (SELECT count(*) FROM entity e JOIN revision r ON r.id = e.main_rev WHERE e.type = 'scan' AND NOT e.deleted AND ${served}
           AND NOT EXISTS (SELECT 1 FROM entity_ref x JOIN entity l ON l.id = x.from_id AND l.type = 'text-layer' AND NOT l.deleted JOIN revision lr ON lr.id = l.main_rev
                           WHERE x.to_id = e.id AND x.field = 'scan' AND lr.data->>'kind' = 'machine-ocr')) AS scans,
-       (SELECT count(*) FROM entity e JOIN revision r ON r.id = e.main_rev WHERE e.type = 'recording' AND NOT e.deleted AND ${served}
+       (SELECT count(*) FROM entity e JOIN revision r ON r.id = e.main_rev WHERE e.type = 'recording' AND NOT e.deleted AND (${served} OR r.data->>'url' IS NOT NULL)
           AND NOT EXISTS (SELECT 1 FROM entity_ref x JOIN entity t ON t.id = x.from_id AND t.type = 'text' AND NOT t.deleted JOIN revision tr ON tr.id = t.main_rev
                           WHERE x.to_id = e.id AND x.field = 'recording' AND tr.data->>'kind' = 'transcript')) AS recordings`,
   );
@@ -232,6 +233,35 @@ export async function finishMachineWork(catalog: Catalog, kind: MachineKind, ite
     [kind, item, outcome.status, outcome.note?.slice(0, 1000) ?? null],
   );
   return rows.length;
+}
+
+/**
+ * How long an item the nightly sweep failed on (a recording whose link no
+ * longer plays, silence, a blank scan) is left out of the sweep. Without
+ * it the newest such item was taken first every night and the sweep never
+ * moved on. Someone asking for it again still gets it tried at once.
+ */
+export const SWEEP_RETRY_DAYS = 30;
+
+/** SQL for a sweep's query: the item `id` (an SQL expression) has not failed `kind` work in the last SWEEP_RETRY_DAYS. */
+export function notRecentlyFailedSql(kind: MachineKind, id: string): string {
+  return `NOT EXISTS (SELECT 1 FROM machine_request mf WHERE mf.kind = '${kind === 'ocr' ? 'ocr' : 'transcript'}' AND mf.entity_id = ${id}
+            AND mf.status = 'failed' AND mf.finished_at > now() - interval '${SWEEP_RETRY_DAYS} days')`;
+}
+
+/**
+ * For the jobs: settles an item's requests as done or failed, and keeps a
+ * failure even when nobody asked for the item (the sweep took it), as the
+ * system's own request, so the sweep leaves it for a while.
+ */
+export async function settleMachineWork(catalog: Catalog, kind: MachineKind, item: EntityId, outcome: { status: 'done' | 'failed'; note?: string }): Promise<void> {
+  const settled = await finishMachineWork(catalog, kind, item, outcome);
+  if (settled || outcome.status !== 'failed') return;
+  await catalog.db.query(
+    `INSERT INTO machine_request (kind, entity_id, requested_by, status, note, started_at, finished_at)
+     VALUES ($1, $2, 'system', 'failed', $3, now(), now())`,
+    [kind, item, outcome.note?.slice(0, 1000) ?? null],
+  );
 }
 
 /** For the jobs: puts back requests a run took but did not get to (it stopped early), so the next run takes them first. */

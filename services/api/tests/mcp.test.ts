@@ -59,6 +59,8 @@ describe('the MCP server', () => {
       'open_issue',
       'suggest_items',
       'add_segments',
+      'list_suggestions',
+      'get_suggestion',
       'approve_suggestion',
       'close_suggestion',
       'reopen_suggestion',
@@ -253,6 +255,15 @@ describe('the MCP server', () => {
     expect(last.structuredContent.status).toBe('open');
     expect((await catalog.proposals(suggestion)).length).toBe(3);
     expect(await catalog.get(workId)).toBeNull();
+
+    // Anyone can find it and read what it changes; its author may not approve it.
+    const listed = await tool('list_suggestions', { q: 'An index' });
+    expect(listed.structuredContent.suggestions).toMatchObject([{ suggestion, title: 'An index', status: 'open' }]);
+    const read = await tool('get_suggestion', { suggestion }, token);
+    expect(read.isError).toBe(false);
+    expect(read.structuredContent).toMatchObject({ suggestion, status: 'open', mayApprove: false, total: 3 });
+    expect(read.structuredContent.items).toContainEqual(expect.objectContaining({ id: workId, change: 'added', name: 'מפתח' }));
+    expect(read.content[0].text).toMatch(/You may not approve it/);
 
     // Only who may approve does: not its author, then a steward.
     expect((await tool('approve_suggestion', { suggestion }, token)).isError).toBe(true);
