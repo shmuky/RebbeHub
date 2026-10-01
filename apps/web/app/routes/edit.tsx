@@ -16,6 +16,7 @@ import { href } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
 import { useAccount } from '../lib/useAccount.js';
 import { Icon } from '../ui/Icon.js';
+import { Bar } from '../ui/primitives.js';
 import { ItemSubpage } from '../views/ItemSubpage.js';
 import '../styles/pages/contribute.css';
 import '../styles/pages/words.css';
@@ -152,6 +153,7 @@ const CHECK = {
     he: 'המילים נקראו במכונה מהסריקה שלצידן. בודקים כל קטע מול הסריקה: "נכון" אם הוא נכון, או לוחצים עליו ומתקנים. כל בדיקה ותיקון נשלחים לאישור.',
     en: 'A machine read these words from the scan beside them. Check each segment against the scan: "Right" when it is, or click it and fix it. Each check and fix goes for review.',
   },
+  kicker: { he: 'בדיקה מול הסריקה', en: 'Checking against the scan' },
   progress: { he: 'נבדקו', en: 'checked' },
   of: { he: 'מתוך', en: 'of' },
   next: { he: 'לקטע הבא שלא נבדק', en: 'Next unchecked segment' },
@@ -190,14 +192,17 @@ function CheckBesideScan({ entity, page, scan, lang }: { entity: { id: string; p
   };
   return (
     <ItemSubpage entity={entity as Parameters<typeof ItemSubpage>[0]['entity']} lang={lang} current="edit" here={t(lang, 'tabEdit')}>
-      <p className="alert info">
-        <Icon name="scan" />
-        <span>{CHECK.help[lang]}</span>
-      </p>
-      <div className="check-bar">
-        <span className="num">
-          {num(machine.length - open.length, lang)} {CHECK.of[lang]} {num(machine.length, lang)} {CHECK.progress[lang]}
-        </span>
+      <div className="check-head">
+        <div className="check-what">
+          <span className="check-kicker">{CHECK.kicker[lang]}</span>
+          <span className="check-help">{CHECK.help[lang]}</span>
+        </div>
+        <div className="check-progress">
+          <Bar value={machine.length - open.length} max={machine.length} tone="open" label={CHECK.progress[lang]} />
+          <span className="num">
+            {num(machine.length - open.length, lang)} {CHECK.of[lang]} {num(machine.length, lang)} {CHECK.progress[lang]}
+          </span>
+        </div>
         {open.length ? (
           <button type="button" className="btn sm" onClick={next}>
             <Icon name="target" />
