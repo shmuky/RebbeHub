@@ -213,12 +213,29 @@ export function jemImporter(input: JemInput | (() => Promise<JemInput>), options
       const data = typeof input === 'function' ? await input() : input;
       const matched = matchFarbrengens(data);
       const known = new Set(data.occasions.flatMap((o) => o.audio.map((a) => a.workerFilename)));
+      // The farbrengens' recordings Sichos-Kodesh's catalog brought (sichosKodeshOccasions.ts) know only JEM's file name, so
+      // their pages could not link to JEM's own player; each is given its link to the Ashreinu app here, by its file.
+      const occasionRecording = new Map(data.occasions.flatMap((o) => o.audio.map((a, i) => [a.workerFilename, `mafteiach-recording:${o.occasionId}/${i + 1}`] as const)));
       const partsOf = new Map(data.occasions.map((o) => [o.occasionId, o.audio.length]));
       const nodes = new Map(data.jem.nodes.map((n) => [n.id, n]));
       yield { key: JEM_SET.key, type: 'set', path: JEM_SET.path, data: { name: JEM_SET.name, slug: 'jem', policy: 'moderated', keepers: [] } };
       for (const tree of trees(data.jem)) {
         const { root } = tree;
         const occasion = matched.get(root.id);
+        for (const recording of tree.recordings) {
+          const file = jemFilename(recording.url);
+          const key = occasionRecording.get(file);
+          if (!key) continue;
+          yield {
+            key,
+            type: 'recording',
+            patch: 'set',
+            data: {
+              externalIds: { 'jem-recording': String(recording.recordingId), 'jem-event': String(recording.eventId) },
+              sources: [{ source: 'jem', sourceId: file, url: jemPlayerUrl(root.id, recording.eventId) }],
+            },
+          };
+        }
         const fresh = tree.recordings.filter((r) => !known.has(jemFilename(r.url)));
         let eventKey: string;
         if (occasion !== undefined) {

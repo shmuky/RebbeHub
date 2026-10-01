@@ -101,11 +101,10 @@ Every night the *Machine transcription* workflow takes the recordings
 people asked for (the button under a farbrengen's parts, the API, the
 `ask_machine` MCP tool, `rebbehub machine ask`), then the newest
 recordings with no transcript, `TRANSCRIBE_NIGHTLY` for each worker,
-always with the local engine. The newest are taken whether RebbeHub
-serves their file or they are heard at another site (Drive, JEM): none
-of the catalog's recordings is a served file yet, so without that the
-nightly run had nothing to do but requests (`TRANSCRIBE_LINKED=false`
-keeps it to served files). A recording the nightly run failed on (its
+always with the local engine. None of the catalog's recordings is a
+served file yet (each is heard at another site, Drive or JEM), so the
+nightly run does only requests until `TRANSCRIBE_LINKED=true` lets it
+take the newest linked recordings too. A recording the nightly run failed on (its
 link no longer plays, or nothing was heard) is left out of the sweep for
 30 days, kept as the system's own failed request, so the sweep moves on;
 asking for it again tries it at once. The OCR sweep does the same. A run can be split into workers side by

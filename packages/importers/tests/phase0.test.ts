@@ -205,8 +205,13 @@ describe("JEM's recordings", () => {
     await run(sichosKodeshOccasionsImporter(occasions()));
     await run(jemImporter({ jem, occasions: occasions() }));
     const farbrengen = await idForKey('mafteiach-occasion:100');
-    // The part it had stays the catalog's; the one it lacked is added after it.
+    // The part it had stays the catalog's, now with its link to JEM's own player; the one it lacked is added after it.
     expect((await catalog.get(await idForKey('jem-audio:JEMT0001'))) ?? null).toBeNull();
+    expect((await catalog.get(await idForKey('mafteiach-recording:100/1')))?.data).toMatchObject({
+      event: farbrengen,
+      externalIds: { 'jem-recording': '11', 'jem-event': '2' },
+      sources: [{ source: 'jem', sourceId: 'JEMT0001.mp3', url: 'https://ashreinu.app/#/player/parentEvent~1_event~2' }],
+    });
     expect((await catalog.get(await idForKey('jem-audio:JEMT0002')))?.data).toMatchObject({ event: farbrengen, part: 2, url: audioUrl('JEMT0002.mp3'), title: { he: 'שיחה ב׳', en: 'Sicha 2' }, sources: [{ source: 'jem', url: 'https://ashreinu.app/#/player/parentEvent~1_event~3' }] });
     expect((await catalog.get(await idForKey('jem-audio:JEMT0003')))?.data).toMatchObject({ event: await idForKey('mafteiach-occasion:200'), part: 1 });
     const shacharis = await catalog.get(await idForKey('jem-event:5'));
@@ -214,6 +219,9 @@ describe("JEM's recordings", () => {
     expect(shacharis?.data).toMatchObject({ kind: 'other', date: '5745-01-03', externalIds: { jem: '5' } });
     expect((await catalog.get(await idForKey('jem-audio:JEMT0004')))?.data).not.toHaveProperty('language');
     expect(await run(jemImporter({ jem, occasions: occasions() }))).toMatchObject({ created: 0, updated: 0 });
+    // The catalog's own importer, run again, leaves the link in place.
+    expect(await run(sichosKodeshOccasionsImporter(occasions()))).toMatchObject({ created: 0, updated: 0 });
+    expect((await catalog.get(await idForKey('mafteiach-recording:100/1')))?.data).toMatchObject({ sources: [{ url: 'https://ashreinu.app/#/player/parentEvent~1_event~2' }] });
   });
 });
 
