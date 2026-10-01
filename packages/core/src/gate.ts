@@ -62,15 +62,22 @@ export class ExportGate {
     return asked;
   }
 
-  /** Why a text layer's pages are withheld, or null. */
-  layerWithheld(layerId: EntityId): Promise<string | null> {
+  /**
+   * Why a text layer's pages are withheld, or null. `scanRights`: the
+   * rights of the scan's file where the caller has read them already (null
+   * for no file), so a page of search results is not three reads a layer.
+   */
+  layerWithheld(layerId: EntityId, scanRights?: RightsState | null): Promise<string | null> {
     const known = this.layers.get(layerId);
     if (known) return known;
     const asked = (async () => {
-      const layer = (await this.view(layerId))?.data as unknown as TextLayerData | undefined;
-      const scan = layer ? ((await this.view(layer.scan))?.data as unknown as ScanData | undefined) : undefined;
-      const file = scan ? await getFile(this.catalog.db, scan.file) : null;
-      return !file || !mayExport(file.rights_state) ? `the scan's rights (${file?.rights_state ?? 'unknown'}) do not allow copies` : null;
+      let rights: RightsState | null | undefined = scanRights;
+      if (rights === undefined) {
+        const layer = (await this.view(layerId))?.data as unknown as TextLayerData | undefined;
+        const scan = layer ? ((await this.view(layer.scan))?.data as unknown as ScanData | undefined) : undefined;
+        rights = scan ? ((await getFile(this.catalog.db, scan.file))?.rights_state ?? null) : null;
+      }
+      return !rights || !mayExport(rights) ? `the scan's rights (${rights ?? 'unknown'}) do not allow copies` : null;
     })();
     this.layers.set(layerId, asked);
     return asked;

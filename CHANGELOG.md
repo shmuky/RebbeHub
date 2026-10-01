@@ -174,6 +174,12 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Changed
 
+- **Search answers sooner.** `/v1/search/moments` reads whether each
+  found page's or paragraph's words may be shown with the rows themselves
+  (three statements, not three a scan), and the search page asks for the
+  moments, the names and a date's farbrengens at once instead of one
+  after another.
+
 - **The review queue lists titles, as GitHub lists pull requests.**
   `/review` shows one line per Suggestion: its title (to its own page),
   its #number, who sent it, when, and how many items it changes. Its

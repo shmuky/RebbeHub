@@ -65,8 +65,44 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const parsed = parseTokens(q, SEARCH_KEYS);
   const kind = (['event', 'library', 'text'] as const).find((k) => parsed.filters.type?.includes(k)) ?? null;
   const words = [parsed.text, ...(parsed.filters.year ?? [])].filter(Boolean).join(' ');
-  // Whether search by meaning is set up: asked with no question, it costs nothing.
-  const meaning = await api.similar('').catch(() => ({ available: false, results: [] as SimilarItem[] }));
+  // Whether search by meaning is set up: asked with no question, it costs nothing. It goes to the API's own Worker, so the
+  // reads below that do not wait on it are started beside it, not after it.
+  const meaningAsked = api.similar('').catch(() => ({ available: false, results: [] as SimilarItem[] }));
+  const smart = parseSmartQuery(words);
+  const understood =
+    smart.parsha || smart.day || smart.year
+      ? {
+          parsha: smart.parsha ? parshaLabel(smart.parsha, lang) : null,
+          day: smart.day?.label ?? null,
+          year: smart.year ?? null,
+          // One day of one month: its month in the calendar (Adar's two spellings are one month in a given year).
+          month: smart.year && smart.day && !smart.parsha && new Set(datesOf(smart)?.map((d) => d.split('-')[1])).size === 1 ? datesOf(smart)![0]!.split('-')[1]! : null,
+        }
+      : null;
+  // By words: the moments, the names and the farbrengens of a date the words name, asked at once.
+  const askByWords = () => {
+    const moments = api.moments(words, 20).catch(() => [] as Moment[]);
+    // Words beyond a date narrow the farbrengens found, and are searched in names too; words read as a date may be a name
+    // too, so the names they match are found as well (a sefer named so first: the API's search puts it there).
+    const search = api.search(understood && smart.rest ? smart.rest : words, { limit: 50 });
+    const dates = understood ? datesOf(smart) : null;
+    const events = !understood
+      ? null
+      : dates?.length
+        ? api.events({ dates: [...new Set(dates)].slice(0, 500), limit: 500 })
+        : smart.day
+          ? api.events({ day: smart.day.tokens, limit: 500 })
+          : smart.year
+            ? api.events({ within: String(smart.year), limit: 500 })
+            : null;
+    // Each is waited on below; until then, one that fails is not an unhandled rejection.
+    search.catch(() => undefined);
+    events?.catch(() => undefined);
+    return { moments, search, events };
+  };
+  // Asked by meaning, they wait to see whether search by meaning is set up; else they start now.
+  let byWords = words && !byMeaning ? askByWords() : null;
+  const meaning = await meaningAsked;
   const empty = {
     lang,
     siteUrl,
@@ -88,42 +124,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     const refs = Object.fromEntries(await api.entities(momentRefs(similar.flatMap((s) => (s.moment ? [s.moment] : [])))));
     return { ...empty, similar, refs };
   }
-  const moments = await api.moments(words, 20).catch(() => [] as Moment[]);
-
-  const smart = parseSmartQuery(words);
-  const understood =
-    smart.parsha || smart.day || smart.year
-      ? {
-          parsha: smart.parsha ? parshaLabel(smart.parsha, lang) : null,
-          day: smart.day?.label ?? null,
-          year: smart.year ?? null,
-          // One day of one month: its month in the calendar (Adar's two spellings are one month in a given year).
-          month: smart.year && smart.day && !smart.parsha && new Set(datesOf(smart)?.map((d) => d.split('-')[1])).size === 1 ? datesOf(smart)![0]!.split('-')[1]! : null,
-        }
-      : null;
-
-  let events: EventItem[] = [];
-  let results: Entity[] = [];
+  byWords ??= askByWords();
+  const moments = await byWords.moments;
+  let events: EventItem[] = (await byWords.events) ?? [];
   let date: { key: string } | null = null;
+  const found = await byWords.search;
+  let results: Entity[] = found.results;
   if (understood) {
-    const dates = datesOf(smart);
-    if (dates?.length) events = await api.events({ dates: [...new Set(dates)].slice(0, 500), limit: 500 });
-    else if (smart.day) events = await api.events({ day: smart.day.tokens, limit: 500 });
-    else if (smart.year) events = await api.events({ within: String(smart.year), limit: 500 });
     if (smart.rest) {
-      // Words beyond the date narrow the farbrengens found, and are searched in names too.
       const rest = smart.rest.split(' ');
       const named = (e: EventItem) => rest.every((w) => JSON.stringify(eventData(e).title ?? '').includes(w));
       if (events.length) events = events.filter(named);
-      results = (await api.search(smart.rest, { limit: 50 })).results;
-    } else {
-      // Words read as a date may be a name too: the names they match are found as well, a sefer named so first (the API's
-      // search puts it there), so a date reading never hides the sefer.
-      results = (await api.search(words, { limit: 50 })).results;
     }
   } else {
-    const found = await api.search(words, { limit: 50 });
-    results = found.results;
     date = found.date;
     if (found.date) {
       const parts = parseDateKey(found.date.key)!;
