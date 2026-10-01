@@ -1,5 +1,5 @@
 import type { Context, Hono } from 'hono';
-import { CatalogError, ExportGate, SITEMAP_PAGE_SIZE, SITEMAP_TYPES, coverSources, sitemapChunks, sitemapPage, coversOf, fileAbout, linkedCounts, linkedOfEach, linkedPage, pdfPageCount, textsProgress, type Catalog, type CoverView, type EntityView } from '@rebbehub/core';
+import { CatalogError, ExportGate, SITEMAP_PAGE_SIZE, SITEMAP_TYPES, coverSources, sitemapChunks, sitemapPage, coversOf, fileAbout, linkedCounts, linkedOfEach, linkedPage, pdfPageCounts, textsProgress, type Catalog, type CoverView, type EntityView } from '@rebbehub/core';
 import { mayServe, readId, type EntityId, type EntityType } from '@rebbehub/model';
 import { HttpError } from './app.js';
 import { cursor, nextLink } from './platform.js';
@@ -113,11 +113,12 @@ export function pageRoutes(app: Hono, catalog: Catalog, options: PageRouteOption
     const base = options.filesBase(c);
     const cover = base ? (await coversOf(catalog.db, [work.id]))[work.id] : undefined;
     const sources = await coverSources(catalog.db, work.id);
+    const pages = await pdfPageCounts(catalog.db, sources.map((s) => s.sha256));
     return c.json({
       work: work.id,
       chosen: (work.data as { cover?: unknown }).cover ?? null,
       cover: cover && base ? coverJson(cover, base) : null,
-      sources: await Promise.all(sources.map(async (s) => ({ ...s, pages: await pdfPageCount(catalog.db, s.sha256) }))),
+      sources: sources.map((s) => ({ ...s, pages: pages.get(s.sha256) ?? null })),
     });
   });
 

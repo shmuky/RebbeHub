@@ -156,8 +156,9 @@ describe('covers and files', () => {
     expect(Object.keys(covers.body.covers)).toEqual([work]);
     expect(covers.body.covers[work]).toMatchObject({ page: 3, machine: true, thumb: { url: `https://files.test/objects/${sha('e')}`, width: 480 } });
 
+    await catalog.db.query("INSERT INTO file_fingerprint (sha256, kind, encoder, pages) VALUES ($1, 'pdf-pages', 'dhash-256@1', 12)", [sha('a')]);
     const cover = await get(`/v1/works/${work}/cover`);
-    expect(cover.body).toMatchObject({ work, chosen: null, cover: { page: 3 }, sources: [{ sha256: sha('a'), via: 'scan' }] });
+    expect(cover.body).toMatchObject({ work, chosen: null, cover: { page: 3 }, sources: [{ sha256: sha('a'), via: 'scan', pages: 12 }] });
     expect((await get(`/v1/works/${event}/cover`)).status).toBe(404);
 
     const about = await get(`/v1/files/${sha('a')}/about`);
