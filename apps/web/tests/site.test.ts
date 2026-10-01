@@ -176,6 +176,9 @@ describe('the public site', () => {
     const page = await get(`/history/${ids.teshura}`);
     expect(page.html).toContain('Better path');
     expect(page.html).toContain('mendy');
+    // As design/ draws it (4c): the versions down one line, the one shown now marked, the last change open on top.
+    expect(page.html).toMatch(/<ol class="hist2"[^>]*><li id="v\d+" class="now"><span class="hist-dot"/);
+    expect(page.html).toContain('הגרסה שמוצגת עכשיו');
   });
 
   it('takes a report with no account, without JavaScript', async () => {
