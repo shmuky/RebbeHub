@@ -216,3 +216,180 @@
 .unclear-talk li.reply {
   padding-inline-start: 16px;
 }
+
+/* ================================================================== a suggestion under review, as design/ draws it (3m) */
+
+/* Where it stands, in its colour; the title in the display face; who, when, where. */
+.sg-top {
+  border-bottom: 0;
+}
+
+.sg-state {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.sg-state .sg-dot {
+  margin-top: 0;
+}
+
+.sg-state .sg-where {
+  margin-top: 0;
+}
+
+.sg-top .title-row .page-title {
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.sg-top .title-row .page-title .num {
+  font-family: var(--ui);
+  font-size: var(--fs-md);
+}
+
+.sg-by {
+  margin-top: 6px;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+
+.sg-by a:not(.person) {
+  color: var(--muted);
+}
+
+/* The change, the checks and the decision, before the talk. */
+.sg-review {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.sg-review .diff-h {
+  background: none;
+}
+
+.sg-review .diff-h > .i {
+  display: none;
+}
+
+.sg-review .diff-h .subtle a.plain {
+  color: var(--subtle);
+}
+
+/* Before and after, each its own line, the changed words marked. */
+.diff-ba .ba {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  border-bottom: 1px solid var(--border);
+}
+
+.diff-ba .ba:last-child {
+  border-bottom: 0;
+}
+
+.diff-ba .ba-k {
+  padding: 18px 14px 0;
+  font-size: 12px;
+  color: var(--subtle);
+}
+
+.diff-ba .t {
+  padding: 12px 18px 12px 20px;
+  line-height: 2;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.diff-ba .t.torah {
+  font-size: 20px;
+}
+
+.diff-ba del,
+.diff-ba ins {
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.checks.plain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.checks.plain .check {
+  padding: 3px 0;
+  border: 0;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+
+/* The reviewer's note, a line to write on, then Approve and Send back. */
+.review-box.direct {
+  border: 0;
+  background: none;
+}
+
+.review-box.direct textarea {
+  border: 0;
+  border-bottom: 1px solid var(--strong);
+  border-radius: 0;
+  background: none;
+  padding: 8px 2px;
+  min-height: 0;
+}
+
+.review-box.direct .rb-f {
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 14px 0 0;
+  border: 0;
+  background: none;
+}
+
+.rb-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rb-buttons .btn {
+  min-height: 44px;
+  padding-inline: 22px;
+}
+
+.rb-buttons .btn.rb-approve {
+  background: var(--strong);
+  border-color: var(--strong);
+  color: var(--on-strong);
+  font-weight: 700;
+  padding-inline: 26px;
+}
+
+.rb-buttons .btn.rb-approve:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.rb-buttons .btn.rb-comment {
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+}
+
+.review-box.direct .rb-foot {
+  font-size: 12px;
+  color: var(--subtle);
+}
+
+/* The printed page the change was read from, beside it. */
+.sg-scan img {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: #fff;
+}

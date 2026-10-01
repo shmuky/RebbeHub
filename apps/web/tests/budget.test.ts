@@ -246,6 +246,13 @@ describe("each page's statements and API calls stay within its ceiling", () => {
     expect(html).toMatch(/class="row issue-row sg-open"><span class="sg-dot"/);
     expect(html).toContain('<div class="sg-where">ממתינה לבדיקה</div>');
   });
+  it('draws a suggestion as the design does (3m): where it stands in words, then the change, then the talk', async () => {
+    const html = await (await handle(new Request(`${SITE}/suggestions/${suggestion}`))).text();
+    expect(html).toMatch(/class="sg-state sg-\w+"><span class="sg-dot" aria-hidden="true"><\/span><span class="sg-where">/);
+    expect(html).toMatch(/class="sg-by">.*?<\/p>/s);
+    expect(html.indexOf('class="sg-review"')).toBeGreaterThan(-1);
+    expect(html.indexOf('class="sg-review"')).toBeLessThan(html.indexOf('id="description"'));
+  });
   it('search, suggestions and review', async () => {
     within(await page(`/search?q=${encodeURIComponent('שיחה')}`), 'search', { statements: 15, calls: 6, kB: 110 });
     within(await page('/suggestions'), '/suggestions', { statements: 8, calls: 3, kB: 35 });
