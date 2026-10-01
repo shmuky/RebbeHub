@@ -45,8 +45,12 @@ export interface Reader {
   close(): Promise<void>;
 }
 
-/** What only the API's Worker answers: the apps' catalog (kept per isolate there), Drive files (its own limits and size cap), search by meaning (Workers AI). */
-const ELSEWHERE = /^\/v1\/(app|drive|search\/similar)(\/|$)/;
+/**
+ * What only the API's Worker answers: the apps' catalog (kept per isolate there), Drive files (its own limits and size cap),
+ * search by meaning (Workers AI), and what needs settings only it is given: sign-in (`/v1/auth/me` asked as nobody still
+ * says whether Google sign-in is on), and the mirrors' git addresses and keys.
+ */
+const ELSEWHERE = /^\/v1\/(app|drive|search\/similar|auth|mirrors)(\/|$)/;
 /** What reads a bucket: answered here only with FILES_PUBLIC. */
 const NEEDS_FILES = /^\/v1\/(status|texts)(\/|$)/;
 
