@@ -27,6 +27,8 @@ export interface Profile {
   /** Set when the page was asked for by a handle they used to have. */
   movedFrom?: string;
   counts: { suggestions: number; merged: number; reviews: number; issues: number; comments: number };
+  /** How much they did each day of the last 12 weeks (UTC days, "2026-09-30": 3), the days they did nothing left out: the profile's squares. */
+  days: Record<string, number>;
   activity: ProfileActivity[];
 }
 
@@ -42,14 +44,22 @@ export async function profile(db: Db, username: string, options: { limit?: numbe
      FROM auth.person p LEFT JOIN account a ON a.id = p.id WHERE p.id = $1`,
     [id],
   );
-  const counts = await one<{ suggestions: number; merged: number; reviews: number; issues: number; comments: number }>(
+  const counts = await one<{ suggestions: number; merged: number; reviews: number; issues: number; comments: number; days: Record<string, number> | null }>(
     db,
     `SELECT (SELECT count(*)::int FROM changeset WHERE author = $1 AND number IS NOT NULL AND status <> 'draft') AS suggestions,
             (SELECT count(*)::int FROM changeset WHERE author = $1 AND number IS NOT NULL AND status = 'merged') AS merged,
             (SELECT count(*)::int FROM review WHERE reviewer = $1) AS reviews,
             (SELECT count(*)::int FROM report WHERE reporter = $1 AND NOT private) AS issues,
             (SELECT count(*)::int FROM comment c WHERE c.author = $1 AND c.hidden_at IS NULL
-               AND NOT (c.target_kind = 'report' AND EXISTS (SELECT 1 FROM report r WHERE r.id::text = c.target_id AND r.private))) AS comments`,
+               AND NOT (c.target_kind = 'report' AND EXISTS (SELECT 1 FROM report r WHERE r.id::text = c.target_id AND r.private))) AS comments,
+            (SELECT json_object_agg(d, n) FROM (
+               SELECT to_char(x.at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS d, count(*)::int AS n FROM (
+                 SELECT coalesce(submitted_at, created_at) AS at FROM changeset WHERE author = $1 AND number IS NOT NULL AND status <> 'draft'
+                 UNION ALL SELECT created_at FROM review WHERE reviewer = $1
+                 UNION ALL SELECT created_at FROM report WHERE reporter = $1 AND NOT private
+                 UNION ALL SELECT c.created_at FROM comment c WHERE c.author = $1 AND c.hidden_at IS NULL
+                   AND NOT (c.target_kind = 'report' AND EXISTS (SELECT 1 FROM report r WHERE r.id::text = c.target_id AND r.private))
+               ) x WHERE x.at > now() - interval '84 days' GROUP BY 1) y) AS days`,
     [id],
   );
   const limit = Math.min(Math.max(options.limit ?? 30, 1), 100);
@@ -98,7 +108,8 @@ export async function profile(db: Db, username: string, options: { limit?: numbe
       suspended: person!.suspended,
     },
     ...(found.movedFrom ? { movedFrom: found.movedFrom } : {}),
-    counts: counts!,
+    counts: { suggestions: counts!.suggestions, merged: counts!.merged, reviews: counts!.reviews, issues: counts!.issues, comments: counts!.comments },
+    days: counts!.days ?? {},
     activity: rows.map((r) => ({
       kind: r.kind,
       at: new Date(r.at).toISOString(),

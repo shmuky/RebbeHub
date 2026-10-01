@@ -10,7 +10,7 @@ import { tt } from '../lib/threadStrings.js';
 import { useAccount } from '../lib/useAccount.js';
 import { useLang } from '../lib/useLang.js';
 import { Icon } from '../ui/Icon.js';
-import { AgentBy, Avatar, Box, EmptyState, Label, RelativeTime, StateIcon, Tabs } from '../ui/primitives.js';
+import { AgentBy, Avatar, Box, EmptyState, Label, RelativeTime, StateIcon } from '../ui/primitives.js';
 import '../styles/pages/people.css';
 
 /**
@@ -39,8 +39,8 @@ export function meta({ loaderData }: Route.MetaArgs) {
 
 /** This page's own words. */
 const WORDS = {
-  he: { overview: 'סקירה', of: 'מתוך', edit: 'עריכת החשבון', admin: 'מנהל פלטפורמה', approvedOf: (n: number, of: number) => `${n} מתוך ${of} הצעות אושרו`, suspendedNote: 'החשבון הזה מושעה.' },
-  en: { overview: 'Overview', of: 'of', edit: 'Edit your account', admin: 'Platform admin', approvedOf: (n: number, of: number) => `${n} of ${of} suggestions approved`, suspendedNote: 'This account is suspended.' },
+  he: { overview: 'סקירה', of: 'מתוך', edit: 'עריכת החשבון', admin: 'מנהל פלטפורמה', approvedOf: (n: number, of: number) => `${n} מתוך ${of} הצעות אושרו`, suspendedNote: 'החשבון הזה מושעה.', approved: 'תיקונים שאושרו', recent: 'פעילות אחרונה', squares: 'השתתפות · 12 שבועות אחרונים', day: (n: number, d: string) => `${d}: ${n}` },
+  en: { overview: 'Overview', of: 'of', edit: 'Edit your account', admin: 'Platform admin', approvedOf: (n: number, of: number) => `${n} of ${of} suggestions approved`, suspendedNote: 'This account is suspended.', approved: 'Fixes approved', recent: 'Recent activity', squares: 'Taking part · the last 12 weeks', day: (n: number, d: string) => `${d}: ${n}` },
 } as const;
 
 type Activity = ProfileData['activity'][number];
@@ -56,6 +56,32 @@ function ActivityIcon({ a }: { a: Activity }) {
     <span className="state-icon neutral">
       <Icon name="discuss" />
     </span>
+  );
+}
+
+/**
+ * The last twelve weeks as squares, a column a week and a row a day, each
+ * as dark as how much they did that day (design/ 4a). Today is the last
+ * square; the days come from the server in UTC.
+ */
+function Squares({ days, lang }: { days: Record<string, number>; lang: Lang }) {
+  const today = new Date();
+  const end = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  // The grid starts on the Sunday twelve weeks back, so each row is one day of the week.
+  const start = end - (11 * 7 + new Date(end).getUTCDay()) * 86400000;
+  const cells: Array<{ key: string; n: number } | null> = [];
+  for (let t = start; t < start + 84 * 86400000; t += 86400000) {
+    const key = new Date(t).toISOString().slice(0, 10);
+    cells.push(t > end ? null : { key, n: days[key] ?? 0 });
+  }
+  const level = (n: number) => (n === 0 ? 0 : n < 2 ? 1 : n < 4 ? 2 : n < 8 ? 3 : 4);
+  return (
+    <section className="pf-squares">
+      <h2 className="pf-h">{WORDS[lang].squares}</h2>
+      <div className="sq-grid" role="img" aria-label={WORDS[lang].squares}>
+        {cells.map((c, i) => (c ? <span key={c.key} className={`sq l${level(c.n)}`} title={WORDS[lang].day(c.n, c.key)} /> : <span key={i} className="sq none" />))}
+      </div>
+    </section>
   );
 }
 
@@ -79,51 +105,48 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
   }
 
   return (
-    <div className="wrap profile">
-      <aside className="profile-card" aria-label={person.displayName}>
+    <div className="wrap profile p2">
+      <header className="pf-head">
         <Avatar name={person.displayName} id={person.id} className="profile-avatar" />
-        <div className="profile-names">
+        <div className="pf-names">
           <h1 className="profile-name">
             <bdi>{person.displayName}</bdi>
           </h1>
-          <p className="profile-handle" dir="ltr">
-            @{person.username}
+          <p className="pf-sub">
+            <span dir="ltr">@{person.username}</span> · {tt(lang, 'memberSince')} {new Date(person.since).toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })}
           </p>
+          {person.admin || person.steward || person.trust === 'trusted' || person.suspended ? (
+            <div className="labels">
+              {person.admin ? <span className="pf-role">{w.admin}</span> : person.steward ? <span className="pf-role">{tt(lang, 'steward')}</span> : null}
+              {person.trust === 'trusted' ? <Label tone="sync">{tt(lang, 'trusted')}</Label> : null}
+              {person.suspended ? <Label tone="scan">{tt(lang, 'suspended')}</Label> : null}
+            </div>
+          ) : null}
         </div>
-        {person.admin || person.steward || person.trust === 'trusted' || person.suspended ? (
-          <div className="labels">
-            {person.admin ? <Label>{w.admin}</Label> : person.steward ? <Label>{tt(lang, 'steward')}</Label> : null}
-            {person.trust === 'trusted' ? <Label tone="sync">{tt(lang, 'trusted')}</Label> : null}
-            {person.suspended ? <Label tone="scan">{tt(lang, 'suspended')}</Label> : null}
-          </div>
-        ) : null}
         {mine ? (
-          <Link className="btn block" to={href('/account', lang)}>
+          <Link className="btn sm pf-edit" to={href('/account', lang)}>
             <Icon name="pencil" />
             {w.edit}
           </Link>
         ) : null}
-        <ul className="profile-facts">
-          <li>
-            <Icon name="cal" />
-            <span>
-              {tt(lang, 'memberSince')} {new Date(person.since).toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })}
-            </span>
-          </li>
-          {counts.suggestions ? (
-            <li>
-              <Icon name="check" />
-              <Link to={list('/suggestions', { author: person.username, state: 'closed' })}>{w.approvedOf(counts.merged, counts.suggestions)}</Link>
-            </li>
-          ) : null}
-          <li>
-            <Icon name="discuss" />
-            <span>
-              <b className="num">{counts.comments}</b> {tt(lang, 'statComments')}
-            </span>
-          </li>
-        </ul>
-      </aside>
+      </header>
+
+      <nav className="pf-stats" aria-label={person.displayName}>
+        <Link to={list('/suggestions', { author: person.username, state: 'closed' })}>
+          <b className="num">{counts.merged}</b>
+          <span>{w.approved}</span>
+        </Link>
+        <Link to={list('/suggestions', { reviewer: person.username, state: 'closed' })}>
+          <b className="num">{counts.reviews}</b>
+          <span>{tt(lang, 'statReviews')}</span>
+        </Link>
+        <Link to={list('/issues', { author: person.username })}>
+          <b className="num">{counts.issues}</b>
+          <span>{tt(lang, 'statIssues')}</span>
+        </Link>
+      </nav>
+
+      {loaderData.profile.days ? <Squares days={loaderData.profile.days} lang={lang} /> : null}
 
       <div className="profile-main">
         {person.suspended ? (
@@ -132,17 +155,7 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
             <div>{w.suspendedNote}</div>
           </div>
         ) : null}
-        <Tabs
-          label={person.displayName}
-          current="overview"
-          items={[
-            { key: 'overview', label: w.overview, icon: 'user', to: href(`/u/${person.username}`, lang) },
-            { key: 'suggestions', label: tt(lang, 'statSuggestions'), icon: 'suggest', count: counts.suggestions, to: list('/suggestions', { author: person.username, state: 'closed' }) },
-            { key: 'reviews', label: tt(lang, 'statReviews'), icon: 'eye', count: counts.reviews, to: list('/suggestions', { reviewer: person.username, state: 'closed' }) },
-            { key: 'issues', label: tt(lang, 'statIssues'), icon: 'report', count: counts.issues, to: list('/issues', { author: person.username }) },
-          ]}
-        />
-        <h2 className="h-block">{tt(lang, 'activity')}</h2>
+        <h2 className="pf-h">{w.recent}</h2>
         {activity.length === 0 ? (
           <Box>
             <EmptyState icon="pulse" title={tt(lang, 'noActivity')} />

@@ -387,7 +387,8 @@ describe('the public site', () => {
     expect(page.status).toBe(200);
     expect(page.html).toContain('@levi-y');
     expect(page.html).toContain('Levi Yitzchak');
-    expect(page.html).toContain('Activity');
+    expect(page.html).toContain('Recent activity');
+    expect(page.html).toContain('class="sq-grid"');
     const moved = await get('/u/levi');
     expect(moved.status).toBe(301);
     expect(moved.location).toBe('/u/levi-y');

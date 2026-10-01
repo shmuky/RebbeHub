@@ -1125,3 +1125,151 @@ a.who:hover {
 .auth .choices {
   margin-bottom: 0;
 }
+
+/* ================================================================== a person, as design/ draws them (4a) */
+
+/* One column: who they are, three numbers, their squares, then what they did. */
+.profile.p2 {
+  display: block;
+  max-width: 760px;
+}
+
+.pf-head {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.pf-head .profile-avatar {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  font-size: 22px;
+}
+
+.pf-names {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.pf-sub {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--subtle);
+}
+
+.pf-role {
+  display: inline-block;
+  padding: 1px 10px;
+  border: 1.5px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.pf-edit {
+  flex: none;
+  align-self: flex-start;
+}
+
+.pf-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 24px 0 8px;
+  border-block: 1px solid var(--border);
+}
+
+.pf-stats a {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 18px 8px;
+  color: var(--text);
+  text-decoration: none;
+  text-align: center;
+}
+
+.pf-stats a + a {
+  border-inline-start: 1px solid var(--border);
+}
+
+.pf-stats a:hover {
+  background: var(--canvas);
+}
+
+.pf-stats b {
+  font: 700 28px / 1.1 var(--display);
+}
+
+.pf-stats span {
+  font-size: var(--fs-sm);
+  color: var(--subtle);
+}
+
+.pf-h {
+  margin: 24px 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* Twelve weeks, a column each; seven days, a row each. */
+.sq-grid {
+  display: grid;
+  grid-template-rows: repeat(7, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 4px;
+  max-width: 520px;
+}
+
+.sq {
+  aspect-ratio: 1;
+  border-radius: 2px;
+  background: var(--sunken);
+}
+
+.sq.none {
+  background: none;
+}
+
+.sq.l1 {
+  background: color-mix(in srgb, var(--accent) 28%, var(--sunken));
+}
+
+.sq.l2 {
+  background: color-mix(in srgb, var(--accent) 50%, var(--sunken));
+}
+
+.sq.l3 {
+  background: color-mix(in srgb, var(--accent) 72%, var(--sunken));
+}
+
+.sq.l4 {
+  background: var(--accent);
+}
+
+/* What they did lately: a quiet list, a line each. */
+.p2 .profile-month .h-sec {
+  margin-top: 14px;
+}
+
+.p2 .profile-month .box {
+  border-inline: 0;
+  border-radius: 0;
+  background: none;
+}
+
+@media (max-width: 720px) {
+  .pf-head .profile-avatar {
+    width: 60px;
+    height: 60px;
+  }
+
+  .pf-stats b {
+    font-size: 24px;
+  }
+}
