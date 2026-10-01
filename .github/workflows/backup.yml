@@ -5,11 +5,13 @@ name: Backup
 # history, so a bad import or merge noticed later could not be undone
 # without this. Never served; restoring is in docs/operations.md, "Backups".
 #
-# backups/db/<yyyy-mm-dd>.dump is pg_dump's custom format (compressed).
-# A night's copy is kept 35 days; the one of the 1st of each month is kept.
+# backups/db/<yyyy-mm-dd>/ holds pg_dump's custom format (compressed) in
+# parts of 90 MB (dump.part00, part01…, what Cloudflare's REST API takes in
+# one request) and SHA256SUMS. A night's copy is kept 35 days; the one of
+# the 1st of each month is kept.
 #
-# Needs DATABASE_URL, R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY
-# (an R2 token that can write rebbehub-preservation), as the transcription has.
+# Needs DATABASE_URL, CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (R2 edit
+# rights on rebbehub-preservation), as the upkeep's covers have.
 on:
   schedule:
     - cron: "17 6 * * *"
@@ -30,18 +32,16 @@ jobs:
     timeout-minutes: 60
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: auto
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       BUCKET: rebbehub-preservation
       KEEP_DAYS: "35"
     steps:
       - name: Check it is configured
         run: |
           if [ -z "$DATABASE_URL" ]; then echo "::error::Add the DATABASE_URL repository secret (see docs/deploy.md)."; exit 1; fi
-          if [ -z "$R2_ENDPOINT" ] || [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-            echo "::error::Add R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY (see docs/deploy.md)."; exit 1
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Add CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (R2 edit rights; see docs/deploy.md)."; exit 1
           fi
       - name: Install pg_dump as new as the server
         run: |
@@ -57,28 +57,39 @@ jobs:
           url="${DATABASE_URL/-pooler./.}"
           day=$(date -u +%F)
           echo "DAY=$day" >> "$GITHUB_ENV"
-          pg_dump --format=custom --compress=9 --no-owner --no-privileges --file "$day.dump" "$url"
+          mkdir out
+          pg_dump --format=custom --compress=9 --no-owner --no-privileges --file dump "$url"
           # A dump that cannot be read back is no backup.
-          pg_restore --list "$day.dump" > toc.txt
+          pg_restore --list dump > toc.txt
           tables=$(grep -c ' TABLE DATA ' toc.txt || true)
           if [ "$tables" -lt 10 ]; then echo "::error::The dump lists only $tables tables' data."; exit 1; fi
-          sha256sum "$day.dump" > "$day.dump.sha256"
-          echo "$(du -h "$day.dump" | cut -f1), $tables tables" | tee -a "$GITHUB_STEP_SUMMARY"
+          split -b 90m -d -a 2 dump out/dump.part
+          (sha256sum dump; cd out && sha256sum dump.part*) > out/SHA256SUMS
+          echo "$(du -h dump | cut -f1) in $(ls out/dump.part* | wc -l) parts, $tables tables" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Upload
         run: |
-          aws s3 cp "$DAY.dump" "s3://$BUCKET/backups/db/$DAY.dump" --endpoint-url "$R2_ENDPOINT" --only-show-errors
-          aws s3 cp "$DAY.dump.sha256" "s3://$BUCKET/backups/db/$DAY.dump.sha256" --endpoint-url "$R2_ENDPOINT" --only-show-errors
-          # Checked there, not only sent.
-          aws s3 ls "s3://$BUCKET/backups/db/$DAY.dump" --endpoint-url "$R2_ENDPOINT"
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/$BUCKET/objects"
+          for file in out/*; do
+            name=$(basename "$file")
+            curl -fsS --retry 4 --retry-all-errors -X PUT -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H 'Content-Type: application/octet-stream' --data-binary "@$file" "$api/backups/db/$DAY/$name" > /dev/null
+          done
+          # Checked there, not only sent: every part, at its size.
+          curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api?prefix=backups/db/$DAY/&per_page=1000" \
+            | jq -r '.result[] | "\(.key | split("/") | last) \(.size)"' | sort > there.txt
+          (cd out && for f in *; do echo "$f $(stat -c %s "$f")"; done) | sort > sent.txt
+          if ! diff sent.txt there.txt; then echo "::error::What is in R2 is not what was sent."; exit 1; fi
+          echo "Kept at $BUCKET/backups/db/$DAY/" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Forget old nights
         run: |
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/$BUCKET/objects"
           cutoff=$(date -u -d "-$KEEP_DAYS days" +%F)
-          aws s3 ls "s3://$BUCKET/backups/db/" --endpoint-url "$R2_ENDPOINT" | awk '{print $4}' | while read -r name; do
-            day="${name%%.dump*}"
+          curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api?prefix=backups/db/&per_page=1000" | jq -r '.result[].key' | while read -r key; do
+            day=$(cut -d/ -f3 <<<"$key")
             [[ "$day" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || continue
             # The 1st of each month stays.
             if [[ "$day" < "$cutoff" ]] && [ "${day:8:2}" != "01" ]; then
-              aws s3 rm "s3://$BUCKET/backups/db/$name" --endpoint-url "$R2_ENDPOINT" --only-show-errors
-              echo "forgot $name"
+              curl -fsS -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/$key" > /dev/null
+              echo "forgot $key"
             fi
           done
