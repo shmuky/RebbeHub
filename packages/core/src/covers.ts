@@ -427,3 +427,17 @@ export async function coversOf(db: Db, ids: readonly string[]): Promise<Record<s
 export async function pdfPageCount(db: Db, sha256: string): Promise<number | null> {
   return (await one<{ pages: number | null }>(db, "SELECT pages FROM file_fingerprint WHERE sha256 = $1 AND kind = 'pdf-pages'", [sha256]))?.pages ?? null;
 }
+
+/**
+ * How many pages each PDF has, where it was counted, in one statement: a
+ * sefer's cover chooser lists every PDF of the sefer (Likkutei Sichos has
+ * 66), and a statement each made its page wait three seconds.
+ */
+export async function pdfPageCounts(db: Db, sha256s: readonly string[]): Promise<Map<string, number>> {
+  if (!sha256s.length) return new Map();
+  const { rows } = await db.query<{ sha256: string; pages: number | null }>(
+    "SELECT sha256, pages FROM file_fingerprint WHERE sha256 = ANY($1::text[]) AND kind = 'pdf-pages' AND pages IS NOT NULL",
+    [sha256s],
+  );
+  return new Map(rows.map((r) => [r.sha256, r.pages!]));
+}

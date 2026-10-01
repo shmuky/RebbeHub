@@ -141,6 +141,7 @@ export {
   hebrewBooksPdfUrl,
   lookOfPage,
   pdfPageCount,
+  pdfPageCounts,
   recordCover,
   titlePageScore,
   type CoverPicture,
