@@ -11,8 +11,9 @@
 # database: minutes next to the database, hours across the internet. So
 # while everything in the live catalog came from importers, the catalog is
 # rebuilt here from its sources and copied in whole, in one transaction
-# that first checks people have still added nothing. Once they have, it is
-# updated in place, which changes only what the sources changed.
+# that first checks people have still added nothing. Once they have, the
+# live catalog is copied here, held still (writes wait) while the import
+# runs next to it, and copied back.
 set -euo pipefail
 
 from=$1
@@ -56,7 +57,8 @@ pgtool() {
 # after $1: SQL that stops the transaction when the live catalog may not be replaced.
 copy_build_to_live() {
   {
-    printf '%s\n' "$1"
+    # The copy itself is let through while the catalog is held (packages/db/src/hold.ts).
+    printf '%s\n' "SET LOCAL rebbehub.import = 'on';" "$1"
     cat <<'SQL'
 SET client_min_messages = warning;
 DO $$ DECLARE t text; BEGIN
@@ -71,6 +73,36 @@ SQL
 }
 
 : "${BUILD_DATABASE_URL:?BUILD_DATABASE_URL is not set}"
+
+# While the import runs next to a copy, the live catalog is held: the site and
+# the jobs read as always, but every write waits (the jobs) or is asked to try
+# again in a few minutes (the site, the API, the MCP tools), so nothing anyone
+# does can stop the copy back, and nobody has to pause for it
+# (packages/db/src/hold.ts). Let go when this script ends, however it ends.
+holder=""
+hold_log=$(mktemp)
+hold_live() {
+  # Its own process group (job control), so letting go reaches npm and node together.
+  set -m
+  DATABASE_URL=$live npm run --silent rebbehub -- hold-catalog --minutes 120 >"$hold_log" 2>&1 &
+  holder=$!
+  set +m
+  trap let_go EXIT
+  until grep -qx held "$hold_log"; do
+    if ! kill -0 "$holder" 2>/dev/null; then cat "$hold_log"; echo "::error::Could not hold the live catalog for the import."; exit 1; fi
+    sleep 1
+  done
+  echo "Holding the live catalog: writes wait until the import is copied back."
+}
+let_go() {
+  [ -n "$holder" ] || return 0
+  kill -TERM -- "-$holder" 2>/dev/null || true
+  # Until the database has let go: the site saves again from then on.
+  for _ in $(seq 60); do grep -qx "let go" "$hold_log" && break; sleep 1; done
+  kill -KILL -- "-$holder" 2>/dev/null || true
+  holder=""
+  echo "Let go of the live catalog."
+}
 DATABASE_URL=$live rebbehub migrate
 if [ "$(DATABASE_URL=$live rebbehub rebuildable | tail -n 1)" != "rebuildable" ]; then
   # Item by item across the internet an import takes hours. So the catalog as it is,
@@ -78,12 +110,14 @@ if [ "$(DATABASE_URL=$live rebbehub rebuildable | tail -n 1)" != "rebuildable" ]
   # is copied back in one transaction, only if the live catalog still has the mark it
   # had when it was copied: anything anyone did meanwhile stops the copy, never lost.
   echo "People have added to the live catalog: importing next to a copy of it, then copying it back."
+  hold_live
   mark=$(DATABASE_URL=$live rebbehub rebuildable --mark | tail -n 1)
   # The auth schema comes along empty: the catalog's triggers call its functions
   # (auth.number_thread numbers Suggestions and Reports), but nobody's account leaves.
   pgtool pg_dump --no-owner --no-privileges --exclude-table-data='auth.*' "$live" | pgtool psql "$BUILD_DATABASE_URL" --quiet --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --output /dev/null
   import_into "$BUILD_DATABASE_URL"
   copy_build_to_live "$(DATABASE_URL=$live rebbehub rebuildable --guard-mark "$mark")"
+  let_go
   echo "Copied: the live catalog is the import's result, with everything people had made."
   exit 0
 fi

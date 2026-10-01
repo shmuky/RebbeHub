@@ -36,8 +36,24 @@ rebbehub shaars [--chunk 500] [--dry-run]   # system changes of --chunk sefarim;
 ```
 
 It can be stopped and run again, and takes up only the sefarim still
-without one. Like every bulk write to the live catalog, run it when no
-import is running (an import aborts if the catalog changes under it).
+without one. While an import runs it waits, like every write to the live
+catalog (below).
+
+### While an import runs
+
+An import of a catalog people have added to copies the live catalog next
+to itself, imports there and copies the result back
+(`scripts/import-catalog.sh`), so it must not change meanwhile. For those
+minutes the import holds the catalog (`rebbehub hold-catalog`,
+`packages/db/src/hold.ts`): every write to a table in `public` checks an
+advisory lock first (`auth.catalog_write_check`, migration 0028). Reads go
+on as always. The API answers a write `503 busy` with `Retry-After`, so the
+site and the MCP tools say to try again in a few minutes and nothing is
+half written; the jobs (`rebbehub transcribe` and the rest) wait and save
+when it is done; the API's cron skips its round. Nobody needs to pause for
+an import any more. The hold ends when the copy back ends, when the import
+fails or is cancelled (its connection closes), and after two hours at the
+most.
 
 Production is Postgres on Neon. The revision table is partitioned by time;
 `ensureRevisionPartitions(db, [2026, 2027])` (in `@rebbehub/db`) adds

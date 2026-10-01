@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import type { DbCost } from '@rebbehub/db';
+import { isCatalogHeld, type DbCost } from '@rebbehub/db';
 import { Catalog, CatalogError, combineSuggestions, ExportGate, openTranscriptFixes, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, shaarFile, suggestShaar, getDerivations, getDerivationsOf, getFile, getFiles, getPageFix, getPageFixes, hanachaSyncs, itemsUsingFile, listWebhooks, pageImageCounts, printingsOf, projectTodo, recordingTranscript, transcriptHistory, transcriptPending, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type FileRow, type Mailer, type PageFixRow, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
 import { dailyLearning, peopleOf } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
@@ -180,6 +180,11 @@ export function createApp(options: ApiOptions): Hono {
     if (error instanceof HttpError) return c.json({ error: ERROR_CODES[error.status] ?? 'bad-request', message: error.message }, error.status);
     if (error instanceof UnresolvedConflictError) return c.json({ error: 'conflict', message: error.message, conflicts: error.conflicts }, 409);
     if (error instanceof CatalogError) return c.json({ error: error.code, message: error.message, detail: error.detail ?? null }, STATUS_BY_CODE[error.code]);
+    // An import holds the catalog for a few minutes (packages/db/src/hold.ts): nothing was written, so try again.
+    if (isCatalogHeld(error)) {
+      c.header('Retry-After', '120');
+      return c.json({ error: 'busy', message: 'RebbeHub is bringing in an import; nothing was changed. Try again in a few minutes.' }, 503);
+    }
     console.error(error);
     return c.json({ error: 'internal', message: 'something went wrong on our side' }, 500);
   });

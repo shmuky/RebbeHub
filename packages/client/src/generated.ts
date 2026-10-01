@@ -19,7 +19,7 @@ export type Via = {
 
 export type ApiError = {
   /** What kind of error, for programs */
-  error: "bad-request" | "unauthorized" | "forbidden" | "not-found" | "conflict" | "invalid" | "rate-limited" | "internal" | "state" | "too-large" | "upstream";
+  error: "bad-request" | "unauthorized" | "forbidden" | "not-found" | "conflict" | "invalid" | "rate-limited" | "internal" | "state" | "too-large" | "upstream" | "busy";
   /** What went wrong, for people */
   message: string;
   /** More, when there is more (a check that failed, the clashes of a merge) */

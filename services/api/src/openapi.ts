@@ -339,7 +339,7 @@ const SCHEMAS: Record<string, Schema> = {
   Via: obj({ kind: { enum: ['token', 'oauth'], description: 'A personal API token, or an app connected with OAuth' }, id: str('The token (tok-…) or the connection (oac-…)'), name: str("The token's name, or the app's (Claude)"), client: str("A connected app's client id") }, ['kind', 'id', 'name'], { description: 'Sent by an agent for its author, not by their own hands; null otherwise. The site shows it as "Claude · for @person".' }),
   ApiError: obj(
     {
-      error: { enum: ['bad-request', 'unauthorized', 'forbidden', 'not-found', 'conflict', 'invalid', 'rate-limited', 'internal', 'state', 'too-large', 'upstream'], description: 'What kind of error, for programs' },
+      error: { enum: ['bad-request', 'unauthorized', 'forbidden', 'not-found', 'conflict', 'invalid', 'rate-limited', 'internal', 'state', 'too-large', 'upstream', 'busy'], description: 'What kind of error, for programs' },
       message: str('What went wrong, for people'),
       detail: { description: 'More, when there is more (a check that failed, the clashes of a merge)' },
       conflicts: arr(any(), 'For a merge that clashes'),
