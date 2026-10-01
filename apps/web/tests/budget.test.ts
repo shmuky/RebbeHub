@@ -236,6 +236,11 @@ describe("each page's statements and API calls stay within its ceiling", () => {
     within(await page('/events/5742-05-10'), 'a farbrengen', { statements: 45, calls: 24, kB: 65 });
     within(await page(await pathOf(ids.recording)), 'a recording', { statements: 40, calls: 20, kB: 45 });
   });
+  it('draws search as the design does (3g): chips for the kinds, each result under where it is from', async () => {
+    const html = await (await handle(new Request(`${SITE}/search?q=${encodeURIComponent('שיחה')}`))).text();
+    expect(html).toMatch(/class="search-chips".*?class="chip" aria-current="page"[^>]*>הכול/s);
+    expect(html).toMatch(/class="row-kicker">.*?<\/span><span class="row-title torah">/s);
+  });
   it('search, suggestions and review', async () => {
     within(await page(`/search?q=${encodeURIComponent('שיחה')}`), 'search', { statements: 15, calls: 6, kB: 110 });
     within(await page('/suggestions'), '/suggestions', { statements: 8, calls: 3, kB: 35 });
