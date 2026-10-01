@@ -15,7 +15,7 @@ export interface ApiErrorBody {
   detail?: unknown;
 }
 
-export type ErrorCode = 'bad-request' | 'unauthorized' | 'forbidden' | 'not-found' | 'conflict' | 'too-large' | 'invalid' | 'rate-limited' | 'internal' | 'upstream';
+export type ErrorCode = 'bad-request' | 'unauthorized' | 'forbidden' | 'not-found' | 'conflict' | 'too-large' | 'invalid' | 'rate-limited' | 'internal' | 'upstream' | 'busy';
 
 export const ERROR_CODES: Record<number, ErrorCode> = {
   400: 'bad-request',
@@ -28,6 +28,7 @@ export const ERROR_CODES: Record<number, ErrorCode> = {
   429: 'rate-limited',
   500: 'internal',
   502: 'upstream',
+  503: 'busy',
 };
 
 // ------------------------------------------------------------------ cursors

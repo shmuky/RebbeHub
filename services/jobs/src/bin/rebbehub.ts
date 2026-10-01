@@ -26,6 +26,7 @@ import {
   readingCopiesMakeCommand,
   readingCopiesPublishCommand,
   readingCopiesRegisterCommand,
+  holdCatalogCommand,
   rebuildableCommand,
   relinkDriveCommand,
   relinkJemCommand,
@@ -43,6 +44,8 @@ const HELP = `rebbehub - RebbeHub's command line
   rebbehub shaars [--chunk <n>] [--dry-run]     every sefer without a shaar gets the one the catalog
                                                 makes from its data (docs/shaar.md), as system
                                                 changes of <n> sefarim; --dry-run only counts them
+  rebbehub hold-catalog [--minutes <n>]         refuses writes to the catalog until stopped (an
+                                                import's copy back); prints held once it does
   rebbehub rebuildable [--guard]                prints rebuildable when importers made everything;
                                                 --guard prints SQL that fails otherwise
   rebbehub rebuildable --mark | --guard-mark <mark>
@@ -222,6 +225,9 @@ try {
   switch (values.help ? 'help' : command) {
     case 'migrate':
       await migrateCommand(ctx);
+      break;
+    case 'hold-catalog':
+      await holdCatalogCommand(ctx, { minutes: number(values.minutes) });
       break;
     case 'rebuildable':
       await rebuildableCommand(ctx, { guard: values.guard, mark: values.mark, guardMark: values['guard-mark'] });

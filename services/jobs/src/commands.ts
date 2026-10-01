@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Catalog, convertLegacyBodies, fillShaars } from '@rebbehub/core';
-import { connectPostgres, one, type Db } from '@rebbehub/db';
+import { connectPostgres, holdCatalog, one, waitingWhileHeld, type Db } from '@rebbehub/db';
 import { openPGlite } from '@rebbehub/db/pglite';
 import {
   OTZROS_FOLDER,
@@ -61,7 +61,8 @@ export async function openDatabase(database?: string): Promise<Db> {
   // On a build server (CI is set there), a missing DATABASE_URL is a mistake, never a cue to use a local database.
   if (!database && !process.env.DATABASE_URL && process.env.CI) throw new Error('DATABASE_URL is not set: add it to this build as a secret (docs/deploy.md)');
   const target = database ?? process.env.DATABASE_URL ?? '.data/pglite';
-  return /^postgres(ql)?:\/\//.test(target) ? connectPostgres(target) : openPGlite(target);
+  // A job's writes wait while an import holds the catalog, rather than fail (packages/db/src/hold.ts).
+  return /^postgres(ql)?:\/\//.test(target) ? waitingWhileHeld(connectPostgres(target), { log: (line) => console.log(line) }) : openPGlite(target);
 }
 
 export async function withCatalog<T>(ctx: Context, fn: (catalog: Catalog) => Promise<T>): Promise<T> {
@@ -231,6 +232,33 @@ export async function rebuildableCommand(ctx: Context, input: { guard?: boolean;
     }
   }
   await withCatalog(ctx, async (catalog) => ctx.log((await catalogIsRebuildable(catalog.db)) ? 'rebuildable' : 'not-rebuildable'));
+}
+
+/**
+ * Holds the live catalog for an import (packages/db/src/hold.ts): prints
+ * `held` once writes under way have finished, then refuses every write
+ * until this process is stopped, or after `minutes` at the most, so an
+ * import that dies never leaves the site unable to save.
+ */
+export async function holdCatalogCommand(ctx: Context, input: { minutes?: number } = {}): Promise<void> {
+  const db = await openDatabase(ctx.database);
+  let stop = () => {};
+  const until = new Promise<void>((resolve) => {
+    stop = resolve;
+  });
+  const timer = setTimeout(() => {
+    ctx.log('held as long as allowed: letting go');
+    stop();
+  }, (input.minutes ?? 120) * 60_000);
+  process.once('SIGTERM', stop);
+  process.once('SIGINT', stop);
+  try {
+    await holdCatalog(db, { until, held: () => ctx.log('held') });
+    ctx.log('let go');
+  } finally {
+    clearTimeout(timer);
+    await db.close();
+  }
 }
 
 /** Checks that every built-in schema can be used. */

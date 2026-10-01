@@ -12,6 +12,13 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **An import no longer stops when someone saves, and nobody has to pause
+  for one.** While an import copies the catalog back, it holds the live
+  catalog for those minutes: pages read as always, and a change answers
+  `503` with `error: "busy"` and `Retry-After` (nothing was changed; try
+  again), which the site and the MCP tools pass on. The nightly jobs wait
+  and save when it is done.
+
 - **The catalog's tree is the official sefarim; everything else is an
   addition to one.** The shelves are the Rebbeim, their sefarim and the
   other official sets, each sefer in its place. A commentary, an index, a

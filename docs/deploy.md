@@ -123,8 +123,12 @@ database address but cannot read the private Sichos-Kodesh repository.
    workflow rebuilds it in a database next to itself and copies it in
    whole: item by item across the internet it would take hours. The copy
    runs in one transaction that first checks people have still added
-   nothing, so it never replaces their work. Once they have, runs update
-   the catalog in place (`scripts/import-catalog.sh`).
+   nothing, so it never replaces their work. Once they have, runs copy
+   the live catalog next to themselves, import there and copy it back,
+   holding the live catalog meanwhile: the site reads as always, and a
+   write is asked to try again in a few minutes
+   ([operations](operations.md#while-an-import-runs);
+   `scripts/import-catalog.sh`).
 
    Each run also crawls, politely and cached, what the other importers
    read: the mafteiach index, chabadlibrary.org's contents and texts, JEM's
