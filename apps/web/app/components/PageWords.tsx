@@ -6,6 +6,7 @@ import type { Lang } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
 import { Icon } from '../ui/Icon.js';
 import { MachineNote } from '../ui/primitives.js';
+import { isGreeting } from '../lib/letters.js';
 import { linkTitle } from '../lib/linkTitle.js';
 import '../styles/pages/words.css';
 import { SegmentEditor, SentNote, type SentSuggestion } from './SegmentEditor.js';
@@ -351,7 +352,7 @@ function Segment({ segment, depth, ctx }: { segment: PageSegment; depth: number;
       return (
         <>
           <SideOf segment={segment} ctx={ctx} />
-          <p id={id} className={`words-p${segment.end ? ' end' : ''}${machine}`}>
+          <p id={id} className={`words-p${segment.end ? ' end' : ''}${isGreeting(segment) ? ' greet' : ''}${machine}`}>
             {/* The paragraph's number in the margin: its own when it has one, else counted in order (words.css). */}
             <a className="words-anchor" href={`#${anchor}`} aria-label={WORDS.segmentLink[ctx.lang]}>
               {segment.n !== undefined ? numberIn(segment.n, ctx.version.language) : null}
@@ -437,7 +438,9 @@ function Credit({ version, profile, lang }: { version: PageVersion; profile?: Te
 const LICENCES: Record<string, string> = { 'cc-by-nc': 'CC BY-NC', 'cc-by': 'CC BY', cc0: 'CC0', 'public-domain': 'Public domain' };
 
 function VersionView({ version, profile, lang, edit }: { version: PageVersion; profile: TextProfile; lang: Lang; edit?: EditState }) {
-  const lead = [...allSegments(version.segments)].find((x) => x.kind === 'paragraph')?.id;
+  // A letter's first word set large is its body's, after its date, addressee and greeting (lib/letters.ts).
+  const paragraphs = [...allSegments(version.segments)].filter((x) => x.kind === 'paragraph');
+  const lead = paragraphs[paragraphs.slice(0, 6).findIndex(isGreeting) + 1]?.id;
   const side = useContext(SideNotes) && !edit && version.notes?.length ? new Map(version.notes.map((n) => [n.id, n])) : undefined;
   const ctx: Context = { lang, profile, version, noteLabel: noteLabels(version), edit, lead, side };
   return (

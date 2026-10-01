@@ -89,6 +89,7 @@ const W = {
   noMatch: { he: 'אין שיחה שמתאימה לסינון.', en: 'No sicha matches the filter.' },
   clear: { he: 'ניקוי', en: 'Clear' },
   sichos: { he: 'שיחות', en: 'sichos' },
+  letters: { he: 'אגרות', en: 'letters' },
   noRecordings: { he: 'לאף שיחה כאן עוד לא קושרה הקלטה.', en: 'No sicha here has a recording linked yet.' },
   noSuggestions: { he: 'אין הצעות פתוחות על הספר הזה.', en: 'No open suggestions about this sefer.' },
   allSuggestions: { he: 'כל ההצעות', en: 'All suggestions' },
@@ -647,7 +648,7 @@ export function WorkPage({ entity, view, lang }: { entity: Entity; view: ItemVie
                     <span className="row-main">
                       <span className="row-title torah">{x.label ? nameOf(x.label, lang) : `${w(lang, 'volumeRow')} ${x.value}`}</span>
                       <span className="row-sub">
-                        {[x.units ? `${num(x.units, lang)} ${w(lang, 'sichos')}` : null, printings ? `${num(printings, lang)} ${w(lang, 'printings')}` : null].filter(Boolean).join(' · ')}
+                        {[x.units ? `${num(x.units, lang)} ${w(lang, (entity.data as D).genre === 'igros' ? 'letters' : 'sichos')}` : null, printings ? `${num(printings, lang)} ${w(lang, 'printings')}` : null].filter(Boolean).join(' · ')}
                       </span>
                     </span>
                     <Icon name="chev" className="subtle flip-ltr" />

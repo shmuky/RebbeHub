@@ -92,6 +92,12 @@ h2.words-heading {
   text-align: end;
 }
 
+/* A letter's greeting, alone on its line (lib/letters.ts). */
+.words-p.greet {
+  text-align: center;
+  font-weight: 700;
+}
+
 .words-anchor,
 .words-verse .words-n {
   position: absolute;
