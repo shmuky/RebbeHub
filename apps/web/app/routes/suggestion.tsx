@@ -19,11 +19,11 @@ import { tt } from '../lib/threadStrings.js';
 import { useAccount } from '../lib/useAccount.js';
 import { useLang } from '../lib/useLang.js';
 import { wordDiff } from '../lib/wordDiff.js';
-import { DiffBox, DiffSegment, DiffStat, FieldDiff } from '../ui/Diff.js';
+import { BeforeAfter, DiffBox, DiffSegment, DiffStat, FieldDiff, diffStat } from '../ui/Diff.js';
 import { Icon } from '../ui/Icon.js';
 import { ReviewBox, reviewChoices } from '../ui/ReviewBox.js';
 import { Timeline, TimelineBlock, TimelineComment } from '../ui/Timeline.js';
-import { Avatar, Breadcrumbs, EmptyState, Label, MachineLabel, Skeleton, StatusBadge, Tabs, cx, type State, MachineNote } from '../ui/primitives.js';
+import { Avatar, Breadcrumbs, EmptyState, Label, MachineLabel, Skeleton, Tabs, cx, MachineNote } from '../ui/primitives.js';
 import { Conversation, FollowToggle, Person, When, Author } from '../views/Conversation.js';
 
 /**
@@ -73,9 +73,6 @@ export function meta({ loaderData }: Route.MetaArgs) {
 
 const W = {
   suggestions: { he: 'הצעות', en: 'Suggestions' },
-  proposes: { he: 'מציע', en: 'suggests' },
-  changesIn: { he: 'שינויים ב', en: 'changes to' },
-  change1: { he: 'שינוי אחד ב', en: 'one change to' },
   conversation: { he: 'שיחה', en: 'Conversation' },
   changes: { he: 'השינויים', en: 'Changes' },
   againstScan: { he: 'מול הסריקה', en: 'Against the scan' },
@@ -122,6 +119,15 @@ const W = {
   keepForReview: { he: 'שמירה לבדיקה', en: 'Add to review' },
   pendingNote: { he: 'הערות שישלחו עם הבדיקה', en: 'Comments sent with your review' },
   editTitle: { he: 'עריכת הכותרת', en: 'Edit title' },
+  waiting: { he: 'ממתינה לבדיקה', en: 'Waiting for review' },
+  sentBackNote: { he: 'הוחזרה עם הערה', en: 'Sent back with a note' },
+  mergedIn: { he: 'אושרה ונכנסה לספרייה', en: 'Approved and in the library' },
+  withdrawnNote: { he: 'בוטלה', en: 'Withdrawn' },
+  draftNote: { he: 'טיוטה', en: 'Draft' },
+  oneWord: { he: 'מילה אחת שונתה', en: 'One word changed' },
+  nWords: { he: '{n} מילים שונו', en: '{n} words changed' },
+  originalPage: { he: 'הדף המקורי', en: 'The printed page' },
+  noteToSender: { he: 'הערה לשולח (לא חובה)', en: 'A note to the sender (optional)' },
 } as const;
 const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
 
@@ -158,8 +164,6 @@ interface Pending {
 }
 
 type Tab = 'conversation' | 'changes' | 'scan' | 'checks';
-
-const stateOfStatus = (status: SuggestionView['status']): State => (status === 'merged' ? 'approved' : status === 'withdrawn' ? 'closed' : status === 'draft' ? 'draft' : status === 'sent_back' ? 'closed' : 'open');
 
 export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
   const { number, id, people: serverPeople } = loaderData;
@@ -240,6 +244,8 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
   const changeCount = view.entries.reduce((n, e) => n + (e.segment ? 1 : 0) + e.fields.reduce((m, f) => m + f.count, 0), 0);
   const comments = talk ? talk.timeline.filter((i) => i.type === 'comment').length : null;
   const scans = view.entries.filter((e) => e.scan);
+  // The printed page of the first change, beside it as the reviewer reads (design/ 3m): already in the view, no more requests.
+  const pageScan = scans.find((e) => e.scan?.image);
 
   async function act(run: () => Promise<unknown>): Promise<boolean> {
     setBusy(true);
@@ -303,6 +309,8 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
       </p>
     ) : null;
 
+  // One who may approve reads the change and decides right under it; everyone else comments at the foot of the talk.
+  const reviewFirst = Boolean(account && live && detail?.mayApprove);
   const reviewBox = !account ? (
     <p className="note sign-note">
       <Icon name="lock" /> <Link to={href('/signin', lang, { return: `/suggestions/${number}` })}>{w(lang, 'signIn')}</Link>
@@ -312,7 +320,8 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
       lang={lang}
       me={{ name: account.person.displayName, id: account.person.id }}
       choices={detail.mayApprove ? reviewChoices(lang).filter((c) => !(detail.mine && c.value === 'send_back')) : undefined}
-      placeholder={tt(lang, 'leaveComment')}
+      direct={detail.mayApprove}
+      placeholder={detail.mayApprove ? w(lang, 'noteToSender') : tt(lang, 'leaveComment')}
       busy={busy}
       error={error}
       footnote={
@@ -355,24 +364,23 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <>
-      <div className="phead">
+      <div className="phead sg-top">
         <div className="wrap">
           <Breadcrumbs items={[...view.crumbs, { label: w(lang, 'suggestions'), to: href('/suggestions', lang) }]} lang={lang} />
+          <p className={`sg-state sg-${view.status}`}>
+            <span className="sg-dot" aria-hidden="true" />
+            <span className="sg-where">{w(lang, view.status === 'merged' ? 'mergedIn' : view.status === 'sent_back' ? 'sentBackNote' : view.status === 'withdrawn' ? 'withdrawnNote' : view.status === 'draft' ? 'draftNote' : 'waiting')}</span>
+          </p>
           <TitleLine view={view} number={number} lang={lang} mayEdit={mayEdit} onSave={(title) => act(() => threads(`suggestions/${id}`, { method: 'PATCH', body: { title } }))} />
-          <div className="pmeta">
-            <StatusBadge state={stateOfStatus(view.status)} icon={view.status === 'merged' ? 'check' : undefined}>
-              {tt(lang, view.status === 'merged' ? 'stateMerged' : view.status === 'sent_back' ? 'stateSentBack' : view.status === 'withdrawn' ? 'stateWithdrawn' : view.status === 'draft' ? 'stateDraft' : 'stateOpen')}
-            </StatusBadge>
-            <span>
-              <Author id={view.author} people={people} lang={lang} via={view.via} /> {w(lang, 'proposes')} {changeCount === 1 ? w(lang, 'change1') : `${num(changeCount, lang)} ${w(lang, 'changesIn')}`}
-              {view.where ? (
-                <Label to={href(view.where.path, lang)} className="where-label">
-                  {[view.where.within, view.where.label].filter(Boolean).join(' · ')}
-                </Label>
-              ) : null}{' '}
-              · <When at={view.submittedAt ?? view.createdAt} lang={lang} />
-            </span>
-          </div>
+          <p className="sg-by">
+            <Author id={view.author} people={people} lang={lang} via={view.via} /> · <When at={view.submittedAt ?? view.createdAt} lang={lang} />
+            {view.where ? (
+              <>
+                {' · '}
+                <Link to={href(view.where.path, lang)}>{[view.where.within, view.where.label].filter(Boolean).join(', ')}</Link>
+              </>
+            ) : null}
+          </p>
           <Tabs
             label={lang === 'he' ? 'חלקי ההצעה' : 'Views of the suggestion'}
             current={tab}
@@ -388,46 +396,45 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
       <div className="wrap cols sugg">
         <div className="imain">
           {tab === 'conversation' ? (
-            <Timeline label={w(lang, 'conversation')}>
-              <TimelineComment
-                id="description"
-                author={people[view.author]?.name ?? view.author}
-                authorId={view.author}
-                bot={Boolean(view.via)}
-                role={w(lang, 'author')}
-                mine={viewer === view.author}
-                header={
-                  <>
-                    <Author id={view.author} people={people} lang={lang} via={view.via} /> <span className="muted">{lang === 'he' ? 'כתב' : 'wrote'}</span> <When at={view.createdAt} lang={lang} anchor="description" />
-                  </>
-                }
-              >
-                {view.via ? <AgentNote via={view.via} status={view.status} author={people[view.author]?.username ? `@${people[view.author]!.username}` : (people[view.author]?.name ?? view.author)} lang={lang} /> : null}
-                <Description view={view} lang={lang} mayEdit={mayEdit} id={id!} onSave={(description) => act(() => threads(`suggestions/${id}`, { method: 'PATCH', body: { description } }))} />
-              </TimelineComment>
-              {view.entries.slice(0, 3).map((e) => (
-                <TimelineBlock key={e.entityId}>
-                  <EntryDiff entry={e} lang={lang} compact markExact={markExact} merged={view.status === 'merged'} busy={busy} />
-                </TimelineBlock>
-              ))}
-              {view.entries.length > 3 ? (
-                <TimelineBlock>
+            <>
+              <div className="sg-review">
+                {view.entries.slice(0, 3).map((e) => (
+                  <EntryDiff key={e.entityId} entry={e} lang={lang} compact markExact={markExact} merged={view.status === 'merged'} busy={busy} />
+                ))}
+                {view.entries.length > 3 ? (
                   <Link className="more-link" to={here('changes')}>
                     +{num(view.entries.length - 3, lang)} {w(lang, 'changes')}
                   </Link>
-                </TimelineBlock>
-              ) : null}
-              {conversation ?? (
-                <TimelineBlock>
-                  <Skeleton rows={3} lang={lang} />
-                </TimelineBlock>
-              )}
-              <TimelineBlock>
-                <Checks checks={view.checks} lang={lang} />
-              </TimelineBlock>
-              {undoBar ? <TimelineBlock>{undoBar}</TimelineBlock> : null}
-              {reviewBox ? <TimelineBlock className="tl-end">{reviewBox}</TimelineBlock> : null}
-            </Timeline>
+                ) : null}
+                <Checks checks={view.checks} lang={lang} plain />
+                {undoBar}
+                {reviewFirst ? reviewBox : null}
+              </div>
+              <Timeline label={w(lang, 'conversation')}>
+                <TimelineComment
+                  id="description"
+                  author={people[view.author]?.name ?? view.author}
+                  authorId={view.author}
+                  bot={Boolean(view.via)}
+                  role={w(lang, 'author')}
+                  mine={viewer === view.author}
+                  header={
+                    <>
+                      <Author id={view.author} people={people} lang={lang} via={view.via} /> <span className="muted">{lang === 'he' ? 'כתב' : 'wrote'}</span> <When at={view.createdAt} lang={lang} anchor="description" />
+                    </>
+                  }
+                >
+                  {view.via ? <AgentNote via={view.via} status={view.status} author={people[view.author]?.username ? `@${people[view.author]!.username}` : (people[view.author]?.name ?? view.author)} lang={lang} /> : null}
+                  <Description view={view} lang={lang} mayEdit={mayEdit} id={id!} onSave={(description) => act(() => threads(`suggestions/${id}`, { method: 'PATCH', body: { description } }))} />
+                </TimelineComment>
+                {conversation ?? (
+                  <TimelineBlock>
+                    <Skeleton rows={3} lang={lang} />
+                  </TimelineBlock>
+                )}
+                {reviewBox && !reviewFirst ? <TimelineBlock className="tl-end">{reviewBox}</TimelineBlock> : null}
+              </Timeline>
+            </>
           ) : tab === 'changes' ? (
             <div className="stack">
               {view.entries.map((e) => (
@@ -453,6 +460,21 @@ export default function SuggestionPage({ loaderData }: Route.ComponentProps) {
           )}
         </div>
         <aside className="side" aria-label={lang === 'he' ? 'פרטים' : 'Details'}>
+          {tab === 'conversation' && pageScan?.scan?.image ? (
+            <section className="sg-scan">
+              <h4>
+                {w(lang, 'originalPage')} · {pageScan.scan.printing.split(' · ').pop()}
+                {pageScan.scan.page ? `, ${w(lang, 'page')} ${pageScan.scan.page}` : ''}
+              </h4>
+              {pageScan.scan.scanPath ? (
+                <Link to={href(pageScan.scan.scanPath, lang)} aria-label={w(lang, 'openScan')}>
+                  <img src={pageScan.scan.image} alt={`${pageScan.scan.printing}, ${w(lang, 'page')} ${pageScan.scan.page}`} loading="lazy" />
+                </Link>
+              ) : (
+                <img src={pageScan.scan.image} alt={`${pageScan.scan.printing}, ${w(lang, 'page')} ${pageScan.scan.page}`} loading="lazy" />
+              )}
+            </section>
+          ) : null}
           <section>
             <h4>
               {tt(lang, 'reviewers')}
@@ -657,17 +679,21 @@ function EntryDiff({
   const seg = entry.segment;
   const parts = seg ? wordDiff(seg.before, seg.after) : null;
   const scan = entry.scan;
+  const where = [entry.isNew ? w(lang, 'newItem') : entry.removed ? w(lang, 'removedItem') : null, scan?.page ? `${w(lang, 'page')} ${scan.page} ${lang === 'he' ? 'בדפוס' : 'in'} ${scan.printing.split(' · ').pop()}` : entry.within].filter(Boolean).join(' · ');
+  // Under review (compact) a changed paragraph reads as design/ draws it: how many words changed, then before and after.
+  const changed = parts && compact && seg?.before && seg.after ? Math.max(diffStat(parts).added, diffStat(parts).removed) : null;
+  const link = (
+    <Link to={href(entry.path, lang)} className="plain">
+      {entry.label}
+    </Link>
+  );
   return (
     <DiffBox
       id={`d-${entry.entityId}`}
       icon={entry.type === 'segment' ? 'file' : 'pencil'}
-      title={
-        <Link to={href(entry.path, lang)} className="plain">
-          {entry.label}
-        </Link>
-      }
-      where={[entry.isNew ? w(lang, 'newItem') : entry.removed ? w(lang, 'removedItem') : null, scan?.page ? `${w(lang, 'page')} ${scan.page} ${lang === 'he' ? 'בדפוס' : 'in'} ${scan.printing.split(' · ').pop()}` : entry.within].filter(Boolean).join(' · ')}
-      stat={parts ? <DiffStat parts={parts} lang={lang} /> : null}
+      title={changed !== null ? (changed === 1 ? w(lang, 'oneWord') : w(lang, 'nWords').replace('{n}', num(changed, lang))) : link}
+      where={changed !== null ? <>{link}{where ? ` · ${where}` : ''}</> : where}
+      stat={parts && changed === null ? <DiffStat parts={parts} lang={lang} /> : null}
       actions={
         <>
           {seg && seg.before && seg.after ? (
@@ -714,6 +740,8 @@ function EntryDiff({
             <DiffSegment n={seg.n} before={seg.before} />
             <DiffSegment n={seg.n} before={seg.after} />
           </div>
+        ) : changed !== null ? (
+          <BeforeAfter before={seg.before} after={seg.after} lang={lang} />
         ) : (
           <>
             {seg.prev ? <DiffSegment n={seg.prev.n} before={seg.prev.content} context /> : null}
@@ -804,10 +832,11 @@ function AgainstScan({ entry, lang }: { entry: EntryView; lang: Lang }) {
   );
 }
 
-function Checks({ checks, lang }: { checks: CheckLine[]; lang: Lang }) {
+/** What was checked, a line each; `plain` is the quiet list under the change, as design/ draws it (3m). */
+function Checks({ checks, lang, plain }: { checks: CheckLine[]; lang: Lang; plain?: boolean }) {
   if (!checks.length) return null;
   return (
-    <div className="box checks" role="list" aria-label={w(lang, 'checks')}>
+    <div className={plain ? 'checks plain' : 'box checks'} role="list" aria-label={w(lang, 'checks')}>
       {checks.map((c, i) => (
         <div key={i} className="check" role="listitem">
           <span className={c.status === 'pass' ? 'ok' : c.status === 'fail' ? 'fail' : 'warn'}>
