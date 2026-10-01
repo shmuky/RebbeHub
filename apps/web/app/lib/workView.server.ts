@@ -28,6 +28,8 @@ export interface TocRow {
   scan: boolean;
   audio: boolean;
   translation: boolean;
+  /** Some of its words a machine made and nobody checked yet: the list's quiet dot. */
+  machine: boolean;
 }
 
 export interface TocGroup {
@@ -42,10 +44,20 @@ export interface WorkToc {
   /** The printing whose page numbers are shown, and the others that have them. */
   printing: { id: string; label: string } | null;
   printings: Array<{ id: string; label: string }>;
+  /** Every printing of this volume, for "how to read it" (the volume's sheet). */
+  editions: Array<{ id: string; path: string; title: string; label: string }>;
   stats: { pages: number | null; printings: number; withAudio: number; checked: number | null; sichos: number };
   /** Where "Read" goes: a served scan of the printing, else the first sicha with words. */
   read: { scanFile: string | null; scanUrl: string | null; unit: string | null };
 }
+
+/** A printing told apart from the others of its volume: who printed it and when, where, how many pages, and where it came from. */
+const editionLabel = (p: Entity, lang: Lang) => {
+  const d = p.data as { placePrinted?: string; pageCount?: number; sources?: Array<{ source: string; sourceId?: string; note?: string }> };
+  const from = d.sources?.[0];
+  const source = !from ? null : from.source === 'hebrewbooks' ? `HebrewBooks ${from.sourceId ?? ''}`.trim() : from.source === 'other' ? (from.note ?? null) : from.source;
+  return [printingLabel(p, lang) || d.placePrinted, d.pageCount ? `${d.pageCount} ${lang === 'he' ? 'עמ׳' : 'pp.'}` : null, source].filter(Boolean).join(' · ');
+};
 
 /** Marks are worked out for a volume's sichos, not a whole shelf at once. */
 const MAX_ROWS = 150;
@@ -88,7 +100,7 @@ export async function workToc(api: RebbeHubApi, units: Entity[], publications: E
       else if (kind === 'edition' && !editionOf.has(u.id)) editionOf.set(u.id, t);
     }
   }
-  const progress = await api.textsProgress([...editionOf.values()].map((t) => t.id)).catch(() => new Map<string, { paragraphs: number; checked: number }>());
+  const progress = await api.textsProgress([...editionOf.values()].map((t) => t.id)).catch(() => new Map<string, { paragraphs: number; checked: number; machine?: number }>());
   const progressOf = (u: Entity) => (editionOf.has(u.id) ? progress.get(editionOf.get(u.id)!.id) : undefined);
   let total = 0;
   let checked = 0;
@@ -123,6 +135,7 @@ export async function workToc(api: RebbeHubApi, units: Entity[], publications: E
       scan: scanned.has(u.id) || Boolean(d.editions?.some((e) => e.kind === 'scan' || e.kind === 'pdf')),
       audio: Boolean(d.events?.some((id) => (recorded.get(id) ?? 0) > 0)),
       translation: translated.has(u.id),
+      machine: (progressOf(u)?.machine ?? 0) > 0,
       group: middle ? nameOf(middle.label, lang) || middle.value : null,
     };
   });
@@ -149,6 +162,7 @@ export async function workToc(api: RebbeHubApi, units: Entity[], publications: E
     groups,
     printing: chosen ? { id: chosen.printing.id, label: printingLabel(chosen.printing, lang) } : null,
     printings: withMaps.map((m) => ({ id: m.printing.id, label: printingLabel(m.printing, lang) })),
+    editions: ofPart.map((p) => ({ id: p.id, path: itemPath(p), title: nameOf((p.data as { title?: LocalName }).title, lang), label: editionLabel(p, lang) })),
     stats: { pages: pageCount, printings: ofPart.length, withAudio: rows.filter((r) => r.audio).length, checked: total ? Math.round((checked / total) * 100) : null, sichos: units.length },
     read: { scanFile, scanUrl, unit: rows.find((r) => r.sections)?.path ?? rows[0]?.path ?? null },
   };

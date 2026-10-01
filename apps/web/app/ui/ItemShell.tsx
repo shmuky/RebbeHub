@@ -90,7 +90,7 @@ export function ItemHeader({ head, lang, flat }: { head: ItemHead; lang: Lang; f
  * panel and brings it into view, from the page's own buttons and from a
  * link that arrives with the hash.
  */
-function useHashPanels() {
+export function useHashPanels() {
   useEffect(() => {
     const open = (id: string) => {
       const el = id ? document.getElementById(id) : null;

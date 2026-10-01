@@ -588,11 +588,11 @@ export class RebbeHubApi {
   }
 
   /** How many paragraphs each of several texts has and how many a person checked, in one request; texts without any are left out. */
-  async textsProgress(ids: readonly string[]): Promise<Map<string, { paragraphs: number; checked: number }>> {
+  async textsProgress(ids: readonly string[]): Promise<Map<string, { paragraphs: number; checked: number; machine?: number }>> {
     const unique = [...new Set(ids)].filter((id) => /^rh-[0-9a-z]+$/.test(id));
-    const out = new Map<string, { paragraphs: number; checked: number }>();
+    const out = new Map<string, { paragraphs: number; checked: number; machine?: number }>();
     for (let i = 0; i < unique.length; i += 200) {
-      const { progress } = await this.get<{ progress: Record<string, { paragraphs: number; checked: number }> }>('/v1/texts/batch/progress', { ids: unique.slice(i, i + 200).join(',') });
+      const { progress } = await this.get<{ progress: Record<string, { paragraphs: number; checked: number; machine?: number }> }>('/v1/texts/batch/progress', { ids: unique.slice(i, i + 200).join(',') });
       for (const [id, p] of Object.entries(progress)) out.set(id, p);
     }
     return out;

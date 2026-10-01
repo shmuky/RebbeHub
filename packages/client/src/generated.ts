@@ -2503,7 +2503,7 @@ export interface Operations {
     };
     output: Record<string, unknown>;
   };
-  /** How many paragraphs each of several texts has, and how many of them a person checked */
+  /** How many paragraphs each of several texts has, how many of them a person checked, and how many a machine made that nobody checked yet */
   textsProgress: {
     input: {
       /** The texts */
@@ -2513,6 +2513,7 @@ export interface Operations {
       progress: Record<string, {
         paragraphs: number;
         checked: number;
+        machine: number;
       }>;
     };
   };
@@ -3701,7 +3702,7 @@ export abstract class GeneratedMethods {
     return this.call('suggestWords', input ?? {} as Operations['suggestWords']['input']);
   }
 
-  /** How many paragraphs each of several texts has, and how many of them a person checked (GET /v1/texts/batch/progress) */
+  /** How many paragraphs each of several texts has, how many of them a person checked, and how many a machine made that nobody checked yet (GET /v1/texts/batch/progress) */
   textsProgress(input: Operations['textsProgress']['input']): Promise<Operations['textsProgress']['output']> {
     return this.call('textsProgress', input ?? {} as Operations['textsProgress']['input']);
   }
