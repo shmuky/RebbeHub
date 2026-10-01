@@ -246,6 +246,15 @@ describe("each page's statements and API calls stay within its ceiling", () => {
     within(await page('/mafteach'), '/mafteach', { statements: 4, calls: 1, kB: 30 });
   });
   it("the day's learning is one read", async () => within(await page('/daily/2026-09-30'), '/daily', { statements: 10, calls: 1, kB: 60 }));
+  it('draws the day as the design does (3e): the date between its arrows, and its shiurim to tick, the first one next', async () => {
+    const html = await (await handle(new Request(`${SITE}/daily/2026-09-30`))).text();
+    expect(html).toContain('class="dl-date"');
+    expect(html).toMatch(/class="dl-hebrew">[^<]*תשרי</);
+    // 30.9.2026 is י״ט תשרי, in Sukkos: the line under the date says so.
+    expect(html).toMatch(/class="dl-sub">[^<]*סוכות/);
+    expect(html).toMatch(/class="dl-row next"/);
+    expect(html.match(/class="dl-row next"/g)).toHaveLength(1);
+  });
   it('the sitemap', async () => within(await page('/sitemap.xml'), '/sitemap.xml', { statements: 2, calls: 2, kB: 5 }));
 });
 

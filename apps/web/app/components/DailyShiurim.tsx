@@ -4,14 +4,17 @@ import type { Lang } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
 import { joinRefs, sefariaUrl } from '../lib/sefaria.js';
 import { labelOf } from '../lib/labels.js';
+import { Icon } from '../ui/Icon.js';
 
 /**
- * The day's shiurim at a glance, Chitas and the Rambam, each a link to its
- * words: Chumash with Rashi, Tehillim, Tanya, then the Rambam's three
- * tracks (three chapters, one chapter, Sefer HaMitzvos). Each has a box to
- * tick once it is learned; the ticks stay in this browser only, and the
- * card counts the days in a row on which everything ticked was learned.
- * Tanya goes to its words on this page; the others to their pages on
+ * The day's shiurim at a glance, as design/ draws the daily page (3e):
+ * Chumash with Rashi, Tehillim, Tanya, the Rambam on the track the reader
+ * follows (three chapters, one chapter or Sefer HaMitzvos, chosen under it
+ * and kept in this browser) and Hayom Yom, each a row going to its words,
+ * with a circle to tick once it is learned and the first not yet learned
+ * marked as next. The ticks stay in this browser only; a bar counts them,
+ * and the days in a row on which everything was learned. Tanya and Hayom
+ * Yom go to their words on this page; the others to their pages on
  * RebbeHub once the catalog has them (the Sefaria import's Chitas and
  * Rambam), to Sefaria until then.
  */
@@ -24,6 +27,12 @@ const W = {
   three: { he: 'רמב״ם, ג׳ פרקים', en: 'Rambam, three chapters' },
   one: { he: 'רמב״ם, פרק אחד', en: 'Rambam, one chapter' },
   mitzvos: { he: 'ספר המצוות', en: 'Sefer HaMitzvos' },
+  rambam: { he: 'רמב״ם', en: 'Rambam' },
+  hayomYom: { he: 'היום יום', en: 'Hayom Yom' },
+  next: { he: 'הבא בתור', en: 'Next' },
+  track: { he: 'מסלול הרמב״ם', en: 'Rambam track' },
+  trackThree: { he: 'ג׳ פרקים', en: '3 chapters' },
+  trackOne: { he: 'פרק אחד', en: '1 chapter' },
   learned: { he: 'למדתי', en: 'Learned' },
   done: { he: 'מתוך', en: 'of' },
   streak: { he: 'ימים ברציפות', en: 'days in a row' },
@@ -76,7 +85,7 @@ function streak(store: Store, date: string, keys: string[]): number {
  * learned on the daily page (`tanya`, its words' place there); `rambam`
  * says which of the Rambam's tracks to list.
  */
-export function shiurRows(day: DailyLearning, lang: Lang, { tanya = '#daily-tanya', rambam: tracks = ['three', 'one', 'mitzvos'] }: { tanya?: string; rambam?: Array<'three' | 'one' | 'mitzvos'> } = {}): ShiurRow[] {
+export function shiurRows(day: DailyLearning, lang: Lang, { tanya = '#daily-tanya', rambam: tracks = ['three', 'one', 'mitzvos'], hayomYom }: { tanya?: string; rambam?: Array<'three' | 'one' | 'mitzvos'>; hayomYom?: string } = {}): ShiurRow[] {
   const t = (key: keyof typeof W) => W[key][lang];
   const rows: ShiurRow[] = [];
   // On RebbeHub once the catalog has the words, else on Sefaria.
@@ -97,6 +106,7 @@ export function shiurRows(day: DailyLearning, lang: Lang, { tanya = '#daily-tany
     };
     for (const track of tracks) shiur(track);
   }
+  if (hayomYom && day.hayomYom.length) rows.push({ key: 'hayom-yom', name: t('hayomYom'), pieces: [{ text: day.hayomYom.map((e) => labelOf(e, 'he')).join(' – '), to: hayomYom, external: false }] });
   return rows;
 }
 
@@ -121,49 +131,103 @@ export function useLearned(date: string, rows: ShiurRow[]) {
   return { ticked, toggle, inARow: streak(store, date, rows.map((r) => r.key)) };
 }
 
+type Track = 'three' | 'one' | 'mitzvos';
+const TRACKS: Track[] = ['three', 'one', 'mitzvos'];
+const TRACK_STORE = 'rebbehub:rambam-track';
+
+/** The Rambam track this reader follows, kept in this browser (three chapters until they choose). */
+function useTrack(): [Track, (t: Track) => void] {
+  const [track, setTrack] = useState<Track>('three');
+  useEffect(() => {
+    try {
+      const kept = localStorage.getItem(TRACK_STORE) as Track | null;
+      if (kept && TRACKS.includes(kept)) setTrack(kept);
+    } catch {
+      // No storage: three chapters.
+    }
+  }, []);
+  const choose = (t: Track) => {
+    setTrack(t);
+    try {
+      localStorage.setItem(TRACK_STORE, t);
+    } catch {
+      // Private windows: the choice holds for this visit.
+    }
+  };
+  return [track, choose];
+}
+
 export function DailyShiurim({ day, lang }: { day: DailyLearning; lang: Lang }) {
   const t = (key: keyof typeof W) => W[key][lang];
-  const rows = shiurRows(day, lang);
+  const [track, setTrack] = useTrack();
+  const rows = shiurRows(day, lang, { rambam: [track], hayomYom: '#daily-hayom-yom' });
   const { ticked, toggle, inARow } = useLearned(day.date, rows);
   if (!rows.length) return null;
   const count = rows.filter((r) => ticked.has(r.key)).length;
+  const next = rows.find((r) => !ticked.has(r.key))?.key;
+  const trackName: Record<Track, string> = { three: t('trackThree'), one: t('trackOne'), mitzvos: t('mitzvos') };
 
   return (
-    <section className="daily-shiurim" aria-labelledby="daily-shiurim">
-      <header className="daily-shiurim-head">
-        <h2 className="h-sec" id="daily-shiurim">
-          {t('title')}
-        </h2>
-        <span className="daily-shiurim-count" title={t('kept')}>
+    <section className="dl-shiurim" aria-label={t('title')}>
+      <div className="dl-progress" title={t('kept')}>
+        <span className="dl-bar" aria-hidden="true">
+          <span style={{ width: `${(count / rows.length) * 100}%` }} />
+        </span>
+        <span className="dl-count">
           {count} {t('done')} {rows.length}
           {inARow > 1 ? ` · ${inARow} ${t('streak')}` : null}
         </span>
-      </header>
-      <ul className="daily-shiurim-list">
-        {rows.map((row) => (
-          <li key={row.key} className={ticked.has(row.key) ? 'done' : undefined}>
-            <label className="daily-shiur-tick">
-              <input type="checkbox" checked={ticked.has(row.key)} onChange={() => toggle(row.key)} aria-label={`${t('learned')}: ${row.name}`} />
-            </label>
-            <span className="daily-shiur-name">{row.name}</span>
-            <span className="daily-shiur-what torah" lang="he" dir="rtl">
-              {row.pieces.map((piece, i) => (
-                <span key={i}>
-                  {i ? ' · ' : null}
-                  {piece.to === null ? (
-                    piece.text
-                  ) : piece.external ? (
-                    <a href={piece.to} target="_blank" rel="noopener">
-                      {piece.text}
+      </div>
+      <ul className="dl-list">
+        {rows.map((row) => {
+          const done = ticked.has(row.key);
+          const [first, ...rest] = row.pieces;
+          const rambam = TRACKS.includes(row.key as Track);
+          return (
+            <li key={rambam ? 'rambam' : row.key} className={`dl-row${done ? ' done' : ''}${row.key === next ? ' next' : ''}`}>
+              <button type="button" className="dl-tick" aria-pressed={done} aria-label={`${t('learned')}: ${row.name}`} onClick={() => toggle(row.key)}>
+                {done ? <Icon name="check" size={15} /> : null}
+              </button>
+              <span className="dl-what">
+                <span className="dl-name">
+                  {rambam ? `${t('rambam')} · ${trackName[row.key as Track]}` : row.name}
+                  {row.key === next ? ` · ${t('next')}` : null}
+                </span>
+                <span className="dl-text torah" lang="he" dir="rtl">
+                  {first?.to ? (
+                    <a className="dl-main" href={first.to} target={first.external ? '_blank' : undefined} rel={first.external ? 'noopener' : undefined}>
+                      {first.text}
                     </a>
                   ) : (
-                    <a href={piece.to}>{piece.text}</a>
+                    first?.text
                   )}
+                  {rest.map((piece, i) => (
+                    <span key={i}>
+                      {' · '}
+                      {piece.to ? (
+                        <a className="dl-more" href={piece.to} target={piece.external ? '_blank' : undefined} rel={piece.external ? 'noopener' : undefined}>
+                          {piece.text}
+                        </a>
+                      ) : (
+                        piece.text
+                      )}
+                    </span>
+                  ))}
                 </span>
-              ))}
-            </span>
-          </li>
-        ))}
+                {rambam ? (
+                  <span className="dl-tracks" role="group" aria-label={t('track')}>
+                    {TRACKS.filter((k) => day.rambam?.[k]).map((k) => (
+                      <button key={k} type="button" aria-pressed={k === track} onClick={() => setTrack(k)}>
+                        {trackName[k]}
+                      </button>
+                    ))}
+                  </span>
+                ) : null}
+              </span>
+              <Icon name="chev" className="dl-chev flip-ltr" size={16} />
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

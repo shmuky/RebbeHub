@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { HDate, HebrewCalendar } from '@hebcal/core';
 import { data, Link, useNavigate } from 'react-router';
 import type { Route } from './+types/daily';
 import { hayomYomShiurimOf } from '@rebbehub/hebrew';
@@ -19,8 +20,10 @@ import { EmptyState } from '../ui/primitives.js';
 import '../styles/pages/daily.css';
 
 /**
- * The day's learning: its shiurim at a glance (Chitas and the Rambam's
- * three tracks, components/DailyShiurim.tsx), then Chitas' Tanya (the day's
+ * The day's learning, as design/ draws it (3e): the day between arrows to
+ * the day before and after, its shiurim as a list to tick (Chitas, the
+ * Rambam on the reader's track and Hayom Yom, components/DailyShiurim.tsx),
+ * then the words of Chitas' Tanya (the day's
  * portion by the yearly cycle from 19 Kislev) and Hayom Yom, from the
  * catalog's own texts, with the day before and after. A day is the civil day it is learned on, and its page
  * is `/daily/2026-09-30`; `/daily` is today, as New York has it when the
@@ -69,7 +72,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const day = await api.daily(date);
   // Each Hayom Yom entry with the head the book prints over it: weekday, year and shiurim.
   const hayomYom = day.hayomYom.map((entry) => ({ entry, shiurim: hayomYomShiurimOf(entry.data) }));
-  return { lang, siteUrl, date, asked: asked !== null, day, hebrew: day.hebrew, tanya: day.tanya, hayomYom };
+  // The day's festival, if it is one (חול המועד סוכות), for the line under its date.
+  const holidays = (HebrewCalendar.getHolidaysOnDate(new HDate(new Date(`${date}T12:00:00Z`)), false) ?? []).map((e) => e.render(lang === 'he' ? 'he-x-NoNikud' : 'en'));
+  return { lang, siteUrl, date, asked: asked !== null, day, hebrew: day.hebrew, tanya: day.tanya, hayomYom, holiday: holidays[0] ?? null };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -87,7 +92,7 @@ function Words({ item, lang }: { item: Entity; lang: Lang }) {
 }
 
 export default function Daily({ loaderData }: Route.ComponentProps) {
-  const { lang, date, asked, day, hebrew, tanya, hayomYom } = loaderData;
+  const { lang, date, asked, day, hebrew, tanya, hayomYom, holiday } = loaderData;
   const navigate = useNavigate();
   // `/daily` was made for New York's today: a reader whose own today is another day goes on to it.
   useEffect(() => {
@@ -96,37 +101,34 @@ export default function Daily({ loaderData }: Route.ComponentProps) {
     if (local !== date) navigate(href(`/daily/${local}`, lang), { replace: true });
   }, [asked, date, lang, navigate]);
   const today = todayIn('America/New_York');
-  const hebrewDay = dateLabel(hebrew, lang, { civil: false });
+  // The day without its year (כ׳ תשרי), as the design heads the page; the year is in the page's title.
+  const hebrewDay = dateLabel(hebrew, lang, { civil: false }).replace(/\s+\S+$/, '');
   const civil = date.split('-').map(Number).reverse().join('.');
 
   return (
     <div className="daily-page">
-      <div className="phead">
-        <div className="wrap">
-          <div className="phead-row">
-            <div>
-              <h1 className="page-title">{w(lang, 'title')}</h1>
-              <p className="lede">
-                <Icon name="cal" className="subtle" /> {WEEKDAYS[lang][weekday(date)]}, <b>{hebrewDay}</b> · {civil}
-              </p>
-            </div>
-            <nav className="phead-acts" aria-label={w(lang, 'title')}>
-              <Link className="btn" to={href(`/daily/${shift(date, -1)}`, lang)} rel="prev" preventScrollReset>
-                <Icon name="chevr" className="flip-ltr" />
-                {w(lang, 'prev')}
-              </Link>
+      <div className="wrap dl">
+        <h1 className="page-title dl-title">{w(lang, 'title')}</h1>
+        <nav className="dl-date" aria-label={w(lang, 'title')}>
+          <Link className="ib" to={href(`/daily/${shift(date, -1)}`, lang)} rel="prev" preventScrollReset aria-label={w(lang, 'prev')}>
+            <Icon name="chevr" className="flip-ltr" />
+          </Link>
+          <div className="dl-day">
+            <p className="dl-hebrew">{hebrewDay}</p>
+            <p className="dl-sub">
+              {[WEEKDAYS[lang][weekday(date)], holiday, civil].filter(Boolean).join(' · ')}
               {asked && date !== today ? (
-                <Link className="btn" to={href('/daily', lang)}>
-                  {w(lang, 'today')}
-                </Link>
+                <>
+                  {' · '}
+                  <Link to={href('/daily', lang)}>{w(lang, 'today')}</Link>
+                </>
               ) : null}
-              <Link className="btn" to={href(`/daily/${shift(date, 1)}`, lang)} rel="next" preventScrollReset>
-                {w(lang, 'next')}
-                <Icon name="chev" className="flip-ltr" />
-              </Link>
-            </nav>
+            </p>
           </div>
-        </div>
+          <Link className="ib" to={href(`/daily/${shift(date, 1)}`, lang)} rel="next" preventScrollReset aria-label={w(lang, 'next')}>
+            <Icon name="chev" className="flip-ltr" />
+          </Link>
+        </nav>
       </div>
 
       <div className="wrap daily-body">
