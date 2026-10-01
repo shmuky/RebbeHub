@@ -1457,3 +1457,55 @@
     font-size: var(--fs-sm);
   }
 }
+
+/* ================================================================== versions side by side (4f) */
+
+/* How a change shows: side by side (before | after) or one above the other, in the text. */
+.hist-view {
+  display: inline-flex;
+  margin-bottom: 14px;
+}
+
+/* Side by side: what it was in one column, what it is in the other, each headed. On a phone there is no room: one above the other. */
+@media (min-width: 721px) {
+  .side .diff-field > .v {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+    padding: 0;
+  }
+
+  .side .diff-field > .v > .diff-line {
+    display: block;
+    height: 100%;
+    padding: 26px 14px 10px;
+    position: relative;
+  }
+
+  .side .diff-field > .v > .diff-line::before {
+    position: absolute;
+    inset-inline-start: 14px;
+    top: 6px;
+    font: 700 11.5px / 1.4 var(--ui);
+    color: var(--subtle);
+    text-align: start;
+  }
+
+  .side .diff-field > .v > .diff-line.was::before {
+    content: var(--was);
+  }
+
+  .side .diff-field > .v > .diff-line.now::before {
+    content: var(--now);
+  }
+
+  .side .diff-field > .v > .diff-line + .diff-line {
+    border-inline-start: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 720px) {
+  .hist-view {
+    display: none;
+  }
+}

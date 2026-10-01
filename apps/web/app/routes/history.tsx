@@ -55,6 +55,11 @@ const W = {
   by: { he: 'הצעה של', en: 'suggested by' },
   shown: { he: 'הגרסה שמוצגת עכשיו', en: 'The version shown now' },
   what: { he: 'מה השתנה', en: 'What changed' },
+  view: { he: 'איך להראות שינוי', en: 'How to show a change' },
+  side: { he: 'זה לצד זה', en: 'Side by side' },
+  inText: { he: 'בתוך הטקסט', en: 'In the text' },
+  before: { he: 'לפני', en: 'Before' },
+  after: { he: 'אחרי', en: 'After' },
 } as const;
 
 function RestoreButton({ entityId, rev, lang }: { entityId: string; rev: number; lang: Lang }) {
@@ -100,6 +105,8 @@ function RestoreButton({ entityId, rev, lang }: { entityId: string; rev: number;
 export default function History({ loaderData }: Route.ComponentProps) {
   const { lang, entity, history } = loaderData;
   const account = useAccount();
+  // As design/ draws versions (4f): a change read side by side, before and after, or one above the other.
+  const [side, setSide] = useState(true);
   // Everyone who changed it, most changes first.
   const people = new Map<string, { name: string; bot: boolean; n: number }>();
   for (const h of history) {
@@ -152,13 +159,23 @@ export default function History({ loaderData }: Route.ComponentProps) {
         <EmptyState icon="history" title={W.empty[lang]} />
       ) : (
         <>
+          {history.some((h) => !h.created && !h.deleted) ? (
+            <div className="hist-view segmented" role="radiogroup" aria-label={W.view[lang]}>
+              <button type="button" role="radio" aria-checked={side} aria-pressed={side} onClick={() => setSide(true)}>
+                {W.side[lang]}
+              </button>
+              <button type="button" role="radio" aria-checked={!side} aria-pressed={!side} onClick={() => setSide(false)}>
+                {W.inText[lang]}
+              </button>
+            </div>
+          ) : null}
           {latest ? (
-            <section className="hist-latest">
+            <section className={side ? 'hist-latest side' : 'hist-latest'} style={{ ['--was' as string]: `"${W.before[lang]}"`, ['--now' as string]: `"${W.after[lang]}"` }}>
               <h2>{W.latest[lang]}</h2>
               <ChangeRows changes={latest.changes} lang={lang} />
             </section>
           ) : null}
-          <ol className="hist2" aria-label={t(lang, 'history')}>
+          <ol className={side ? 'hist2 side' : 'hist2'} aria-label={t(lang, 'history')} style={{ ['--was' as string]: `"${W.before[lang]}"`, ['--now' as string]: `"${W.after[lang]}"` }}>
             {history.map((h, i) => {
               const author = personName(h.author, h.authorName, lang);
               const approver = personName(h.mergedBy, h.mergedByName, lang);
