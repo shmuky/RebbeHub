@@ -99,6 +99,38 @@
     linear-gradient(var(--border-strong), var(--border-strong)) right center / 34px 1px no-repeat;
 }
 
+/* A letter (5b, 5d): its name at the start, and under it the date and addressee from its own first lines. */
+.rd-letter-head {
+  text-align: start;
+  padding: 22px 0 4px;
+}
+
+.rd-letter-head h1 {
+  color: var(--text);
+}
+
+.rd-letter-sub {
+  margin-top: 6px;
+  color: var(--subtle);
+  font-size: var(--fs-md);
+}
+
+/* Its date and place at the line's end, close together, and its greeting centred, as a letter prints them. */
+.rd .words-p.end {
+  text-align: end;
+  line-height: 1.5;
+  margin-bottom: 0.25em;
+}
+
+.rd .words-p.greet {
+  text-align: center;
+  font-weight: 700;
+}
+
+.rd-facts {
+  display: none;
+}
+
 /* When the page's name is its words' own heading (שיחה א), the heading is not said twice. */
 .rd-titled .words > .words-heading:first-child,
 .rd-titled .words > .words-section:first-child > .words-heading:first-child {
@@ -447,5 +479,54 @@
   .rd:not(.rd-with-toc):has(.words-side) {
     max-width: 1000px;
     padding-inline-end: calc(var(--gutter) + 240px);
+  }
+}
+
+/* A letter on a wide screen: its details in a column on the other side (5d). */
+@media (min-width: 1180px) {
+  .rd.rd-letter.rd-with-toc {
+    grid-template-columns: 220px minmax(0, 1fr) 240px;
+  }
+
+  .rd-with-toc .rd-facts {
+    display: block;
+    position: sticky;
+    top: 76px;
+    padding: 4px 0 16px;
+    font-size: var(--fs-sm);
+  }
+
+  .rd-facts h2 {
+    margin: 0 0 10px;
+    font: 600 12px / 1.4 var(--ui);
+    color: var(--subtle);
+    letter-spacing: 0.03em;
+  }
+
+  .rd-facts dl {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+  }
+
+  .rd-facts dt {
+    color: var(--subtle);
+    font-size: 12px;
+  }
+
+  .rd-facts dd {
+    margin: 0;
+    color: var(--text);
+    font-size: var(--fs-md);
+    overflow-wrap: anywhere;
+  }
+
+  .rd-facts-note {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-muted);
+    color: var(--subtle);
+    font-size: 12px;
+    line-height: 1.5;
   }
 }

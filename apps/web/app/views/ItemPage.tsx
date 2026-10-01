@@ -23,6 +23,7 @@ import { num } from '../lib/i18nUi.js';
 import type { ItemView } from '../lib/itemData.server.js';
 import { driveCopyOf } from '../lib/drive.js';
 import { labelOf } from '../lib/labels.js';
+import { letterOpening, shapeLetter } from '../lib/letters.js';
 import { st } from '../lib/scanStrings.js';
 import { tracksOf } from '../lib/tracks.js';
 import { ps } from '../lib/pageStrings.js';
@@ -215,6 +216,10 @@ function ReadingPage({ entity, view, lang, about }: { entity: Entity; view: Item
   const titled = /^\d+$/.test(label) && openingName ? openingName : null;
   const title = titled ?? label;
   const kicker = middle ? nameOf(middle.label, lang) || middle.value : work ? labelOf(work, lang) : null;
+  // A letter (5b, 5d): its name at the start, under it the date and addressee its own first lines give, and those lines set as a letter prints them.
+  const letter = steps[steps.length - 1]?.level === 'letter';
+  const head = letter && isPageText(d.body) ? letterOpening(d.body) : null;
+  const shown = head && isPageText(d.body) ? { ...entity, data: { ...d, body: shapeLetter(d.body, head) } } : entity;
   const texts = view.lists.texts ?? [];
   const originals = texts.filter((x) => (x.data as D).kind !== 'transcript' && (x.data as D).kind !== 'translation');
   const printedIn = view.lists.printedIn ?? [];
@@ -256,8 +261,32 @@ function ReadingPage({ entity, view, lang, about }: { entity: Entity; view: Item
         </ol>
       </nav>
     ) : null;
+  const source = d.bodySource as { url?: string; credit?: string; via?: string; source?: string } | undefined;
+  const facts = head ? (
+    <aside className="rd-facts" aria-label={L[lang].details}>
+      <h2>{L[lang].details}</h2>
+      <dl>
+        {head.date ? <LetterFact name={L[lang].date}>{head.date}</LetterFact> : null}
+        {head.place ? <LetterFact name={L[lang].place}>{head.place}</LetterFact> : null}
+        {head.to ? <LetterFact name={L[lang].to}>{head.to}</LetterFact> : null}
+        {work ? (
+          <LetterFact name={L[lang].printed}>
+            <Link to={back}>{[labelOf(work, lang), volumeName].filter(Boolean).join(', ')}</Link>
+          </LetterFact>
+        ) : null}
+        {source?.url ? (
+          <LetterFact name={L[lang].source}>
+            <a href={source.url} target="_blank" rel="noopener">
+              {source.credit ?? source.via ?? source.source}
+            </a>
+          </LetterFact>
+        ) : null}
+      </dl>
+      <p className="rd-facts-note">{L[lang].fromLines}</p>
+    </aside>
+  ) : null;
   return (
-    <div className={`wrap rd${titled ? ' rd-titled' : ''}${toc ? ' rd-with-toc' : ''}`}>
+    <div className={`wrap rd${titled ? ' rd-titled' : ''}${toc ? ' rd-with-toc' : ''}${head ? ' rd-letter' : ''}`}>
       {toc}
       <div className="rd-main">
         <div className="rd-top">
@@ -270,13 +299,20 @@ function ReadingPage({ entity, view, lang, about }: { entity: Entity; view: Item
             <MoreMenu links={links} actions={slots?.actions} lang={lang} />
           </span>
         </div>
-        <header className="rd-head">
-          {kicker && kicker !== title ? <p className="rd-kicker">{kicker}</p> : null}
-          <h1 className="torah">{title}</h1>
-          <span className="rd-orn" aria-hidden="true" />
-        </header>
+        {head ? (
+          <header className="rd-head rd-letter-head">
+            <h1 className="torah">{title}</h1>
+            {head.date || head.to ? <p className="rd-letter-sub">{[head.date, head.to].filter(Boolean).join(' · ')}</p> : null}
+          </header>
+        ) : (
+          <header className="rd-head">
+            {kicker && kicker !== title ? <p className="rd-kicker">{kicker}</p> : null}
+            <h1 className="torah">{title}</h1>
+            <span className="rd-orn" aria-hidden="true" />
+          </header>
+        )}
         <SideNotes.Provider value={true}>
-          <UnitBody entity={entity} view={view} lang={lang} />
+          <UnitBody entity={shown} view={view} lang={lang} />
         </SideNotes.Provider>
         {slots?.below ? <div className="below">{slots.below}</div> : null}
         <details className="rd-about">
@@ -287,6 +323,21 @@ function ReadingPage({ entity, view, lang, about }: { entity: Entity; view: Item
           </div>
         </details>
       </div>
+      {facts}
+    </div>
+  );
+}
+
+const L = {
+  he: { details: 'פרטים', date: 'תאריך', place: 'מקום', to: 'אל', printed: 'נדפס', source: 'מקור הטקסט', fromLines: 'התאריך, המקום והנמען כפי שנכתבו בראש המכתב.' },
+  en: { details: 'Details', date: 'Date', place: 'Place', to: 'To', printed: 'Printed in', source: 'Text from', fromLines: "The date, place and addressee as the letter's head lines give them." },
+} as const;
+
+function LetterFact({ name, children }: { name: string; children: ReactNode }) {
+  return (
+    <div>
+      <dt>{name}</dt>
+      <dd>{children}</dd>
     </div>
   );
 }
