@@ -21,6 +21,13 @@ describe("the site's own reads (reads.ts)", () => {
     expect(answeredHere(`${API}/v1/app/v1/catalog/manifest.json`, undefined, API, true)).toBe(false);
     expect(answeredHere(`${API}/v1/drive/1abc`, undefined, API, true)).toBe(false);
     expect(answeredHere(`${API}/v1/search/similar?q=שבת`, undefined, API, true)).toBe(false);
+    // Sign-in asked as nobody: only the API's Worker knows whether Google sign-in is on (the site's /signin hid it without).
+    expect(answeredHere(`${API}/v1/auth/me`, undefined, API, true)).toBe(false);
+    expect(answeredHere(`${API}/v1/auth/google/start`, undefined, API, true)).toBe(false);
+    // The mirrors' git addresses and keys are the API Worker's settings.
+    expect(answeredHere(`${API}/v1/mirrors`, undefined, API, true)).toBe(false);
+    // A name that only starts like one of those is still answered here.
+    expect(answeredHere(`${API}/v1/authors`, undefined, API, true)).toBe(true);
     // Not the API at all, or not /v1.
     expect(answeredHere('https://rebbehub.org/v1/sets', undefined, API, true)).toBe(false);
     expect(answeredHere(`${API}/openapi.json`, undefined, API, true)).toBe(false);

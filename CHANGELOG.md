@@ -204,6 +204,11 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Fixed
 
+- **Signing in with Google shows again for someone signed out.** The
+  site answers reads as nobody in its own Worker, which has no sign-in
+  routes, so `/_/auth/me` answered 404 on every page and `/signin` hid
+  the Google button. Sign-in and the mirrors' list now always go to the
+  API's Worker.
 - **Approving a big Suggestion lands at once.** Approving wrote each
   item on its own, a dozen statements each: the catalog's reorganisation
   (hundreds of items) was thousands of round trips and never finished.
