@@ -12,6 +12,7 @@ import {
   isEntityPath,
   newId,
   referencesOf,
+  type Reference,
   type EntityId,
   type EntityType,
   type SchemaData,
@@ -19,7 +20,7 @@ import {
 } from '@rebbehub/model';
 import { summarizeChanges, type ChangeGroup } from './changeSummary.js';
 import { badState, CatalogError, forbidden, invalid, notFound } from './errors.js';
-import { indexDriveFiles } from './driveFiles.js';
+import { driveFilesOf } from './driveFiles.js';
 import { withStructuredBody } from './legacyWords.js';
 import { diffData, threeWayMerge, resolveConflicts, UnresolvedConflictError, type Conflict, type FieldChange, type Json, type Resolution } from './merge.js';
 import { canApprove, canSuggest, earnedTrust, mayGoLive, type Account, type SetInfo } from './permissions.js';
@@ -1214,83 +1215,132 @@ export class Catalog {
     if (unresolved.length > 0) throw new UnresolvedConflictError(unresolved);
 
     // What main will hold once this lands, for checking the merged result.
+    // Checked and written a few statements for the whole change, not a few per item:
+    // a catalog reorganisation of 700 items was minutes of round trips and never landed.
     const landing = new Map(planned.map((x) => [x.proposal.entityId, x]));
+    const pointing: Array<{ from: EntityId; ref: Reference }> = [];
     for (const x of planned) {
       if (x.data === null) continue;
       const valid = registry.validate(x.proposal.type, x.data);
       if (!valid.ok) throw invalid(`${x.proposal.entityId} would not be valid after merging: ${valid.issues.map((i) => `${i.path || '/'} ${i.message}`).join('; ')}`, valid.issues);
       for (const ref of referencesOf(x.proposal.type, x.data)) {
         const target = landing.get(ref.id);
-        if (target) {
-          if (target.data === null) throw invalid(`${x.proposal.entityId} points at ${ref.id}, which this change deletes`);
-          continue;
-        }
-        const row = await one<{ type: string; deleted: boolean; main_rev: number | null }>(tx, 'SELECT type, deleted, main_rev FROM entity WHERE id = $1', [ref.id]);
-        if (!row || row.deleted || row.main_rev === null) throw invalid(`${x.proposal.entityId} points at ${ref.id} (${ref.field}), which is not in the catalog`);
+        if (!target) pointing.push({ from: x.proposal.entityId, ref });
+        else if (target.data === null) throw invalid(`${x.proposal.entityId} points at ${ref.id}, which this change deletes`);
       }
-      if (x.path !== null) {
-        const taken = await one<{ id: string }>(tx, 'SELECT id FROM entity WHERE path = $1 AND id <> $2 AND NOT deleted', [x.path, x.proposal.entityId]);
-        if (taken && !(landing.get(taken.id as EntityId)?.path !== x.path && landing.has(taken.id as EntityId))) throw invalid(`the path ${x.path} already belongs to ${taken.id}`);
+    }
+    if (pointing.length) {
+      const { rows } = await tx.query<{ id: string }>('SELECT id FROM entity WHERE id = ANY($1::text[]) AND NOT deleted AND main_rev IS NOT NULL', [[...new Set(pointing.map((p) => p.ref.id))]]);
+      const live = new Set(rows.map((r) => r.id));
+      const missing = pointing.find((p) => !live.has(p.ref.id));
+      if (missing) throw invalid(`${missing.from} points at ${missing.ref.id} (${missing.ref.field}), which is not in the catalog`);
+    }
+    const paths = planned.filter((x) => x.path !== null);
+    if (paths.length) {
+      const { rows } = await tx.query<{ id: string; path: string }>('SELECT id, path FROM entity WHERE path = ANY($1::text[]) AND NOT deleted', [paths.map((x) => x.path)]);
+      const holder = new Map(rows.map((r) => [r.path, r.id as EntityId]));
+      for (const x of paths) {
+        const taken = holder.get(x.path!);
+        if (taken === undefined || taken === x.proposal.entityId) continue;
+        // Taken by an item this change moves elsewhere: it is released first.
+        if (!(landing.has(taken) && landing.get(taken)!.path !== x.path)) throw invalid(`the path ${x.path} already belongs to ${taken}`);
       }
     }
 
     const commit = await one<{ seq: number }>(tx, 'INSERT INTO commit (changeset_id, merged_by, message) VALUES ($1, $2, $3) RETURNING seq', [changesetId, by, message]);
     const seq = commit!.seq;
+    const ids = planned.map((x) => x.proposal.entityId);
     // Paths are released before they are taken, so two items may swap paths in one change.
-    for (const x of planned) await tx.query('UPDATE entity SET path = NULL WHERE id = $1', [x.proposal.entityId]);
-    for (const x of planned) {
-      let revId = x.proposal.rev.id;
-      if (!x.direct) {
-        const hash = await contentHash({ type: x.proposal.type, data: x.data, path: x.path });
-        const row = await one<{ id: number }>(
-          tx,
-          `INSERT INTO revision (entity_id, entity_type, parent_rev, merge_rev, data, path, hash, changeset_id, author)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-          [x.proposal.entityId, x.proposal.type, x.current?.id ?? null, x.proposal.rev.id, x.data === null ? null : JSON.stringify(x.data), x.path, hash, changesetId, by],
-        );
-        revId = row!.id;
-      }
-      await tx.query('INSERT INTO commit_change (commit_seq, entity_id, rev_id, prev_rev_id) VALUES ($1, $2, $3, $4)', [seq, x.proposal.entityId, revId, x.current?.id ?? null]);
-      await this.updateMain(tx, x.proposal.entityId, x.proposal.type, revId, x.data, x.path, x.current?.path ?? null, seq);
+    await tx.query('UPDATE entity SET path = NULL WHERE id = ANY($1::text[])', [ids]);
+    const revIds = new Map<string, number>(planned.filter((x) => x.direct).map((x) => [x.proposal.entityId, x.proposal.rev.id]));
+    const made = planned.filter((x) => !x.direct);
+    if (made.length) {
+      const hashes = await Promise.all(made.map((x) => contentHash({ type: x.proposal.type, data: x.data, path: x.path })));
+      const { rows } = await tx.query<{ id: number; entity_id: string }>(
+        `INSERT INTO revision (entity_id, entity_type, parent_rev, merge_rev, data, path, hash, changeset_id, author)
+         SELECT e, t, p, m, d::jsonb, pa, h, $8, $9 FROM unnest($1::text[], $2::text[], $3::bigint[], $4::bigint[], $5::text[], $6::text[], $7::text[]) AS u(e, t, p, m, d, pa, h)
+         RETURNING id, entity_id`,
+        [
+          made.map((x) => x.proposal.entityId),
+          made.map((x) => x.proposal.type),
+          made.map((x) => x.current?.id ?? null),
+          made.map((x) => x.proposal.rev.id),
+          made.map((x) => (x.data === null ? null : JSON.stringify(x.data))),
+          made.map((x) => x.path),
+          hashes,
+          changesetId,
+          by,
+        ],
+      );
+      for (const row of rows) revIds.set(row.entity_id, Number(row.id));
     }
+    await tx.query(
+      'INSERT INTO commit_change (commit_seq, entity_id, rev_id, prev_rev_id) SELECT $1, e, r, p FROM unnest($2::text[], $3::bigint[], $4::bigint[]) AS u(e, r, p)',
+      [seq, ids, ids.map((id) => revIds.get(id)!), planned.map((x) => x.current?.id ?? null)],
+    );
+    await this.updateMain(
+      tx,
+      planned.map((x) => ({ id: x.proposal.entityId, type: x.proposal.type, revId: revIds.get(x.proposal.entityId)!, data: x.data, path: x.path, oldPath: x.current?.path ?? null })),
+      seq,
+    );
     return seq;
   }
 
-  /** Points main at a new revision and refreshes what is derived from it: path, redirects, links, search text. */
-  private async updateMain(tx: Db, id: EntityId, type: EntityType, revId: number, data: Json | null, path: string | null, oldPath: string | null, seq: number): Promise<void> {
-    const deleted = data === null;
+  /** Points main at new revisions and refreshes what is derived from them: paths, redirects, links, search text. A few statements for any number of items. */
+  private async updateMain(tx: Db, items: Array<{ id: EntityId; type: EntityType; revId: number; data: Json | null; path: string | null; oldPath: string | null }>, seq: number): Promise<void> {
+    if (!items.length) return;
+    const ids = items.map((x) => x.id);
     await tx.query(
-      "UPDATE entity SET main_rev = $2, path = $3, deleted = $4, search_text = $5, search_tsv = to_tsvector('simple', coalesce($5, '')), updated_seq = $6 WHERE id = $1",
-      [
-        id,
-        revId,
-        deleted ? null : path,
-        deleted,
-        deleted ? null : searchTextOf(data),
-        seq,
-      ],
+      `UPDATE entity e SET main_rev = u.r, path = u.p, deleted = u.d, search_text = u.s, search_tsv = to_tsvector('simple', coalesce(u.s, '')), updated_seq = $6
+       FROM unnest($1::text[], $2::bigint[], $3::text[], $4::boolean[], $5::text[]) AS u(id, r, p, d, s) WHERE e.id = u.id`,
+      [ids, items.map((x) => x.revId), items.map((x) => (x.data === null ? null : x.path)), items.map((x) => x.data === null), items.map((x) => (x.data === null ? null : searchTextOf(x.data))), seq],
     );
-    if (oldPath !== null && oldPath !== path) {
-      await tx.query('INSERT INTO path_redirect (path, entity_id) VALUES ($1, $2) ON CONFLICT (path) DO UPDATE SET entity_id = EXCLUDED.entity_id, created_at = now()', [oldPath, id]);
+    const moved = items.filter((x) => x.oldPath !== null && x.oldPath !== x.path);
+    if (moved.length) {
+      await tx.query(
+        'INSERT INTO path_redirect (path, entity_id) SELECT p, e FROM unnest($1::text[], $2::text[]) AS u(p, e) ON CONFLICT (path) DO UPDATE SET entity_id = EXCLUDED.entity_id, created_at = now()',
+        [moved.map((x) => x.oldPath), moved.map((x) => x.id)],
+      );
     }
-    if (path !== null) await tx.query('DELETE FROM path_redirect WHERE path = $1', [path]);
-    await tx.query('DELETE FROM entity_ref WHERE from_id = $1', [id]);
-    await tx.query('DELETE FROM entity_external_id WHERE entity_id = $1', [id]);
-    // The Drive files it links to, which the API reads for the site (driveFiles.ts).
-    await indexDriveFiles(tx, id, data);
-    if (!deleted) {
-      const externalIds = (data as { externalIds?: Record<string, string> }).externalIds ?? {};
+    // A path an item holds now is no longer a redirect, whoever it led to before.
+    const held = items.filter((x) => x.path !== null).map((x) => x.path);
+    if (held.length) await tx.query('DELETE FROM path_redirect WHERE path = ANY($1::text[])', [held]);
+    await tx.query('DELETE FROM entity_ref WHERE from_id = ANY($1::text[])', [ids]);
+    await tx.query('DELETE FROM entity_external_id WHERE entity_id = ANY($1::text[])', [ids]);
+    // The Drive files they link to, which the API reads for the site (driveFiles.ts).
+    await tx.query('DELETE FROM drive_file WHERE entity_id = ANY($1::text[])', [ids]);
+    const external: string[][] = [[], [], []];
+    const refs: string[][] = [[], [], []];
+    const drive: Array<Array<string | null>> = [[], [], []];
+    for (const x of items) {
+      if (x.data === null) continue;
+      const externalIds = (x.data as { externalIds?: Record<string, string> }).externalIds ?? {};
       for (const [key, value] of Object.entries(externalIds)) {
-        if (typeof value === 'string') await tx.query('INSERT INTO entity_external_id (entity_id, key, value) VALUES ($1, $2, $3)', [id, key, value]);
+        if (typeof value !== 'string') continue;
+        external[0]!.push(x.id);
+        external[1]!.push(key);
+        external[2]!.push(value);
       }
       const seen = new Set<string>();
-      for (const ref of referencesOf(type, data)) {
+      for (const ref of referencesOf(x.type, x.data)) {
         const key = `${ref.field}\u0000${ref.id}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        await tx.query('INSERT INTO entity_ref (from_id, field, to_id) VALUES ($1, $2, $3)', [id, ref.field, ref.id]);
+        refs[0]!.push(x.id);
+        refs[1]!.push(ref.field);
+        refs[2]!.push(ref.id);
       }
     }
+    for (const x of items) {
+      for (const file of driveFilesOf(x.data)) {
+        drive[0]!.push(file.id);
+        drive[1]!.push(x.id);
+        drive[2]!.push(file.resourceKey ?? null);
+      }
+    }
+    if (external[0]!.length) await tx.query('INSERT INTO entity_external_id (entity_id, key, value) SELECT * FROM unnest($1::text[], $2::text[], $3::text[])', external);
+    if (refs[0]!.length) await tx.query('INSERT INTO entity_ref (from_id, field, to_id) SELECT * FROM unnest($1::text[], $2::text[], $3::text[])', refs);
+    if (drive[0]!.length) await tx.query('INSERT INTO drive_file (file_id, entity_id, resource_key) SELECT * FROM unnest($1::text[], $2::text[], $3::text[]) ON CONFLICT DO NOTHING', drive);
   }
 
   /**

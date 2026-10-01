@@ -185,6 +185,16 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Fixed
 
+- **Approving a big Suggestion lands at once.** Approving wrote each
+  item on its own, a dozen statements each: the catalog's reorganisation
+  (hundreds of items) was thousands of round trips and never finished.
+  Now a whole Suggestion is written in a few dozen statements, however
+  many items it has (500 items: 4,524 statements before, 33 now).
+- **A Suggestion names what it points at.** A part moved to another sefer
+  read as two ids (`rh-61vwn5d7` → `rh-v94rk99s`); now it says "In the
+  sefer" and the sefer's name. An item taken out (merged into another)
+  shows only that it is removed, not its old fields. The suggestion view
+  carries `items`: the items its page's changes point at, by id.
 - **A large Suggestion reads in a few lines.** Its summary named every
   field it touches by its path (`body/versions/he/segments/t1/printed`,
   hundreds of them), which said nothing and stopped phones. Now a page's

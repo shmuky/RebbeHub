@@ -222,8 +222,9 @@ export async function suggestionView(api: RebbeHubApi, detail: SuggestionDetail,
     }
     // An item whose only change is its details (a paragraph re-timed because its words were fixed) is not a change to show.
     if (anyReal && e.before !== null && e.after !== null && !e.withheld && !(segment && segment.before !== segment.after) && onlyInfo(e.changes.filter((c) => !(segment && (c.path === '/content' || c.path === 'content'))))) continue;
-    const folded = foldChanges(e.changes.filter((c) => !(segment && (c.path === '/content' || c.path === 'content'))));
-    const fields = folded.rows.map((c) => ({ path: c.path, name: foldedName(c, lang), before: valueText(c.path, c.before, lang), after: valueText(c.path, c.after, lang), count: c.count }));
+    // An item taken out (merged into another) is said by its header alone: its old fields are nothing to read.
+    const folded = foldChanges(e.after === null ? [] : e.changes.filter((c) => !(segment && (c.path === '/content' || c.path === 'content'))));
+    const fields = folded.rows.map((c) => ({ path: c.path, name: foldedName(c, lang), before: valueText(c.path, c.before, lang, detail.items), after: valueText(c.path, c.after, lang, detail.items), count: c.count }));
     if (folded.hidden) fields.push({ path: '/…', name: moreChanges(folded.hidden, lang), before: '', after: '', count: folded.hidden });
     // Timings and machine details are counted, not shown, and are not changes to count on the tab.
     if (folded.info) fields.push({ path: '/…info', name: infoChanges(folded.info, lang), before: '', after: '', count: 0 });

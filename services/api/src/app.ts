@@ -1017,9 +1017,26 @@ export function createApp(options: ApiOptions): Hono {
       const similar = await Promise.all((await similarFiles(catalog.db, sha)).map(async (s) => ({ kind: s.kind, matched: s.matched, of: s.of, items: (await itemsUsingFile(catalog.db, s.sha256)).map((i) => ({ id: i.id, type: i.type, path: i.path })) })));
       if (file) files[sha] = { url: base && mayServe(file.rights_state) && file.storage_tier === 'public' ? `${base}/objects/${sha}` : null, mime: file.mime, bytes: file.bytes, rights: file.rights_state, similar };
     }
+    // The items this page's changes point at (a part moved to another sefer), by name: a reviewer reads a name, never an id. One read.
+    const pointedAt = new Set<string>();
+    const collect = (value: unknown, depth: number): void => {
+      if (typeof value === 'string') {
+        if (isEntityId(value)) pointedAt.add(value);
+      } else if (Array.isArray(value) && depth < 3) for (const v of value) collect(v, depth + 1);
+    };
+    for (const entry of view.entries) for (const change of entry.changes) {
+      collect(change.before, 0);
+      collect(change.after, 0);
+    }
+    const items: Record<string, { type: string; data: { name?: unknown; title?: unknown; label?: unknown; date?: unknown } }> = {};
+    for (const item of await catalog.getMany([...pointedAt].slice(0, 200) as EntityId[])) {
+      const d = item.data as Record<string, unknown>;
+      items[item.id] = { type: item.type, data: { name: d.name, title: d.title, label: d.label, date: d.date } };
+    }
     const next = view.offset + view.entries.length < view.total ? view.offset + view.entries.length : null;
     return c.json({
       ...view,
+      items,
       changeset: { ...changeset, checks: checks.filter((k) => k.status !== 'pass' && (!k.entityId || onPage.has(k.entityId))), checkCounts },
       limit,
       next,

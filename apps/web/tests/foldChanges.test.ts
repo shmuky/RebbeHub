@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { foldChanges, foldedName, valueText } from '../app/components/ChangeTable.js';
+import { fieldName, foldChanges, foldedName, valueText } from '../app/components/ChangeTable.js';
 
 /**
  * A sync bot's change moves every word of a recording: two thousand word
@@ -45,5 +45,15 @@ describe("a small fix to a transcript's words", () => {
     expect(onlyInfo([{ path: '/words' }, { path: '/origin/edited' }, { path: '/proofread' }, { path: '/updatedAt' }])).toBe(true);
     expect(onlyInfo([{ path: '/words' }, { path: '/content' }])).toBe(false);
     expect(onlyInfo([])).toBe(false);
+  });
+});
+
+describe('a part moved to another sefer', () => {
+  it('reads as the sefer it moves to, by name, never as an id', () => {
+    const items = { 'rh-v94rk99s': { type: 'work', data: { title: { he: 'ספר המאמרים תרנ״ב' } } } };
+    expect(fieldName('/work', 'he')).toBe('בספר');
+    expect(valueText('/work', 'rh-v94rk99s', 'he', items)).toBe('ספר המאמרים תרנ״ב');
+    // One the page could not name is "another item", still not an id.
+    expect(valueText('/work', 'rh-61vwn5d7', 'he', items)).toBe('פריט אחר');
   });
 });
