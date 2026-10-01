@@ -47,13 +47,32 @@ interface Context {
   edit?: EditState;
   /** Side by side, the row carries the segment's anchor, not each version's copy of it. */
   rowAnchors?: boolean;
+  /** The text's first paragraph, whose first word is set large, as a sefer opens. */
+  lead?: string;
 }
 
 /** The words of one segment: runs in their marks, links, footnote marks, source markers, line breaks. Never HTML. */
-function Runs({ runs, ctx }: { runs: readonly PageInline[] | undefined; ctx: Context }) {
+function Runs({ runs, ctx, lead }: { runs: readonly PageInline[] | undefined; ctx: Context; lead?: boolean }) {
+  const first = lead ? (runs ?? []).findIndex((run) => 'text' in run && !('href' in run && run.href) && /\S/.test(run.text)) : -1;
   return (
     <>
       {(runs ?? []).map((run, i) => {
+        if (i === first && 'text' in run) {
+          // A section's letter (א.) opens many sichos: the word after it is the one set large.
+          const [, space = '', word = '', rest = ''] = /^(\s*(?:[א-ת]{1,3}[.)]\s+)?)(\S+)([\s\S]*)$/.exec(run.text) ?? [];
+          let node: ReactNode = (
+            <>
+              {space}
+              <span className="words-lead">{word}</span>
+              {rest}
+            </>
+          );
+          for (const mark of [...(run.marks ?? [])].reverse()) {
+            const Tag = MARK_TAGS[mark];
+            node = <Tag>{node}</Tag>;
+          }
+          return <Fragment key={i}>{node}</Fragment>;
+        }
         if ('br' in run) return <br key={i} />;
         if ('marker' in run)
           return (
@@ -115,7 +134,7 @@ interface EditState {
  */
 function Words({ segment, ctx }: { segment: PageSegment; ctx: Context }) {
   const edit = ctx.edit;
-  if (!edit) return <Runs runs={segment.text} ctx={ctx} />;
+  if (!edit) return <Runs runs={segment.text} ctx={ctx} lead={ctx.lead === segment.id} />;
   const key = `${ctx.version.id}/${segment.id}`;
   const sent = edit.sent[key];
   const editor =
@@ -384,7 +403,8 @@ function Credit({ version, profile, lang }: { version: PageVersion; profile?: Te
 const LICENCES: Record<string, string> = { 'cc-by-nc': 'CC BY-NC', 'cc-by': 'CC BY', cc0: 'CC0', 'public-domain': 'Public domain' };
 
 function VersionView({ version, profile, lang, edit }: { version: PageVersion; profile: TextProfile; lang: Lang; edit?: EditState }) {
-  const ctx: Context = { lang, profile, version, noteLabel: noteLabels(version), edit };
+  const lead = [...allSegments(version.segments)].find((x) => x.kind === 'paragraph')?.id;
+  const ctx: Context = { lang, profile, version, noteLabel: noteLabels(version), edit, lead };
   return (
     <div className={`words words-${profile}${version.origin && !version.origin.checked ? ' machine' : ''}`} lang={version.language} dir={dirOf(version.language)}>
       <Segments list={version.segments} depth={0} ctx={ctx} />

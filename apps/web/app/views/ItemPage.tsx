@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useContext, useEffect, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { isPageText, type LocalName } from '@rebbehub/model';
 import { AudioPlayer } from '../components/AudioPlayer.js';
@@ -30,7 +30,9 @@ import { useLang } from '../lib/useLang.js';
 import { readHref } from '../routes/read.js';
 import { readable } from './EventPage.js';
 import { Icon } from '../ui/Icon.js';
-import { ItemShell, type ItemFact } from '../ui/ItemShell.js';
+import { ItemShell, ItemSlots, useHashPanels, type ItemFact } from '../ui/ItemShell.js';
+import { MoreMenu, type MoreLink } from '../ui/MoreMenu.js';
+import '../styles/pages/reading.css';
 import { EmptyState, MachineNote } from '../ui/primitives.js';
 import { Shaar } from '../ui/Shaar.js';
 import { commonTabs, p, SideActivity, SideDetails, SideKeepers, SideSection, ThreadRows } from './itemParts.js';
@@ -142,6 +144,116 @@ function workCrumbs(work: Entity | undefined, view: ItemView, lang: Lang, volume
   ];
 }
 
+/** Sizes of the text a reader may choose (the "אא" button), kept on this device. */
+const TEXT_SIZES = ['s', 'm', 'l', 'xl'] as const;
+
+function TextSize({ lang }: { lang: Lang }) {
+  const [size, setSize] = useState<string>('m');
+  useEffect(() => {
+    try {
+      const kept = localStorage.getItem('rebbehub.textSize');
+      if (kept && (TEXT_SIZES as readonly string[]).includes(kept)) setSize(kept);
+    } catch {
+      // No storage (a private window): the size is for this visit only.
+    }
+  }, []);
+  useEffect(() => {
+    document.documentElement.dataset.textSize = size;
+  }, [size]);
+  const label = lang === 'he' ? 'גודל הטקסט' : 'Text size';
+  return (
+    <button
+      type="button"
+      className="ib rd-size"
+      aria-label={label}
+      title={label}
+      onClick={() => {
+        const next = TEXT_SIZES[(TEXT_SIZES.indexOf(size as (typeof TEXT_SIZES)[number]) + 1) % TEXT_SIZES.length]!;
+        setSize(next);
+        try {
+          localStorage.setItem('rebbehub.textSize', next);
+        } catch {
+          // As above.
+        }
+      }}
+    >
+      <span aria-hidden="true">
+        <small>{lang === 'he' ? 'א' : 'A'}</small>
+        {lang === 'he' ? 'א' : 'A'}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * A sicha (or a chapter) to read, as the design draws it (3d, 3l): a quiet
+ * line back to its volume, the text size and one ⋯ for everything else
+ * (suggestions, talk, history, comparing printings, the scan, following,
+ * editing); its name centred over an ornament; its words as the sefer sets
+ * them, notes at their foot; and the one before and after it above the
+ * words (quietly) and below them.
+ * What the page's side used to hold is folded away under "about this page".
+ */
+function ReadingPage({ entity, view, lang, about }: { entity: Entity; view: ItemView; lang: Lang; about: ReactNode }) {
+  const slots = useContext(ItemSlots);
+  useHashPanels();
+  const d = entity.data as D;
+  const work = view.refs[d.work];
+  const steps = (d.position ?? []) as Array<{ level: string; value: string; label?: LocalName }>;
+  const volume = steps.length > 1 ? steps[0] : null;
+  const middle = steps.length > 2 ? steps[steps.length - 2] : null;
+  const volumeName = volume ? nameOf(volume.label, lang) || volume.value : null;
+  const back = work ? href(itemPath(work), lang, volume ? { part: volume.value } : {}) : href('/sets', lang);
+  const backLabel = [work ? labelOf(work, lang) : null, volumeName].filter(Boolean).join(' · ') || t(lang, 'tabLibrary');
+  // A sicha numbered only (1, 2) is called by its words' own heading (שיחה א) when they open with one.
+  const body = d.body as { versions?: Array<{ segments: Array<{ kind: string; text?: Array<{ text?: string }> }> }> } | undefined;
+  const opening = body?.versions?.[0]?.segments?.[0];
+  const openingName = opening?.kind === 'heading' ? (opening.text ?? []).map((r) => r.text ?? '').join('').trim() : '';
+  const label = nameOf(d.label, lang);
+  const titled = /^\d+$/.test(label) && openingName ? openingName : null;
+  const title = titled ?? label;
+  const kicker = middle ? nameOf(middle.label, lang) || middle.value : work ? labelOf(work, lang) : null;
+  const texts = view.lists.texts ?? [];
+  const originals = texts.filter((x) => (x.data as D).kind !== 'transcript' && (x.data as D).kind !== 'translation');
+  const printedIn = view.lists.printedIn ?? [];
+  const scanCopy = ((d.editions ?? []) as Array<{ kind: string; url?: string }>).find((e) => (e.kind === 'pdf' || e.kind === 'scan') && e.url && readable(e.url));
+  const suggestions = view.about.filter((x) => x.kind === 'suggestion' && x.state === 'open').length;
+  const links: MoreLink[] = [
+    ...(scanCopy ? [{ to: readHref({ url: scanCopy.url!, title, sub: work ? labelOf(work, lang) : undefined }, lang), icon: 'scan' as const, label: lang === 'he' ? 'דף סרוק' : 'Scanned page' }] : []),
+    ...(originals.length + printedIn.length >= 2 ? [{ to: href(`/compare/${entity.id}`, lang), icon: 'compare' as const, label: t(lang, 'comparePrintings') }] : []),
+    { to: href(itemPath(entity), lang, { tab: 'suggestions' }), icon: 'suggest', label: w(lang, 'suggestions'), count: suggestions || undefined },
+    ...commonTabs(entity, view, lang).map((x) => ({ to: x.to!, icon: x.icon!, label: String(x.label), count: typeof x.count === 'number' ? x.count : undefined })),
+  ];
+  return (
+    <div className={`wrap rd${titled ? ' rd-titled' : ''}`}>
+      <div className="rd-top">
+        <Link className="rd-back" to={back}>
+          <Icon name="back" size={18} />
+          <span>{backLabel}</span>
+        </Link>
+        <span className="rd-tools">
+          <TextSize lang={lang} />
+          <MoreMenu links={links} actions={slots?.actions} lang={lang} />
+        </span>
+      </div>
+      <header className="rd-head">
+        {kicker && kicker !== title ? <p className="rd-kicker">{kicker}</p> : null}
+        <h1 className="torah">{title}</h1>
+        <span className="rd-orn" aria-hidden="true" />
+      </header>
+      <UnitBody entity={entity} view={view} lang={lang} />
+      {slots?.below ? <div className="below">{slots.below}</div> : null}
+      <details className="rd-about">
+        <summary>{lang === 'he' ? 'על הדף' : 'About this page'}</summary>
+        <div className="side">
+          {about}
+          {slots?.side}
+        </div>
+      </details>
+    </div>
+  );
+}
+
 function UnitPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang: Lang }) {
   const d = entity.data as D;
   const work = view.refs[d.work];
@@ -165,6 +277,47 @@ function UnitPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang
   ];
   const suggestions = view.about.filter((x) => x.kind === 'suggestion' && x.state === 'open').length;
   const [params] = useSearchParams();
+  const side = (
+    <>
+      <SideDetails
+        lang={lang}
+        rows={[
+          work && [typeName('work', lang), <ItemLink item={work} />],
+          volume && [lang === 'he' ? 'כרך' : 'Volume', work ? <Link to={href(itemPath(work), lang, { part: volume.value })}>{nameOf(volume.label, lang) || volume.value}</Link> : volume.value],
+          d.date && [t(lang, 'date'), dateLabel(d.date, lang)],
+          events.length ? [t(lang, 'events'), <Refs ids={d.events} view={view} />] : null,
+          [p(lang, 'id'), <span className="num">{entity.id}</span>],
+        ]}
+      />
+      {printedIn.length ? (
+        <SideSection title={t(lang, 'printedIn')}>
+          <div className="side-list">
+            {printedIn.map((m) => {
+              const md = m.data as D;
+              const pub = view.refs[md.publication];
+              return pub ? (
+                <Link key={m.id} to={href(itemPath(pub), lang)}>
+                  <span className="grow">{labelOf(pub, lang)}</span>
+                  <span className="num subtle">
+                    {md.pages.from}–{md.pages.to}
+                  </span>
+                </Link>
+              ) : null;
+            })}
+          </div>
+        </SideSection>
+      ) : null}
+      {d.editions?.length ? (
+        <SideSection title={t(lang, 'editions')}>
+          <Copies copies={d.editions.filter((e: { url?: string }) => !(e.url && readable(e.url)))} lang={lang} />
+        </SideSection>
+      ) : null}
+      <SideKeepers keepers={view.keepers} lang={lang} />
+      <SideActivity about={view.about} lang={lang} />
+    </>
+  );
+  // To read it, the design's reading page; its suggestions keep the full frame.
+  if (params.get('tab') !== 'suggestions') return <ReadingPage entity={entity} view={view} lang={lang} about={side} />;
   return (
     <ItemShell
       lang={lang}
@@ -198,45 +351,7 @@ function UnitPage({ entity, view, lang }: { entity: Entity; view: ItemView; lang
         ],
         tab: params.get('tab') === 'suggestions' ? 'suggestions' : 'page',
       }}
-      side={
-        <>
-          <SideDetails
-            lang={lang}
-            rows={[
-              work && [typeName('work', lang), <ItemLink item={work} />],
-              volume && [lang === 'he' ? 'כרך' : 'Volume', work ? <Link to={href(itemPath(work), lang, { part: volume.value })}>{nameOf(volume.label, lang) || volume.value}</Link> : volume.value],
-              d.date && [t(lang, 'date'), dateLabel(d.date, lang)],
-              events.length ? [t(lang, 'events'), <Refs ids={d.events} view={view} />] : null,
-              [p(lang, 'id'), <span className="num">{entity.id}</span>],
-            ]}
-          />
-          {printedIn.length ? (
-            <SideSection title={t(lang, 'printedIn')}>
-              <div className="side-list">
-                {printedIn.map((m) => {
-                  const md = m.data as D;
-                  const pub = view.refs[md.publication];
-                  return pub ? (
-                    <Link key={m.id} to={href(itemPath(pub), lang)}>
-                      <span className="grow">{labelOf(pub, lang)}</span>
-                      <span className="num subtle">
-                        {md.pages.from}–{md.pages.to}
-                      </span>
-                    </Link>
-                  ) : null;
-                })}
-              </div>
-            </SideSection>
-          ) : null}
-          {d.editions?.length ? (
-            <SideSection title={t(lang, 'editions')}>
-              <Copies copies={d.editions.filter((e: { url?: string }) => !(e.url && readable(e.url)))} lang={lang} />
-            </SideSection>
-          ) : null}
-          <SideKeepers keepers={view.keepers} lang={lang} />
-          <SideActivity about={view.about} lang={lang} />
-        </>
-      }
+      side={side}
     >
       <UnitBody entity={entity} view={view} lang={lang} />
     </ItemShell>

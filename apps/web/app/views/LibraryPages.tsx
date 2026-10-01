@@ -20,6 +20,7 @@ import type { TocGroup, TocRow } from '../lib/workView.server.js';
 import { Icon, type IconName } from '../ui/Icon.js';
 import { readHref } from '../routes/read.js';
 import { ItemShell, ItemSlots, useHashPanels } from '../ui/ItemShell.js';
+import { MoreMenu, type MoreLink } from '../ui/MoreMenu.js';
 import { EmptyState, MachineLabel } from '../ui/primitives.js';
 import { Shaar } from '../ui/Shaar.js';
 import { commonTabs, p, SideActivity, SideDetails, SideKeepers, SideSection, SideSources, ThreadRows } from './itemParts.js';
@@ -378,7 +379,7 @@ function VolumePage({ entity, view, lang, part, title, partLabel }: { entity: En
   const here = href(itemPath(entity), lang, { part });
   const tabTo = (tab: string) => href(itemPath(entity), lang, { part, tab });
   const scanTo = toc.read.scanUrl ? readHref({ url: toc.read.scanUrl, title: `${title}, ${partLabel}`, sub: toc.printing?.label }, lang) : null;
-  const more: Array<{ to: string; icon: IconName; label: string; count?: number }> = [
+  const more: MoreLink[] = [
     { to: tabTo('printings'), icon: 'layers', label: w(lang, 'printingsTab'), count: toc.stats.printings || undefined },
     ...(toc.stats.withAudio ? [{ to: tabTo('recordings'), icon: 'audio' as const, label: w(lang, 'recordings'), count: toc.stats.withAudio }] : []),
     { to: tabTo('suggestions'), icon: 'suggest', label: p(lang, 'suggestions') },
@@ -394,23 +395,7 @@ function VolumePage({ entity, view, lang, part, title, partLabel }: { entity: En
           <Icon name="back" size={18} />
           <span className="torah">{title}</span>
         </Link>
-        <details className="vol-more">
-          <summary className="ib" aria-label={w(lang, 'more')} title={w(lang, 'more')}>
-            <Icon name="more" />
-          </summary>
-          <div className="vol-menu" role="list">
-            {more.map((x) => (
-              <Link key={x.to} role="listitem" to={x.to}>
-                <Icon name={x.icon} size={18} className="subtle" />
-                <span className="grow">{x.label}</span>
-                {x.count ? <span className="subtle num">{num(x.count, lang)}</span> : null}
-              </Link>
-            ))}
-            <div className="vol-menu-actions">
-              {slots?.actions}
-            </div>
-          </div>
-        </details>
+        <MoreMenu links={more} actions={slots?.actions} lang={lang} />
       </div>
 
       <header className="vol-head">
