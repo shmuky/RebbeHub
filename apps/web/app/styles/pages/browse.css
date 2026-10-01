@@ -425,8 +425,106 @@
   line-height: 42px;
 }
 
-.search-page .phead .tabs {
-  margin-top: 18px;
+/* The kinds of result as a row of chips (3g); the one shown is filled. */
+.search-chips {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.search-chips .chip {
+  height: 34px;
+  padding: 0 16px;
+  font-size: var(--fs-md);
+  flex: none;
+}
+
+.search-chips .chip[aria-current='page'] {
+  background: var(--strong);
+  border-color: var(--strong);
+  color: var(--on-strong);
+  font-weight: 700;
+}
+
+.chip-n {
+  font-size: var(--fs-sm);
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The results as one quiet list: no boxes, a line between them, where each is from above it. */
+.search-main .box {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.search-main .box .row {
+  padding-inline: 2px;
+}
+
+.search-rows .row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--subtle);
+  font-size: var(--fs-sm);
+}
+
+.search-rows .row-title {
+  font: 700 18px / 1.4 var(--display);
+}
+
+/* A moment in a text: where it is from first, then its words, two lines at most. */
+.search-main .moments .row > .i {
+  display: none;
+}
+
+.search-main .moments .row-main {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 4px;
+}
+
+.search-main .moments .row-sub {
+  margin-top: 0;
+}
+
+.search-main .moment-words {
+  font-size: 17px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.search-main .h-block {
+  font: 700 var(--fs-sm) / 1.4 var(--ui);
+  color: var(--subtle);
+}
+
+@media (max-width: 720px) {
+  /* The header already says "search": the page opens at its line. */
+  .search-page .phead .page-title,
+  .search-page .phead .lede {
+    display: none;
+  }
+  .search-page .search-line {
+    margin-top: 4px;
+  }
+  .search-main .section-hint {
+    display: none;
+  }
 }
 
 .search-main > section + section {

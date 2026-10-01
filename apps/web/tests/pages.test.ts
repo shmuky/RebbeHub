@@ -90,7 +90,8 @@ describe("every item's own page", () => {
     // `תניא` is also the year 5461, and names the sefer: the sefer is found first, and its index after it, labelled an addition to it.
     const found = (await get(`/search?q=${encodeURIComponent('תניא')}`)).html;
     expect(found).toMatch(/href="\/tanya-sample".*?href="\/tanya-index-sample"/s);
-    expect(found).toMatch(/href="\/tanya-index-sample".*?הוספה ל: תניא.*?הוספה/s);
+    // Above its name, where it is from: what it is, and that it is an addition to the sefer.
+    expect(found).toMatch(/href="\/tanya-index-sample".*?class="row-kicker">.*?הוספה ל: תניא/s);
   });
 
   it("goes back and forth between a sefer's sichos, above the text and below it", async () => {

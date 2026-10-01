@@ -15,7 +15,7 @@ import { pageMeta } from '../lib/seo.js';
 import { datesOf, parseSmartQuery, parshaLabel } from '../lib/smartSearch.js';
 import { parseTokens, withToken, type TokenKey } from '../lib/tokens.js';
 import { Icon, type IconName } from '../ui/Icon.js';
-import { EmptyState, Label, MachineLabel, MachineNote, Tabs, type LabelTone } from '../ui/primitives.js';
+import { EmptyState, Label, MachineLabel, MachineNote } from '../ui/primitives.js';
 import { TokenSearch } from '../ui/TokenSearch.js';
 import '../styles/pages/browse.css';
 
@@ -31,8 +31,11 @@ import '../styles/pages/browse.css';
  * that is set up, and says the machine chose what it shows.
  *
  * Filters are written into the line itself, as GitHub's are: `סוג:התוועדות`
- * shows only farbrengens, `שנה:תשמ״ב` adds a year. The tabs are the same
- * filter, set by a click.
+ * shows only farbrengens, `שנה:תשמ״ב` adds a year. The chips under the line
+ * are the same filter, set by a click.
+ *
+ * As design/ draws it (3g): the line, a row of chips, and the results as
+ * one quiet list, each with where it is from above its name or its words.
  */
 
 /** The filters the search line takes. */
@@ -183,8 +186,6 @@ const EXAMPLES: Record<Lang, string[]> = {
 
 const yearOf = (e: EventItem) => Number(String(eventData(e).date ?? '').slice(0, 4));
 
-/** A library item's kind as a label, in the colour of what it is. */
-const TYPE_TONE: Record<string, LabelTone> = { work: 'text', unit: 'text', publication: 'source', scan: 'scan', recording: 'audio', author: 'meta', set: 'meta', text: 'text' };
 const TYPE_ICON: Record<string, IconName> = { work: 'book', unit: 'file', publication: 'layers', scan: 'scan', recording: 'audio', author: 'user', set: 'book', text: 'file' };
 
 export default function Search({ loaderData }: Route.ComponentProps) {
@@ -194,10 +195,10 @@ export default function Search({ loaderData }: Route.ComponentProps) {
   const tab = by === 'meaning' ? 'meaning' : (kind ?? 'all');
   const tabTo = (value: Kind | null) => href('/search', lang, { q: withToken(q, SEARCH_KEYS, 'type', value, lang) || undefined });
   const tabs = [
-    { key: 'all', label: w(lang, 'all'), to: tabTo(null), count: hasQuery && by === 'words' ? num(total, lang) : null },
-    { key: 'event', label: t(lang, 'tabFarbrengens'), icon: 'cal' as const, to: tabTo('event'), count: hasQuery && by === 'words' ? num(events.length, lang) : null },
-    { key: 'library', label: t(lang, 'tabLibrary'), icon: 'book' as const, to: tabTo('library'), count: hasQuery && by === 'words' ? num(results.length, lang) : null },
-    { key: 'text', label: tn(lang, 'inTheTexts'), icon: 'scan' as const, to: tabTo('text'), count: hasQuery && by === 'words' ? num(moments.length, lang) : null },
+    { key: 'all', label: w(lang, 'all'), to: tabTo(null), count: hasQuery && by === 'words' && total ? num(total, lang) : null },
+    { key: 'event', label: t(lang, 'tabFarbrengens'), icon: 'cal' as const, to: tabTo('event'), count: hasQuery && by === 'words' && events.length ? num(events.length, lang) : null },
+    { key: 'library', label: t(lang, 'tabLibrary'), icon: 'book' as const, to: tabTo('library'), count: hasQuery && by === 'words' && results.length ? num(results.length, lang) : null },
+    { key: 'text', label: tn(lang, 'inTheTexts'), icon: 'scan' as const, to: tabTo('text'), count: hasQuery && by === 'words' && moments.length ? num(moments.length, lang) : null },
     ...(meaningAvailable ? [{ key: 'meaning', label: tn(lang, 'byMeaning'), icon: 'sparkle' as const, to: href('/search', lang, { q: q || undefined, by: 'meaning' }) }] : []),
   ];
   const show = (k: Kind) => by === 'words' && (kind === null || kind === k);
@@ -222,7 +223,14 @@ export default function Search({ loaderData }: Route.ComponentProps) {
               size="lg"
             />
           </div>
-          <Tabs items={tabs} current={tab} label={w(lang, 'kinds')} />
+          <nav className="search-chips" aria-label={w(lang, 'kinds')}>
+            {tabs.map((x) => (
+              <Link key={x.key} className="chip" to={x.to} aria-current={x.key === tab ? 'page' : undefined}>
+                {x.label}
+                {x.count ? <span className="chip-n">{x.count}</span> : null}
+              </Link>
+            ))}
+          </nav>
         </div>
       </div>
       <div className="wrap cols">
@@ -260,7 +268,7 @@ export default function Search({ loaderData }: Route.ComponentProps) {
                   <h2 className="h-block" id="in-library">
                     {t(lang, 'tabLibrary')} <span className="count">{num(results.length, lang)}</span>
                   </h2>
-                  <ul className="box">
+                  <ul className="box search-rows">
                     {(results as Entity[]).map((r) => {
                       // An addition to a sefer says so, and to which: the official sefarim are what the tree is built of.
                       const addition = r.type === 'work' ? (r.data as { addition?: { to?: string } }).addition : undefined;
@@ -268,19 +276,13 @@ export default function Search({ loaderData }: Route.ComponentProps) {
                       return (
                         <li key={r.id}>
                           <Link className="row hover" to={href(itemPath(r), lang)}>
-                            <Icon name={TYPE_ICON[r.type] ?? 'file'} className="subtle" />
                             <span className="row-main">
+                              <span className="row-kicker">
+                                <Icon name={TYPE_ICON[r.type] ?? 'file'} size={13} />
+                                {[typeName(r.type, lang), addition ? (to ? `${w(lang, 'additionTo')} ${labelOf(to, lang)}` : w(lang, 'addition')) : null].filter(Boolean).join(' · ')}
+                              </span>
                               <span className="row-title torah">{labelOf(r, lang)}</span>
-                              {to ? <span className="row-sub">{`${w(lang, 'additionTo')} ${labelOf(to, lang)}`}</span> : null}
                             </span>
-                            {addition ? (
-                              <Label tone="meta" size="sm">
-                                {w(lang, 'addition')}
-                              </Label>
-                            ) : null}
-                            <Label tone={TYPE_TONE[r.type] ?? 'meta'} size="sm">
-                              {typeName(r.type, lang)}
-                            </Label>
                           </Link>
                         </li>
                       );
