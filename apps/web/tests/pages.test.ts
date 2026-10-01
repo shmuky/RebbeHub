@@ -79,8 +79,9 @@ describe("every item's own page", () => {
     expect(shelf).not.toContain('ביאור לספר השער');
     // The addition that belongs to no sefer is apart, closed, after the sefarim.
     expect(shelf).toMatch(/<details[^>]*><summary[^>]*>הוספות \(1\)<\/summary>.*?ליקוט לדוגמה/s);
+    // The library lists it only inside its sefer's open card, with the other editions.
     const library = (await get('/sets')).html;
-    expect(library).not.toContain('ביאור לספר השער');
+    expect(library).toMatch(/class="lb-with".*?ביאור לספר השער/s);
     const biur = (await get('/biur-sample')).html;
     expect(biur).toMatch(/הוספה ל.*?href="\/shaar-sample"/s);
   });
