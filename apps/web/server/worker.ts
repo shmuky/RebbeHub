@@ -32,6 +32,8 @@ import * as build from '../build/server/index.js';
 interface Env extends ReadsEnv, DoorEnv {
   API_URL: string;
   SITE_URL: string;
+  /** Sichos-Kodesh's media proxy (JEM's audio), reached only from here while RebbeHub is private (wrangler.toml). */
+  MEDIA?: { fetch(request: Request): Promise<Response> };
   /** The site's built files (build/client); the Worker runs first, so the lock covers them too (wrangler.toml). */
   ASSETS?: { fetch(request: Request): Promise<Response> };
   API?: { fetch: (input: string, init?: RequestInit) => Promise<Response> };
@@ -92,6 +94,16 @@ export default {
     const shut = await door(request, env, (opened) => (key = opened));
     if (shut) return shut;
     if (key) {
+      const url = new URL(request.url);
+      if (env.MEDIA && url.pathname.startsWith('/_/media/')) {
+        // The recording's bytes, through the proxy's service binding; its range and caching headers go through as they are.
+        const headers = new Headers();
+        for (const name of ['range', 'if-none-match', 'if-modified-since', 'accept']) {
+          const value = request.headers.get(name);
+          if (value) headers.set(name, value);
+        }
+        return privately(await env.MEDIA.fetch(new Request(`https://media${url.pathname.slice('/_/media'.length)}${url.search}`, { method: request.method, headers })));
+      }
       if (env.ASSETS && (request.method === 'GET' || request.method === 'HEAD')) {
         const file = await env.ASSETS.fetch(request);
         if (file.status !== 404) return privately(file);

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { forgetPlace, localPlace, placeKey, recordPlace, resumeFrom } from '../lib/places.js';
 import { useAccount } from '../lib/useAccount.js';
+import { playable } from '../lib/media.js';
 
 /**
  * One player for the whole site, as in Sichos-Kodesh's app: a single
@@ -183,8 +184,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const el = audio.current;
     if (!el || !current) return;
-    if (el.src !== current.url) {
-      el.src = current.url;
+    const src = playable(current.url);
+    if (el.src !== new URL(src, window.location.href).href) {
+      el.src = src;
       el.load();
     }
     if (autoplay.current) {

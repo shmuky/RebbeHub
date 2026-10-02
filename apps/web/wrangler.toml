@@ -29,6 +29,12 @@ run_worker_first = true
 binding = "API"
 service = "rebbehub-api"
 
+# Sichos-Kodesh's media proxy (JEM's audio): its public address is off while RebbeHub is private, so the site plays
+# those recordings through /_/media/…, behind its lock (server/worker.ts).
+[[services]]
+binding = "MEDIA"
+service = "sichos-kodesh-media-proxy"
+
 # A page's own reads are answered in this Worker by the API itself, over one connection to Postgres the page
 # opens and closes (server/worker.ts; `readerFor` in services/api/src/reads.ts), so a page is one Worker
 # invocation, not one and a dozen. Postgres on Neon through Hyperdrive: the same config as the API's.
