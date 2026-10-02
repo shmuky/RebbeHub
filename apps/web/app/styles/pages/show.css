@@ -232,6 +232,186 @@
   padding: 8px 20px;
 }
 
+/* Benchmarks (components/Benchmarks.tsx): a few figures, then each model against where it started. */
+.bm-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.bm-tile {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.bm-tile-label {
+  font-size: 13px;
+  color: var(--muted);
+}
+.bm-tile-value {
+  font-family: var(--ui);
+  font-weight: 700;
+  font-size: clamp(28px, 3.4vw, 36px);
+  line-height: 1.2;
+  margin: 4px 0;
+  color: var(--text);
+}
+.bm-tile-note {
+  font-size: 12px;
+  color: var(--subtle);
+}
+.bm-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  align-items: start;
+  gap: 12px;
+  margin-top: 12px;
+}
+.bm-chart {
+  margin: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px 10px;
+}
+.bm-chart-t {
+  font-weight: 700;
+  font-size: 15px;
+}
+.bm-chart-sub {
+  font-size: 13px;
+  color: var(--subtle);
+}
+.bm-times {
+  margin: 8px 0 4px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.bm-times strong {
+  font-size: 22px;
+  color: var(--text);
+}
+.bm-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 6px;
+  font-family: var(--ui);
+}
+.bm-axis {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.bm-hit {
+  fill: transparent;
+}
+.bm-bar {
+  fill: var(--border-strong);
+  transition: opacity 0.15s;
+}
+.bm-row.ours .bm-bar {
+  fill: var(--accent);
+}
+.bm-charts svg:has(.bm-row.hover) .bm-row:not(.hover) .bm-bar {
+  opacity: 0.45;
+}
+.bm-label {
+  font-size: 16px;
+  fill: var(--muted);
+}
+.bm-row.ours .bm-label {
+  fill: var(--text);
+  font-weight: 700;
+}
+.bm-value {
+  font-size: 16px;
+  font-weight: 700;
+  fill: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A sicha set as printed (components/PrintPage.tsx): every line at its place on the page. */
+.pr-page {
+  position: relative;
+  width: 100%;
+  container-type: inline-size;
+  background: #fffefb;
+  color: #141210;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(31, 26, 19, 0.06), 0 8px 24px rgba(31, 26, 19, 0.08);
+  font-family: 'FrankRuehlCLM', var(--torah);
+  overflow: hidden;
+}
+.pr-line,
+.pr-head {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  line-height: 1;
+}
+.pr-line > span {
+  display: inline-block;
+  transform-origin: right center;
+}
+.pr-heading {
+  justify-content: center;
+}
+.pr-heading > span {
+  font-weight: 700;
+}
+.pr-end {
+  justify-content: flex-end;
+}
+.pr-head {
+  color: #2a2620;
+}
+.pr-head-center {
+  justify-content: center;
+}
+.pr-head-start {
+  justify-content: flex-start;
+}
+.pr-head-end {
+  justify-content: flex-end;
+}
+.pr-rule {
+  position: absolute;
+  background: #2a2620;
+  min-height: 1px;
+}
+.pr-miram,
+.pr-ois {
+  font-weight: 700;
+}
+.pr-ois {
+  font-family: 'Frank Ruhl Libre', 'FrankRuehlCLM', serif;
+}
+.pr-small {
+  font-size: 0.82em;
+}
+.pr-ref {
+  font-size: 0.62em;
+  line-height: 0;
+  vertical-align: 0.55em;
+}
+.pr-label {
+  font-weight: 400;
+}
+.show-print {
+  display: grid;
+  gap: 8px;
+}
+.show-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--subtle);
+}
+
 /* The farbrengens: one at a time. */
 .show-picks {
   display: flex;
@@ -280,6 +460,79 @@
   padding: 8px 12px;
   border: 1px solid var(--border);
   background: var(--card);
+}
+
+/* The player: the farbrengen's name, its words and its controls on one deep panel, the words lit as they are said. */
+.show-player {
+  --pl-bg: radial-gradient(120% 70% at 85% 0%, rgba(120, 150, 230, 0.28) 0%, transparent 60%), radial-gradient(90% 60% at 0% 100%, rgba(150, 90, 170, 0.22) 0%, transparent 60%), linear-gradient(165deg, #22335f 0%, #19244a 50%, #121935 100%);
+  background: var(--pl-bg);
+  color: #fff;
+  border-radius: 18px;
+  padding: 18px 18px 14px;
+  box-shadow: 0 1px 2px rgba(12, 18, 40, 0.2), 0 18px 40px rgba(12, 18, 40, 0.28);
+}
+.show-player .show-card-head {
+  margin-bottom: 4px;
+  padding: 2px 6px 0;
+}
+.show-player .show-card-t {
+  font-family: var(--display);
+  font-size: clamp(22px, 3vw, 28px);
+  color: #fff;
+}
+.show-player .show-card-d {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 14px;
+}
+.show-player .show-seg {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.show-player .show-seg button {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+}
+.show-player .show-seg button + button {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.show-player .show-seg button.on {
+  background: #fff;
+  color: #19244a;
+}
+.show-player .show-lyrics {
+  border: 0;
+  background: none;
+}
+.show-player .lyrics {
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+.show-player .lyrics.full {
+  background: var(--pl-bg);
+}
+.show-player .lyrics-scroll {
+  height: min(66vh, 600px);
+}
+.show-player .lyrics-line {
+  font-size: clamp(21px, 2.6vw, 30px);
+  line-height: 1.55;
+  margin-bottom: 26px;
+}
+/* Before it plays, the words read well; once it plays, what was said, is said, and is to come each have their light. */
+.show-player .lyrics:not(:has(.lyrics-line.now)) .lyrics-line {
+  color: rgba(255, 255, 255, 0.84);
+}
+.show-player .lyrics-play {
+  width: 60px;
+  height: 60px;
+}
+.show-player .show-scan {
+  border: 0;
+  border-radius: 10px;
+}
+.show-player-meta {
+  color: rgba(255, 255, 255, 0.62);
+  padding: 0 6px;
 }
 
 /* The joined index. */
@@ -336,6 +589,16 @@
   }
   .show-words {
     font-size: 17px;
+  }
+  .bm-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .bm-tile {
+    padding: 10px 12px;
+  }
+  .bm-tile-value {
+    font-size: 22px;
   }
   /* On a phone each agent is a small block of its own: the table's columns become labelled lines. */
   .show-table,

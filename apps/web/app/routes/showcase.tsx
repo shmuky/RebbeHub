@@ -7,7 +7,7 @@ import { dateLabel } from '../lib/dates.js';
 import { langFrom, type Lang } from '../lib/i18n.js';
 import { num } from '../lib/i18nUi.js';
 import { labelOf } from '../lib/labels.js';
-import { readingOf } from '../lib/reading.js';
+import { readingOf, readingOfJson } from '../lib/reading.js';
 import { mediaSourceOf, newToken, NO_EXTRAS, TOKEN, type MediaSource, type Showcase, type ShowcaseExtras } from '../lib/showcase.js';
 import { Icon } from '../ui/Icon.js';
 import { EmptyState } from '../ui/primitives.js';
@@ -80,8 +80,8 @@ const W = {
   noScan: { he: 'בלי סריקה', en: 'no scan' },
   readings: { he: 'דפים שהקורא שלנו קרא', en: 'Pages our reader read' },
   readingsSub: {
-    he: 'קובץ הטקסט שהקורא כותב לשיחה (עם שורת scan: לסריקה). בדף יוצג לצד הדף המקורי.',
-    en: "The text file the reader writes for a sicha (with a scan: line for its scan). The page shows it beside the original.",
+    he: 'קובץ ה-JSON שהקורא כותב לשיחה (נקבע כמו הדפוס, שורה בשורה), או קובץ הטקסט שלו (עם שורת scan: לסריקה). בדף יוצג לצד הדף המקורי.',
+    en: "The JSON file the reader writes for a sicha (set as printed, line for line), or its text file (with a scan: line for its scan). The page shows it beside the original.",
   },
   addReading: { he: 'הוספת קובץ', en: 'Add a file' },
   dropReading: { he: 'להסיר', en: 'Remove' },
@@ -214,7 +214,10 @@ export async function action({ request, context }: Route.ActionArgs) {
   for (const [i, kept] of (existing?.readings ?? []).entries()) if (form.get(`drop-reading:${i}`) !== 'on') keepReading(kept);
   for (const file of form.getAll('reading')) {
     if (typeof file === 'string' || !file.size || file.size > MAX_READING_BYTES) continue;
-    const reading = readingOf(await file.text(), file.name.replace(/\.\w+$/, ''));
+    const words = await file.text();
+    const name = file.name.replace(/\.\w+$/, '');
+    // The reader's own output (JSON) keeps the print's lines; its text file does not.
+    const reading = /^\s*[{[]/.test(words) ? readingOfJson(words, name) : readingOf(words, name);
     if (reading) keepReading(reading);
   }
 
@@ -379,7 +382,7 @@ function Editor({ lang, current, best }: { lang: Lang; current: Current; best: B
       ) : null}
       <label className="sc-file">
         <span>{w(lang, 'addReading')}</span>
-        <input type="file" name="reading" accept=".txt,text/plain" multiple />
+        <input type="file" name="reading" accept=".txt,.json,text/plain,application/json" multiple />
       </label>
 
       <h3 className="sc-h">{w(lang, 'also')}</h3>
