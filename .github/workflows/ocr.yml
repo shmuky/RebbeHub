@@ -46,6 +46,8 @@ jobs:
     timeout-minutes: 120
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # While RebbeHub is private, the jobs read the site with its key (services/jobs/src/privateKey.ts).
+      REBBEHUB_PASSWORD: ${{ secrets.REBBEHUB_PASSWORD }}
     steps:
       - name: Check it is configured
         run: |

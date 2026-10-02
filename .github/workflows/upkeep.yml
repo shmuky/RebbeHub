@@ -62,6 +62,8 @@ jobs:
     timeout-minutes: 180
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # While RebbeHub is private, the jobs read the site with its key (services/jobs/src/privateKey.ts).
+      REBBEHUB_PASSWORD: ${{ secrets.REBBEHUB_PASSWORD }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       JOB: ${{ inputs.job }}

@@ -101,6 +101,8 @@ jobs:
         shard: ${{ fromJSON('{"1":[0],"2":[0,1],"4":[0,1,2,3],"8":[0,1,2,3,4,5,6,7],"16":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]}')[inputs.requested && '1' || inputs.workers || vars.TRANSCRIBE_WORKERS || '1'] }}
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # While RebbeHub is private, the jobs read the site with its key (services/jobs/src/privateKey.ts).
+      REBBEHUB_PASSWORD: ${{ secrets.REBBEHUB_PASSWORD }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_AI_TOKEN: ${{ secrets.CLOUDFLARE_AI_TOKEN }}
       R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}

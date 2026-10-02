@@ -111,3 +111,8 @@ HYPERDRIVE_DAILY_QUERIES = "0"
 WORKERS_CPU_MS = "30000"
 RATE_LIMIT_TOKEN_PER_MINUTE = "1200"
 RATE_LIMIT_SEARCH_PER_MINUTE = "60"
+# RebbeHub is private for now (src/lock.ts): the sha256 of the password's key, the same as the site's. Not a secret; the
+# password is long and random. To change it, set the secret LOCK_PASSWORD here and on rebbehub-web. Accounts let in by
+# token besides platform admins (comma separated), for the owner's MCP connector and scripts.
+LOCK_KEY_HASH = "1f37eaa3510f38c6b6834a83ca45de7e6af8019f4da01f1d5642c95c5391bd2b"
+OWNER_ACCOUNTS = ""

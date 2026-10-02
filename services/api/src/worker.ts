@@ -6,6 +6,7 @@ import { r2Store, r2Writer, statusStore, type R2Bucket } from './r2.js';
 import { AppReleases } from './appCatalog.js';
 import { DEFAULT_IP_PER_MINUTE, DEFAULT_KEY_PER_MINUTE, DEFAULT_SEARCH_PER_MINUTE, mayUseEdgeCache, type RateLimiter } from './platform.js';
 import { authFor } from './auth.js';
+import { LOCKED_HEADER, lockOf, openedBy, ownersFrom, unlocked, type LockEnv } from './lock.js';
 import { githubDispatch } from './machine.js';
 import { resendMailer, workersAiAdvisor } from './mail.js';
 import {
@@ -40,7 +41,9 @@ import {
  * limits come from the RATE_LIMIT_ADDRESS and RATE_LIMIT_TOKEN bindings
  * (docs/configuration.md); without them nothing is counted.
  */
-interface Env {
+interface Env extends LockEnv {
+  /** While RebbeHub is private (lock.ts): accounts let in by token besides platform admins, comma separated. */
+  OWNER_ACCOUNTS?: string;
   HYPERDRIVE: { connectionString: string };
   /** The site's Worker (a service binding), for the status checks; without it they ask SITE_URL over the internet. */
   SITE?: { fetch(request: Request): Promise<Response> };
@@ -160,11 +163,33 @@ export default {
    * is answered here, fresh.
    */
   async fetch(request: Request, env: Env, ctx: Ctx): Promise<Response> {
+    // While RebbeHub is private (lock.ts), nothing comes from the edge cache: the key opens it, else only an owner's token.
+    const lock = await lockOf(env);
+    if (lock) {
+      if (await openedBy(request, lock)) {
+        unlocked.add(request);
+        return answer(request, env, ctx, true);
+      }
+      if (request.method === 'OPTIONS' || mayAsk(request)) return answer(request, env, ctx, true);
+      return new Response(JSON.stringify({ error: 'unauthorized', message: 'RebbeHub is private for now' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex', [LOCKED_HEADER]: '1' },
+      });
+    }
     const cached = ctx.exports?.CachedApi;
     if (cached && mayUseEdgeCache(request)) return cached.fetch(request);
     return answer(request, env, ctx);
   },
 };
+
+/**
+ * While locked, what reaches the app without the key, to be answered for an owner alone (private.ts): a request with
+ * a token, the MCP server (told how to connect), and connecting an app (OAuth).
+ */
+function mayAsk(request: Request): boolean {
+  if (/^bearer\s/i.test(request.headers.get('Authorization') ?? '')) return true;
+  return /^\/(mcp|\.well-known\/oauth-[a-z-]+(\/mcp)?|oauth\/(register|authorize|token|revoke))$/.test(new URL(request.url).pathname);
+}
 
 /** The API's answers to anyone's reads, kept at the edge (the Workers cache is switched on for this entrypoint alone). */
 export class CachedApi extends WorkerEntrypoint<Env> {
@@ -173,7 +198,7 @@ export class CachedApi extends WorkerEntrypoint<Env> {
   }
 }
 
-async function answer(request: Request, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): Promise<Response> {
+async function answer(request: Request, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }, locked = false): Promise<Response> {
   // The request's own connection, counted: its answer says what it cost (Server-Timing).
   const db = measured(connectPostgres(env.HYPERDRIVE.connectionString, { max: 1 }));
   const app = createApp({
@@ -204,6 +229,7 @@ async function answer(request: Request, env: Env, ctx: { waitUntil(promise: Prom
     appReleases,
     machineDispatch: env.GITHUB_DISPATCH_TOKEN ? githubDispatch({ token: env.GITHUB_DISPATCH_TOKEN, repo: env.GITHUB_REPO }) : undefined,
     waitUntil: (work) => ctx.waitUntil(work),
+    privateTo: locked ? { owners: ownersFrom(env.OWNER_ACCOUNTS) } : undefined,
   });
   try {
     return await app.fetch(request);
@@ -231,7 +257,8 @@ async function keepStatus(env: Env, ctx: { waitUntil(promise: Promise<unknown>):
   const analytics = env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_ANALYTICS_TOKEN ? { accountId: env.CLOUDFLARE_ACCOUNT_ID, token: env.CLOUDFLARE_ANALYTICS_TOKEN } : null;
   const [siteCheck, apiCheck, mcpCheck, used, load] = await Promise.all([
     // A fresh page each time, not the edge's copy: the Worker itself must answer.
-    probe('site', site, new Request(`${siteOrigin}/about?status=${now.getTime()}`, { headers: { 'Cache-Control': 'no-cache' } })),
+    // While RebbeHub is private the site answers its lock page: the Worker itself answered.
+    probe('site', site, new Request(`${siteOrigin}/about?status=${now.getTime()}`, { headers: { 'Cache-Control': 'no-cache' } }), async (r) => (r.ok || r.headers.has(LOCKED_HEADER) ? null : `answered ${r.status}`)),
     probe('api', self, new Request(`${apiOrigin}/openapi.json`)),
     probe('mcp', self, mcpRequest(apiOrigin), mcpAnswers),
     analytics && env.HYPERDRIVE_ID ? hyperdriveQueriesToday({ ...analytics, configId: env.HYPERDRIVE_ID, now }) : Promise.resolve(null),

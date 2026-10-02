@@ -31,15 +31,22 @@ jobs:
       # The site turns away bots that do not say they are a browser (docs/operations.md, "Traffic and crawlers").
       UA: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36 RebbeHub-watch"
       NOTIFY: "@shmuky"
+      # While RebbeHub is private (services/api/src/lock.ts) the watch looks with the lock's key, made from this secret.
+      REBBEHUB_PASSWORD: ${{ secrets.REBBEHUB_PASSWORD }}
     steps:
       - name: Look
         id: look
         run: |
+          key=""
+          if [ -n "$REBBEHUB_PASSWORD" ]; then key=$(printf 'rebbehub-lock:%s' "$REBBEHUB_PASSWORD" | sha256sum | cut -d' ' -f1); fi
           look() {
             problems=()
-            code=$(curl -s -o /dev/null -w '%{http_code}' -A "$UA" -H 'Cache-Control: no-cache' --max-time 30 "$SITE/about?watch=$(date +%s)" || true)
-            [ "$code" = "200" ] || problems+=("The site answered $code for /about.")
-            if curl -sf -A "$UA" --max-time 30 "$API/v1/status" -o status.json; then
+            code=$(curl -s -o /dev/null -w '%{http_code}' -A "$UA" -H 'Cache-Control: no-cache' -H "x-rebbehub-key: $key" --max-time 30 "$SITE/about?watch=$(date +%s)" || true)
+            # Without the key, the lock page (401) is the site answering.
+            if [ -n "$key" ]; then [ "$code" = "200" ] || problems+=("The site answered $code for /about."); else [ "$code" = "401" ] || problems+=("The site answered $code for its lock page."); fi
+            if [ -z "$key" ]; then
+              echo "::notice::No REBBEHUB_PASSWORD secret: the API's own checks are not read while RebbeHub is private."
+            elif curl -sf -A "$UA" -H "x-rebbehub-key: $key" --max-time 30 "$API/v1/status" -o status.json; then
               # The report is kept by the API's own five-minute checks; an old one means they stopped.
               age=$(( $(date +%s) - $(date -d "$(jq -r '.report.checkedAt // empty' status.json)" +%s 2>/dev/null || echo 0) ))
               [ "$age" -le 1200 ] || problems+=("The API's own checks have not run for $((age / 60)) minutes.")
