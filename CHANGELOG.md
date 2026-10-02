@@ -12,6 +12,8 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **A page for RebbeHub's models, `/models`.** Each model (the Likkutei Sichos reader, the Miram detector, the Whisper that hears the Rebbe), which one is in use, and every benchmark score on the test it was scored on, in Hebrew and English; the same in docs/models.md. The models are not released; their descriptions and benchmarks are CC BY-NC-ND 4.0.
+
 - A page's words may carry the mark `ois`: the letter that opens a numbered piece of a sicha (א. ב.), drawn apart from bold (which in the Rebbe's sichos is Miram, the stressed words).
 
 - **An import no longer stops when someone saves, and nobody has to pause

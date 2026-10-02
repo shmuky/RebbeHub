@@ -34,6 +34,7 @@ ${pages}
 ## Optional
 
 - [Download and mirror](${site}/mirrors): the whole catalog as signed dumps
+- [Models](${site}/models): RebbeHub's OCR, bold and speech models and their benchmark scores (the models are not released)
 - [Source code](https://github.com/shmuky/RebbeHub) (AGPL-3.0)
 `;
 }

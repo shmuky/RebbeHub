@@ -62,6 +62,8 @@ export default [
   route('projects', 'routes/projects.tsx'),
   // How to keep a full copy of the catalog: the git mirror, every edition's dumps with their checksums.
   route('mirrors', 'routes/mirrors.tsx'),
+  // RebbeHub's own models (OCR, the Miram detector, Whisper) and their scores; the models themselves are not released.
+  route('models', 'routes/models.tsx'),
   route('projects/:slug', 'routes/project.tsx'),
   route('signin', 'routes/signin.tsx'),
   // Connecting an app (Claude, another MCP client) to your account: the API's OAuth sends you here to say yes or no.

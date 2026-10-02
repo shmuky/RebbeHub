@@ -88,6 +88,10 @@ Scored in the booklets' spelling, words wrong / letters wrong:
 | 11 Nissan 5733 (an older era), 344 clips | | | 13.7% / 5.2% | 13.7% / 5.1% |
 | 17 Tammuz 5742, the whole 29 minutes, as the job runs it | 58% / 28% | 13.0% / 5.9% | 11.9% / 5.3% | 11.5% / 5.5% |
 
+These and every other model's scores, side by side, are in
+[models.md](models.md#the-rebbes-voice-to-text-whisper) and on the site at
+[/models](https://rebbehub.org/models).
+
 They spell the Loshon Kodesh right (`דברי תורה שבכתב`, `שולחן ערוך`).
 What they still miss are rarer words (`תנות` for `תענית`). They run at the
 same speed as ivrit.ai's model, 3.5x speech on 4 CPUs. Their transcripts,

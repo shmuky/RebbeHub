@@ -12,6 +12,7 @@ const F = {
   index: { he: 'מפתח ענינים ללקוטי שיחות', en: 'Likkutei Sichos index' },
   status: { he: 'מצב האתר', en: 'Status' },
   developers: { he: 'למפתחים', en: 'Developers' },
+  models: { he: 'המודלים', en: 'Models' },
   links: { he: 'קישורים', en: 'Links' },
 } as const;
 
@@ -49,6 +50,7 @@ export function Footer({ lang }: { lang: Lang }) {
         { to: '/health', label: tu(lang, 'health') },
         { to: '/status', label: F.status[lang] },
         { to: '/mirrors', label: tu(lang, 'mirrors') },
+        { to: '/models', label: F.models[lang] },
         { to: '/developers', label: F.developers[lang] },
         { to: '/takedown', label: tu(lang, 'takedown') },
       ],
