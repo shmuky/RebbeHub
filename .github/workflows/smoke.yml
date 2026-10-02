@@ -6,10 +6,7 @@ name: Smoke
 # Cloudflare's Workers Builds deploys every push to main by itself; this
 # waits for it, then looks. Every morning too, and by hand.
 on:
-  push:
-    branches: [main]
-  schedule:
-    - cron: "41 5 * * *"
+  # By hand only while RebbeHub is private (2 October 2026): Actions minutes are limited on a private repository.
   workflow_dispatch:
 
 permissions:
@@ -40,9 +37,5 @@ jobs:
           npm install --no-audit --no-fund playwright@1.56.1
           npx playwright install --with-deps chromium
           echo "NODE_PATH=$RUNNER_TEMP/pw/node_modules" >> "$GITHUB_ENV"
-      - name: Wait for the deploy
-        if: github.event_name == 'push'
-        # Workers Builds takes a few minutes after a push.
-        run: sleep 360
       - name: Look at the pages
         run: node scripts/smoke.cjs

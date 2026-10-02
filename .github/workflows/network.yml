@@ -13,8 +13,8 @@ name: Links, embeddings and citations
 # Needs the DATABASE_URL repository secret, as the import does; embed also
 # the Workers AI secrets the transcription uses. See docs/operations.md.
 on:
-  schedule:
-    - cron: "43 3 * * *"
+  # No nightly run while RebbeHub is private (2 October 2026): Actions minutes are limited on a private repository.
+  # It runs by hand.
   workflow_dispatch:
     inputs:
       job:

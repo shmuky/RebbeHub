@@ -38,8 +38,8 @@ name: Machine transcription
 # by hand with base_model. See docs/deploy.md
 # and docs/transcription.md.
 on:
-  schedule:
-    - cron: "43 3 * * *"
+  # No nightly run while RebbeHub is private (2 October 2026): Actions minutes are limited on a private repository.
+  # It runs when someone asks (the API starts it) or by hand.
   workflow_dispatch:
     inputs:
       requested:

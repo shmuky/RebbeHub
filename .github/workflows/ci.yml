@@ -1,9 +1,9 @@
 name: CI
 
 on:
+  # Pull requests only, not again on main after the merge, while Actions minutes are limited (private repository).
   pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -30,6 +30,8 @@ jobs:
 
   postgres:
     name: Tests on Postgres 16
+    # By hand only while Actions minutes are limited; the PGlite job above runs the same tests on every pull request.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     services:
       postgres:
