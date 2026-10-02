@@ -215,8 +215,10 @@ const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.
  * middle, what was said dimmed, what is still to come quieter. Tapping a
  * word or paragraph plays from there. Scrolling by hand lets go of the
  * recording until "Back to now"; full screen hides the page around it.
+ * Without `onEdit` it is for listening alone (a showcase's guest,
+ * routes/show.tsx): no Edit, and words marked unclear open no conversation.
  */
-function Lyrics({
+export function Lyrics({
   transcripts,
   tracks,
   lang,
@@ -233,7 +235,7 @@ function Lyrics({
   found: string | null;
   machine: boolean;
   signedIn: boolean;
-  onEdit: () => void;
+  onEdit?: () => void;
 }) {
   const player = usePlayer();
   const [discuss, setDiscuss] = useState<{ words: string; atMs: number | null } | null>(null);
@@ -336,18 +338,20 @@ function Lyrics({
         </div>
         {machine ? <MachineLabel lang={lang} size="sm" /> : null}
         {/* Editing is one step away, never in the way of listening: the tools open on their own screen. */}
-        <button
-          type="button"
-          className="lyrics-edit"
-          onClick={() => {
-            setFull(false);
-            onEdit();
-          }}
-          title={t(lang, machine ? 'reviewMachineText' : 'reviewTranscript')}
-        >
-          <PenLine size={16} aria-hidden />
-          {t(lang, 'editTranscript')}
-        </button>
+        {onEdit ? (
+          <button
+            type="button"
+            className="lyrics-edit"
+            onClick={() => {
+              setFull(false);
+              onEdit();
+            }}
+            title={t(lang, machine ? 'reviewMachineText' : 'reviewTranscript')}
+          >
+            <PenLine size={16} aria-hidden />
+            {t(lang, 'editTranscript')}
+          </button>
+        ) : null}
         <button type="button" className="lyrics-ib" onClick={() => setFull((f) => !f)} aria-label={t(lang, full ? 'exitFullScreen' : 'fullScreen')} title={t(lang, full ? 'exitFullScreen' : 'fullScreen')}>
           {full ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
         </button>
@@ -395,7 +399,7 @@ function Lyrics({
                 const at = target.closest<HTMLElement>('[data-ms]')?.dataset.ms;
                 const u = target.closest<HTMLElement>('[data-u]')?.dataset.u;
                 const mark = u !== undefined ? unclearRanges(p.content)[Number(u)] : undefined;
-                if (mark) setDiscuss({ words: p.content.slice(mark.from, mark.to), atMs: at ? Number(at) : p.startMs });
+                if (mark && onEdit) setDiscuss({ words: p.content.slice(mark.from, mark.to), atMs: at ? Number(at) : p.startMs });
                 playFrom(at ? Number(at) : (p.startMs ?? 0));
               }}
             >

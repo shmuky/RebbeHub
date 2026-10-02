@@ -2573,6 +2573,16 @@ export interface Operations {
       goal: Record<string, unknown>;
     };
   };
+  /** Every recording that has a transcript, the most checked first, then the longest */
+  transcribedRecordings: {
+    input: {
+      /** How many (at most 1000) */
+      limit?: number;
+    };
+    output: {
+      recordings: Array<Record<string, unknown>>;
+    };
+  };
   /** Every transcript fix waiting for approval, to go through together: each paragraph on the site and as the fix would make it, where it is heard, who sent it, and whether you may approve it */
   transcriptFixes: {
     input: {
@@ -2916,6 +2926,7 @@ export const OPERATIONS = {
   threadByNumber: {"method":"GET","path":"/v1/threads/{number}","pathParams":["number"],"query":[],"body":null,"answer":"json"},
   trainingClips: {"method":"GET","path":"/v1/machine/training/clips","pathParams":[],"query":[],"body":null,"answer":"json"},
   trainingSummary: {"method":"GET","path":"/v1/machine/training","pathParams":[],"query":["since"],"body":null,"answer":"json"},
+  transcribedRecordings: {"method":"GET","path":"/v1/transcripts","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
   transcriptFixes: {"method":"GET","path":"/v1/transcripts/fixes","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
   transcriptHistory: {"method":"GET","path":"/v1/recordings/{id}/transcript/history","pathParams":["id"],"query":["limit"],"body":null,"answer":"json"},
   types: {"method":"GET","path":"/v1/types","pathParams":[],"query":[],"body":null,"answer":"json"},
@@ -3746,6 +3757,11 @@ export abstract class GeneratedMethods {
   /** The next Rebbe Whisper's training data so far: every transcript paragraph a person checked, as clips (GET /v1/machine/training) */
   trainingSummary(input?: Operations['trainingSummary']['input']): Promise<Operations['trainingSummary']['output']> {
     return this.call('trainingSummary', input ?? {} as Operations['trainingSummary']['input']);
+  }
+
+  /** Every recording that has a transcript, the most checked first, then the longest (GET /v1/transcripts) */
+  transcribedRecordings(input?: Operations['transcribedRecordings']['input']): Promise<Operations['transcribedRecordings']['output']> {
+    return this.call('transcribedRecordings', input ?? {} as Operations['transcribedRecordings']['input']);
   }
 
   /** Every transcript fix waiting for approval, to go through together: each paragraph on the site and as the fix would make it, where it is heard, who sent it, and whether you may approve it (GET /v1/transcripts/fixes) */

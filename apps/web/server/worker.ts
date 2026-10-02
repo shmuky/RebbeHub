@@ -4,6 +4,7 @@ import type { ServerBuild } from 'react-router';
 import { crawlBudget, crawlLater, edgeCacheable, forEdge } from './cachePolicy.js';
 import { createSiteHandler } from './handler.js';
 import { door, privately, type DoorEnv } from './lock.js';
+import { guestRequest, r2Showcases, showcaseMedia, type ShowcaseBucket } from './showcase.js';
 // @ts-ignore - made by `react-router build`
 import * as build from '../build/server/index.js';
 
@@ -60,6 +61,7 @@ function site(env: Env) {
     apiUrl: env.API_URL,
     siteUrl: env.SITE_URL,
     fetch: env.API ? (input, init) => env.API!.fetch(input, init) : undefined,
+    showcases: showcasesOf(env) ?? undefined,
   });
   return handler;
 }
@@ -73,6 +75,37 @@ async function page(env: Env, ctx: { waitUntil(promise: Promise<unknown>): void 
   } finally {
     ctx.waitUntil(reader.close());
   }
+}
+
+/** Showcases, kept in the public bucket (server/showcase.ts). */
+const showcasesOf = (env: Env) => (env.FILES_PUBLIC ? r2Showcases(env.FILES_PUBLIC as unknown as ShowcaseBucket) : null);
+
+/**
+ * A guest with a showcase's link (app/lib/showcase.ts): its page, its data
+ * and its transcripts are made like any page, privately; its files are
+ * passed on as the showcase lists them; the site's built files are given.
+ * Null for anything else, which goes to the lock as before.
+ */
+async function asGuest(request: Request, env: Env, ctx: Ctx): Promise<Response | null> {
+  const guest = guestRequest(request);
+  if (!guest) return null;
+  if (guest.kind === 'file') {
+    const file = env.ASSETS ? await env.ASSETS.fetch(request) : null;
+    return file && file.status !== 404 ? file : null;
+  }
+  const showcase = await showcasesOf(env)?.get(guest.token);
+  if (!showcase) return null;
+  if (guest.kind === 'media') {
+    const source = showcase.media[guest.index];
+    if (!source) return new Response('Not found.', { status: 404, headers: { 'Cache-Control': 'no-store' } });
+    const reader = readerFor(env, (work) => ctx.waitUntil(work));
+    try {
+      return await showcaseMedia(source, request, { apiUrl: env.API_URL, reader, media: env.MEDIA });
+    } finally {
+      if (reader) ctx.waitUntil(reader.close());
+    }
+  }
+  return privately(await page(env, ctx, request));
 }
 
 /** Search asks the database (and, by meaning, a model) something new each time: an address may search a limited number of times a minute. */
@@ -89,6 +122,9 @@ export class CachedSite extends WorkerEntrypoint<Env> {
 
 export default {
   async fetch(request: Request, env: Env, ctx: Ctx): Promise<Response> {
+    // A showcase's guest is let in to that page alone, before the lock (showcase.ts).
+    const guest = await asGuest(request, env, ctx);
+    if (guest) return guest;
     // While RebbeHub is private (lock.ts), the door comes first, for the built files too, and nothing is served from the edge cache.
     let key: string | undefined;
     const shut = await door(request, env, (opened) => (key = opened));

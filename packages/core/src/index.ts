@@ -59,7 +59,9 @@ export {
   type Timed,
   type TranscriptParagraph,
   type TranscriptView,
+  type TranscribedRecording,
   type WordTiming,
+  transcribedRecordings,
 } from './sync.js';
 export { convertLegacyBodies, suggestWords, type WordsChange, type WordsInput } from './pageWords.js';
 export { fromWikitext as readLegacyBody, legacyProfile, withStructuredBody } from './legacyWords.js';

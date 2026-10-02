@@ -1,5 +1,6 @@
 import type { Issue, IssueLabel, IssueRights, IssueTemplate, People, SuggestionListItem, TimelineItem, Via } from './threads.js';
 import type { EntityType, LocalName } from '@rebbehub/model';
+import type { Transcript } from './transcript.js';
 
 /**
  * The site reads the catalog through the public API (services/api), like
@@ -385,6 +386,17 @@ export interface SuggestionDetail {
   summary?: ChangeGroup[];
   /** Who wrote it: a person, or a bot. */
   people?: Record<string, { name: string; username: string | null; bot: boolean }>;
+}
+
+/** A recording with a transcript, as GET /v1/transcripts lists it. */
+export interface TranscribedRecording {
+  recording: string;
+  title: LocalName | null;
+  event: string | null;
+  durationMs: number | null;
+  paragraphs: number;
+  checked: number;
+  timedWords: number;
 }
 
 export class ApiError extends Error {
@@ -819,6 +831,16 @@ export class RebbeHubApi {
   }
 
   /** The same for several recordings (a farbrengen's parts) in one request, by recording; those with none are left out. */
+  /** Every recording that has a transcript, the most checked first, with how much of each is checked and timed (GET /v1/transcripts). */
+  async transcribed(limit = 1000) {
+    return (await this.get<{ recordings: TranscribedRecording[] }>('/v1/transcripts', { limit })).recordings;
+  }
+
+  /** A recording's transcript with where each paragraph is heard; null when it has none. */
+  transcript(recording: string) {
+    return this.maybe(this.get<Transcript>(`/v1/recordings/${encodeURIComponent(recording)}/transcript`));
+  }
+
   async hanachaSyncs(recordings: readonly string[]): Promise<Map<string, HanachaSync>> {
     const ids = [...new Set(recordings)].slice(0, 200);
     if (ids.length === 0) return new Map();

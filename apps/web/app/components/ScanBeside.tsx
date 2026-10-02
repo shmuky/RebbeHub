@@ -25,7 +25,7 @@ const WORDS = {
  * each segment is checked against the page itself. The file is loaded
  * once; turning pages and zooming only draw again. `file` is where its
  * bytes are read (a Drive file through RebbeHub's API), `src` its own
- * address, for the reader. `marks` are the clicked segment's lines, drawn
+ * address, for the reader (none: no link to the reader). `marks` are the clicked segment's lines, drawn
  * over the page they are on and scrolled into view.
  */
 export function ScanBeside({ file, src, title, page, marks = [], lang, onPage }: { file: string; src: string; title: string; page: number; marks?: PrintedPlace[]; lang: Lang; onPage: (page: number) => void }) {
@@ -124,9 +124,11 @@ export function ScanBeside({ file, src, title, page, marks = [], lang, onPage }:
             <Icon name="plus" />
           </button>
         </span>
-        <Link className="btn sm ghost" to={href('/read', lang, { src, title, page: String(shown) })} target="_blank">
-          {WORDS.open[lang]}
-        </Link>
+        {src ? (
+          <Link className="btn sm ghost" to={href('/read', lang, { src, title, page: String(shown) })} target="_blank">
+            {WORDS.open[lang]}
+          </Link>
+        ) : null}
       </div>
       <div className="scan-page" dir="ltr">
         <div ref={sheet} className="scan-sheet">

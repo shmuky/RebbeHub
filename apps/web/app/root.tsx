@@ -40,7 +40,9 @@ export const links: LinksFunction = () => [
 ];
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const lang = langFrom(request);
+  const url = new URL(request.url);
+  // A showcase opens in English for Shmuly's guests (routes/show.tsx).
+  const lang: Lang = url.pathname.startsWith('/show/') ? (url.searchParams.get('lang') === 'he' ? 'he' : 'en') : langFrom(request);
   return { lang, siteUrl: siteOf(context).siteUrl };
 }
 
@@ -55,8 +57,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const data = useRouteLoaderData('root') as { lang?: Lang } | undefined;
   const lang = data?.lang ?? 'he';
   // An embed is the item alone, in another site's frame: no menus, no player bar.
-  const embedded = useLocation().pathname.startsWith('/embed/');
-  useServiceWorker(!embedded);
+  const { pathname } = useLocation();
+  const embedded = pathname.startsWith('/embed/');
+  // A showcase is its own page, for a guest of Shmuly's: no menus or links into the private site, its own player (routes/show.tsx).
+  const showcase = pathname.startsWith('/show/');
+  useServiceWorker(!embedded && !showcase);
   return (
     <html lang={lang} dir={dir(lang)}>
       <head>
@@ -73,6 +78,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <body className={embedded ? 'embedded' : undefined}>
         {embedded ? (
           <main id="main">{children}</main>
+        ) : showcase ? (
+          <ToastProvider>
+            <PlayerProvider>
+              <main id="main">{children}</main>
+            </PlayerProvider>
+          </ToastProvider>
         ) : (
           <ToastProvider>
             <a className="skip-link" href="#main">
