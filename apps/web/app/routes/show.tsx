@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { data, Form } from 'react-router';
 import { hayomYomShiurimOf } from '@rebbehub/hebrew';
-import { isPageText, type PageText } from '@rebbehub/model';
+import { allSegments, isPageText, type PageText } from '@rebbehub/model';
 import { Pause, Play } from 'lucide-react';
 import type { Route } from './+types/show';
 import type { Entity, Mafteach } from '../lib/api.js';
@@ -41,6 +41,19 @@ import '../styles/pages/show.css';
 
 const INDEX = '/likkutei-sichos-mafteach-inyanim';
 const SEFER = '/likkutei-sichos';
+/** A page with our reader's reading beside the typed text shows the reading first: it is what the showcase is for. */
+function readerFirst(body: PageText): PageText {
+  const read = body.versions.findIndex((v) => v.origin?.by.startsWith('ocr:'));
+  return read > 0 ? { ...body, versions: [body.versions[read]!, ...body.versions.filter((_, i) => i !== read)] } : body;
+}
+
+/** The scan's page the words start on, where the reading says where it is printed. */
+function firstPrinted(body: PageText | null): number {
+  let first = Infinity;
+  for (const segment of allSegments(body?.versions[0]?.segments)) for (const place of segment.printed ?? []) first = Math.min(first, place.page);
+  return Number.isFinite(first) ? first : 1;
+}
+
 const todayIn = (timeZone: string) => new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
@@ -104,7 +117,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         title: labelOf(unit, lang),
         sub: [work ? labelOf(work, lang) : null, volume ? (lang === 'he' ? `חלק ${volume}` : `Vol. ${volume}`) : null].filter(Boolean).join(' · '),
         scan: media !== undefined ? mediaPath(token, media) : null,
-        body: unit.withheld || !isPageText(d.body) ? null : d.body,
+        body: unit.withheld || !isPageText(d.body) ? null : readerFirst(d.body),
         machine: Boolean(d.machineOrigin && !d.machineOrigin.checked),
       },
     ];
@@ -481,7 +494,7 @@ type PageView = { id: string; title: string; sub: string; scan: string | null; b
 /** A sicha: its words, and its scan beside them or alone. */
 function PageCard({ page: p, lang }: { page: PageView; lang: Lang }) {
   const [view, setView] = useState<View>('text');
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => firstPrinted(p.body));
   const shown: View = !p.scan ? 'text' : !p.body ? 'original' : view;
   return (
     <article className="show-card">
