@@ -51,6 +51,15 @@ on the site can be done through the API, with the same review.
 - **The whole catalog**, as signed dumps and a git mirror, for anyone to
   keep: [docs/mirrors.md](docs/mirrors.md); webhooks and OAI-PMH too.
 
+## Models
+
+RebbeHub reads scans and hears recordings with models of its own: a
+Likkutei Sichos reader (OCR), a Miram (bold) detector, and a Whisper that
+hears the Rebbe's Yiddish. What each one does, which is in use, and every
+benchmark score: [docs/models.md](docs/models.md), and on the site at
+[rebbehub.org/models](https://rebbehub.org/models). The models are not
+released; their descriptions and benchmarks are CC BY-NC-ND 4.0.
+
 ## Helping
 
 - **Found a mistake, or something missing?** [Open a report](https://github.com/shmuky/RebbeHub/issues/new/choose) -

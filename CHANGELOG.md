@@ -12,6 +12,8 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **A page for RebbeHub's models, `/models`.** Each model (the Likkutei Sichos reader, the Miram detector, the Whisper that hears the Rebbe), which one is in use, and every benchmark score on the test it was scored on, in Hebrew and English; the same in docs/models.md. The models are not released; their descriptions and benchmarks are CC BY-NC-ND 4.0.
+
 - **The shiurim page** (`/shiurim`, `/shiurim/2026-10-02`). The day's
   shiurim with their words on one page: Chumash with Rashi (the day's
   aliyah, not its whole chapter), Tehillim, Tanya and the Rambam's three

@@ -46,7 +46,7 @@ export function sectionOf(pathname: string): string {
   if (pathname.startsWith('/review') || pathname.startsWith('/suggestions')) return '/suggestions';
   if (pathname.startsWith('/issues')) return '/issues';
   if (pathname.startsWith('/projects') || pathname.startsWith('/missing') || pathname.startsWith('/health') || pathname.startsWith('/help')) return '/projects';
-  if (['/search', '/signin', '/account', '/inbox', '/u/', '/admin', '/about', '/takedown', '/mirrors', '/connect', '/developers', '/read', '/_'].some((p) => pathname.startsWith(p))) return '';
+  if (['/search', '/signin', '/account', '/inbox', '/u/', '/admin', '/about', '/takedown', '/mirrors', '/models', '/connect', '/developers', '/read', '/_'].some((p) => pathname.startsWith(p))) return '';
   return '/sets';
 }
 
