@@ -222,6 +222,11 @@ html[dir='ltr'] .words li:target {
 }
 
 .words-note-ref a,
+/* A bare-star note called from inside a footnote: a level under it. */
+.words-notes li.words-note-l2 {
+  padding-inline-start: 1.4em;
+}
+
 .words-note-back {
   text-decoration: none;
 }

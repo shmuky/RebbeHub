@@ -70,6 +70,40 @@ const LIBRARY: PageText = {
   ],
 };
 
+/** A sicha as the Likkutei Sichos OCR writes it (RebbeHub-OCR assemble.py, readupload.py), every piece machine-read. */
+const BY = { by: 'ocr:test' };
+const OCR: PageText = {
+  profile: 'sichos-kodesh',
+  versions: [
+    {
+      id: 'he',
+      language: 'he',
+      origin: BY,
+      segments: [
+        { id: 'p0', kind: 'heading', origin: BY, text: [{ marker: '10' }, { text: 'שיחה ב' }, { note: 'ns1' }] },
+        {
+          id: 'ois1',
+          kind: 'section',
+          n: 1,
+          label: 'א',
+          origin: BY,
+          children: [
+            { id: 'p1', kind: 'paragraph', origin: BY, printed: [{ page: 3, box: [0.1, 0.2, 0.4, 0.3] }], text: [{ text: 'א.', marks: ['ois'] }, { text: ' אות ' }, { text: 'מודגשת', marks: ['b'] }, { note: 'n1' }, { marker: '11' }, { text: ' המשך' }] },
+            { id: 'p2', kind: 'paragraph', origin: BY, text: [{ text: '(משיחות ש״פ לדוגמה)', marks: ['small'] }] },
+          ],
+        },
+        { id: 'p3', kind: 'paragraph', end: true, origin: BY, text: [{ text: 'תאריך' }] },
+      ],
+      notes: [
+        { id: 'n1', kind: 'note', level: 1, label: '1', origin: BY, text: [{ text: 'הערה ראשונה' }, { note: 'ns2' }] },
+        { id: 'n2', kind: 'note', level: 1, label: '2', origin: BY, text: [{ text: 'הערה שאין מי שקורא לה' }] },
+        { id: 'ns1', kind: 'note', level: 1, label: '*', origin: BY, text: [{ text: 'הערה לכותרת' }] },
+        { id: 'ns2', kind: 'note', level: 2, label: '*', origin: BY, text: [{ text: 'הערה בתוך הערה' }] },
+      ],
+    },
+  ],
+};
+
 beforeAll(async () => {
   if (!existsSync(`${webRoot}/build/server/index.js`)) execFileSync('npx', ['react-router', 'build'], { cwd: webRoot, stdio: 'ignore' });
   const build = (await import(`${webRoot}/build/server/index.js`)) as ServerBuild;
@@ -91,6 +125,14 @@ beforeAll(async () => {
     'unit',
     { work, position: [{ level: 'chapter', value: '2' }], order: 'W', label: { he: 'פרק ב' }, body: LIBRARY as never, bodySource: { source: 'chabadlibrary', via: 'chabadlibrary', credit: 'ספריית ליובאוויטש', rights: 'credit' } },
     '/sample/2',
+  );
+  ids.ocr = await add(
+    catalog,
+    'mendy',
+    'keeper',
+    'unit',
+    { work, position: [{ level: 'chapter', value: '3' }], order: 'X', label: { he: 'פרק ג' }, body: OCR as never },
+    '/sample/3',
   );
   ids.event = await add(catalog, 'mendy', 'keeper', 'event', { kind: 'farbrengen', title: { he: 'התוועדות' }, date: '5742-05-10', sets: [set], body: OUTLINE as never }, '/events/5742-05-10');
   const api = createApp({ catalog, reportSalt: 'test' });
@@ -125,6 +167,24 @@ describe("a page's words", () => {
     expect(page).toContain('id="n-he-n1"');
     expect(page).toMatch(/<a href="https:\/\/chabadlibrary\.org\/books\/11"[^>]*>ספריית ליובאוויטש · chabadlibrary\.org<\/a>/);
     expect(await html('/sample/2?lang=en')).toMatch(/>The Lubavitch Library · chabadlibrary\.org<\/a>/);
+  });
+
+  it("draws a sicha as the OCR writes it: its ois, Miram as bold, page numbers, notes beside the words and a second-level note under the note that calls it", async () => {
+    const page = await html('/sample/3');
+    // The ois letter keeps its mark, and the word after it is the one set large.
+    expect(page).toContain('<span class="words-ois">א.</span> <span class="words-lead">אות</span>');
+    expect(page).toContain('<b>מודגשת</b>');
+    expect(page).toContain('<span class="words-marker">11</span>');
+    expect(page).toContain('<small>(משיחות ש״פ לדוגמה)</small>');
+    expect(page).toMatch(/class="words-p end/);
+    // The star note called from the footnote stands right under it, a level in, at the foot and beside the words.
+    const foot = page.slice(page.indexOf('class="words-notes'));
+    expect(foot.indexOf('id="n-he-ns2"')).toBeGreaterThan(foot.indexOf('id="n-he-n1"'));
+    expect(foot.indexOf('id="n-he-ns2"')).toBeLessThan(foot.indexOf('id="n-he-n2"'));
+    expect(foot).toMatch(/id="n-he-ns2" class="words-note-l2"/);
+    expect(page).toMatch(/<aside class="words-side"[^>]*><p><b>1<\/b> (?:<!-- -->)?הערה ראשונה.*?<p class="l2"><b>\*<\/b> (?:<!-- -->)?הערה בתוך הערה/s);
+    // The title's star note stands beside the title too.
+    expect(page).toMatch(/<aside class="words-side"[^>]*><p><b>\*<\/b> (?:<!-- -->)?הערה לכותרת/);
   });
 
   it("draws a farbrengen's outline as numbered items, and words that look like markup only as words", async () => {

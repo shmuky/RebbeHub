@@ -65,14 +65,31 @@ interface Context {
 /** The notes a segment's words point to, in order. */
 const noteIds = (segment: PageSegment) => (segment.text ?? []).flatMap((run) => ('note' in run ? [run.note] : []));
 
+/**
+ * The notes a segment points to, each followed by the notes its own words
+ * point to: a sicha's bare-star notes (*, **) are called from inside a
+ * footnote, a second level under it, as the OCR marks them (level 2).
+ */
+function notesUnder(segment: PageSegment, side: Map<string, PageSegment>): PageSegment[] {
+  const seen = new Set<string>();
+  const walk = (ids: string[]): PageSegment[] =>
+    ids.flatMap((id) => {
+      const note = side.get(id);
+      if (!note || seen.has(id)) return [];
+      seen.add(id);
+      return [note, ...walk(noteIds(note))];
+    });
+  return walk(noteIds(segment));
+}
+
 /** A paragraph's notes beside it: a copy of the ones at the foot, for the eye only. */
 function SideOf({ segment, ctx }: { segment: PageSegment; ctx: Context }) {
-  const notes = ctx.side ? noteIds(segment).flatMap((id) => (ctx.side!.has(id) ? [ctx.side!.get(id)!] : [])) : [];
+  const notes = ctx.side ? notesUnder(segment, ctx.side) : [];
   if (!notes.length) return null;
   return (
     <aside className="words-side" aria-hidden="true">
       {notes.map((note) => (
-        <p key={note.id}>
+        <p key={note.id} className={note.level === 2 ? 'l2' : undefined}>
           <b>{ctx.noteLabel(note.id)}</b> <Runs runs={note.text} ctx={ctx} />
         </p>
       ))}
@@ -104,7 +121,8 @@ function readable(runs: readonly PageInline[] | undefined, ctx: Context): readon
 /** The words of one segment: runs in their marks, links, footnote marks, source markers, line breaks. Never HTML. */
 function Runs({ runs: given, ctx, lead }: { runs: readonly PageInline[] | undefined; ctx: Context; lead?: boolean }) {
   const runs = readable(given, ctx);
-  const first = lead ? runs.findIndex((run) => 'text' in run && !('href' in run && run.href) && /\S/.test(run.text)) : -1;
+  // The word set large is the first after the ois letter, whether the letter is marked (the OCR's 'ois') or only typed.
+  const first = lead ? runs.findIndex((run) => 'text' in run && !('href' in run && run.href) && !run.marks?.includes('ois') && /\S/.test(run.text)) : -1;
   return (
     <>
       {runs.map((run, i) => {
@@ -120,7 +138,7 @@ function Runs({ runs: given, ctx, lead }: { runs: readonly PageInline[] | undefi
           );
           for (const mark of [...(run.marks ?? [])].reverse()) {
             const Tag = MARK_TAGS[mark];
-            node = <Tag>{node}</Tag>;
+            node = mark === 'ois' ? <span className="words-ois">{node}</span> : <Tag>{node}</Tag>;
           }
           return <Fragment key={i}>{node}</Fragment>;
         }
@@ -354,9 +372,13 @@ function Segment({ segment, depth, ctx }: { segment: PageSegment; depth: number;
       );
     case 'heading':
       return (
-        <Heading level={(segment.level ?? 1) + 1} id={id} className="words-heading">
-          <Words segment={segment} ctx={ctx} />
-        </Heading>
+        <>
+          {/* A sicha's title can call a note too (שיחה ב*). */}
+          <SideOf segment={segment} ctx={ctx} />
+          <Heading level={(segment.level ?? 1) + 1} id={id} className="words-heading">
+            <Words segment={segment} ctx={ctx} />
+          </Heading>
+        </>
       );
     case 'verse':
       return (
@@ -391,13 +413,23 @@ function Notes({ ctx }: { ctx: Context }) {
   const notes = ctx.version.notes ?? [];
   if (!notes.length) return null;
   // Every note already stands beside its paragraph: the list at the foot is for a narrow screen only.
-  const beside = ctx.side ? new Set([...allSegments(ctx.version.segments)].flatMap((x) => (x.kind === 'paragraph' ? noteIds(x) : []))) : null;
+  const side = ctx.side;
+  const beside = side ? new Set([...allSegments(ctx.version.segments)].flatMap((x) => (x.kind === 'paragraph' || x.kind === 'heading' ? notesUnder(x, side).map((n) => n.id) : []))) : null;
   const placed = beside && notes.every((n) => beside.has(n.id));
+  // A second-level note right under the footnote that calls it, wherever the list had it.
+  const byId = new Map(notes.map((n) => [n.id, n]));
+  const called = new Set(notes.flatMap((n) => noteIds(n)));
+  const listed = new Set<string>();
+  const ordered = notes
+    .filter((n) => !called.has(n.id))
+    .flatMap((n) => [n, ...notesUnder(n, byId)])
+    .filter((n) => !listed.has(n.id) && Boolean(listed.add(n.id)));
+  for (const n of notes) if (!listed.has(n.id)) ordered.push(n);
   return (
     <aside className={`words-notes${placed ? ' placed' : ''}`} aria-label={WORDS.notes[ctx.lang]}>
       <ol>
-        {notes.map((note) => (
-          <li key={note.id} id={`n-${ctx.version.id}-${note.id}`}>
+        {ordered.map((note) => (
+          <li key={note.id} id={`n-${ctx.version.id}-${note.id}`} className={note.level === 2 ? 'words-note-l2' : undefined}>
             <a className="words-note-back" href={`#r-${ctx.version.id}-${note.id}`} aria-label={WORDS.back[ctx.lang]}>
               {ctx.noteLabel(note.id)}
             </a>{' '}
