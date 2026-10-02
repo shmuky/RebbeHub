@@ -249,8 +249,10 @@ const fractionalOrder = str({ pattern: '^[0-9A-Za-z]+$', maxLength: 64 });
  * 11: a sefer's `shaar` (shaar.ts), its title page's words and its sections, read and written as one file.
  * 12: a sefer's `addition`, marking a work that is not one of the official sefarim the tree is built of
  * (a commentary, an index, a book about one) and the official sefer it belongs under.
+ * 13: the page mark `ois`, the letter that opens a piece of a sicha (PR #152 added it
+ * to the schema without this, so live catalogs kept refusing it).
  */
-export const BUILTIN_SCHEMA_VERSION = 12;
+export const BUILTIN_SCHEMA_VERSION = 13;
 
 export const BUILTIN_SCHEMAS: Record<EntityType, JsonSchema> = {
   set: entitySchema(
