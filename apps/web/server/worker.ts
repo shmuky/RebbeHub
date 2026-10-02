@@ -100,7 +100,7 @@ async function asGuest(request: Request, env: Env, ctx: Ctx): Promise<Response |
     if (!source) return new Response('Not found.', { status: 404, headers: { 'Cache-Control': 'no-store' } });
     const reader = readerFor(env, (work) => ctx.waitUntil(work));
     try {
-      return await showcaseMedia(source, request, { apiUrl: env.API_URL, reader });
+      return await showcaseMedia(source, request, { apiUrl: env.API_URL, reader, media: env.MEDIA });
     } finally {
       if (reader) ctx.waitUntil(reader.close());
     }

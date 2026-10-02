@@ -64,6 +64,18 @@ describe('where a file comes from', () => {
     expect(asked.map((a) => a.url)).toEqual(['https://dtgj2yu3gmlic.cloudfront.net/AR1.mp3', 'https://dtgj2yu3gmlic.cloudfront.net/AR1.m4a']);
     expect(asked.every((a) => a.range === 'bytes=0-4')).toBe(true);
   });
+
+  it("plays JEM's audio through the media proxy's binding when the site has it, as the site's player does", async () => {
+    const proxied: Array<{ url: string; range: string | null }> = [];
+    const media = { fetch: async (r: Request) => (proxied.push({ url: r.url, range: r.headers.get('range') }), new Response('bytes', { status: 206, headers: { 'content-type': 'audio/mpeg', 'content-range': 'bytes 0-4/100' } })) };
+    const send = (async () => {
+      throw new Error('not the CDN');
+    }) as typeof fetch;
+    const answer = await showcaseMedia({ kind: 'jem', file: 'AR1.mp3' }, new Request('https://rebbehub.org/show/x/m/0', { headers: { range: 'bytes=0-4' } }), { apiUrl: 'https://api.rebbehub.org', reader: null, fetch: send, media });
+    expect(answer.status).toBe(206);
+    expect(answer.headers.get('cache-control')).toContain('no-store');
+    expect(proxied).toEqual([{ url: 'https://media/jem-audio/AR1.mp3', range: 'bytes=0-4' }]);
+  });
 });
 
 describe('the store', () => {

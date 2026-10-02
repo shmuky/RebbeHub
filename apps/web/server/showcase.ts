@@ -76,7 +76,7 @@ export function guestRequest(request: Request): GuestRequest | null {
   return { kind: 'page', token };
 }
 
-/** JEM's audio files, where Sichos-Kodesh's media proxy fetches them (services/media-proxy there). */
+/** JEM's audio files, where Sichos-Kodesh's media proxy fetches them (services/media-proxy there): the way round it when it is not bound. */
 const JEM_CDN = 'https://dtgj2yu3gmlic.cloudfront.net';
 const AUDIO_TYPES = ['mp3', 'm4a', 'opus'];
 
@@ -116,10 +116,23 @@ async function jemAudio(file: string, range: string | null, send: typeof fetch):
  * fetched from Drive itself: the owner named it when saving, and only he
  * saves showcases.
  */
-export async function showcaseMedia(source: MediaSource, request: Request, options: { apiUrl: string; reader: PageReader | null; fetch?: typeof fetch }): Promise<Response> {
+export async function showcaseMedia(
+  source: MediaSource,
+  request: Request,
+  options: { apiUrl: string; reader: PageReader | null; fetch?: typeof fetch; media?: { fetch(request: Request): Promise<Response> } },
+): Promise<Response> {
   const send = options.fetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
   const range = request.headers.get('range');
-  if (source.kind === 'jem') return jemAudio(source.file, range, send);
+  if (source.kind === 'jem') {
+    // Through Sichos-Kodesh's media proxy, as the site's own player plays it (its service binding, never its public address);
+    // straight from JEM's CDN when the proxy is not bound or does not answer.
+    if (options.media) {
+      const answer = await options.media.fetch(new Request(`https://media/jem-audio/${source.file}`, { headers: range ? { Range: range } : {} })).catch(() => null);
+      if (answer && (answer.ok || answer.status === 206)) return passed(answer);
+      await answer?.body?.cancel();
+    }
+    return jemAudio(source.file, range, send);
+  }
   if (!options.reader) return new Response('Not here.', { status: 404, headers: NOT_KEPT });
   const base = options.apiUrl.replace(/\/$/, '');
   const path = source.kind === 'object' ? `/objects/${source.sha256}` : `/v1/drive/${source.id}`;
