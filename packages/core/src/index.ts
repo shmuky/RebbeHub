@@ -261,7 +261,7 @@ export { MACHINE_KINDS, MACHINE_REQUESTS_PER_DAY, checkMachineWork, finishMachin
 export { CLIP_MAX_SECONDS, HELD_OUT_AUDIO, TRAINING_GOAL, piecesOf, splitOf, summariseTraining, trainingClips, trainingGoal, type ClipQuality, type GoalFarbrengen, type TrainingClip, type TrainingGoal, type TrainingSkip, type TrainingSummary } from './trainingClips.js';
 export { machineToCheck, type MachineToCheck, type PageToCheck, type ScanToCheck, type TranscriptToCheck } from './toCheck.js';
 export { openTranscriptFixes, TRANSCRIPT_FIXES_MAX, type TranscriptFix, type TranscriptFixChange } from './transcriptFixes.js';
-export { DAILY_WORKS, dailyLearning, dailyPathOf, tanyaStart, type DailyLearning, type DailyShiur, type DailyTanyaPart } from './daily.js';
+export { DAILY_WORKS, dailyLearning, dailyPathOf, dailyShiurim, shiurimWords, spansOf, tanyaStart, type DailyLearning, type DailyShiur, type DailyTanyaPart, type ShiurPart, type ShiurSection, type ShiurSpan } from './daily.js';
 export { dailyRambam, type DailyRambam, type RambamShiur } from './rambam.js';
 export { combineSuggestions } from './combine.js';
 export { fillShaars, shaarFile, suggestShaar, type ShaarFile, type ShaarInput } from './shaar.js';

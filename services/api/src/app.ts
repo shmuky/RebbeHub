@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { isCatalogHeld, type DbCost } from '@rebbehub/db';
 import { Catalog, CatalogError, combineSuggestions, ExportGate, openTranscriptFixes, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, shaarFile, suggestShaar, getDerivations, getDerivationsOf, getFile, getFiles, getPageFix, getPageFixes, hanachaSyncs, itemsUsingFile, listWebhooks, pageImageCounts, printingsOf, projectTodo, recordingTranscript, transcriptHistory, transcriptPending, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type FileRow, type Mailer, type PageFixRow, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
-import { dailyLearning, peopleOf } from '@rebbehub/core';
+import { dailyLearning, dailyShiurim, peopleOf, shiurimWords } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType, type Language, type PageInline, type PageSegmentKind } from '@rebbehub/model';
 import { authRoutes, sessionAuthenticator, type AuthOptions } from './auth.js';
@@ -332,6 +332,18 @@ export function createApp(options: ApiOptions): Hono {
     if (!found) throw new HttpError(400, 'give date as YYYY-MM-DD');
     const [tanya, hayomYom] = await Promise.all([redact(found.tanya), redact(found.hayomYom)]);
     return c.json({ ...found, tanya, hayomYom });
+  });
+
+  // The shiurim's words, each cut to what is learned: the day's (Chumash by aliyah with Rashi, Tehillim, Tanya, the Rambam), or any by Sefaria's references (core/daily.ts).
+  app.get('/v1/shiurim', async (c) => {
+    const date = c.req.query('date');
+    const refs = c.req.queries('ref') ?? [];
+    let found: { date: string | null; hebrew: string | null; sections: Awaited<ReturnType<typeof shiurimWords>> } | null = null;
+    if (date !== undefined) found = /^\d{4}-\d{2}-\d{2}$/.test(date) ? await dailyShiurim(catalog, date) : null;
+    else if (refs.length && refs.length <= 10) found = { date: null, hebrew: null, sections: await shiurimWords(catalog, [{ key: 'passage', label: refs.join(', '), refs, rashi: c.req.query('rashi') === '1' }]) };
+    if (!found) throw new HttpError(400, 'give date as YYYY-MM-DD, or up to ten ref');
+    const sections = await Promise.all(found.sections.map(async (s) => ({ ...s, parts: (await redact(s.parts)) as typeof s.parts })));
+    return c.json({ ...found, sections });
   });
 
   // The community page in numbers: the latest merges, reports waiting (a count), people, and what the catalog lacks.

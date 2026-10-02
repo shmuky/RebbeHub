@@ -201,7 +201,7 @@ function ContinueCard({ lang }: { lang: Lang }) {
 
 /** The day's learning: each shiur with a tick, kept in this browser and shared with the daily page. */
 function DailyCard({ day, lang }: { day: DailyLearning; lang: Lang }) {
-  const rows = shiurRows(day, lang, { tanya: `${href('/daily', lang)}#daily-tanya`, rambam: ['three'] }).map((r) => (r.key === 'three' ? { ...r, name: w(lang, 'rambam') } : r));
+  const rows = shiurRows(day, lang, { rambam: ['three'] }).map((r) => (r.key === 'three' ? { ...r, name: w(lang, 'rambam') } : r));
   const hayomYom = day.hayomYom[0];
   if (hayomYom) rows.push({ key: 'hayom-yom', name: w(lang, 'hayomYom'), pieces: [{ text: dateLabel(day.hebrew, 'he', { civil: false }).replace(/\s\S+$/, ''), to: `${href('/daily', lang)}#daily-hayom-yom`, external: false }] });
   const { ticked, toggle } = useLearned(day.date, rows);

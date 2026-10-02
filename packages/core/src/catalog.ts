@@ -381,6 +381,16 @@ export class Catalog {
     return moved ? { id: moved.id, redirected: true, path: moved.path } : null;
   }
 
+  /** The items on main at these paths, in one statement (no redirects followed): a page made of several others' words. */
+  async getByPaths(paths: readonly string[]): Promise<EntityView[]> {
+    if (!paths.length) return [];
+    const { rows } = await this.db.query<RevisionRow>(
+      'SELECT r.* FROM entity e JOIN revision r ON r.id = e.main_rev WHERE e.path = ANY($1::text[]) AND NOT e.deleted AND r.data IS NOT NULL',
+      [[...new Set(paths.map((p) => p.toLowerCase()))].slice(0, 200)],
+    );
+    return rows.map((r) => ({ id: r.entity_id, type: r.entity_type, path: r.path, rev: r.id, data: r.data! }));
+  }
+
   /** Which of these paths are items on main, in one statement (no redirects followed): what a page links to only when it is there. */
   async livePaths(paths: readonly string[]): Promise<Set<string>> {
     if (!paths.length) return new Set();
