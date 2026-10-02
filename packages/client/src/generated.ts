@@ -2378,6 +2378,26 @@ export interface Operations {
     };
     output: Record<string, unknown>;
   };
+  /** The shiurim's words, each page cut to what is learned: a day's (Chumash by aliyah with Rashi, Tehillim, Tanya, the Rambam's three tracks), or any by Sefaria's references */
+  shiurim: {
+    input: {
+      /** The civil day */
+      date?: string;
+      /** A Sefaria reference; repeat for more */
+      ref?: string;
+      /** With a Chumash reference, its Rashi too */
+      rashi?: string;
+    };
+    output: {
+      date: string | null;
+      hebrew: string | null;
+      sections: Array<{
+        key: string;
+        label: string;
+        parts: Array<Item>;
+      }>;
+    };
+  };
   /** Held files that look like this one (the same scan or recording in other bytes): a machine's guess */
   similarFiles: {
     input: {
@@ -2881,6 +2901,7 @@ export const OPERATIONS = {
   setIssueLabels: {"method":"PUT","path":"/v1/issues/{number}/labels","pathParams":["number"],"query":[],"body":"json","answer":"json"},
   setIssueState: {"method":"POST","path":"/v1/issues/{number}/state","pathParams":["number"],"query":[],"body":"json","answer":"json"},
   setIssueVisibility: {"method":"POST","path":"/v1/issues/{number}/visibility","pathParams":["number"],"query":[],"body":"json","answer":"json"},
+  shiurim: {"method":"GET","path":"/v1/shiurim","pathParams":[],"query":["date","ref","rashi"],"body":null,"answer":"json"},
   similarFiles: {"method":"GET","path":"/v1/files/{sha256}/similar","pathParams":["sha256"],"query":[],"body":null,"answer":"json"},
   sitemapPage: {"method":"GET","path":"/v1/sitemap/{type}/{page}","pathParams":["type","page"],"query":[],"body":null,"answer":"json"},
   sitemaps: {"method":"GET","path":"/v1/sitemap","pathParams":[],"query":[],"body":null,"answer":"json"},
@@ -3650,6 +3671,11 @@ export abstract class GeneratedMethods {
   /** Make it private or public (stewards and keepers) (POST /v1/issues/{number}/visibility) */
   setIssueVisibility(input: Operations['setIssueVisibility']['input']): Promise<Operations['setIssueVisibility']['output']> {
     return this.call('setIssueVisibility', input ?? {} as Operations['setIssueVisibility']['input']);
+  }
+
+  /** The shiurim's words, each page cut to what is learned: a day's (Chumash by aliyah with Rashi, Tehillim, Tanya, the Rambam's three tracks), or any by Sefaria's references (GET /v1/shiurim) */
+  shiurim(input?: Operations['shiurim']['input']): Promise<Operations['shiurim']['output']> {
+    return this.call('shiurim', input ?? {} as Operations['shiurim']['input']);
   }
 
   /** Held files that look like this one (the same scan or recording in other bytes): a machine's guess (GET /v1/files/{sha256}/similar) */

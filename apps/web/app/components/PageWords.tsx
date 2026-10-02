@@ -80,12 +80,34 @@ function SideOf({ segment, ctx }: { segment: PageSegment; ctx: Context }) {
   );
 }
 
+/**
+ * Where Sefaria's Tanya marks the daily portions of its yearly cycle,
+ * `[מ: כד כסלו]` and `[פ: כב כסלו]`, as a marker or in the words: the
+ * reader does not see them (the daily page cuts the portion by them); the
+ * Edit tab still shows them, since they are in the words.
+ */
+const DAILY_MARK = /\[(?:מ|פ): [^\]]+\]\s*/g;
+
+/** A segment's runs as the reader sees them: without the Tanya's daily marks, but where it is edited. */
+function readable(runs: readonly PageInline[] | undefined, ctx: Context): readonly PageInline[] {
+  if (ctx.edit) return runs ?? [];
+  return (runs ?? []).flatMap((run): PageInline[] => {
+    if ('marker' in run) return run.marker.replace(DAILY_MARK, '').trim() ? [run] : [];
+    if ('text' in run && typeof run.text === 'string' && run.text.includes('[')) {
+      const text = run.text.replace(DAILY_MARK, '');
+      return text ? [{ ...run, text }] : [];
+    }
+    return [run];
+  });
+}
+
 /** The words of one segment: runs in their marks, links, footnote marks, source markers, line breaks. Never HTML. */
-function Runs({ runs, ctx, lead }: { runs: readonly PageInline[] | undefined; ctx: Context; lead?: boolean }) {
-  const first = lead ? (runs ?? []).findIndex((run) => 'text' in run && !('href' in run && run.href) && /\S/.test(run.text)) : -1;
+function Runs({ runs: given, ctx, lead }: { runs: readonly PageInline[] | undefined; ctx: Context; lead?: boolean }) {
+  const runs = readable(given, ctx);
+  const first = lead ? runs.findIndex((run) => 'text' in run && !('href' in run && run.href) && /\S/.test(run.text)) : -1;
   return (
     <>
-      {(runs ?? []).map((run, i) => {
+      {runs.map((run, i) => {
         if (i === first && 'text' in run) {
           // A section's letter (א.) opens many sichos: the word after it is the one set large.
           const [, space = '', word = '', rest = ''] = /^(\s*(?:[א-ת]{1,3}[.)]\s+)?)(\S+)([\s\S]*)$/.exec(run.text) ?? [];

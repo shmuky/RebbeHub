@@ -7,6 +7,8 @@ export default [
   route('calendar/:year?/:month?', 'routes/calendar.tsx'),
   // The day's learning: Chitas' Tanya and Hayom Yom, today or any day (`/daily/2026-09-30`).
   route('daily/:date?', 'routes/daily.tsx'),
+  // The shiurim's words on one page, each cut to what is learned: a day's, or any by reference (`/shiurim?ref=Exodus 10:1-11`).
+  route('shiurim/:date?', 'routes/shiurim.tsx'),
   route('about', 'routes/about.tsx'),
   // Asking for a file to stop being served (rights holders, families): no account needed.
   route('takedown', 'routes/takedown.tsx'),

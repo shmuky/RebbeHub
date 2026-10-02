@@ -14,6 +14,18 @@ any time. `@rebbehub/client` carries the API's version.
 
 - **A page for RebbeHub's models, `/models`.** Each model (the Likkutei Sichos reader, the Miram detector, the Whisper that hears the Rebbe), which one is in use, and every benchmark score on the test it was scored on, in Hebrew and English; the same in docs/models.md. The models are not released; their descriptions and benchmarks are CC BY-NC-ND 4.0.
 
+- **The shiurim page** (`/shiurim`, `/shiurim/2026-10-02`). The day's
+  shiurim with their words on one page: Chumash with Rashi (the day's
+  aliyah, not its whole chapter), Tehillim, Tanya and the Rambam's three
+  tracks with Sefer HaMitzvos, each cut to what is learned, in Hebrew, each
+  piece linking to its whole page. The list of the day's shiurim (on
+  `/daily` and the home page) goes there. The Chumash and Tehillim of a
+  Hayom Yom's "שיעורים" go to their own words on RebbeHub, by aliyah
+  (`/shiurim?ref=Exodus 10:1-11&rashi=1`), no longer to Sefaria.
+  `GET /v1/shiurim` gives the same, by `date` or by `ref`.
+- **Tanya without the daily marks.** Sefaria's `[מ: …]` and `[פ: …]`, where
+  the yearly cycle's days start, are no longer shown in Tanya's words
+  (the Edit tab still has them).
 - A page's words may carry the mark `ois`: the letter that opens a numbered piece of a sicha (א. ב.), drawn apart from bold (which in the Rebbe's sichos is Miram, the stressed words).
 
 - **An import no longer stops when someone saves, and nobody has to pause

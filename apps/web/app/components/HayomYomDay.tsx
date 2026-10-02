@@ -4,7 +4,6 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { Lang } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
-import { sefariaUrl } from '../lib/sefaria.js';
 import { PageWords } from './PageWords.js';
 import '../styles/pages/hayom-yom.css';
 
@@ -48,16 +47,16 @@ export function HayomYomDay({ title, body, shiurim, lang, actions }: { title: st
         <div className="hy-shiurim">
           <span className="hy-shiurim-title">שיעורים.</span>
           <span className="hy-shiur-name">חומש:</span>
-          <span>{shiurim.chumashRef ? <a className="hy-shiur-link" href={sefaria(shiurim.chumashRef, true)}>{shiurim.chumash}</a> : shiurim.chumash}</span>
+          <span>{shiurim.chumashRef ? <Link className="hy-shiur-link" to={shiur(shiurim.chumashRef, true, lang, shiurim.chumash)}>{shiurim.chumash}</Link> : shiurim.chumash}</span>
           <span className="hy-shiur-name">תהלים:</span>
           <span>
             {shiurim.tehillimParts.map((part, i) => (
               <span key={i}>
                 {i ? ' ' : null}
                 {part.ref ? (
-                  <a className="hy-shiur-link" href={sefaria(part.ref, false)}>
+                  <Link className="hy-shiur-link" to={shiur(part.ref, false, lang, `תהלים ${part.text}`)}>
                     {part.text}
-                  </a>
+                  </Link>
                 ) : (
                   part.text
                 )}
@@ -93,11 +92,8 @@ export function HayomYomDay({ title, body, shiurim, lang, actions }: { title: st
   );
 }
 
-/**
- * Chumash (with Rashi) and Tehillim on Sefaria until RebbeHub has their
- * words; `Exodus 10:1-11` is Sefaria's `Exodus.10.1-11`.
- */
-const sefaria = (ref: string, rashi: boolean) => sefariaUrl(ref, { rashi });
+/** Chumash (with Rashi) and Tehillim on the shiurim page, cut to what the book says to learn: the aliyah, not its whole chapter. */
+const shiur = (ref: string, rashi: boolean, lang: Lang, title: string) => href('/shiurim', lang, { ref, rashi: rashi ? '1' : undefined, title: title.replace(/\.$/, '') });
 
 /** The Tanya line, to where the day's Tanya starts on its chapter's page. */
 function TanyaLink({ shiurim, lang, children }: { shiurim: HayomYomShiurim; lang: Lang; children: ReactNode }) {

@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { dailyLearning, dailyPathOf, tanyaStart, type Catalog, type Json } from '@rebbehub/core';
+import { dailyLearning, dailyPathOf, dailyShiurim, shiurimWords, spansOf, tanyaStart, type Catalog, type Json } from '@rebbehub/core';
 import type { EntityId, PageText } from '@rebbehub/model';
 import { add, freshCatalog } from './helpers.js';
 
@@ -128,11 +128,43 @@ describe("the day's learning", () => {
     expect(dailyPathOf('Sefer HaMitzvot, Positive Commandments 109')).toBeNull();
   });
 
+  it('learns a shiur on the pages and verses its reference names, by aliyah and not by chapter', () => {
+    expect(spansOf('Deuteronomy 33:27-29')).toEqual([{ page: '/chumash/deuteronomy/33', from: 27, to: 29 }]);
+    expect(spansOf('Genesis 1:1-2:3', { rashi: true })).toEqual([
+      { page: '/chumash/rashi-genesis/1', from: 1, to: null, rashi: true },
+      { page: '/chumash/rashi-genesis/2', from: null, to: 3, rashi: true },
+    ]);
+    expect(spansOf('Psalms 104-105').map((s) => s.page)).toEqual(['/tehillim/104', '/tehillim/105']);
+    expect(spansOf('Mishneh Torah, Divorce 11')).toEqual([{ page: '/rambam/divorce/11', from: null, to: null }]);
+    expect(spansOf('Sefer HaMitzvot, Positive Commandments 109')).toEqual([{ page: '/sefer-hamitzvos/4/109', from: null, to: null }]);
+    expect(spansOf('Sefer HaMitzvot, Negative Commandments 12')[0]!.page).toBe('/sefer-hamitzvos/6/12');
+    expect(spansOf('Sefer HaMitzvot, Shorashim 1-3').map((s) => s.page)).toEqual(['/sefer-hamitzvos/2/1', '/sefer-hamitzvos/2/2', '/sefer-hamitzvos/2/3']);
+    expect(spansOf('Sefer HaMitzvot, Introductions')).toEqual([]);
+  });
+
   it('links a shiur to its page once the catalog has it', async () => {
     const work = await add(catalog, 'shmuly', 'shmuly', 'work', { title: { he: 'תהלים', en: 'Psalms' }, slug: 'tehillim', authors: [], genre: 'chassidus', levels: ['chapter'] }, '/tehillim');
     await add(catalog, 'shmuly', 'shmuly', 'unit', { work, position: [{ level: 'chapter', value: '90' }], order: '090', label: { he: 'צ', en: '90' } } as unknown as Json, '/tehillim/90');
     const day = (await dailyLearning(catalog, '2026-09-30'))!;
     expect(day.tehillim[0]!.path).toBe('/tehillim/90');
     expect(day.chumash!.path).toBeNull();
+  });
+
+  it("gives a shiur's words cut to what is learned, in Hebrew, all pages in one read", async () => {
+    const work = await add(catalog, 'shmuly', 'shmuly', 'work', { title: { he: 'דברים', en: 'Deuteronomy' }, slug: 'deuteronomy', authors: [], genre: 'chassidus', levels: ['chapter'] }, '/chumash/deuteronomy');
+    const verses = (language: string) => Array.from({ length: 29 }, (_, i) => ({ id: String(i + 1), n: i + 1, kind: 'verse', text: [{ text: `${language} ${i + 1}` }] }));
+    const body = { profile: 'sefaria', versions: [{ id: 'he', language: 'he', segments: verses('he') }, { id: 'en', language: 'en', segments: verses('en') }] };
+    await add(catalog, 'shmuly', 'shmuly', 'unit', { work, position: [{ level: 'chapter', value: '33' }], order: '033', label: { he: 'פרק לג', en: '33' }, body } as unknown as Json, '/chumash/deuteronomy/33');
+    const [section] = await shiurimWords(catalog, [{ key: 'chumash', label: 'וזאת הברכה, ששי עם פירש״י', refs: ['Deuteronomy 33:27-29'], rashi: true }]);
+    // The verses learned and no others, in Hebrew; Rashi's page is not in this catalog, so it is left out.
+    expect(section!.parts).toHaveLength(1);
+    expect(section!.parts[0]).toMatchObject({ path: '/chumash/deuteronomy/33', from: '27', to: '30' });
+    const words = (section!.parts[0]!.data as { body: { versions: Array<{ language: string; segments: Array<{ id: string }> }> } }).body;
+    expect(words.versions.map((v) => v.language)).toEqual(['he']);
+    expect(words.versions[0]!.segments.map((s) => s.id)).toEqual(['27', '28', '29']);
+    // The day's: Chumash, Tehillim, Tanya, then the Rambam's tracks, in order.
+    const day = (await dailyShiurim(catalog, '2026-09-30'))!;
+    expect(day.sections.map((s) => s.key)).toEqual(['chumash', 'tehillim', 'tanya', 'three', 'one', 'mitzvos']);
+    expect(await dailyShiurim(catalog, 'yesterday')).toBeNull();
   });
 });

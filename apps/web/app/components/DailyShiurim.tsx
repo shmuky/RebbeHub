@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import type { DailyLearning } from '../lib/api.js';
 import type { Lang } from '../lib/i18n.js';
 import { href } from '../lib/links.js';
-import { joinRefs, sefariaUrl } from '../lib/sefaria.js';
 import { labelOf } from '../lib/labels.js';
 import { Icon } from '../ui/Icon.js';
 
@@ -13,10 +12,9 @@ import { Icon } from '../ui/Icon.js';
  * and kept in this browser) and Hayom Yom, each a row going to its words,
  * with a circle to tick once it is learned and the first not yet learned
  * marked as next. The ticks stay in this browser only; a bar counts them,
- * and the days in a row on which everything was learned. Tanya and Hayom
- * Yom go to their words on this page; the others to their pages on
- * RebbeHub once the catalog has them (the Sefaria import's Chitas and
- * Rambam), to Sefaria until then.
+ * and the days in a row on which everything was learned. Each shiur goes
+ * to its words on the shiurim page, cut to what is learned (the Chumash
+ * by aliyah); Hayom Yom to its words on this page.
  */
 
 const W = {
@@ -81,31 +79,19 @@ function streak(store: Store, date: string, keys: string[]): number {
 }
 
 /**
- * The day's shiurim as rows, each with where it is learned. Tanya is
- * learned on the daily page (`tanya`, its words' place there); `rambam`
- * says which of the Rambam's tracks to list.
+ * The day's shiurim as rows, each going to its words on the shiurim page
+ * (`/shiurim/<date>`, each cut to what is learned: the Chumash by aliyah);
+ * `rambam` says which of the Rambam's tracks to list.
  */
-export function shiurRows(day: DailyLearning, lang: Lang, { tanya = '#daily-tanya', rambam: tracks = ['three', 'one', 'mitzvos'], hayomYom }: { tanya?: string; rambam?: Array<'three' | 'one' | 'mitzvos'>; hayomYom?: string } = {}): ShiurRow[] {
+export function shiurRows(day: DailyLearning, lang: Lang, { rambam: tracks = ['three', 'one', 'mitzvos'], hayomYom }: { rambam?: Array<'three' | 'one' | 'mitzvos'>; hayomYom?: string } = {}): ShiurRow[] {
   const t = (key: keyof typeof W) => W[key][lang];
   const rows: ShiurRow[] = [];
-  // On RebbeHub once the catalog has the words, else on Sefaria.
-  const place = (path: string | null | undefined, ref: string | null, rashi = false) => (path ? { to: href(path, lang), external: false } : { to: ref ? sefariaUrl(ref, { rashi }) : null, external: true });
-  if (day.chumash) {
-    const rashi = day.chumash.rashi ? [{ text: 'רש״י', to: href(day.chumash.rashi, lang), external: false }] : [];
-    rows.push({ key: 'chumash', name: t('chumash'), pieces: [{ text: day.chumash.label, ...place(day.chumash.path, day.chumash.ref, true) }, ...rashi] });
-  }
-  if (day.tehillim?.length) rows.push({ key: 'tehillim', name: t('tehillim'), pieces: day.tehillim.map((p) => ({ text: p.text.replace(/\.$/, ''), ...place(p.path, p.ref) })) });
-  if (day.tanya.length) rows.push({ key: 'tanya', name: t('tanya'), pieces: [{ text: day.tanya.map((p) => labelOf(p, 'he')).join(' – '), to: tanya, external: false }] });
+  const at = (section: string) => ({ to: `${href(`/shiurim/${day.date}`, lang)}#${section}`, external: false });
+  if (day.chumash) rows.push({ key: 'chumash', name: t('chumash'), pieces: [{ text: day.chumash.label, ...at('chumash') }] });
+  if (day.tehillim?.length) rows.push({ key: 'tehillim', name: t('tehillim'), pieces: [{ text: day.tehillim.map((p) => p.text.replace(/\.$/, '')).join(' '), ...at('tehillim') }] });
+  if (day.tanya.length) rows.push({ key: 'tanya', name: t('tanya'), pieces: [{ text: day.tanya.map((p) => labelOf(p, 'he')).join(' – '), ...at('tanya') }] });
   const rambam = day.rambam;
-  if (rambam) {
-    const shiur = (key: 'three' | 'one' | 'mitzvos') => {
-      const s = rambam[key];
-      if (!s) return;
-      const ref = key === 'mitzvos' ? (s.refs[0] ?? null) : joinRefs(s.refs);
-      rows.push({ key, name: t(key), pieces: [{ text: s.label, ...place(s.paths?.[0], ref) }] });
-    };
-    for (const track of tracks) shiur(track);
-  }
+  if (rambam) for (const key of tracks) if (rambam[key]) rows.push({ key, name: t(key), pieces: [{ text: rambam[key]!.label, ...at(key) }] });
   if (hayomYom && day.hayomYom.length) rows.push({ key: 'hayom-yom', name: t('hayomYom'), pieces: [{ text: day.hayomYom.map((e) => labelOf(e, 'he')).join(' – '), to: hayomYom, external: false }] });
   return rows;
 }
