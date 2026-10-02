@@ -182,6 +182,7 @@ describe('making one and showing it', () => {
     expect(html).toContain('Read by our model');
     expect(html).toContain('איתא בספרי');
     expect(html).toContain('Side by side');
+    expect(html).toContain('rebbehub-whisper-v3');
     // No menus: the header's links into the private site are not drawn.
     expect(html).not.toContain('href="/search"');
   });
