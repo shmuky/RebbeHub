@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import '../privateKey.js';
 import { parseArgs } from 'node:util';
 import { checkLinksCommand, citationsCommand, embedCommand } from '../networkCommands.js';
 import { machineCommand } from '../machineCommand.js';

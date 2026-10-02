@@ -60,6 +60,8 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # While RebbeHub is private, the jobs read the site with its key (services/jobs/src/privateKey.ts).
+      REBBEHUB_PASSWORD: ${{ secrets.REBBEHUB_PASSWORD }}
       SICHOS_KODESH_TOKEN: ${{ secrets.SICHOS_KODESH_TOKEN }}
     steps:
       - name: Check the import is configured

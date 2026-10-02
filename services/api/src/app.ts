@@ -25,6 +25,7 @@ import { organizeRoutes } from './organize.js';
 import { appCatalogRoutes, type AppReleases } from './appCatalog.js';
 import { machineRoutes, type MachineDispatch } from './machine.js';
 import { mafteachRoutes } from './mafteach.js';
+import { ownersOnly } from './private.js';
 
 /**
  * The RebbeHub API, version 1 (docs/developers/api.md). Reading needs
@@ -84,6 +85,11 @@ export interface ApiOptions {
   machineDispatch?: MachineDispatch;
   /** Lets work finish after the answer is sent (Workers' waitUntil); unset, the answer waits for it. */
   waitUntil?: (work: Promise<unknown>) => void;
+  /**
+   * While RebbeHub is private (lock.ts): a request that did not show the key at the Worker's door is answered only
+   * for an owner, a platform admin or one of these accounts, signed in by token. Unset, the API is open.
+   */
+  privateTo?: { owners: string[] };
 }
 
 /** A byte range asked for with `Range: bytes=…`. */
@@ -193,6 +199,7 @@ export function createApp(options: ApiOptions): Hono {
   app.use('*', cors());
   app.use('*', caching());
   app.use('*', tokenGate(catalog, options.rateLimits));
+  if (options.privateTo) app.use('*', ownersOnly(catalog, options.privateTo.owners, authenticate));
 
   if (options.auth) authRoutes(app, catalog, options.mailer && !options.auth.mailer ? { ...options.auth, mailer: options.mailer } : options.auth);
   adminRoutes(app, catalog, signedIn);

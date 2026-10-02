@@ -1,5 +1,31 @@
 # Accounts and signing in
 
+## Private for now
+
+Since 2 October 2026 RebbeHub is closed to everyone but Shmuly. The site,
+the API, the MCP server and the files all answer a lock page (the site) or
+401 (the API) until the password is given. The lock is
+`services/api/src/lock.ts` and `apps/web/server/lock.ts`.
+
+- **The site**: the password, given once at the lock page, leaves its key
+  (never the password) in a cookie on rebbehub.org and its subdomains for
+  a year, so the API's files open in the same browser. Phones that
+  installed the site get a service worker that forgets the pages it kept.
+- **The API and the MCP server**: the key, or a token of an owner's (a
+  platform admin, or an account in `OWNER_ACCOUNTS` in
+  `services/api/wrangler.toml`). His MCP connector keeps working; connecting
+  again goes through the site, behind the lock.
+- **GitHub's jobs** (OCR, transcription, upkeep, imports, the watch and the
+  smoke test) send the key, made from the repository secret
+  `REBBEHUB_PASSWORD`.
+- **Changing the password**: in Cloudflare, Workers, `rebbehub-web` and
+  `rebbehub-api`, Settings, Variables and Secrets, set the secret
+  `LOCK_PASSWORD` on both (it wins over `LOCK_KEY_HASH` in wrangler.toml),
+  and the repository secret `REBBEHUB_PASSWORD` to the same. Every browser
+  then asks again.
+- **Opening it again**: remove `LOCK_KEY_HASH` from both wrangler.toml files
+  and any `LOCK_PASSWORD` secret.
+
 People read, listen and report problems without an account. To suggest a
 fix, follow a sefer or join a project, they sign in (the plan, section 7:
 a Contributor signs in with a passkey, an email link or Google). All

@@ -15,9 +15,12 @@ enabled = true
 [placement]
 mode = "smart"
 
-# build/client is served as static files before the Worker runs.
+# build/client: the site's built files. While RebbeHub is private the Worker runs first, so its lock covers them too
+# (server/lock.ts), and hands them out through the ASSETS binding.
 [assets]
 directory = "build/client"
+binding = "ASSETS"
+run_worker_first = true
 
 # The API, reached inside Cloudflare without a public round trip through this binding (API_URL is its
 # public address, used only when the binding is absent): for what a page cannot answer itself, and for
@@ -65,6 +68,12 @@ name = "RATE_LIMIT_CRAWL"
 namespace_id = "1102"
 simple = { limit = 10, period = 60 }
 
+# Password tries at the lock (server/lock.ts) per address a minute.
+[[ratelimits]]
+name = "RATE_LIMIT_LOCK"
+namespace_id = "1103"
+simple = { limit = 10, period = 60 }
+
 # Cloudflare's Workers cache (docs/operations.md, "Traffic and crawlers"). The default entrypoint runs on
 # every request and is never cached: it sends pages for someone not signed in on to CachedSite, which the
 # cache sits in front of (pages say how long in their Cache-Control: root.tsx). server/worker.ts.
@@ -84,3 +93,6 @@ enabled = true
 API_URL = "https://api.rebbehub.org"
 # The site's public address, for canonical links and sitemaps.
 SITE_URL = "https://rebbehub.org"
+# RebbeHub is private for now (server/lock.ts, services/api/src/lock.ts): the sha256 of the password's key. Not a secret;
+# the password is long and random. To change the password, set the secret LOCK_PASSWORD on this Worker and on rebbehub-api.
+LOCK_KEY_HASH = "1f37eaa3510f38c6b6834a83ca45de7e6af8019f4da01f1d5642c95c5391bd2b"

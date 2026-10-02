@@ -78,6 +78,9 @@ const EXPOSE_HEADERS = 'ETag, Link, Retry-After, RateLimit-Policy, Content-Range
  * never allowed across sites (no Allow-Credentials): a signed-in session
  * acts only from RebbeHub's own pages (auth.ts).
  */
+/** The site's own origins. */
+const SITE_ORIGIN = /^https:\/\/(www\.)?rebbehub\.org$/;
+
 export function cors(): MiddlewareHandler {
   return async (c, next) => {
     if (c.req.method === 'OPTIONS' && c.req.header('Access-Control-Request-Method')) {
@@ -92,7 +95,13 @@ export function cors(): MiddlewareHandler {
       });
     }
     await next();
-    c.header('Access-Control-Allow-Origin', '*');
+    // The site's own pages may send their cookie (the reader's PDFs, while RebbeHub is private: lock.ts); anyone else's never.
+    const origin = c.req.header('Origin');
+    if (origin && SITE_ORIGIN.test(origin)) {
+      c.header('Access-Control-Allow-Origin', origin);
+      c.header('Access-Control-Allow-Credentials', 'true');
+      c.header('Vary', 'Origin');
+    } else c.header('Access-Control-Allow-Origin', '*');
     c.header('Access-Control-Expose-Headers', EXPOSE_HEADERS);
     c.header('X-Content-Type-Options', 'nosniff');
   };

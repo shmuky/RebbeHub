@@ -3,6 +3,7 @@ import { readerFor, type ReadsEnv } from '@rebbehub/api';
 import type { ServerBuild } from 'react-router';
 import { crawlBudget, crawlLater, edgeCacheable, forEdge } from './cachePolicy.js';
 import { createSiteHandler } from './handler.js';
+import { door, privately, type DoorEnv } from './lock.js';
 // @ts-ignore - made by `react-router build`
 import * as build from '../build/server/index.js';
 
@@ -28,9 +29,11 @@ import * as build from '../build/server/index.js';
  * crawler's pages are counted against its budget (cachePolicy.ts,
  * crawlBudget): what is already at the edge is free and never counted.
  */
-interface Env extends ReadsEnv {
+interface Env extends ReadsEnv, DoorEnv {
   API_URL: string;
   SITE_URL: string;
+  /** The site's built files (build/client); the Worker runs first, so the lock covers them too (wrangler.toml). */
+  ASSETS?: { fetch(request: Request): Promise<Response> };
   API?: { fetch: (input: string, init?: RequestInit) => Promise<Response> };
   /** Searches per address a minute ([[ratelimits]] in wrangler.toml); without it, none are counted. */
   RATE_LIMIT_SEARCH?: RateLimit;
@@ -60,11 +63,11 @@ function site(env: Env) {
 }
 
 /** A page, made with a reader of its own when this Worker has a database; the reader's connection is closed once the page is sent. */
-async function page(env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }, request: Request): Promise<Response> {
+async function page(env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }, request: Request, key?: string): Promise<Response> {
   const reader = readerFor(env, (work) => ctx.waitUntil(work));
-  if (!reader) return site(env)(request);
+  if (!reader) return site(env)(request, undefined, key);
   try {
-    return await site(env)(request, reader);
+    return await site(env)(request, reader, key);
   } finally {
     ctx.waitUntil(reader.close());
   }
@@ -84,6 +87,21 @@ export class CachedSite extends WorkerEntrypoint<Env> {
 
 export default {
   async fetch(request: Request, env: Env, ctx: Ctx): Promise<Response> {
+    // While RebbeHub is private (lock.ts), the door comes first, for the built files too, and nothing is served from the edge cache.
+    let key: string | undefined;
+    const shut = await door(request, env, (opened) => (key = opened));
+    if (shut) return shut;
+    if (key) {
+      if (env.ASSETS && (request.method === 'GET' || request.method === 'HEAD')) {
+        const file = await env.ASSETS.fetch(request);
+        if (file.status !== 404) return privately(file);
+      }
+      return privately(await page(env, ctx, request, key));
+    }
+    if (env.ASSETS) {
+      const file = await env.ASSETS.fetch(request);
+      if (file.status !== 404) return file;
+    }
     const address = request.headers.get('cf-connecting-ip');
     if (env.RATE_LIMIT_SEARCH && address && SEARCHING.test(new URL(request.url).pathname) && !(await env.RATE_LIMIT_SEARCH.limit({ key: address })).success) {
       return new Response('Too many searches; wait a minute.', { status: 429, headers: { 'Retry-After': '60', 'Cache-Control': 'no-store', 'Content-Type': 'text/plain; charset=utf-8' } });

@@ -66,6 +66,8 @@ const BASE_URL = import.meta.env.BASE_URL;
 export function loadPdfDocument(url: string, onProgress?: (p: { loaded: number; total: number }) => void): PDFDocumentLoadingTask {
   const task = pdfjsLib.getDocument({
     url,
+    // The API's files open only with the site's cookie while RebbeHub is private (services/api/src/lock.ts).
+    withCredentials: /^https:\/\/api\.rebbehub\.org\//.test(url),
     disableRange: true,
     wasmUrl: `${BASE_URL}pdf-wasm/`,
     cMapUrl: `${BASE_URL}pdf-cmaps/`,

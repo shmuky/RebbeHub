@@ -3,6 +3,9 @@ import { createRequestHandler, type ServerBuild } from 'react-router';
 import { RebbeHubApi } from '../app/lib/api.js';
 import { hasSession, withCachePolicy } from './cachePolicy.js';
 
+/** The header the lock's key goes in (services/api/src/lock.ts). */
+const LOCK_HEADER = 'x-rebbehub-key';
+
 export interface SiteOptions {
   /** The public API, e.g. https://api.rebbehub.org */
   apiUrl: string;
@@ -129,11 +132,19 @@ export function createSiteHandler(build: ServerBuild, options: SiteOptions, mode
   const handle = createRequestHandler(build, mode);
   const base = options.apiUrl.replace(/\/$/, '');
   const reach: Send = options.fetch ?? ((input, init) => fetch(input, init));
-  return async (request: Request, reader?: PageReader) => {
+  return async (request: Request, reader?: PageReader, key?: string) => {
     const started = performance.now();
     // The request's own count of what it asks the API, so its answer can say what it cost.
     const meter = new Meter();
-    const send = meter.wrap(reach, reader);
+    // While RebbeHub is private, the visitor's key goes with every question to the API (services/api/src/lock.ts).
+    const reachWithKey: Send = key
+      ? (input, init) => {
+          const headers = new Headers(init?.headers);
+          headers.set(LOCK_HEADER, key);
+          return reach(input, { ...init, headers });
+        }
+      : reach;
+    const send = meter.wrap(reachWithKey, reader);
     const api = new RebbeHubApi(base, send);
     // Someone signed in may have just changed what they are looking at: their pages ask the API past its edge cache.
     const fresh = new RebbeHubApi(base, (input, init) => {
