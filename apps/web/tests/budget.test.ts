@@ -275,7 +275,8 @@ describe("each page's statements and API calls stay within its ceiling", () => {
     // The full subject index: one call, a letter or a search at a time (here, with no index yet, the page says so).
     within(await page('/mafteach'), '/mafteach', { statements: 4, calls: 1, kB: 30 });
   });
-  it("the day's learning is one read", async () => within(await page('/daily/2026-09-30'), '/daily', { statements: 10, calls: 1, kB: 60 }));
+  // 62 kB: every page's route list grew by the showcase's three routes (/showcase, /show/:token and its transcripts), taking this one just past 60.
+  it("the day's learning is one read", async () => within(await page('/daily/2026-09-30'), '/daily', { statements: 10, calls: 1, kB: 62 }));
   it("the day's shiurim, their words on one page, are one read", async () => within(await page('/shiurim/2026-09-30'), '/shiurim', { statements: 11, calls: 1, kB: 60 }));
   it('draws the day as the design does (3e): the date between its arrows, and its shiurim to tick, the first one next', async () => {
     const html = await (await handle(new Request(`${SITE}/daily/2026-09-30`))).text();
