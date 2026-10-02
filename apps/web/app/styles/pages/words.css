@@ -98,6 +98,13 @@ h2.words-heading {
   font-weight: 700;
 }
 
+/* The ois letter opening a piece (א. ב.): set apart from the words after it, not as a stressed word. */
+.words-ois {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-inline-end: 0.15em;
+}
+
 .words-anchor,
 .words-verse .words-n {
   position: absolute;

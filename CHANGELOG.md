@@ -12,6 +12,8 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- A page's words may carry the mark `ois`: the letter that opens a numbered piece of a sicha (א. ב.), drawn apart from bold (which in the Rebbe's sichos is Miram, the stressed words).
+
 - **An import no longer stops when someone saves, and nobody has to pause
   for one.** While an import copies the catalog back, it holds the live
   catalog for those minutes: pages read as always, and a change answers

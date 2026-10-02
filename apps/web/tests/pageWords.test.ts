@@ -141,6 +141,7 @@ describe("a page's words", () => {
     const text = (t: string): Fake => ({ nodeType: 3, textContent: t, childNodes: [] });
     const el = (tag: string, children: Fake[], dataset: Record<string, string> = {}): Fake => ({ nodeType: 1, tagName: tag.toUpperCase(), dataset, childNodes: children });
     const root = el('span', [
+      el('span', [text('א.')], { mark: 'ois' }),
       text('אות '),
       el('b', [text('שלישית'), el('i', [text(' ממש')])]),
       el('span', [], { run: JSON.stringify({ note: 'n1' }) }),
@@ -150,6 +151,7 @@ describe("a page's words", () => {
       el('br', []),
     ]);
     expect(readRuns(root as unknown as Node)).toEqual([
+      { text: 'א.', marks: ['ois'] },
       { text: 'אות ' },
       { text: 'שלישית', marks: ['b'] },
       { text: ' ממש', marks: ['b', 'i'] },
