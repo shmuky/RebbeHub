@@ -13,6 +13,7 @@ import { href } from '../lib/links.js';
 import { LABELS, detailLabels, stateOf, stateWord } from '../lib/suggestions.js';
 import { Icon, type IconName } from '../ui/Icon.js';
 import { Avatar, Label, MachineLabel, RelativeTime, Skeleton, StateIcon, StatusBadge } from '../ui/primitives.js';
+import { playable } from '../lib/media.js';
 
 /**
  * One Suggestion in the review queue (routes/review.tsx). Drawn at once
@@ -241,7 +242,7 @@ function NewItem({ type, data, files, lang }: { type: string; data: Record<strin
         {file ? <span className="end num subtle">{`${(file.bytes / 1024 / 1024).toLocaleString(lang === 'he' ? 'he-IL' : 'en-US', { maximumFractionDigits: 1 })} MB`}</span> : null}
       </header>
       <div className="rq-new-b">
-        {file?.url && file.mime.startsWith('audio/') ? <audio controls preload="none" src={file.url} /> : null}
+        {file?.url && file.mime.startsWith('audio/') ? <audio controls preload="none" src={playable(file.url)} /> : null}
         {file?.url && file.mime === 'application/pdf' ? (
           <a className="btn sm" href={file.url} target="_blank" rel="noreferrer">
             <Icon name="file" />
