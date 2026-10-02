@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { ServerBuild } from 'react-router';
-import { Catalog, createPerson, registerFile, setUsername } from '@rebbehub/core';
+import { Catalog, createPerson, openIssue, registerFile, setUsername } from '@rebbehub/core';
 import { measured } from '@rebbehub/db';
 import type { EntityId } from '@rebbehub/model';
 import { createApp } from '../../../services/api/src/app.js';
@@ -64,6 +64,8 @@ beforeAll(async () => {
   // A handle that changed: the old address leads to the new one.
   const levi = await createPerson(catalog.db, 'Levi Yitzchak', 'levi');
   await setUsername(catalog.db, levi.id, 'levi-y');
+  // A report with words of its own, which its page shows and the list leaves out.
+  await openIssue(catalog, 'mendy', { title: 'A page is missing in the sample sicha', body: 'Between the first and the second paragraph a whole page of the printing was skipped.', type: 'missing-page', entityId: ids.unit });
 
   // The API as on Workers: its database counted, so each answer says what it cost.
   const db = measured(catalog.db);
@@ -77,13 +79,13 @@ const get = async (path: string, headers: Record<string, string> = {}) => {
 };
 
 describe('the public site', () => {
-  it('renders the home page in Hebrew, right to left, with the week, the tabs and the community', async () => {
+  it("renders the home page in Hebrew, right to left, with the day, its learning and the tabs", async () => {
     const page = await get('/');
     expect(page.status).toBe(200);
     expect(page.html).toContain('<html lang="he" dir="rtl">');
-    expect(page.html).toContain('class="daybar"'); // the day, its chag or the coming parsha
-    expect(page.html).toContain('התוועדויות'); // the farbrengens tab
-    expect(page.html).toContain('class="box needs"'); // what the community can help with
+    expect(page.html).toContain('class="hm-day"'); // the day, its chag or the coming parsha
+    expect(page.html).toContain('class="hm-shiurim"'); // the day's learning, each with a tick
+    expect(page.html).toContain('לימוד יומי'); // the daily learning tab
     expect(page.html).toContain('href="/help"');
   });
 
@@ -174,6 +176,11 @@ describe('the public site', () => {
     const page = await get(`/history/${ids.teshura}`);
     expect(page.html).toContain('Better path');
     expect(page.html).toContain('mendy');
+    // As design/ draws it (4c): the versions down one line, the one shown now marked, the last change open on top.
+    expect(page.html).toMatch(/<ol class="hist2[^"]*"[^>]*><li id="v\d+" class="now"><span class="hist-dot"/);
+    expect(page.html).toContain('הגרסה שמוצגת עכשיו');
+    // Versions (4f): a change read side by side, before and after, or in the text.
+    expect(page.html).toMatch(/class="hist-view segmented".*?aria-pressed="true"[^>]*>זה לצד זה/s);
   });
 
   it('takes a report with no account, without JavaScript', async () => {
@@ -385,7 +392,8 @@ describe('the public site', () => {
     expect(page.status).toBe(200);
     expect(page.html).toContain('@levi-y');
     expect(page.html).toContain('Levi Yitzchak');
-    expect(page.html).toContain('Activity');
+    expect(page.html).toContain('Recent activity');
+    expect(page.html).toContain('class="sq-grid"');
     const moved = await get('/u/levi');
     expect(moved.status).toBe(301);
     expect(moved.location).toBe('/u/levi-y');
@@ -397,6 +405,19 @@ describe('the public site', () => {
     // Suggestions and reports share one numbering: a suggestion's number asked for as a report goes to its own page.
     expect(await get('/issues/1')).toMatchObject({ status: 302, location: '/suggestions/1' });
     expect((await get('/issues/not-a-number')).status).toBe(404);
+  });
+
+  it('lists reports by their title, as GitHub lists issues, and keeps their words for each report\'s own page', async () => {
+    const list = await get('/issues?lang=en');
+    expect(list.status).toBe(200);
+    expect(list.html).toContain('A page is missing in the sample sicha');
+    // Not in the list, and not in what the page carries to the browser either.
+    expect(list.html).not.toContain('a whole page of the printing was skipped');
+    const number = list.html.match(/href="\/issues\/(\d+)\?lang=en"[^>]*>A page is missing in the sample sicha</)?.[1];
+    expect(number).toBeDefined();
+    const own = await get(`/issues/${number}?lang=en`);
+    expect(own.status).toBe(200);
+    expect(own.html).toContain('a whole page of the printing was skipped');
   });
 
   it('splits the account into its own pages, as GitHub settings are, and answers a part that is not there with 404', async () => {

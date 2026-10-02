@@ -38,6 +38,7 @@ stands. ✅ built and tested · 🟡 partly · ⬜ not yet.
 | Installable app (PWA): manifest, icons, a service worker that keeps the app and every page read for offline use | ✅ | `public/manifest.webmanifest`, `public/sw.js`, `lib/pwa.ts` |
 | SEO: canonical and hreflang links, schema.org data, sitemaps, robots.txt | ✅ | `apps/web/app/lib/seo.ts`, `/sitemap.xml` |
 | Report a problem on every page (no account, works without JavaScript) | ✅ | `ReportForm.tsx` |
+| Every sefer's shaar, its README: one fixed format, read strictly, shown under its contents and on its title page, edited at `/shaar/<id>`; one made from the catalog for a sefer no person wrote one for | ✅ | `packages/model/src/shaar.ts`, `components/ShaarFile.tsx`, `routes/shaar.tsx` - [the shaar](shaar.md) |
 
 ## Phase 2 - Contribute
 
@@ -230,6 +231,6 @@ run each, and what it needs, is in [importers](importers.md).
 | `mafteiach` | `packages/mafteiach-index` | events (farbrengens, with occasion ids), units of the collections the phone browses, their PDF editions | |
 | `jem` | `packages/jem-index` (`JEM_DB`) | recordings with their JEM links, added to the farbrengens already imported where they match; the rest as JEM events. jem-index has no video links yet | ✅ |
 | `igros` | the Igros app's build (`IGROS_DATA`) | dates for the 11,059 letters the works importer brings; the Maanos stay out | ✅ needs Shmuly's files |
-| `sefaria` | Sefaria's API (`rebbehub crawl-sefaria`) | Chabad books Sichos-Kodesh does not publish, a page per chapter, CC BY-NC with credit, kept on RebbeHub's storage by sha256 | ✅ keeping needs `CLOUDFLARE_API_TOKEN` |
+| `sefaria` | Sefaria's API (`rebbehub crawl-sefaria`) | Chabad books Sichos-Kodesh does not publish, and (`--daily`) Chitas and the Rambam in their own Set in public-domain Hebrew versions, a page per chapter, CC BY-NC with credit, kept on RebbeHub's storage by sha256 | ✅ keeping needs `CLOUDFLARE_API_TOKEN` |
 | `hebrewbooks` | `packages/hebrewbooks-index` shelf | publications with HebrewBooks ids, link-only scans | ✅ |
 | `archive` | `services/archive` SQLite (`SK_ARCHIVE_DB`) | history as bot commits; `wanted` files it could not get go on the Missing board's Files lost tab | ✅ needs a copy of the index |

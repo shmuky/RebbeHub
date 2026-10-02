@@ -15,7 +15,7 @@ import { pageMeta } from '../lib/seo.js';
 import { datesOf, parseSmartQuery, parshaLabel } from '../lib/smartSearch.js';
 import { parseTokens, withToken, type TokenKey } from '../lib/tokens.js';
 import { Icon, type IconName } from '../ui/Icon.js';
-import { EmptyState, Label, MachineLabel, MachineNote, Tabs, type LabelTone } from '../ui/primitives.js';
+import { EmptyState, Label, MachineLabel, MachineNote } from '../ui/primitives.js';
 import { TokenSearch } from '../ui/TokenSearch.js';
 import '../styles/pages/browse.css';
 
@@ -31,8 +31,11 @@ import '../styles/pages/browse.css';
  * that is set up, and says the machine chose what it shows.
  *
  * Filters are written into the line itself, as GitHub's are: `סוג:התוועדות`
- * shows only farbrengens, `שנה:תשמ״ב` adds a year. The tabs are the same
- * filter, set by a click.
+ * shows only farbrengens, `שנה:תשמ״ב` adds a year. The chips under the line
+ * are the same filter, set by a click.
+ *
+ * As design/ draws it (3g): the line, a row of chips, and the results as
+ * one quiet list, each with where it is from above its name or its words.
  */
 
 /** The filters the search line takes. */
@@ -62,8 +65,44 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const parsed = parseTokens(q, SEARCH_KEYS);
   const kind = (['event', 'library', 'text'] as const).find((k) => parsed.filters.type?.includes(k)) ?? null;
   const words = [parsed.text, ...(parsed.filters.year ?? [])].filter(Boolean).join(' ');
-  // Whether search by meaning is set up: asked with no question, it costs nothing.
-  const meaning = await api.similar('').catch(() => ({ available: false, results: [] as SimilarItem[] }));
+  // Whether search by meaning is set up: asked with no question, it costs nothing. It goes to the API's own Worker, so the
+  // reads below that do not wait on it are started beside it, not after it.
+  const meaningAsked = api.similar('').catch(() => ({ available: false, results: [] as SimilarItem[] }));
+  const smart = parseSmartQuery(words);
+  const understood =
+    smart.parsha || smart.day || smart.year
+      ? {
+          parsha: smart.parsha ? parshaLabel(smart.parsha, lang) : null,
+          day: smart.day?.label ?? null,
+          year: smart.year ?? null,
+          // One day of one month: its month in the calendar (Adar's two spellings are one month in a given year).
+          month: smart.year && smart.day && !smart.parsha && new Set(datesOf(smart)?.map((d) => d.split('-')[1])).size === 1 ? datesOf(smart)![0]!.split('-')[1]! : null,
+        }
+      : null;
+  // By words: the moments, the names and the farbrengens of a date the words name, asked at once.
+  const askByWords = () => {
+    const moments = api.moments(words, 20).catch(() => [] as Moment[]);
+    // Words beyond a date narrow the farbrengens found, and are searched in names too; words read as a date may be a name
+    // too, so the names they match are found as well (a sefer named so first: the API's search puts it there).
+    const search = api.search(understood && smart.rest ? smart.rest : words, { limit: 50 });
+    const dates = understood ? datesOf(smart) : null;
+    const events = !understood
+      ? null
+      : dates?.length
+        ? api.events({ dates: [...new Set(dates)].slice(0, 500), limit: 500 })
+        : smart.day
+          ? api.events({ day: smart.day.tokens, limit: 500 })
+          : smart.year
+            ? api.events({ within: String(smart.year), limit: 500 })
+            : null;
+    // Each is waited on below; until then, one that fails is not an unhandled rejection.
+    search.catch(() => undefined);
+    events?.catch(() => undefined);
+    return { moments, search, events };
+  };
+  // Asked by meaning, they wait to see whether search by meaning is set up; else they start now.
+  let byWords = words && !byMeaning ? askByWords() : null;
+  const meaning = await meaningAsked;
   const empty = {
     lang,
     siteUrl,
@@ -85,39 +124,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     const refs = Object.fromEntries(await api.entities(momentRefs(similar.flatMap((s) => (s.moment ? [s.moment] : [])))));
     return { ...empty, similar, refs };
   }
-  const moments = await api.moments(words, 20).catch(() => [] as Moment[]);
-  const refs = Object.fromEntries(await api.entities(momentRefs(moments)));
-
-  const smart = parseSmartQuery(words);
-  const understood =
-    smart.parsha || smart.day || smart.year
-      ? {
-          parsha: smart.parsha ? parshaLabel(smart.parsha, lang) : null,
-          day: smart.day?.label ?? null,
-          year: smart.year ?? null,
-          // One day of one month: its month in the calendar (Adar's two spellings are one month in a given year).
-          month: smart.year && smart.day && !smart.parsha && new Set(datesOf(smart)?.map((d) => d.split('-')[1])).size === 1 ? datesOf(smart)![0]!.split('-')[1]! : null,
-        }
-      : null;
-
-  let events: EventItem[] = [];
-  let results: Entity[] = [];
+  byWords ??= askByWords();
+  const moments = await byWords.moments;
+  let events: EventItem[] = (await byWords.events) ?? [];
   let date: { key: string } | null = null;
+  const found = await byWords.search;
+  let results: Entity[] = found.results;
   if (understood) {
-    const dates = datesOf(smart);
-    if (dates?.length) events = await api.events({ dates: [...new Set(dates)].slice(0, 500), limit: 500 });
-    else if (smart.day) events = await api.events({ day: smart.day.tokens, limit: 500 });
-    else if (smart.year) events = await api.events({ within: String(smart.year), limit: 500 });
     if (smart.rest) {
-      // Words beyond the date narrow the farbrengens found, and are searched in names too.
       const rest = smart.rest.split(' ');
       const named = (e: EventItem) => rest.every((w) => JSON.stringify(eventData(e).title ?? '').includes(w));
       if (events.length) events = events.filter(named);
-      results = (await api.search(smart.rest, { limit: 50 })).results;
     }
   } else {
-    const found = await api.search(words, { limit: 50 });
-    results = found.results;
     date = found.date;
     if (found.date) {
       const parts = parseDateKey(found.date.key)!;
@@ -125,6 +144,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       events = (await api.events({ within, limit: 500 })).filter((e) => !parts.day || eventData(e).date === found.date!.key);
     }
   }
+  // The items the moments name, and the sefer each addition found belongs to, in one request.
+  const additionTos = results.flatMap((r) => (r.type === 'work' && typeof (r.data as { addition?: { to?: unknown } }).addition?.to === 'string' ? [(r.data as { addition: { to: string } }).addition.to] : []));
+  const refs = Object.fromEntries(await api.entities([...momentRefs(moments), ...additionTos]));
   // Farbrengens show once, in their own section.
   const shown = new Set(events.map((e) => e.id));
   results = results.filter((r) => !shown.has(r.id));
@@ -144,6 +166,8 @@ const W = {
   lede: { he: 'ספרים, שיחות, התוועדויות ותאריכים — וגם המילים שבתוך הסריקות והתמלולים.', en: 'Sefarim, sichos, farbrengens and dates — and the words inside the scans and transcripts.' },
   all: { he: 'הכול', en: 'All' },
   kinds: { he: 'סוגי תוצאות', en: 'Kinds of result' },
+  addition: { he: 'הוספה', en: 'Addition' },
+  additionTo: { he: 'הוספה ל:', en: 'An addition to' },
   placeholder: { he: 'פרשה, תאריך, שנה, שם של ספר או מילים מתוך הטקסט', en: 'A parsha, a date, a year, a sefer’s name or words from the text' },
   hint: { he: 'אפשר לסנן: סוג:התוועדות שנה:תשמ״ב', en: 'Filter with type:farbrengen year:5742' },
   understood: { he: 'הובן מהחיפוש', en: 'Understood' },
@@ -175,8 +199,6 @@ const EXAMPLES: Record<Lang, string[]> = {
 
 const yearOf = (e: EventItem) => Number(String(eventData(e).date ?? '').slice(0, 4));
 
-/** A library item's kind as a label, in the colour of what it is. */
-const TYPE_TONE: Record<string, LabelTone> = { work: 'text', unit: 'text', publication: 'source', scan: 'scan', recording: 'audio', author: 'meta', set: 'meta', text: 'text' };
 const TYPE_ICON: Record<string, IconName> = { work: 'book', unit: 'file', publication: 'layers', scan: 'scan', recording: 'audio', author: 'user', set: 'book', text: 'file' };
 
 export default function Search({ loaderData }: Route.ComponentProps) {
@@ -186,10 +208,10 @@ export default function Search({ loaderData }: Route.ComponentProps) {
   const tab = by === 'meaning' ? 'meaning' : (kind ?? 'all');
   const tabTo = (value: Kind | null) => href('/search', lang, { q: withToken(q, SEARCH_KEYS, 'type', value, lang) || undefined });
   const tabs = [
-    { key: 'all', label: w(lang, 'all'), to: tabTo(null), count: hasQuery && by === 'words' ? num(total, lang) : null },
-    { key: 'event', label: t(lang, 'tabFarbrengens'), icon: 'cal' as const, to: tabTo('event'), count: hasQuery && by === 'words' ? num(events.length, lang) : null },
-    { key: 'library', label: t(lang, 'tabLibrary'), icon: 'book' as const, to: tabTo('library'), count: hasQuery && by === 'words' ? num(results.length, lang) : null },
-    { key: 'text', label: tn(lang, 'inTheTexts'), icon: 'scan' as const, to: tabTo('text'), count: hasQuery && by === 'words' ? num(moments.length, lang) : null },
+    { key: 'all', label: w(lang, 'all'), to: tabTo(null), count: hasQuery && by === 'words' && total ? num(total, lang) : null },
+    { key: 'event', label: t(lang, 'tabFarbrengens'), icon: 'cal' as const, to: tabTo('event'), count: hasQuery && by === 'words' && events.length ? num(events.length, lang) : null },
+    { key: 'library', label: t(lang, 'tabLibrary'), icon: 'book' as const, to: tabTo('library'), count: hasQuery && by === 'words' && results.length ? num(results.length, lang) : null },
+    { key: 'text', label: tn(lang, 'inTheTexts'), icon: 'scan' as const, to: tabTo('text'), count: hasQuery && by === 'words' && moments.length ? num(moments.length, lang) : null },
     ...(meaningAvailable ? [{ key: 'meaning', label: tn(lang, 'byMeaning'), icon: 'sparkle' as const, to: href('/search', lang, { q: q || undefined, by: 'meaning' }) }] : []),
   ];
   const show = (k: Kind) => by === 'words' && (kind === null || kind === k);
@@ -214,7 +236,14 @@ export default function Search({ loaderData }: Route.ComponentProps) {
               size="lg"
             />
           </div>
-          <Tabs items={tabs} current={tab} label={w(lang, 'kinds')} />
+          <nav className="search-chips" aria-label={w(lang, 'kinds')}>
+            {tabs.map((x) => (
+              <Link key={x.key} className="chip" to={x.to} aria-current={x.key === tab ? 'page' : undefined}>
+                {x.label}
+                {x.count ? <span className="chip-n">{x.count}</span> : null}
+              </Link>
+            ))}
+          </nav>
         </div>
       </div>
       <div className="wrap cols">
@@ -252,20 +281,25 @@ export default function Search({ loaderData }: Route.ComponentProps) {
                   <h2 className="h-block" id="in-library">
                     {t(lang, 'tabLibrary')} <span className="count">{num(results.length, lang)}</span>
                   </h2>
-                  <ul className="box">
-                    {results.map((r) => (
-                      <li key={r.id}>
-                        <Link className="row hover" to={href(itemPath(r), lang)}>
-                          <Icon name={TYPE_ICON[r.type] ?? 'file'} className="subtle" />
-                          <span className="row-main">
-                            <span className="row-title torah">{labelOf(r, lang)}</span>
-                          </span>
-                          <Label tone={TYPE_TONE[r.type] ?? 'meta'} size="sm">
-                            {typeName(r.type, lang)}
-                          </Label>
-                        </Link>
-                      </li>
-                    ))}
+                  <ul className="box search-rows">
+                    {(results as Entity[]).map((r) => {
+                      // An addition to a sefer says so, and to which: the official sefarim are what the tree is built of.
+                      const addition = r.type === 'work' ? (r.data as { addition?: { to?: string } }).addition : undefined;
+                      const to = addition?.to ? (refs as Record<string, Entity>)[addition.to] : undefined;
+                      return (
+                        <li key={r.id}>
+                          <Link className="row hover" to={href(itemPath(r), lang)}>
+                            <span className="row-main">
+                              <span className="row-kicker">
+                                <Icon name={TYPE_ICON[r.type] ?? 'file'} size={13} />
+                                {[typeName(r.type, lang), addition ? (to ? `${w(lang, 'additionTo')} ${labelOf(to, lang)}` : w(lang, 'addition')) : null].filter(Boolean).join(' · ')}
+                              </span>
+                              <span className="row-title torah">{labelOf(r, lang)}</span>
+                            </span>
+                          </Link>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </section>
               ) : null}

@@ -86,9 +86,12 @@ describe('all that belongs to an item', () => {
     const empty = await add(catalog, 'mendy', 'keeper', 'text', { kind: 'hanacha', unit, language: 'he' });
     await add(catalog, 'mendy', 'keeper', 'segment', { text, order: 'a', kind: 'heading', content: 'כותרת', proofread: 1 });
     for (const [order, proofread] of [['b', 1], ['c', 0], ['d', 2]] as const) await add(catalog, 'mendy', 'keeper', 'segment', { text, order, kind: 'paragraph', content: `פסקה ${order}`, proofread });
+    // Two a machine made: one a person checked since, one nobody did (the list's quiet dot).
+    await add(catalog, 'mendy', 'keeper', 'segment', { text, order: 'e', kind: 'paragraph', content: 'פסקה e', proofread: 1, origin: { by: 'ocr:kraken@5', checked: true } });
+    await add(catalog, 'mendy', 'keeper', 'segment', { text, order: 'f', kind: 'paragraph', content: 'פסקה f', proofread: 0, origin: { by: 'ocr:kraken@5' } });
     const progress = await get(`/v1/texts/batch/progress?ids=${text},${empty}`);
     expect(progress.status).toBe(200);
-    expect(progress.body.progress).toEqual({ [text]: { paragraphs: 3, checked: 2 } });
+    expect(progress.body.progress).toEqual({ [text]: { paragraphs: 5, checked: 3, machine: 1 } });
   });
 });
 
@@ -153,8 +156,9 @@ describe('covers and files', () => {
     expect(Object.keys(covers.body.covers)).toEqual([work]);
     expect(covers.body.covers[work]).toMatchObject({ page: 3, machine: true, thumb: { url: `https://files.test/objects/${sha('e')}`, width: 480 } });
 
+    await catalog.db.query("INSERT INTO file_fingerprint (sha256, kind, encoder, pages) VALUES ($1, 'pdf-pages', 'dhash-256@1', 12)", [sha('a')]);
     const cover = await get(`/v1/works/${work}/cover`);
-    expect(cover.body).toMatchObject({ work, chosen: null, cover: { page: 3 }, sources: [{ sha256: sha('a'), via: 'scan' }] });
+    expect(cover.body).toMatchObject({ work, chosen: null, cover: { page: 3 }, sources: [{ sha256: sha('a'), via: 'scan', pages: 12 }] });
     expect((await get(`/v1/works/${event}/cover`)).status).toBe(404);
 
     const about = await get(`/v1/files/${sha('a')}/about`);

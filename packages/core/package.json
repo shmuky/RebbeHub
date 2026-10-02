@@ -28,6 +28,8 @@
     "build": "tsc -b"
   },
   "dependencies": {
+    "@hebcal/core": "^6.11.0",
+    "@hebcal/learning": "^6.11.4",
     "@rebbehub/db": "^0.1.0",
     "@rebbehub/hebrew": "^0.1.0",
     "@rebbehub/model": "^0.1.0"

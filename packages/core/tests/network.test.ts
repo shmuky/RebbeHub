@@ -123,7 +123,13 @@ describe('search that lands on the moment', () => {
     const alignment = await add(catalog, 'mendy', 'keeper', 'alignment', { recording, text, granularity: 'paragraph' });
     await add(catalog, 'mendy', 'keeper', 'alignment-span', { alignment, segment, startMs: 754_000, endMs: 800_000 });
 
+    // The rows found and whether their words may be shown are three statements, however many texts and scans they are of.
+    let statements = 0;
+    const query = catalog.db.query.bind(catalog.db);
+    catalog.db.query = ((sql: string, params?: unknown[]) => (statements++, query(sql, params))) as typeof catalog.db.query;
     const moments = await searchMoments(catalog, 'אהבת ישראל');
+    catalog.db.query = query;
+    expect(statements).toBeLessThanOrEqual(3);
     expect(moments).toHaveLength(2);
     expect(moments.find((m) => m.kind === 'scan-line')).toMatchObject({ scan, publication, page: 7, line: { id: 'l2' }, hits: ['אהבת', 'ישראל'], machine: true });
     expect(moments.find((m) => m.kind === 'paragraph')).toMatchObject({ id: segment, recording, event, startMs: 754_000, textKind: 'transcript', machine: true });

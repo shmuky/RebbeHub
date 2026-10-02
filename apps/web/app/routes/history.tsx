@@ -10,9 +10,9 @@ import { href } from '../lib/links.js';
 import { personName } from '../lib/people.js';
 import { pageMeta } from '../lib/seo.js';
 import { useAccount } from '../lib/useAccount.js';
+import { between } from '../lib/versions.js';
 import { Icon } from '../ui/Icon.js';
-import { AgentBy, Avatar, EmptyState, Label, RelativeTime } from '../ui/primitives.js';
-import { Timeline, TimelineComment } from '../ui/Timeline.js';
+import { AgentBy, Avatar, EmptyState, RelativeTime } from '../ui/primitives.js';
 import { ItemSubpage } from '../views/ItemSubpage.js';
 import '../styles/pages/contribute.css';
 
@@ -51,6 +51,24 @@ const W = {
   restoring: { he: 'שולח…', en: 'Sending…' },
   wrote: { he: 'שינה', en: 'changed it' },
   bot: { he: 'ייבוא', en: 'import' },
+  latest: { he: 'השינוי האחרון', en: 'The latest change' },
+  approver: { he: 'אישר:', en: 'Approved by' },
+  by: { he: 'הצעה של', en: 'suggested by' },
+  shown: { he: 'הגרסה שמוצגת עכשיו', en: 'The version shown now' },
+  what: { he: 'מה השתנה', en: 'What changed' },
+  view: { he: 'איך להראות שינוי', en: 'How to show a change' },
+  side: { he: 'זה לצד זה', en: 'Side by side' },
+  inText: { he: 'בתוך הטקסט', en: 'In the text' },
+  before: { he: 'לפני', en: 'Before' },
+  after: { he: 'אחרי', en: 'After' },
+  pickTwo: { he: 'בחרו שתי גרסאות כדי להשוות. א׳ ישנה, ב׳ חדשה.', en: 'Pick two versions to compare. A is the older, B the newer.' },
+  compare: { he: 'להשוואה', en: 'Compare' },
+  older: { he: 'א׳', en: 'A' },
+  newer: { he: 'ב׳', en: 'B' },
+  changes: { he: 'שינויים', en: 'changes' },
+  none: { he: 'אין הבדל בין שתי הגרסאות.', en: 'The two versions are the same.' },
+  cannot: { he: 'את שתי הגרסאות האלה אי אפשר להשוות כאן; השינויים של כל גרסה פתוחים ברשימה.', en: "These two versions can't be compared here; each version's changes are in the list." },
+  clearPick: { he: 'סגירת ההשוואה', en: 'Close the comparison' },
 } as const;
 
 function RestoreButton({ entityId, rev, lang }: { entityId: string; rev: number; lang: Lang }) {
@@ -96,6 +114,15 @@ function RestoreButton({ entityId, rev, lang }: { entityId: string; rev: number;
 export default function History({ loaderData }: Route.ComponentProps) {
   const { lang, entity, history } = loaderData;
   const account = useAccount();
+  // As design/ draws versions (4f): a change read side by side, before and after, or one above the other.
+  const [side, setSide] = useState(true);
+  // Any two versions picked to compare (4f), read from the history already here: no request.
+  const [pick, setPick] = useState<number[]>([]);
+  const toggle = (rev: number) => setPick((was) => (was.includes(rev) ? was.filter((r) => r !== rev) : [...was.slice(-1), rev]));
+  const order = (rev: number) => history.findIndex((h) => h.rev === rev);
+  const [older, newer] = pick.length === 2 ? [...pick].sort((a, b) => order(b) - order(a)) : [];
+  const compared = older !== undefined && newer !== undefined ? between(history, older, newer) : undefined;
+  const whenOf = (rev: number) => history.find((h) => h.rev === rev);
   // Everyone who changed it, most changes first.
   const people = new Map<string, { name: string; bot: boolean; n: number }>();
   for (const h of history) {
@@ -103,13 +130,15 @@ export default function History({ loaderData }: Route.ComponentProps) {
     people.set(h.author, { name: personName(h.author, h.authorName, lang), bot: h.authorIsBot, n: (was?.n ?? 0) + 1 });
   }
   const who = [...people.entries()].sort((a, b) => b[1].n - a[1].n);
+  // The last change, open at the top as design/ draws it (4c); the older ones open on asking.
+  const latest = history[0] && !history[0].created && !history[0].deleted ? history[0] : null;
   return (
     <ItemSubpage
       entity={entity}
       lang={lang}
       current="history"
       here={t(lang, 'history')}
-      sub={t(lang, 'historyIntro')}
+      sub={`${num(history.length, lang)} ${W.versions[lang]}`}
       side={
         <>
           <section>
@@ -145,70 +174,97 @@ export default function History({ loaderData }: Route.ComponentProps) {
       {history.length === 0 ? (
         <EmptyState icon="history" title={W.empty[lang]} />
       ) : (
-        <Timeline className="hist" label={t(lang, 'history')}>
-          {history.map((h, i) => {
-            const author = personName(h.author, h.authorName, lang);
-            const approver = personName(h.mergedBy, h.mergedByName, lang);
-            const stat = h.created || h.deleted ? null : wordsStat(h.changes, lang);
-            return (
-              <TimelineComment
-                key={h.commit}
-                id={`v${h.rev}`}
-                author={author}
-                authorId={h.author}
-                bot={h.authorIsBot || Boolean(h.via)}
-                header={
-                  <>
+        <>
+          {history.some((h) => !h.created && !h.deleted) ? (
+            <div className="hist-view segmented" role="radiogroup" aria-label={W.view[lang]}>
+              <button type="button" role="radio" aria-checked={side} aria-pressed={side} onClick={() => setSide(true)}>
+                {W.side[lang]}
+              </button>
+              <button type="button" role="radio" aria-checked={!side} aria-pressed={!side} onClick={() => setSide(false)}>
+                {W.inText[lang]}
+              </button>
+            </div>
+          ) : null}
+          {history.length > 1 ? <p className="hist-hint subtle">{W.pickTwo[lang]}</p> : null}
+          {older !== undefined && newer !== undefined ? (
+            <section className={side ? 'hist-latest hist-compare side' : 'hist-latest hist-compare'} style={{ ['--was' as string]: `"${W.older[lang]}"`, ['--now' as string]: `"${W.newer[lang]}"` }} aria-live="polite">
+              <div className="hist-compare-h">
+                <h2>
+                  {W.older[lang]} <RelativeTime at={whenOf(older)!.at} lang={lang} /> · {W.newer[lang]} <RelativeTime at={whenOf(newer)!.at} lang={lang} />
+                </h2>
+                {compared?.length ? <span className="subtle">{wordsStat(compared, lang) ?? `${num(compared.length, lang)} ${W.changes[lang]}`}</span> : null}
+                <span className="grow" />
+                {account && order(older) > 0 ? <RestoreButton entityId={entity.id} rev={older} lang={lang} /> : null}
+                <button type="button" className="ib" aria-label={W.clearPick[lang]} title={W.clearPick[lang]} onClick={() => setPick([])}>
+                  <Icon name="x" />
+                </button>
+              </div>
+              {compared === null ? <p className="subtle">{W.cannot[lang]}</p> : compared?.length ? <ChangeRows changes={compared} lang={lang} /> : <p className="subtle">{W.none[lang]}</p>}
+            </section>
+          ) : latest ? (
+            <section className={side ? 'hist-latest side' : 'hist-latest'} style={{ ['--was' as string]: `"${W.before[lang]}"`, ['--now' as string]: `"${W.after[lang]}"` }}>
+              <h2>{W.latest[lang]}</h2>
+              <ChangeRows changes={latest.changes} lang={lang} />
+            </section>
+          ) : null}
+          <ol className={side ? 'hist2 side' : 'hist2'} aria-label={t(lang, 'history')} style={{ ['--was' as string]: `"${W.before[lang]}"`, ['--now' as string]: `"${W.after[lang]}"` }}>
+            {history.map((h, i) => {
+              const author = personName(h.author, h.authorName, lang);
+              const approver = personName(h.mergedBy, h.mergedByName, lang);
+              const stat = h.created || h.deleted ? null : wordsStat(h.changes, lang);
+              const mark = h.rev === older ? W.older[lang] : h.rev === newer ? W.newer[lang] : null;
+              return (
+                <li key={h.commit} id={`v${h.rev}`} className={[i === 0 ? 'now' : '', pick.includes(h.rev) ? 'picked' : ''].filter(Boolean).join(' ') || undefined}>
+                  <span className="hist-dot" aria-hidden="true">
+                    {mark}
+                  </span>
+                  {history.length > 1 ? (
+                    <button type="button" className="hist-pick" aria-pressed={pick.includes(h.rev)} onClick={() => toggle(h.rev)}>
+                      {mark ?? W.compare[lang]}
+                    </button>
+                  ) : null}
+                  <h3 className="hist-title">
+                    <bdi>{h.message || `${W.version[lang]} ${num(history.length - i, lang)}`}</bdi>
+                  </h3>
+                  <p className="hist-by">
+                    {h.mergedBy !== h.author ? (
+                      <>
+                        {W.approver[lang]} {approver} ·{' '}
+                      </>
+                    ) : null}
+                    <RelativeTime at={h.at} lang={lang} /> ·{' '}
                     <AgentBy via={h.via} lang={lang} who={author}>
-                      <b>{author}</b>
+                      {h.mergedBy !== h.author ? `${W.by[lang]} ${author}` : author}
                     </AgentBy>
-                    <span className="hist-msg">{h.message}</span>
-                    <span className="subtle">
-                      · <RelativeTime at={h.at} lang={lang} />
-                    </span>
-                  </>
-                }
-                role={
-                  <>
-                    {stat}
-                    {i === 0 ? <Label tone="sync">{t(lang, 'currentVersion')}</Label> : <a className="hist-rev num" href={`#v${h.rev}`}>{`${W.version[lang]} ${num(history.length - i, lang)}`}</a>}
-                  </>
-                }
-                footer={
-                  (h.mergedBy !== h.author || (i > 0 && account && !h.deleted)) ? (
-                    <>
-                      {h.mergedBy !== h.author ? (
-                        <span className="hist-approved">
-                          <Icon name="check" size={14} />
-                          {t(lang, 'approvedBy')} <b>{approver}</b>
-                        </span>
-                      ) : null}
-                      {i > 0 && account && !h.deleted ? (
-                        <span className="end">
-                          <RestoreButton entityId={entity.id} rev={h.rev} lang={lang} />
-                        </span>
-                      ) : null}
-                    </>
-                  ) : undefined
-                }
-              >
-                {h.created ? (
-                  <p className="hist-note">
-                    <Icon name="plus" /> {t(lang, 'versionCreated')}
+                    {stat ? <> · {stat}</> : null}
                   </p>
-                ) : h.deleted ? (
-                  <p className="hist-note">
-                    <Icon name="trash" /> {t(lang, 'versionDeleted')}
-                  </p>
-                ) : (
-                  <div className="hist-changes">
-                    <ChangeRows changes={h.changes} lang={lang} />
-                  </div>
-                )}
-              </TimelineComment>
-            );
-          })}
-        </Timeline>
+                  {i === 0 ? <p className="hist-current">{W.shown[lang]}</p> : null}
+                  {h.created ? (
+                    <p className="hist-note">
+                      <Icon name="plus" /> {t(lang, 'versionCreated')}
+                    </p>
+                  ) : h.deleted ? (
+                    <p className="hist-note">
+                      <Icon name="trash" /> {t(lang, 'versionDeleted')}
+                    </p>
+                  ) : i > 0 || !latest ? (
+                    <details className="hist-what">
+                      <summary>{W.what[lang]}</summary>
+                      <div className="hist-changes">
+                        <ChangeRows changes={h.changes} lang={lang} />
+                      </div>
+                    </details>
+                  ) : null}
+                  {i > 0 && account && !h.deleted ? (
+                    <div className="hist-acts">
+                      <RestoreButton entityId={entity.id} rev={h.rev} lang={lang} />
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+        </>
       )}
     </ItemSubpage>
   );

@@ -41,6 +41,7 @@ Every error has one shape, with the HTTP status of its kind:
 | 422 | `invalid` | the catalog's checks refused it (`detail` says which) |
 | 429 | `rate-limited` | too many requests: wait `Retry-After` seconds |
 | 500 | `internal` | our mistake; please report it |
+| 503 | `busy` | an import is bringing in new catalog data and holds every change for a few minutes; nothing was changed: try again after `Retry-After` seconds |
 
 `message` is for people and may change; `error` is for programs and does
 not.

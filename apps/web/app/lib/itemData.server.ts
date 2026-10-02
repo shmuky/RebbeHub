@@ -1,5 +1,6 @@
+import { DAILY_WORKS, hayomYomShiurimOf, type HayomYomShiurim } from '@rebbehub/hebrew';
 import { threadsAbout, type AboutThread } from './about.server.js';
-import { workToc, type WorkToc } from './workView.server.js';
+import { volumeLines, workToc, type VolumeLine, type WorkToc } from './workView.server.js';
 import { eventView, type EventView } from './eventView.server.js';
 import { eventRow } from '../components/EventRow.js';
 import type { Backlink, Cover, Entity, FileInfo, LinkGroup, RebbeHubApi, RelationLink, ScanPages, WorkCover } from './api.js';
@@ -51,6 +52,12 @@ export interface ItemView {
   talk: number;
   /** A farbrengen's: what was said there, and its words synced to its recordings. */
   event?: EventView;
+  /** A day of Hayom Yom's: the head the book prints over it (weekday, year, shiurim), to set it as printed. */
+  hayomYom?: HayomYomShiurim | null;
+  /** A sicha's: the units before and after it in its sefer, for its back and forth buttons. */
+  neighbours?: { previous: Entity | null; next: Entity | null };
+  /** A sicha's: the rest of its volume, for the column beside it on a wide screen. */
+  volume?: VolumeLine[];
 }
 
 /** A text's paragraphs, all of them, a page at a time (a hanacha may have up to 2,000; a sefer's text more). */
@@ -102,28 +109,45 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
     }
   };
   const wanted = new Set<string>([...ids(d.sets), ...ids(d.topics)]);
+  /** Whether what points at the item is counted already (a set's and a sefer's pages count it first). */
+  let counted = false;
 
   switch (entity.type) {
     case 'set': {
       // Its sefarim, all of them (a shelf), with how many sichos each holds; of whatever else is in it, the first sixty of
       // each kind and how many there are (a set of three thousand farbrengens listed five hundred, 700 kB no one scrolled).
-      const [groups, works, units] = await Promise.all([orNone(api.linkedCounts(entity.id), []), api.list({ set: entity.id, type: 'work', limit: 500 }), api.refCounts('work', 'unit')]);
+      // A shelf lists its official sefarim, and apart the additions that belong to none; an addition to a sefer is on that sefer's page.
+      const [groups, works, units] = await Promise.all([orNone(api.linkedCounts(entity.id), []), api.list({ set: entity.id, type: 'work', limit: 500, shelf: true }), api.refCounts('work', 'unit')]);
       const otherTypes = [...new Set(groups.filter((g) => g.field === 'sets' && g.type !== 'work').map((g) => g.type))];
       const others = await Promise.all(otherTypes.map((type) => api.list({ set: entity.id, type, limit: 60 })));
       view.lists.members = [...works.items, ...others.flatMap((o) => o.items)];
       view.linked = groups;
+      counted = true;
       view.counts = units;
       view.covers = await orNone(api.covers(works.items.map((m) => m.id)), {});
       break;
     }
     case 'work': {
       ids(d.authors).forEach((id) => wanted.add(id));
-      // Its volumes first; one volume's units when one is opened (?part=), else the units of a work of one level.
-      const [outline, publications, cover] = await Promise.all([
+      // An addition names the official sefer it belongs to: its page links back there.
+      ids((d.addition as { to?: unknown } | undefined)?.to).forEach((id) => wanted.add(id));
+      // Its volumes first; one volume's units when one is opened (?part=), else the units of a work of one level. What points
+      // at it is counted now, not after, so its additions are asked for only when it has some.
+      const [outline, publications, cover, groups] = await Promise.all([
         api.workOutline(entity.id),
         linkedItems(api, entity.id, 'work', 'publication'),
         orNone(api.workCover(entity.id), null),
+        orNone(api.linkedCounts(entity.id), []),
       ]);
+      view.linked = groups;
+      counted = true;
+      // The additions to it (commentaries, indexes, books about it), each only its name and kind: one request, made only when there are some.
+      if (groups.some((g) => g.type === 'work' && g.field === 'addition.to')) {
+        view.lists.additions = (await linkedItems(api, entity.id, 'addition.to', 'work')).map((x) => {
+          const xd = x.data as { title?: unknown; addition?: unknown };
+          return { id: x.id, type: x.type, path: x.path, rev: x.rev, data: { title: xd.title, addition: xd.addition } };
+        });
+      }
       // Its volumes as the page lists them: the contents' volumes, and any only its printings name (a PDF copy of each).
       view.outline = workVolumes(outline, publications.map((x) => (x.data as { volume?: unknown }).volume));
       view.workCover = cover;
@@ -146,7 +170,15 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
     }
     case 'unit': {
       [...ids(d.work), ...ids(d.events)].forEach((id) => wanted.add(id));
-      const texts = await linkedItems(api, entity.id, 'unit', 'text');
+      // Its back and forth, and the others in its volume, asked for beside its texts.
+      const volume = Array.isArray(d.position) && d.position.length > 1 ? (d.position[0] as { value?: unknown }).value : undefined;
+      const [texts, neighbours, siblings] = await Promise.all([
+        linkedItems(api, entity.id, 'unit', 'text'),
+        typeof d.work === 'string' ? orNone(api.unitNeighbours(entity.id), { previous: null, next: null }) : { previous: null, next: null },
+        typeof d.work === 'string' && typeof volume === 'string' ? orNone(api.workPart(d.work, volume), []) : [],
+      ]);
+      view.neighbours = neighbours;
+      view.volume = volumeLines(siblings, entity, url.searchParams.get('lang') === 'en' ? 'en' : 'he');
       view.lists.texts = texts;
       const segments = await Promise.all(texts.map((text) => allSegments(api, text.id)));
       texts.forEach((text, i) => (view.segments[text.id] = segments[i]!));
@@ -212,7 +244,9 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
       break;
     }
     case 'author': {
-      const [works, units] = await Promise.all([linkedItems(api, entity.id, 'authors', 'work'), api.refCounts('work', 'unit')]);
+      const [all, units] = await Promise.all([linkedItems(api, entity.id, 'authors', 'work'), api.refCounts('work', 'unit')]);
+      // A Rebbe's sefarim are his official ones; an addition to a sefer is on that sefer's page.
+      const works = all.filter((w) => !(w.data as { addition?: unknown }).addition);
       view.lists.works = works;
       view.counts = units;
       view.covers = await orNone(api.covers(works.map((w) => w.id)), {});
@@ -237,7 +271,7 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
   // Asked for together: each is its own round trip to the API.
   [view.backlinks, view.linked, view.relations] = await Promise.all([
     api.backlinks(entity.id),
-    view.linked.length ? Promise.resolve(view.linked) : orNone(api.linkedCounts(entity.id), []),
+    counted ? Promise.resolve(view.linked) : orNone(api.linkedCounts(entity.id), []),
     // An API from before links were served has none to give.
     api.relations(entity.id).catch(() => []),
   ]);
@@ -246,6 +280,7 @@ export async function loadItemView(api: RebbeHubApi, entity: Entity, url: URL): 
   view.refs = { ...view.refs, ...Object.fromEntries(refs) };
   // Keepers of its set, by name.
   const workOf = typeof d.work === 'string' ? view.refs[d.work] : undefined;
+  if (entity.type === 'unit' && workOf?.path === DAILY_WORKS.hayomYom) view.hayomYom = hayomYomShiurimOf(entity.data);
   const setWanted = entity.type === 'set' ? entity.id : (ids(d.sets)[0] ?? ids((workOf?.data as Record<string, unknown> | undefined)?.sets)[0]);
   const setOf = entity.type === 'set' ? entity : setWanted ? (view.refs[setWanted] ?? (await orNone(api.entity(setWanted), null)) ?? undefined) : undefined;
   if (setOf && !view.refs[setOf.id]) view.refs[setOf.id] = setOf;

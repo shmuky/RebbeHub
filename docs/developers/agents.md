@@ -23,7 +23,7 @@ JSON-RPC message, get JSON back. It keeps no sessions and opens no event
 stream. It has one address, `https://api.rebbehub.org/mcp`:
 
 - **Reading needs no account.** `search`, `get_item`, `list_children`,
-  `get_text` and `list_issues` answer anyone.
+  `get_text`, `get_shaar`, `list_issues`, `list_suggestions` and `get_suggestion` answer anyone.
 - **Writing asks for you when it is needed.** A tool that writes
   (`suggest_fix`, `open_issue`, `ask_machine`…) called without sign-in answers HTTP
   `401` with `WWW-Authenticate: Bearer resource_metadata="https://api.rebbehub.org/.well-known/oauth-protected-resource/mcp", scope="read write"`,
@@ -39,9 +39,15 @@ stream. It has one address, `https://api.rebbehub.org/mcp`:
 | `search` | items by name or Hebrew date (`where: "names"`), or the lines and paragraphs that hold the words (`where: "words"`) |
 | `get_item` | one item by id or path, with all its data |
 | `list_children` | what an item holds, in order: a sefer's sichos, a text's paragraphs, a farbrengen's recordings, a set's items; a page at a time |
+| `list_printings` | every printing of a sefer in one call, in volume order, each with its volume and where its scans come from (HebrewBooks, אוצרות הרבי…) with the links; printings without a readable path too |
 | `get_text` | the words of a sicha, a scan's page or a recording's transcript; machine words marked `[machine]` |
 | `suggest_fix` | a correction to one item, as a suggestion for review, under your name (`write`) |
+| `get_shaar` | a sefer's shaar file, the README of a sefer ([the shaar](../shaar.md)); one the catalog made is marked `[machine]` |
+| `suggest_shaar` | a sefer's whole shaar file, changed, as a suggestion for review; a file that cannot be read is refused line by line (`write`) |
 | `suggest_items` | add new items, or change or delete many, as one suggestion; 200 items a call, added to the same draft over several calls (`write`) |
+| `add_segments` | add or replace a few segments in many pages' words (a line a source left out, a machine's reading of a scan) without sending the rest of each page; 200 pages a call, one suggestion (`write`) |
+| `list_suggestions` | suggestions sent, newest first: open ones by default, by author, reviewer, item or words in the title |
+| `get_suggestion` | one suggestion: whether you may approve it, its failed checks, and what it changes, a page of items at a time |
 | `approve_suggestion` | approve a suggestion sent for review, when you may: its sets' keepers, or a steward ; `clashes` (`keep_live` or `take_suggestion`) settles every clash with a later change at once (`write`) |
 | `close_suggestion` | close (withdraw) a suggestion without merging it: your own, or any as a steward (`write`) |
 | `reopen_suggestion` | open a closed suggestion for review again; its checks run again (`write`) |
@@ -62,6 +68,7 @@ stream. It has one address, `https://api.rebbehub.org/mcp`:
 | `create_set` | a new set, under another or at the top, with items moved in at once (needs `write`) |
 | `delete_set` | remove a set that holds nothing (needs `write`) |
 | `merge_items` | merge a duplicate into the item kept: its children and links move over, its paths redirect (needs `write`) |
+| `mark_addition` | mark a sefer as an addition (a commentary, index, book about or collection) to an official sefer, or make it official again (needs `write`) |
 
 Every tool calls the API itself, as you, so an agent reads exactly what
 anyone reads: words withheld for rights stay withheld, and a fix it

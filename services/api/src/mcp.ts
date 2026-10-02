@@ -1,4 +1,5 @@
 import type { Context, Hono } from 'hono';
+import { parseHebrewNumeral } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, allSegments, inlineText, isPageText } from '@rebbehub/model';
 import { mcpChallenge } from './oauth.js';
 import { mcpInnerCalls, tokenGrantOf } from './tokens.js';
@@ -99,6 +100,20 @@ function nameOf(item: { id: string; type: string; data?: any }): string {
   return item.id;
 }
 
+/** A volume as a number, whether printed "30" or "ל (בראשית)", so a sefer's printings sort and match by volume. */
+export function volumeNumber(volume: unknown): number | null {
+  if (typeof volume !== 'string') return null;
+  const digits = /^\s*(\d+)/.exec(volume);
+  if (digits) return Number(digits[1]);
+  const first = volume.trim().split(/[\s(,-]/)[0] ?? '';
+  return parseHebrewNumeral(first) || null;
+}
+
+/** Where a printing's scans or PDF come from, one line: "hebrewbooks https://hebrewbooks.org/14953", "אוצרות הרבי https://drive.google.com/…". */
+function sourcesOf(data: any): Array<{ source: string; note: string | null; url: string | null }> {
+  return (Array.isArray(data?.sources) ? data.sources : []).map((s: any) => ({ source: String(s.source ?? ''), note: s.note ?? null, url: s.url ?? null }));
+}
+
 /**
  * Which children an item has, by its type: the field that points at it and
  * the type of the children. A set lists its items instead.
@@ -133,6 +148,7 @@ function tools(siteUrl: string): Tool[] {
           query: { type: 'string', minLength: 1, maxLength: 500 },
           where: { enum: ['names', 'words'], default: 'names', description: 'names: items by their names and dates; words: inside texts, scans and transcripts' },
           type: { enum: [...ENTITY_TYPES], description: 'Only items of this type (names only)' },
+          work: { ...ID, description: "Only items of this sefer, rh-… (names only): its printings, its sichos" },
           limit: { type: 'integer', minimum: 1, maximum: 50, default: 10 },
         },
         required: ['query'],
@@ -154,10 +170,20 @@ function tools(siteUrl: string): Tool[] {
           return { text: moments.length ? `${lines.join('\n')}\n\n${moments.some((m) => m.machine) ? MACHINE_NOTE : ''}`.trim() : 'Nothing found inside the texts.', structured: { query, moments } };
         }
         const type = typeof args.type === 'string' ? `&type=${encodeURIComponent(args.type)}` : '';
-        const found = await need(call, 'GET', `/v1/search?q=${encodeURIComponent(query)}&limit=${limit}${type}`);
-        const results = (found.results as any[]).map(summary);
+        const work = typeof args.work === 'string' ? `&work=${encodeURIComponent(args.work)}` : '';
+        const found = await need(call, 'GET', `/v1/search?q=${encodeURIComponent(query)}&limit=${limit}${type}${work}`);
+        // A printing says its volume and where it comes from: two printings of one volume share a name, and only these tell them apart.
+        const results = (found.results as any[]).map((item) => (item.type === 'publication' ? { ...summary(item), volume: item.data?.volume ?? null, sources: sourcesOf(item.data) } : summary(item)));
+        const line = (r: any) => `- ${r.name} (${r.type}, ${r.id}) ${r.url}${r.type === 'publication' ? `${r.volume ? `, volume ${r.volume}` : ''}${r.sources.length ? `, from ${r.sources.map((s: any) => s.note ?? s.source).join('; ')}` : ''}` : ''}`;
         const date = found.date ? `The query names the date ${found.date.en} (${found.date.he}, key ${found.date.key}).\n` : '';
-        return { text: results.length ? `${date}${results.map((r) => `- ${r.name} (${r.type}, ${r.id}) ${r.url}`).join('\n')}` : `${date}Nothing found.`, structured: { query, date: found.date, results } };
+        // An addition to a sefer says so, and to which: the official sefarim are what the tree is built of.
+        const added = (r: any) => {
+          const a = (found.results as any[]).find((x) => x.id === r.id)?.data?.addition;
+          return a ? ` [addition: ${a.kind}${a.to ? ` to ${a.to}` : ''}]` : '';
+        };
+        // Many printings of one sefer share its name and tie; the list stops at the limit before it reaches them all.
+        const more = results.length === limit && results.some((r) => r.type === 'publication') ? `\n\nThe list stopped at ${limit}; more may match. list_printings gives every printing of a sefer in one call, or add a volume to the query ("לקוטי שיחות 30").` : '';
+        return { text: results.length ? `${date}${results.map((r) => `${line(r)}${added(r)}`).join('\n')}${more}` : `${date}Nothing found.`, structured: { query, date: found.date, results } };
       },
     },
     {
@@ -222,6 +248,43 @@ function tools(siteUrl: string): Tool[] {
           const more = found.next ? `\nMore: call again with cursor "${found.next}".` : '';
           return { text: items.length ? `${what}:\n${items.map((i) => `- ${i.name} (${i.type}, ${i.id})${i.withheld ? ' [withheld]' : ''}`).join('\n')}${more}` : `No ${what}.`, structured: { items, next: found.next } };
         }
+      },
+    },
+    {
+      name: 'list_printings',
+      title: "List a sefer's printings",
+      description:
+        "Every printing of a sefer in one call, in volume order: each with its volume, its kind, its path if it has one, and where its scans or PDF come from (HebrewBooks, a Drive file of אוצרות הרבי…), with the links. Printings without a readable path are here too, though a search by name may stop before it reaches them. Give the sefer, or one of its sichos or printings; `volume` (30 or ל) keeps one volume.",
+      inputSchema: {
+        type: 'object',
+        properties: { id: ID, path: { type: 'string', description: 'A readable path, starting with /' }, volume: { type: 'string', description: 'Only this volume, as a number (30) or as printed (ל)' } },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      async run(args, call) {
+        let id = typeof args.id === 'string' ? args.id : undefined;
+        if (!id && typeof args.path === 'string') id = (await need(call, 'GET', `/v1/resolve?path=${encodeURIComponent(args.path)}`)).id;
+        if (!id) throw new ToolError('give the id or path of a sefer');
+        const item = await need(call, 'GET', `/v1/entities/${encodeURIComponent(id)}`);
+        const workId = item.type === 'work' ? item.id : typeof item.data?.work === 'string' ? item.data.work : null;
+        if (!workId) throw new ToolError(`${item.id} is a ${item.type} of no sefer; give a sefer, or one of its sichos or printings`);
+        const work = item.type === 'work' ? item : await need(call, 'GET', `/v1/entities/${encodeURIComponent(workId)}`);
+        const found = await need(call, 'GET', `/v1/entities/${encodeURIComponent(workId)}/children?field=work&type=publication&limit=1000`);
+        const wanted = typeof args.volume === 'string' && args.volume.trim() ? args.volume.trim() : null;
+        const wantedNumber = wanted ? volumeNumber(wanted) : null;
+        const printings = (found.items as any[])
+          .map((p) => ({ ...summary(p), kind: p.data?.kind ?? null, volume: p.data?.volume ?? null, volumeNumber: volumeNumber(p.data?.volume), publisher: p.data?.publisher ?? null, pageCount: p.data?.pageCount ?? null, sources: sourcesOf(p.data) }))
+          .filter((p) => !wanted || (wantedNumber !== null ? p.volumeNumber === wantedNumber : p.volume === wanted))
+          // By volume; within one volume, printings with a path first, as the site shows them.
+          .sort((a, b) => (a.volumeNumber ?? Infinity) - (b.volumeNumber ?? Infinity) || Number(a.path === null) - Number(b.path === null) || a.id.localeCompare(b.id));
+        const more = found.next ? '\nThe sefer has more than 1000 printings; these are the first 1000.' : '';
+        const line = (p: (typeof printings)[number]) =>
+          `- ${p.volume ? `volume ${p.volume}: ` : ''}${p.name} (${p.id}) ${p.url}${p.sources.length ? `\n  from ${p.sources.map((s) => [s.note ?? s.source, s.url].filter(Boolean).join(' ')).join('; ')}` : ''}`;
+        const what = `printings of ${nameOf(work)}${wanted ? `, volume ${wanted}` : ''}`;
+        return {
+          text: printings.length ? `${printings.length} ${what}:\n${printings.map(line).join('\n')}${more}` : `No ${what}.`,
+          structured: { work: summary(work), printings, truncated: Boolean(found.next) },
+        };
       },
     },
     {
@@ -306,6 +369,42 @@ function tools(siteUrl: string): Tool[] {
         const made = await need(call, 'POST', '/v1/suggestions/quick', { entityId: item.id, data, title: args.title, note: args.note });
         const status = made.status === 'merged' ? 'merged at once (the set lets your fixes go live; it will still be reviewed after)' : `sent for review (${made.status})`;
         return { text: `Suggestion ${made.id} for ${nameOf(item)}: ${status}. ${site}/review?s=${made.id}`, structured: { suggestion: made.id, status: made.status, checks: made.checks, url: `${site}/review?s=${made.id}` } };
+      },
+    },
+    {
+      name: 'get_shaar',
+      title: "Get a sefer's shaar",
+      description:
+        "A sefer's shaar file, the README of a sefer: a header of fixed fields between --- lines (shaar: 1, title, title-en, subtitle, subtitle-en, by: rh-… one line an author, by-line, by-line-en, genre), then sections under fixed headings (## על הספר | About, ## סדר הספר | Structure, ## הדפסות | Printings, ## מקורות | Sources, ## הערות | Notes). For a sefer no person has written one for, the one the catalog makes from its data, marked as the machine's.",
+      inputSchema: { type: 'object', properties: { id: ID }, required: ['id'], additionalProperties: false },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      async run(args, call) {
+        const file = await need(call, 'GET', `/v1/entities/${encodeURIComponent(String(args.id ?? ''))}/shaar`);
+        return { text: `${file.machine ? '[machine] Made from the catalog; no person has read it yet.\n' : ''}${file.text}`, structured: file };
+      },
+    },
+    {
+      name: 'suggest_shaar',
+      title: "Suggest a sefer's shaar",
+      description:
+        "Send a sefer's whole shaar file (as get_shaar gives it, changed) for review. The file is read strictly: one that cannot be read is refused with each line that is wrong and why. Setting the title, authors or genre here changes the sefer's own. Needs your RebbeHub account with the write scope.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: ID,
+          text: { type: 'string', maxLength: 120000, description: 'The whole shaar file' },
+          before: { type: 'string', description: 'The file as get_shaar gave it, so a change made since is not overwritten' },
+          title: { type: 'string', maxLength: 200, description: 'What the change is, in a few words' },
+          note: { type: 'string', maxLength: 2000, description: 'Why, and the source for it' },
+        },
+        required: ['id', 'text'],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      async run(args, call) {
+        const made = await need(call, 'POST', '/v1/suggestions/shaar', { entityId: args.id, text: args.text, before: args.before, title: args.title, note: args.note });
+        const status = made.status === 'merged' ? 'merged at once (the set lets your fixes go live; it will still be reviewed after)' : `sent for review (${made.status})`;
+        return { text: `Suggestion ${made.id} for the shaar: ${status}. ${site}/review?s=${made.id}`, structured: { suggestion: made.id, status: made.status, checks: made.checks, url: `${site}/review?s=${made.id}` } };
       },
     },
     {
@@ -416,6 +515,197 @@ function tools(siteUrl: string): Tool[] {
       },
     },
     {
+      name: 'add_segments',
+      title: 'Add segments to many pages',
+      description:
+        "Add or replace a few segments in the words of many items at once, as one suggestion: a line a source left out, a heading, a machine's reading of a scan. Each item names its id and the segments (as get_item shows them in data.body: id, kind, text runs, origin for a machine's reading), and where each goes: at 'start', 'end', or a number (before that many of the version's segments). A segment whose id is already there is replaced where it stands. The rest of each item is left as it is, so only the new words are sent. Up to 200 items a call, kept in one suggestion like suggest_items. Needs a RebbeHub API token with the write scope.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 200,
+            items: {
+              type: 'object',
+              properties: {
+                id: ID,
+                version: { type: 'string', description: "The version of the words to change (its id); left out, the first" },
+                segments: {
+                  type: 'array',
+                  minItems: 1,
+                  items: {
+                    type: 'object',
+                    properties: {
+                      segment: { type: 'object', additionalProperties: true, description: 'The segment: id, kind, text, origin' },
+                      at: { oneOf: [{ enum: ['start', 'end'] }, { type: 'integer', minimum: 0 }], default: 'end' },
+                    },
+                    required: ['segment'],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ['id', 'segments'],
+              additionalProperties: false,
+            },
+          },
+          suggestion: { type: 'integer', description: 'A suggestion made by an earlier call, still a draft, to add these items to' },
+          submit: { type: 'boolean', default: true, description: 'Send it for review after these items; false keeps it a draft to add more' },
+          ...SUGGESTION_WORDS,
+        },
+        required: ['items'],
+        additionalProperties: false,
+      },
+      annotations: WRITE,
+      async run(args, call) {
+        if (!Array.isArray(args.items) || args.items.length === 0) throw new ToolError('give items: a list of { id, segments }');
+        if (args.items.length > 200) throw new ToolError('at most 200 items a call; keep adding to the same suggestion');
+        const changed: { type: string; id: string; data: Record<string, unknown> }[] = [];
+        for (const [i, item] of (args.items as any[]).entries()) {
+          if (!item || typeof item.id !== 'string' || !Array.isArray(item.segments)) throw new ToolError(`item ${i + 1}: give id and segments`);
+          const live = await need(call, 'GET', `/v1/entities/${encodeURIComponent(item.id)}`);
+          if (live.withheld) throw new ToolError(`${live.id} is withheld for its rights; suggest on the site`);
+          const data = structuredClone(live.data ?? {});
+          const versions: any[] | undefined = data.body?.versions;
+          const version = versions?.find((v) => item.version === undefined || v.id === item.version);
+          if (!version || !Array.isArray(version.segments)) throw new ToolError(`item ${i + 1} (${item.id}): it has no words${item.version ? ` in version ${item.version}` : ''} to add to`);
+          const segments: any[] = version.segments;
+          const added = new Set<string>(item.segments.map((s: any) => s?.segment?.id));
+          const kept = segments.filter((s) => !added.has(s.id));
+          // A segment already there is replaced where it stands; a new one goes where `at` says, counted among the segments that were there.
+          const out = [...kept];
+          const ends: any[] = [];
+          const starts: any[] = [];
+          const placed: { at: number; segment: any }[] = [];
+          for (const [n, s] of item.segments.entries()) {
+            if (!s?.segment || typeof s.segment.id !== 'string') throw new ToolError(`item ${i + 1}, segment ${n + 1}: give segment with an id`);
+            const standing = segments.findIndex((x) => x.id === s.segment.id);
+            if (standing >= 0) placed.push({ at: kept.filter((x) => segments.indexOf(x) < standing).length, segment: s.segment });
+            else if (s.at === 'start') starts.push(s.segment);
+            else if (typeof s.at === 'number') placed.push({ at: Math.min(s.at, kept.length), segment: s.segment });
+            else ends.push(s.segment);
+          }
+          for (const p of placed.reverse()) out.splice(p.at, 0, p.segment);
+          version.segments = [...starts, ...out, ...ends];
+          changed.push({ type: live.type, id: live.id, data });
+        }
+        let suggestion = typeof args.suggestion === 'number' ? args.suggestion : null;
+        if (suggestion === null) {
+          const title = typeof args.title === 'string' && args.title.trim() ? args.title.trim() : `Add words to ${changed.length} page${changed.length === 1 ? '' : 's'}`;
+          suggestion = (await need(call, 'POST', '/v1/suggestions', { title, description: typeof args.note === 'string' ? args.note : undefined })).id as number;
+        }
+        for (const [i, item] of changed.entries()) {
+          const answer = await call('PUT', `/v1/suggestions/${suggestion}/items`, item);
+          if (answer.status >= 400) throw new ToolError(`item ${i + 1}: ${answer.body?.message ?? `the API answered ${answer.status}`} (suggestion ${suggestion} keeps the ${i} before it; fix it and call again with suggestion ${suggestion})`);
+        }
+        const url = `${site}/review?s=${suggestion}`;
+        if (args.submit === false) return { text: `Suggestion ${suggestion}: ${changed.length} page${changed.length === 1 ? '' : 's'} changed, still a draft. ${url}`, structured: { suggestion, status: 'draft', items: changed.map((c) => c.id), url } };
+        const sent = await need(call, 'POST', `/v1/suggestions/${suggestion}/submit`);
+        const failed = (sent.checks ?? []).filter((c: any) => c.status === 'fail');
+        const status = sent.status === 'merged' ? 'merged at once (the set lets your changes go live; it will still be reviewed after)' : `sent for review (${sent.status})`;
+        return {
+          text: [`Suggestion ${suggestion}: ${status}; ${changed.length} page${changed.length === 1 ? '' : 's'} in this call. ${url}`, ...failed.map((c: any) => `Failed check: ${c.message}`)].join('\n'),
+          structured: { suggestion, status: sent.status, items: changed.map((c) => c.id), checks: sent.checks ?? [], url },
+        };
+      },
+    },
+    {
+      name: 'list_suggestions',
+      title: 'List suggestions',
+      description:
+        "Suggestions people and bots sent, newest first: open ones (waiting for review, or sent back) by default. Filter by author or reviewer (a @handle), by items they change, or by words in the title or #number. `suggestion` is the id the other suggestion tools take.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          state: { enum: ['open', 'closed', 'all'], default: 'open' },
+          author: { type: 'string', maxLength: 100, description: 'Only those this @handle sent' },
+          reviewer: { type: 'string', maxLength: 100, description: 'Only those this @handle is asked to review' },
+          item: { ...ID, description: 'Only those that change this item' },
+          q: { type: 'string', maxLength: 200, description: 'Words in the title, or #number' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 30 },
+        },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      async run(args, call) {
+        const params = new URLSearchParams({ state: String(args.state ?? 'open'), limit: String(Math.min(Math.max(Number(args.limit) || 30, 1), 100)) });
+        for (const key of ['author', 'reviewer', 'q'] as const) if (typeof args[key] === 'string' && args[key].trim()) params.set(key, args[key].trim());
+        if (typeof args.item === 'string') params.set('about', args.item);
+        const page = await need(call, 'GET', `/v1/suggestions?${params}`);
+        const name = (id: string) => page.people?.[id]?.name ?? id;
+        const suggestions = (page.suggestions as any[]).map((s) => ({
+          suggestion: s.id,
+          number: s.number,
+          title: s.title,
+          status: s.status,
+          kind: s.kind,
+          author: name(s.author),
+          submittedAt: s.submittedAt,
+          approvals: s.approvals,
+          comments: s.comments,
+          types: s.types ?? [],
+          url: `${site}/review?s=${s.id}`,
+        }));
+        const text = suggestions.length ? suggestions.map((s) => `#${s.number} [${s.status}] ${s.title} (by ${s.author}${s.types.length ? `; ${s.types.join(', ')}` : ''}) suggestion ${s.suggestion} ${s.url}`).join('\n') : 'No suggestions.';
+        return { text, structured: { suggestions, counts: page.counts, next: page.next ?? null } };
+      },
+    },
+    {
+      name: 'get_suggestion',
+      title: 'Read a suggestion',
+      description:
+        "One suggestion: its title, status and author, whether you may approve it (and if not, why), its checks that did not pass, and what it changes, a page of items at a time (each item's changed fields, before and after, without long words). Clashes with what changed on the site since are listed per item; approve_suggestion's `clashes` settles them.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          suggestion: { type: 'integer' },
+          offset: { type: 'integer', minimum: 0, default: 0, description: 'Skip this many items (the answer says where the next page starts)' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 25 },
+        },
+        required: ['suggestion'],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      async run(args, call) {
+        const id = Number(args.suggestion);
+        const params = new URLSearchParams({ brief: '1', offset: String(Math.max(Number(args.offset) || 0, 0)), limit: String(Math.min(Math.max(Number(args.limit) || 25, 1), 100)) });
+        const view = await need(call, 'GET', `/v1/suggestions/${id}?${params}`);
+        const cs = view.changeset;
+        const short = (value: unknown) => {
+          const text = JSON.stringify(value) ?? 'nothing';
+          return text.length > 300 ? `${text.slice(0, 300)}…` : text;
+        };
+        const items = (view.entries as any[]).map((e) => ({
+          id: e.entityId,
+          type: e.type,
+          name: nameOf({ id: e.entityId, type: e.type, data: e.after ?? e.before }),
+          change: e.before === null ? 'added' : e.after === null ? 'deleted' : 'changed',
+          fields: (e.changes as any[]).map((c) => ({ path: c.path, before: c.before ?? null, after: c.after ?? null })),
+          clashes: (e.conflicts as any[]).map((c) => c.path),
+          withheld: e.withheld ?? null,
+        }));
+        const url = `${site}/review?s=${id}`;
+        const author = view.names?.[cs.author] ?? cs.author;
+        const lines = [
+          `Suggestion ${id}${cs.number != null ? ` (#${cs.number})` : ''}: ${cs.title ?? '(no title)'} [${cs.status}] by ${author}. ${url}`,
+          view.mayApprove ? 'You may approve it.' : `You may not approve it: ${view.mayApproveReason}.`,
+          `Checks: ${cs.checkCounts.fail} failed, ${cs.checkCounts.warn} warnings, ${cs.checkCounts.pass} passed.`,
+          ...(cs.checks as any[]).map((k) => `${k.status === 'fail' ? 'Failed' : 'Warning'}: ${k.message}`),
+          `Items ${view.offset + 1}-${view.offset + items.length} of ${view.total}${view.next != null ? ` (next page: offset ${view.next})` : ''}:`,
+          ...items.map((i) => {
+            const head = `${i.change} ${i.type} ${i.name} (${i.id})${i.clashes.length ? `, clashes on ${i.clashes.join(', ')}` : ''}`;
+            if (i.withheld) return `${head}: withheld (${i.withheld})`;
+            if (i.change !== 'changed') return head;
+            return [head, ...i.fields.map((f) => `  ${f.path || '(whole)'}: ${short(f.before)} -> ${short(f.after)}`)].join('\n');
+          }),
+        ];
+        return {
+          text: lines.join('\n'),
+          structured: { suggestion: id, number: cs.number ?? null, title: cs.title ?? null, status: cs.status, author, mayApprove: view.mayApprove, mayApproveReason: view.mayApproveReason, checkCounts: cs.checkCounts, checks: cs.checks, total: view.total, next: view.next, items, url },
+        };
+      },
+    },
+    {
       name: 'approve_suggestion',
       title: 'Approve a suggestion',
       description:
@@ -512,7 +802,7 @@ function machineTools(site: string): Tool[] {
         for (const key of ['kind', 'item', 'status']) if (typeof args[key] === 'string') params.set(key, args[key] as string);
         const [{ requests }, summary] = await Promise.all([need(call, 'GET', `/v1/machine/requests?${params}`), args.item ? null : need(call, 'GET', '/v1/machine')]);
         const head = summary
-          ? [`OCR: ${summary.ocr.waiting} waiting, ${summary.ocr.backlog} served scans not read yet.`, `Transcripts: ${summary.transcript.waiting} waiting, ${summary.transcript.backlog} served recordings not transcribed yet.`]
+          ? [`OCR: ${summary.ocr.waiting} waiting, ${summary.ocr.backlog} served scans not read yet.`, `Transcripts: ${summary.transcript.waiting} waiting, ${summary.transcript.backlog} recordings not transcribed yet.`]
           : [];
         return { text: [...head, ...(requests as any[]).map(line)].join('\n') || 'No requests.', structured: { requests, ...(summary ? { summary } : {}) } };
       },
@@ -578,9 +868,9 @@ const OPERATIONS = {
   type: 'array',
   minItems: 1,
   maxItems: 200,
-  items: { type: 'object', properties: { op: { enum: ['move', 'move-up', 'rename', 'reorder', 'create-set', 'delete-set', 'merge', 'split'] } }, required: ['op'], additionalProperties: true },
+  items: { type: 'object', properties: { op: { enum: ['move', 'move-up', 'rename', 'reorder', 'create-set', 'delete-set', 'merge', 'split', 'addition', 'official'] } }, required: ['op'], additionalProperties: true },
   description:
-    'Done in order; items are ids, or new:<key> for a set made earlier in the plan. move { items, to, from?, mode?, position? }, move-up { items, from? }, rename { item, name?, slug?, path? }, reorder { items, parent?, position? }, create-set { key?, name, slug, parent?, items? }, delete-set { item }, merge { from, into }, split { work, units? or range: { from, to }, title, slug }.',
+    'Done in order; items are ids, or new:<key> for a set made earlier in the plan. move { items, to, from?, mode?, position? }, move-up { items, from? }, rename { item, name?, slug?, path? }, reorder { items, parent?, position? }, create-set { key?, name, slug, parent?, items? }, delete-set { item }, merge { from, into }, split { work, units? or range: { from, to }, title, slug }, addition { item, to?, kind } (a sefer is an addition to the official sefer `to`, not an official sefer: kind commentary, index, about, collection or other), official { item } (an addition becomes an official sefer again).',
 };
 
 /**
@@ -618,7 +908,7 @@ function organizeTools(site: string): Tool[] {
       name: 'get_tree',
       title: 'See the tree',
       description:
-        "The catalog as a tree, for organizing it: the top sets (no root), or one set or sefer, with the sets under it, the sefarim and other items in it (sefarim first, in their order) and how much each holds (sets, items, units). depth goes further down (a set's sefarim's units at depth 2).",
+        "The catalog as a tree, for organizing it: the top sets (no root), or one set or sefer, with the sets under it, the sefarim and other items in it (official sefarim first, in their order, then additions, marked {addition: kind to id}) and how much each holds (sets, items, units). depth goes further down (a set's sefarim's units at depth 2). The tree is built of the official sefarim; a commentary, an index or a book about one is an addition to it (mark_addition).",
       inputSchema: { type: 'object', properties: { root: { ...ID, description: 'A set or sefer; left out, the top sets' }, depth: { type: 'integer', minimum: 0, maximum: 4, default: 1 }, limit: { type: 'integer', minimum: 1, maximum: 500, default: 100 } }, additionalProperties: false },
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
       async run(args, call) {
@@ -630,7 +920,7 @@ function organizeTools(site: string): Tool[] {
         const lines: string[] = [];
         const walk = (nodes: any[], indent: string) => {
           for (const n of nodes) {
-            lines.push(`${indent}- ${label(n)} (${n.type}, ${n.id}${n.path ? `, ${n.path}` : ''})${counts(n) ? ` [${counts(n)}]` : ''}`);
+            lines.push(`${indent}- ${label(n)} (${n.type}, ${n.id}${n.path ? `, ${n.path}` : ''})${n.addition ? ` {addition: ${n.addition.kind}${n.addition.to ? ` to ${n.addition.to}` : ''}}` : ''}${counts(n) ? ` [${counts(n)}]` : ''}`);
             if (n.children) walk(n.children, `${indent}  `);
             if (n.more) lines.push(`${indent}  … ${n.more} more`);
           }
@@ -742,6 +1032,23 @@ function organizeTools(site: string): Tool[] {
         return send(call, [{ op: 'merge', from: args.from, into: args.into }], args);
       },
     },
+    {
+      name: 'mark_addition',
+      title: 'Mark a sefer as an addition, or official',
+      description: `The catalog's tree is built of the official sefarim (the Rebbeim's sefarim and the other official sets); any other book is an addition to one: a commentary, an index, a book about it, a collection from it. Mark a sefer as an addition (kind, and to: the official sefer it belongs to, listed there under Additions; without to, it is shown apart at the end of its shelf), or with official: true make it an official sefer again. Another scan or format of the same book is no addition: merge it into that sefer (merge_items).${ORGANIZE_NOTE}`,
+      inputSchema: {
+        type: 'object',
+        properties: { item: ID, to: { ...ID, description: 'The official sefer it belongs to' }, kind: { enum: ['commentary', 'index', 'about', 'collection', 'other'] }, official: { type: 'boolean', description: 'Make it an official sefer again (clears the addition)' }, ...SUGGESTION_WORDS },
+        required: ['item'],
+        additionalProperties: false,
+      },
+      annotations: WRITE,
+      async run(args, call) {
+        if (args.official === true) return send(call, [{ op: 'official', item: args.item }], args);
+        if (typeof args.kind !== 'string') throw new ToolError('give kind (commentary, index, about, collection or other), or official: true');
+        return send(call, [{ op: 'addition', item: args.item, to: args.to, kind: args.kind }], args);
+      },
+    },
   ];
 }
 
@@ -772,7 +1079,7 @@ export function mcpRoutes(app: Hono, options: { siteUrl: string; version: string
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: MCP_SERVER_NAME, title: 'RebbeHub', version: options.version, websiteUrl: `${options.siteUrl.replace(/\/+$/, '')}/developers` },
           instructions:
-            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix (write scope; you will be asked to connect your RebbeHub account) makes a suggestion under the connected person\'s account that people review before anything changes; suggest_items (write scope) adds, changes or deletes many items in one suggestion, approve_suggestion approves one when you may, and combine_suggestions makes several of your own into one; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into. ask_machine (write scope) asks for a scan to be read by OCR or a recording transcribed; machine_queue shows where those requests stand, machine_to_check what the machines wrote that nobody checked yet, and training_data how much training data people\'s checking has made for the next transcription model. To organize the catalog, get_tree shows it; move_items, move_up, rename_item, reorder_children, create_set, delete_set, merge_items and organize (write scope) each make one suggestion that people review; preview_organize shows the change first.',
+            'RebbeHub is the open, community-edited index of Chabad Torah and media. Search, read items and their words; ids are rh-… and never change. Words marked [machine] were read or heard by a machine and not yet checked. suggest_fix (write scope; you will be asked to connect your RebbeHub account) makes a suggestion under the connected person\'s account that people review before anything changes; suggest_items (write scope) adds, changes or deletes many items in one suggestion, list_suggestions and get_suggestion show what was suggested, approve_suggestion approves one when you may, and combine_suggestions makes several of your own into one; list_issues shows what people reported, and open_issue (write scope) reports a problem for people to look into. ask_machine (write scope) asks for a scan to be read by OCR or a recording transcribed; machine_queue shows where those requests stand, machine_to_check what the machines wrote that nobody checked yet, and training_data how much training data people\'s checking has made for the next transcription model. To organize the catalog, get_tree shows it; move_items, move_up, rename_item, reorder_children, create_set, delete_set, merge_items, mark_addition and organize (write scope) each make one suggestion that people review; preview_organize shows the change first. The tree is built of the official sefarim; other books are additions to one.',
         };
       }
       case 'ping':

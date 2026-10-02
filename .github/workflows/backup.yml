@@ -1,0 +1,99 @@
+name: Backup
+
+# The whole database (the catalog, accounts and sessions, everything), every
+# night, into the private preservation bucket: Neon keeps only a day of
+# history, so a bad import or merge noticed later could not be undone
+# without this. Never served; restoring is in docs/operations.md, "Backups".
+#
+# backups/db/<yyyy-mm-dd>/ holds pg_dump's custom format (compressed) in
+# parts of 90 MB (dump.part00, part01…, what Cloudflare's REST API takes in
+# one request) and SHA256SUMS. A night's copy is kept 35 days; the one of
+# the 1st of each month is kept.
+#
+# Needs DATABASE_URL, and a way to write rebbehub-preservation: either
+# CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (R2 edit rights, as the
+# upkeep's covers need), or R2_ENDPOINT, R2_ACCESS_KEY_ID and
+# R2_SECRET_ACCESS_KEY of an R2 token with Object Read & Write on the bucket.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Database to R2
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      BUCKET: rebbehub-preservation
+      KEEP_DAYS: "35"
+    steps:
+      - name: Check it is configured
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "::error::Add the DATABASE_URL repository secret (see docs/deploy.md)."; exit 1; fi
+          if [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && [ -n "$CLOUDFLARE_API_TOKEN" ]; then echo "VIA=rest" >> "$GITHUB_ENV"
+          elif [ -n "$R2_ENDPOINT" ] && [ -n "$AWS_ACCESS_KEY_ID" ]; then echo "VIA=s3" >> "$GITHUB_ENV"
+          else
+            echo "::error::Add CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN, or R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY (see the top of this file)."; exit 1
+          fi
+      - uses: actions/checkout@v7
+      - name: Install pg_dump as new as the server
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSo /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
+      - name: Dump
+        run: |
+          # pg_dump wants one session of its own: Neon's pooler (-pooler in the host) is left out.
+          url="${DATABASE_URL/-pooler./.}"
+          day=$(date -u +%F)
+          echo "DAY=$day" >> "$GITHUB_ENV"
+          mkdir out
+          pg_dump --format=custom --compress=9 --no-owner --no-privileges --file dump "$url"
+          # A dump that cannot be read back is no backup.
+          pg_restore --list dump > toc.txt
+          tables=$(grep -c ' TABLE DATA ' toc.txt || true)
+          if [ "$tables" -lt 10 ]; then echo "::error::The dump lists only $tables tables' data."; exit 1; fi
+          split -b 90m -d -a 2 dump out/dump.part
+          (sha256sum dump; cd out && sha256sum dump.part*) > out/SHA256SUMS
+          echo "$(du -h dump | cut -f1) in $(ls out/dump.part* | wc -l) parts, $tables tables" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Upload
+        run: |
+          source .github/backup-r2.sh
+          for file in out/*; do put "$file" "backups/db/$DAY/$(basename "$file")"; done
+          # Checked there, not only sent: every part, at its size.
+          list "backups/db/$DAY/" | sed 's|^backups/db/[^/]*/||' | sort > there.txt
+          (cd out && for f in *; do echo "$f $(stat -c %s "$f")"; done) | sort > sent.txt
+          if ! diff sent.txt there.txt; then echo "::error::What is in R2 is not what was sent."; exit 1; fi
+          echo "Kept at $BUCKET/backups/db/$DAY/" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Forget old nights
+        run: |
+          source .github/backup-r2.sh
+          cutoff=$(date -u -d "-$KEEP_DAYS days" +%F)
+          list backups/db/ | while read -r key size; do
+            day=$(cut -d/ -f3 <<<"$key")
+            [[ "$day" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || continue
+            # The 1st of each month stays.
+            if [[ "$day" < "$cutoff" ]] && [ "${day:8:2}" != "01" ]; then
+              forget "$key"
+              echo "forgot $key"
+            fi
+          done

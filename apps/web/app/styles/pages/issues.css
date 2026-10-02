@@ -263,3 +263,108 @@ details.pick .pop.down {
 .new-report .about-field .row-line {
   gap: 4px;
 }
+
+/* ================================================================== suggestions, as design/ draws them (3h) */
+
+/* Whose suggestions: everyone's, what waits for my review, what I sent. */
+.sg-whose {
+  display: flex;
+  gap: 2px;
+  margin-top: 14px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--sunken);
+  max-width: 520px;
+}
+
+.sg-whose a {
+  flex: 1;
+  text-align: center;
+  padding: 7px 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: var(--fs-md);
+}
+
+.sg-whose a:hover {
+  text-decoration: none;
+  color: var(--text);
+}
+
+.sg-whose a[aria-current='true'] {
+  background: var(--card);
+  color: var(--text);
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+}
+
+/* One quiet list: no box around it. */
+.sg-list .box.issues {
+  border: 0;
+  background: none;
+}
+
+.sg-list .box-h.list-bar {
+  background: none;
+  padding-inline: 2px;
+}
+
+.sg-list .issue-row {
+  align-items: flex-start;
+  padding-inline: 2px;
+}
+
+/* Where it stands: a dot in its colour, and what happened to it in words. */
+.sg-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-top: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--subtle);
+}
+
+.sg-sent_back .sg-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.sg-merged .sg-dot {
+  background: var(--open);
+  border-color: var(--open);
+}
+
+.sg-withdrawn .sg-dot,
+.sg-draft .sg-dot {
+  border-color: var(--faint);
+}
+
+.sg-list .row-title {
+  font-family: var(--display);
+}
+
+.sg-where {
+  margin-top: 2px;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.sg-sent_back .sg-where {
+  color: var(--accent);
+}
+
+.sg-merged .sg-where {
+  color: var(--open);
+}
+
+.sg-withdrawn .sg-where {
+  color: var(--faint);
+  font-weight: 400;
+}
+
+@media (max-width: 720px) {
+  .sg-head .lede {
+    display: none;
+  }
+}

@@ -1,40 +1,41 @@
-import { Maximize2, Minimize2, Pause, PenLine, Play, Radio, SkipBack, SkipForward, Undo2, LocateFixed, Loader2 } from 'lucide-react';
+import { Maximize2, Minimize2, Pause, PenLine, Play, SkipBack, SkipForward, Undo2, LocateFixed, Loader2 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { unclearRanges } from '@rebbehub/model';
 import { t, type Lang } from '../lib/i18n.js';
 import { clockOf, tn } from '../lib/i18nNetwork.js';
 import { href } from '../lib/links.js';
-import { get, pendingRanges, within, type Span, type Transcript, type Word } from '../lib/transcript.js';
+import { get, pendingRanges, timedWords, within, type Transcript, type Word } from '../lib/transcript.js';
 import { useAccount } from '../lib/useAccount.js';
 import { clock, usePlayer, type Track } from '../player/PlayerProvider.js';
 import { MachineLabel } from '../ui/primitives.js';
 import { AskMachine } from './AskMachine.js';
-import { ConfirmTiming, DiscussUnclear, timingWords, withSpans } from './TimingTools.js';
+import { DiscussUnclear } from './TimingTools.js';
 import { TranscriptEditor } from './TranscriptEditor.js';
 
 /**
  * A farbrengen's transcripts, part by part, synced to its recordings (the
  * plan: "the player highlights the words as they are spoken"). The
  * paragraph being heard is marked and kept in view, and within it the word
- * being said; tapping a paragraph plays from there. When the sync drifts,
- * a listener taps "Said now" on the paragraph the Rebbe is saying: it is
- * set to this moment and locked, and what follows moves with it (the
- * plan's "fix a drifting line in two taps"). Paragraphs and sync the
+ * being said; tapping a paragraph plays from there. The sync is the
+ * model's and listeners do not move it here: Shmuly had the "Timing"
+ * button taken out, as it is already synced well. Paragraphs and sync the
  * machine made and nobody checked are marked as such; a signed-in listener
  * fixes a paragraph's words as they hear them. (A hanacha synced to the
  * recording is the farbrengen page's own text, EventPage's Words.)
  * A search hit opens here at its paragraph (`?at=`), lit up, with a
- * button to play from the moment it is heard. Signed in, "Timing" turns a
- * tap on a paragraph into "the Rebbe starts it now" (asked once before it
- * is sent), and a tap on words marked unclear opens a conversation about
+ * button to play from the moment it is heard. A tap on words marked
+ * unclear opens a conversation about
  * them on the recording's talk page.
  *
  * Listening comes first: the words are shown as a music app shows lyrics,
  * large and calm, the word being said lit and kept in view as the
- * recording plays. The tools for checking the machine's words open only
- * on "Review machine text" (or `?review=1`, as /check links), so a
- * listener is not asked to judge every line.
+ * recording plays. The words to read and check have a tab of their own
+ * on the page (`?tab=text`, and `?review=1` as older links say): one
+ * view, the same for everyone, with the tools to fix and check for those
+ * signed in (Shmuly: one editor, not two modes; editing on its own tab).
+ * Edit on the player goes there, so a listener is not asked to judge
+ * every line.
  */
 
 /** Where the audio is, in milliseconds, updated many times a second while this recording plays, for word by word highlighting. */
@@ -109,17 +110,14 @@ function Spoken({ content, words, nowMs, lang, pending = [] }: { content: string
   return <>{out}</>;
 }
 
-export function Transcripts({ tracks, lang, onLoaded, only }: { tracks: Track[]; lang: Lang; onLoaded?: (transcripts: number) => void; only?: string }) {
+export function Transcripts({ tracks, lang, onLoaded, only, view = 'listen' }: { tracks: Track[]; lang: Lang; onLoaded?: (transcripts: number) => void; only?: string; view?: 'listen' | 'text' }) {
   // `tracks` is what plays, one part after the other; `only` narrows what is read here to one of them (a recording's own page).
   const heard = only ? tracks.filter((tr) => tr.id === only) : tracks;
   const player = usePlayer();
   const account = useAccount();
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const found = params.get('at');
-  const [reviewing, setReviewing] = useState(params.get('review') === '1');
-  useEffect(() => {
-    if (params.get('review') === '1') setReviewing(true);
-  }, [params]);
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [loaded, setLoaded] = useState(false);
   const section = useRef<HTMLElement>(null);
@@ -143,11 +141,6 @@ export function Transcripts({ tracks, lang, onLoaded, only }: { tracks: Track[];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ids]);
 
-  // A timing fix, shown at once.
-  function anchored(recording: string, spans: Span[]) {
-    setTranscripts((all) => withSpans(all, recording, spans));
-  }
-
   // An approved fix, shown at once: its words, and whether the paragraph is now checked or only fixed in part.
   function fixed(recording: string, segment: string, content: string, complete: boolean) {
     setTranscripts((all) =>
@@ -159,25 +152,13 @@ export function Transcripts({ tracks, lang, onLoaded, only }: { tracks: Track[];
     );
   }
 
-  // Checking is remembered in this browser until "Back to listening", so a reload opens the editor again.
-  const reviewKey = `rebbehub.review.on.${ids}`;
-  useEffect(() => {
-    try {
-      if (localStorage.getItem(reviewKey)) setReviewing(true);
-    } catch {
-      // No storage: the listening view, as always.
-    }
-  }, [reviewKey]);
-
-  function review(on: boolean) {
-    try {
-      if (on) localStorage.setItem(reviewKey, '1');
-      else localStorage.removeItem(reviewKey);
-    } catch {
-      // Not remembered.
-    }
-    setReviewing(on);
-    requestAnimationFrame(() => section.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  // Edit goes to the page's Text tab, where the words are read and checked.
+  function toText() {
+    const next = new URLSearchParams(params);
+    next.set('tab', 'text');
+    next.delete('review');
+    navigate({ search: `?${next}` });
+    requestAnimationFrame(() => window.scrollTo({ top: 0 }));
   }
 
   // Parts with no transcript yet: anyone signed in may ask the machine for one.
@@ -201,10 +182,10 @@ export function Transcripts({ tracks, lang, onLoaded, only }: { tracks: Track[];
   const unchecked = transcripts.some((tr) => tr.paragraphs.some((p) => !p.checked));
   const syncUnchecked = transcripts.some((tr) => tr.paragraphs.some((p) => p.syncChecked === false));
 
-  if (!reviewing)
+  if (view === 'listen')
     return (
       <section id="transcript" ref={section} className="transcripts">
-        <Lyrics transcripts={transcripts} tracks={tracks} lang={lang} nowMs={nowMs} found={found} machine={unchecked || syncUnchecked} signedIn={Boolean(account)} onEdit={() => review(true)} onAnchored={anchored} />
+        <Lyrics transcripts={transcripts} tracks={tracks} lang={lang} nowMs={nowMs} found={found} machine={unchecked || syncUnchecked} signedIn={Boolean(account)} onEdit={toText} />
         {unchecked || syncUnchecked ? <p className="lyrics-foot row-sub">{t(lang, 'lyricsMachineHint')}</p> : null}
         {ask}
       </section>
@@ -219,9 +200,7 @@ export function Transcripts({ tracks, lang, onLoaded, only }: { tracks: Track[];
         nowMs={nowMs}
         found={found}
         account={account}
-        onBack={() => review(false)}
         onFixed={fixed}
-        onAnchored={anchored}
       />
       {ask}
     </section>
@@ -246,7 +225,6 @@ function Lyrics({
   machine,
   signedIn,
   onEdit,
-  onAnchored,
 }: {
   transcripts: Transcript[];
   tracks: Track[];
@@ -256,13 +234,8 @@ function Lyrics({
   machine: boolean;
   signedIn: boolean;
   onEdit: () => void;
-  onAnchored: (recording: string, spans: Span[]) => void;
 }) {
   const player = usePlayer();
-  // Timing: a tap on a paragraph says the Rebbe starts it now; the moment waits for Confirm.
-  const [timing, setTiming] = useState(false);
-  const [tap, setTap] = useState<{ segment: string; atMs: number } | null>(null);
-  const [timed, setTimed] = useState(false);
   const [discuss, setDiscuss] = useState<{ words: string; atMs: number | null } | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const [follow, setFollow] = useState(true);
@@ -375,22 +348,6 @@ function Lyrics({
           <PenLine size={16} aria-hidden />
           {t(lang, 'editTranscript')}
         </button>
-        {signedIn ? (
-          <button
-            type="button"
-            className={timing ? 'lyrics-edit on' : 'lyrics-edit'}
-            aria-pressed={timing}
-            onClick={() => {
-              setTiming((on) => !on);
-              setTap(null);
-              setTimed(false);
-            }}
-            title={timingWords.timingModeHint[lang]}
-          >
-            <Radio size={16} aria-hidden />
-            {timingWords.timingMode[lang]}
-          </button>
-        ) : null}
         <button type="button" className="lyrics-ib" onClick={() => setFull((f) => !f)} aria-label={t(lang, full ? 'exitFullScreen' : 'fullScreen')} title={t(lang, full ? 'exitFullScreen' : 'fullScreen')}>
           {full ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
         </button>
@@ -436,42 +393,17 @@ function Lyrics({
               onClick={(e) => {
                 const target = e.target as HTMLElement;
                 const at = target.closest<HTMLElement>('[data-ms]')?.dataset.ms;
-                if (timing && playing && p.startMs !== null) {
-                  setTap({ segment: p.id, atMs: Math.round(player.now() * 1000) });
-                  setTimed(false);
-                  return;
-                }
                 const u = target.closest<HTMLElement>('[data-u]')?.dataset.u;
                 const mark = u !== undefined ? unclearRanges(p.content)[Number(u)] : undefined;
                 if (mark) setDiscuss({ words: p.content.slice(mark.from, mark.to), atMs: at ? Number(at) : p.startMs });
                 playFrom(at ? Number(at) : (p.startMs ?? 0));
               }}
             >
-              {now && p.words?.length ? <Spoken content={p.content} words={p.words} nowMs={nowMs} lang={lang} pending={waiting} /> : <Plain content={p.content} lang={lang} pending={waiting} />}
+              {now && timedWords(p) ? <Spoken content={p.content} words={timedWords(p)!} nowMs={nowMs} lang={lang} pending={waiting} /> : <Plain content={p.content} lang={lang} pending={waiting} />}
             </button>
           );
         })}
       </div>
-      {timing ? (
-        <div className="lyrics-timing">
-          {tap ? (
-            <ConfirmTiming
-              recording={shown.recording}
-              segment={tap.segment}
-              atMs={tap.atMs}
-              lang={lang}
-              onCancel={() => setTap(null)}
-              onDone={(spans) => {
-                setTap(null);
-                setTimed(true);
-                onAnchored(shown.recording, spans);
-              }}
-            />
-          ) : (
-            <p className="row-sub">{timed ? timingWords.syncFixed[lang] : timingWords.timingModeHint[lang]}</p>
-          )}
-        </div>
-      ) : null}
       {discuss ? <DiscussUnclear recording={shown.recording} words={discuss.words} atMs={discuss.atMs} lang={lang} signedIn={signedIn} onClose={() => setDiscuss(null)} /> : null}
       {!follow && playing ? (
         <button type="button" className="lyrics-now" onClick={backToNow}>

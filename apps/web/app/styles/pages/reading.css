@@ -1,0 +1,532 @@
+/*
+ * A sicha or a chapter to read (views/ItemPage.tsx ReadingPage), as
+ * design/ draws it in 3d and 3l: one column of text set as a sefer sets it
+ * (justified, its first word large, note numbers in the accent, the notes
+ * at its foot), under a quiet line back to its volume and its name
+ * centred over an ornament. The reader's text size ("אא") is kept on the
+ * page's root as data-text-size.
+ */
+
+.rd {
+  max-width: 760px;
+  padding-block: 18px 56px;
+  --rd-size: 21px;
+}
+
+:root[data-text-size='s'] .rd {
+  --rd-size: 18px;
+}
+
+:root[data-text-size='l'] .rd {
+  --rd-size: 24px;
+}
+
+:root[data-text-size='xl'] .rd {
+  --rd-size: 28px;
+}
+
+.rd-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rd-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--fs-md);
+  margin-inline-start: -4px;
+}
+
+.rd-back span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rd-back:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.rd-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.rd-size {
+  font: 700 18px / 1 var(--display);
+  color: var(--text);
+}
+
+.rd-size small {
+  font-size: 13px;
+  margin-inline-end: 1px;
+}
+
+/* Its name, centred, in the accent, over a rule with a dot in it. */
+.rd-head {
+  text-align: center;
+  padding: 26px 0 8px;
+}
+
+.rd-kicker {
+  color: var(--muted);
+  font-size: var(--fs-md);
+  margin-bottom: 4px;
+}
+
+.rd-head h1 {
+  font: 700 40px / 1.2 var(--display);
+  color: var(--accent);
+  letter-spacing: 0;
+}
+
+.rd-orn {
+  display: block;
+  width: 84px;
+  height: 9px;
+  margin: 14px auto 0;
+  background:
+    radial-gradient(circle, var(--subtle) 2px, transparent 2.5px) center / 9px 9px no-repeat,
+    linear-gradient(var(--border-strong), var(--border-strong)) left center / 34px 1px no-repeat,
+    linear-gradient(var(--border-strong), var(--border-strong)) right center / 34px 1px no-repeat;
+}
+
+/* A letter (5b, 5d): its name at the start, and under it the date and addressee from its own first lines. */
+.rd-letter-head {
+  text-align: start;
+  padding: 22px 0 4px;
+}
+
+.rd-letter-head h1 {
+  color: var(--text);
+}
+
+.rd-letter-sub {
+  margin-top: 6px;
+  color: var(--subtle);
+  font-size: var(--fs-md);
+}
+
+/* Its date and place at the line's end, close together, and its greeting centred, as a letter prints them. */
+.rd .words-p.end {
+  text-align: end;
+  line-height: 1.5;
+  margin-bottom: 0.25em;
+}
+
+.rd .words-p.greet {
+  text-align: center;
+  font-weight: 700;
+}
+
+.rd-facts {
+  display: none;
+}
+
+/* When the page's name is its words' own heading (שיחה א), the heading is not said twice. */
+.rd-titled .words > .words-heading:first-child,
+.rd-titled .words > .words-section:first-child > .words-heading:first-child {
+  display: none;
+}
+
+/* ------------------------------------------------------------ the text */
+
+.rd .page-body,
+.rd .unit-text {
+  margin-top: 22px;
+}
+
+.rd .words {
+  font-size: var(--rd-size);
+  line-height: 1.95;
+}
+
+.rd .words-p {
+  text-align: justify;
+  padding-inline-start: 0;
+  margin-bottom: 0.9em;
+}
+
+/* No numbers in the margin: a paragraph's link shows where the pointer is. */
+.rd .words-p > .words-anchor {
+  inset-inline-start: -30px;
+  opacity: 0;
+}
+
+.rd .words-p:hover > .words-anchor,
+.rd .words-p > .words-anchor:focus-visible {
+  opacity: 1;
+}
+
+/* Unchecked machine words: a small quiet dot beside the paragraph, never a banner. */
+.rd .words-p.machine {
+  border-inline-start: 0;
+  padding-inline-start: 0;
+}
+
+.rd .words-p.machine::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: -16px;
+  top: 0.85em;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--machine);
+}
+
+.rd .machine-note {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--subtle);
+  font-size: var(--fs-sm);
+  justify-content: center;
+}
+
+.rd .machine-note svg {
+  display: none;
+}
+
+.rd .machine-note::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-top: 0.55em;
+  border-radius: 50%;
+  background: var(--machine);
+}
+
+.words-lead {
+  font: 700 1.6em / 1 var(--display);
+  margin-inline-end: 0.1em;
+}
+
+.rd .words-heading {
+  text-align: center;
+  color: var(--text);
+}
+
+.rd .words-note-ref {
+  font-weight: 700;
+}
+
+.rd .words-note-ref a {
+  color: var(--accent);
+}
+
+/* The notes at its foot, under their name. */
+.rd .words-notes {
+  margin-top: 2.2em;
+  padding-top: 14px;
+  font-size: 0.72em;
+}
+
+.rd .words-notes::before {
+  content: attr(aria-label);
+  display: block;
+  font: 700 var(--fs-sm) var(--ui);
+  color: var(--subtle);
+  margin-bottom: 8px;
+}
+
+.rd .words-notes li:target {
+  background: var(--accent-soft);
+  border-radius: 6px;
+  padding-inline: 6px;
+}
+
+.rd .words-note-back {
+  color: var(--accent);
+}
+
+.rd .words-credit,
+.rd .body-source {
+  text-align: center;
+}
+
+/* ------------------------------------------------------------ the one before and after it */
+
+.rd .chapter-nav-bottom {
+  margin-top: 32px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.rd .chapter-nav-link {
+  border: 0;
+  background: none;
+  padding: 6px 2px;
+}
+
+.rd .chapter-nav-link:hover {
+  background: none;
+}
+
+.rd .chapter-nav-link:hover .chapter-nav-name {
+  color: var(--accent);
+}
+
+.rd .chapter-nav-name {
+  font: 700 var(--fs-md) / 1.35 var(--display);
+}
+
+/* ------------------------------------------------------------ what the side held, folded away */
+
+.rd .below {
+  margin-top: 36px;
+}
+
+.rd-about {
+  margin-top: 28px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.rd-about > summary {
+  cursor: pointer;
+  color: var(--subtle);
+  font-size: var(--fs-sm);
+}
+
+.rd-about > .side {
+  margin-top: 12px;
+  display: grid;
+  gap: 18px;
+}
+
+@media (max-width: 860px) {
+  .rd {
+    padding-block: 10px 32px;
+    --rd-size: 19px;
+  }
+  :root[data-text-size='s'] .rd {
+    --rd-size: 17px;
+  }
+  :root[data-text-size='l'] .rd {
+    --rd-size: 22px;
+  }
+  :root[data-text-size='xl'] .rd {
+    --rd-size: 25px;
+  }
+  .rd-head {
+    padding-top: 18px;
+  }
+  .rd-head h1 {
+    font-size: 32px;
+  }
+  .rd .words-p.machine::before {
+    inset-inline-start: -12px;
+  }
+}
+
+/* One credit line under the text: the source's own (which its terms ask for) says it, so the import record is not repeated. */
+.rd .page-body:has(.words-credit) .body-source {
+  display: none;
+}
+
+/* Above the words the one before and after are a quiet line; below them, the full buttons. */
+.rd .chapter-nav-top {
+  margin: 18px 0 0;
+}
+
+.rd .chapter-nav-top .chapter-nav-link {
+  min-height: 0;
+  padding: 2px;
+}
+
+.rd .chapter-nav-top .chapter-nav-name {
+  font: 400 var(--fs-sm) / 1.35 var(--ui);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rd .chapter-nav-top .chapter-nav-text > .subtle {
+  display: none;
+}
+
+/* ------------------------------------------------------------ a wide screen (3l) */
+
+/*
+ * The others in its volume in a column at its side, this one marked; and
+ * each paragraph's notes beside it in the other margin. The notes float
+ * there, each under the last, so a long one pushes the next down rather
+ * than over it. Narrower, both stay out of the way: the volume is one tap
+ * back and the notes are at the foot.
+ */
+.rd-toc,
+.words-side {
+  display: none;
+}
+
+@media (min-width: 1180px) {
+  .rd.rd-with-toc {
+    max-width: var(--wrap);
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 40px;
+    align-items: start;
+  }
+
+  .rd-with-toc .rd-main {
+    width: 100%;
+    max-width: 760px;
+    margin-inline: auto;
+  }
+
+  /* Room in the other margin for the notes beside the text. */
+  .rd-main:has(.words-side) {
+    max-width: 1000px;
+    padding-inline-end: 240px;
+  }
+
+  .rd-toc {
+    display: block;
+    position: sticky;
+    top: 76px;
+    max-height: calc(100vh - 92px);
+    overflow-y: auto;
+    padding: 4px 0 16px;
+    font-size: var(--fs-md);
+  }
+
+  .rd-toc-work {
+    color: var(--subtle);
+    font-size: var(--fs-sm);
+  }
+
+  .rd-toc-volume {
+    display: block;
+    font: 700 19px / 1.35 var(--display);
+    color: var(--text);
+    margin: 2px 0 12px;
+  }
+
+  .rd-toc ol {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 2px;
+  }
+
+  .rd-toc-group {
+    display: block;
+    font: 700 var(--fs-sm) / 1.4 var(--ui);
+    color: var(--subtle);
+    padding: 10px 10px 2px;
+  }
+
+  .rd-toc ol a {
+    display: block;
+    padding: 6px 10px;
+    border-radius: 8px;
+    color: var(--muted);
+  }
+
+  .rd-toc ol a:hover {
+    background: var(--sunken);
+    text-decoration: none;
+  }
+
+  .rd-toc ol a[aria-current='page'] {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .rd .words-side {
+    display: block;
+    float: inline-end;
+    clear: inline-end;
+    width: 200px;
+    margin-inline-end: -240px;
+    margin-top: 0.35em;
+    font: 400 var(--fs-sm) / 1.6 var(--ui);
+    color: var(--muted);
+    text-align: start;
+  }
+
+  .rd .words-side p {
+    margin: 0 0 10px;
+    padding: 4px 8px;
+    border-radius: 6px;
+  }
+
+  .rd .words-side b {
+    color: var(--accent);
+    margin-inline-end: 4px;
+  }
+
+  .rd .words-notes.placed {
+    display: none;
+  }
+}
+
+@media (min-width: 1180px) {
+  /* A page with notes and no volume column still keeps its text its width. */
+  .rd:not(.rd-with-toc):has(.words-side) {
+    max-width: 1000px;
+    padding-inline-end: calc(var(--gutter) + 240px);
+  }
+}
+
+/* A letter on a wide screen: its details in a column on the other side (5d). */
+@media (min-width: 1180px) {
+  .rd.rd-letter.rd-with-toc {
+    grid-template-columns: 220px minmax(0, 1fr) 240px;
+  }
+
+  .rd-with-toc .rd-facts {
+    display: block;
+    position: sticky;
+    top: 76px;
+    padding: 4px 0 16px;
+    font-size: var(--fs-sm);
+  }
+
+  .rd-facts h2 {
+    margin: 0 0 10px;
+    font: 600 12px / 1.4 var(--ui);
+    color: var(--subtle);
+    letter-spacing: 0.03em;
+  }
+
+  .rd-facts dl {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+  }
+
+  .rd-facts dt {
+    color: var(--subtle);
+    font-size: 12px;
+  }
+
+  .rd-facts dd {
+    margin: 0;
+    color: var(--text);
+    font-size: var(--fs-md);
+    overflow-wrap: anywhere;
+  }
+
+  .rd-facts-note {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-muted);
+    color: var(--subtle);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+}

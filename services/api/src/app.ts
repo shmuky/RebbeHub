@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono';
-import type { DbCost } from '@rebbehub/db';
-import { Catalog, CatalogError, combineSuggestions, ExportGate, openTranscriptFixes, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, getDerivations, getDerivationsOf, getFile, getFiles, getPageFix, getPageFixes, hanachaSyncs, itemsUsingFile, listWebhooks, pageImageCounts, printingsOf, projectTodo, recordingTranscript, transcriptHistory, transcriptPending, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type FileRow, type Mailer, type PageFixRow, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
+import { isCatalogHeld, type DbCost } from '@rebbehub/db';
+import { Catalog, CatalogError, combineSuggestions, ExportGate, openTranscriptFixes, TAKEDOWN_RESPONSE_DAYS, idsOfUsernames, listSuggestions, UnresolvedConflictError, adviceFor, anchorSync, chooseSeed, claimNext, comparePrintings, confirmPage, confirmSync, createWebhook, deleteWebhook, fileFromDrive, fixLine, fixParagraph, suggestWords, shaarFile, suggestShaar, getDerivations, getDerivationsOf, getFile, getFiles, getPageFix, getPageFixes, hanachaSyncs, itemsUsingFile, listWebhooks, pageImageCounts, printingsOf, projectTodo, recordingTranscript, transcriptHistory, transcriptPending, releaseClaim, requestTakedown, scanProgress, scanText, similarFiles, uploadOcr, type ChangesetStatus, type Embedder, type FileRow, type Mailer, type PageFixRow, type TakedownRelation, type EntityView, type Json, type ReportReason, type Resolution, type OcrFormat, type ProjectFocus, type WordsChange, type MetadataFetch } from '@rebbehub/core';
 import { dailyLearning, peopleOf } from '@rebbehub/core';
 import { parseDateText, describeDateKey } from '@rebbehub/hebrew';
 import { ENTITY_TYPES, isEntityId, mayServe, readId, sha256Hex, type EntityId, type EntityType, type Language, type PageInline, type PageSegmentKind } from '@rebbehub/model';
@@ -24,6 +24,7 @@ import { threadRoutes } from './threads.js';
 import { organizeRoutes } from './organize.js';
 import { appCatalogRoutes, type AppReleases } from './appCatalog.js';
 import { machineRoutes, type MachineDispatch } from './machine.js';
+import { mafteachRoutes } from './mafteach.js';
 
 /**
  * The RebbeHub API, version 1 (docs/developers/api.md). Reading needs
@@ -179,6 +180,11 @@ export function createApp(options: ApiOptions): Hono {
     if (error instanceof HttpError) return c.json({ error: ERROR_CODES[error.status] ?? 'bad-request', message: error.message }, error.status);
     if (error instanceof UnresolvedConflictError) return c.json({ error: 'conflict', message: error.message, conflicts: error.conflicts }, 409);
     if (error instanceof CatalogError) return c.json({ error: error.code, message: error.message, detail: error.detail ?? null }, STATUS_BY_CODE[error.code]);
+    // An import holds the catalog for a few minutes (packages/db/src/hold.ts): nothing was written, so try again.
+    if (isCatalogHeld(error)) {
+      c.header('Retry-After', '120');
+      return c.json({ error: 'busy', message: 'RebbeHub is bringing in an import; nothing was changed. Try again in a few minutes.' }, 503);
+    }
     console.error(error);
     return c.json({ error: 'internal', message: 'something went wrong on our side' }, 500);
   });
@@ -207,6 +213,7 @@ export function createApp(options: ApiOptions): Hono {
   threadRoutes(app, catalog, signedIn, authenticate);
   organizeRoutes(app, catalog, signedIn);
   appCatalogRoutes(app, catalog, options.appReleases);
+  mafteachRoutes(app, catalog);
   machineRoutes(app, catalog, signedIn, { dispatch: options.machineDispatch, waitUntil: options.waitUntil ? (_c, work) => options.waitUntil!(work) : undefined });
   scanRoutes(app, catalog, {
     filesBase,
@@ -251,7 +258,20 @@ export function createApp(options: ApiOptions): Hono {
     const limit = Math.min(Math.max(intParam(c.req.query('limit'), 'limit') ?? 50, 1), 500);
     const raw = c.req.query('cursor') ?? c.req.query('after');
     const after = cursor.decode(raw)?.[0] ?? raw;
-    const items = await catalog.list({ type: type as EntityType | undefined, set: set ? entityId(set) : undefined, after: after === undefined ? undefined : String(after), limit });
+    // The tree is built of official sefarim; the rest are additions to one (core additions.ts). `shelf=1`: what a shelf
+    // lists, without the additions that belong on a sefer's page; `official=1` (or 0): only official sefarim (or only
+    // additions); `additions-of=<id>`: the additions to one sefer.
+    const yes = (name: string) => (c.req.query(name) === undefined ? undefined : c.req.query(name) === '1' || c.req.query(name) === 'true');
+    const additionsOf = c.req.query('additions-of');
+    const items = await catalog.list({
+      type: type as EntityType | undefined,
+      set: set ? entityId(set) : undefined,
+      after: after === undefined ? undefined : String(after),
+      limit,
+      shelf: yes('shelf') === true,
+      official: yes('official'),
+      additionsOf: additionsOf ? entityId(additionsOf) : undefined,
+    });
     const last = items[items.length - 1];
     const next = last && items.length === limit ? cursor.encode([`${last.path ?? ''}${last.id}`]) : null;
     nextLink(c, next);
@@ -302,6 +322,8 @@ export function createApp(options: ApiOptions): Hono {
   // A work's volumes (its top-level parts) with how many units each holds, and one volume's units.
   app.get('/v1/works/:id/outline', async (c) => c.json({ parts: await catalog.workOutline(entityId(c.req.param('id'))) }));
   app.get('/v1/works/:id/parts/:part', async (c) => c.json({ items: await catalog.workPart(entityId(c.req.param('id')), c.req.param('part'), intParam(c.req.query('limit'), 'limit')) }));
+  // The units before and after a unit in its work's order (across volumes): a sicha's page's back and forth, one read.
+  app.get('/v1/units/:id/neighbours', async (c) => c.json(await catalog.unitNeighbours(entityId(c.req.param('id')))));
 
   // The day's learning, Chitas' Tanya and Hayom Yom, for a civil day: the daily page's one read (core/daily.ts).
   app.get('/v1/daily', async (c) => {
@@ -730,6 +752,17 @@ export function createApp(options: ApiOptions): Hono {
     return c.json({ history: withheld ? history.map((h) => ({ ...h, changes: [] })) : history });
   });
 
+  /**
+   * A sefer's shaar file (docs/shaar.md), the README of a sefer: as JSON
+   * with whether the catalog made it (no person read it yet), or the file
+   * itself with `?format=text`.
+   */
+  app.get('/v1/entities/:id/shaar', async (c) => {
+    const file = await shaarFile(catalog, entityId(c.req.param('id')));
+    if (c.req.query('format') === 'text') return c.body(file.text, 200, { 'Content-Type': 'text/markdown; charset=utf-8', 'X-Content-Type-Options': 'nosniff' });
+    return c.json(file);
+  });
+
   // The page's talk page: the conversation about it, open to read; writing needs a signed-in account.
   app.get('/v1/entities/:id/talk', async (c) => c.json({ talk: await catalog.talk({ kind: 'entity', id: entityId(c.req.param('id')) }) }));
 
@@ -781,7 +814,8 @@ export function createApp(options: ApiOptions): Hono {
     const type = c.req.query('type');
     if (type && !(await catalog.registry()).has(type)) throw new HttpError(400, `unknown type "${type}"`);
     const date = parseDateText(q);
-    const results = await catalog.search(q, { type: type as EntityType | undefined, limit: intParam(c.req.query('limit'), 'limit') });
+    const work = c.req.query('work');
+    const results = await catalog.search(q, { type: type as EntityType | undefined, work: work ? entityId(work) : undefined, limit: intParam(c.req.query('limit'), 'limit') });
     return c.json({ query: q, date: date.ok ? { key: date.key, he: describeDateKey(date.key, 'he'), en: describeDateKey(date.key, 'en') } : null, results: await redact(results) });
   });
 
@@ -988,9 +1022,26 @@ export function createApp(options: ApiOptions): Hono {
       const similar = await Promise.all((await similarFiles(catalog.db, sha)).map(async (s) => ({ kind: s.kind, matched: s.matched, of: s.of, items: (await itemsUsingFile(catalog.db, s.sha256)).map((i) => ({ id: i.id, type: i.type, path: i.path })) })));
       if (file) files[sha] = { url: base && mayServe(file.rights_state) && file.storage_tier === 'public' ? `${base}/objects/${sha}` : null, mime: file.mime, bytes: file.bytes, rights: file.rights_state, similar };
     }
+    // The items this page's changes point at (a part moved to another sefer), by name: a reviewer reads a name, never an id. One read.
+    const pointedAt = new Set<string>();
+    const collect = (value: unknown, depth: number): void => {
+      if (typeof value === 'string') {
+        if (isEntityId(value)) pointedAt.add(value);
+      } else if (Array.isArray(value) && depth < 3) for (const v of value) collect(v, depth + 1);
+    };
+    for (const entry of view.entries) for (const change of entry.changes) {
+      collect(change.before, 0);
+      collect(change.after, 0);
+    }
+    const items: Record<string, { type: string; data: { name?: unknown; title?: unknown; label?: unknown; date?: unknown } }> = {};
+    for (const item of await catalog.getMany([...pointedAt].slice(0, 200) as EntityId[])) {
+      const d = item.data as Record<string, unknown>;
+      items[item.id] = { type: item.type, data: { name: d.name, title: d.title, label: d.label, date: d.date } };
+    }
     const next = view.offset + view.entries.length < view.total ? view.offset + view.entries.length : null;
     return c.json({
       ...view,
+      items,
       changeset: { ...changeset, checks: checks.filter((k) => k.status !== 'pass' && (!k.entityId || onPage.has(k.entityId))), checkCounts },
       limit,
       next,
@@ -1048,6 +1099,23 @@ export function createApp(options: ApiOptions): Hono {
         title: input.title,
         note: input.note,
       }),
+      201,
+    );
+  });
+
+  /**
+   * A sefer's shaar, the whole file, sent for review as a suggestion of
+   * its own. A file the catalog cannot read is refused with every line
+   * that is wrong (`detail.problems`); `before` is the file as the person
+   * opened it, so a change made since is never overwritten.
+   */
+  app.post('/v1/suggestions/shaar', async (c) => {
+    const by = await signedIn(c);
+    const input = await body<{ entityId?: string; text?: unknown; before?: unknown; title?: string; note?: string }>(c);
+    if (!input.entityId || !isEntityId(input.entityId)) throw new HttpError(400, 'say which sefer this shaar is of (entityId)');
+    if (typeof input.text !== 'string') throw new HttpError(400, 'give the shaar file (text)');
+    return c.json(
+      await suggestShaar(catalog, by, { entity: input.entityId as EntityId, text: input.text, before: typeof input.before === 'string' ? input.before : undefined, title: input.title, note: input.note }),
       201,
     );
   });

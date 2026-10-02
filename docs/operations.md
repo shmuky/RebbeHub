@@ -27,9 +27,67 @@ is still rebuildable, re-running `sichos-kodesh-works`,
 `sichos-kodesh-occasions` and `sefaria` gives the fullest structure
 (footnotes, the English beside the Hebrew), which markup had lost.
 
+Every sefer without a shaar ([the shaar](shaar.md)) gets the one the
+catalog makes from its data, labelled as the catalog's until a person
+reads it:
+
+```sh
+rebbehub shaars [--chunk 500] [--dry-run]   # system changes of --chunk sefarim; --dry-run only counts
+```
+
+It can be stopped and run again, and takes up only the sefarim still
+without one. While an import runs it waits, like every write to the live
+catalog (below).
+
+### While an import runs
+
+An import of a catalog people have added to copies the live catalog next
+to itself, imports there and copies the result back
+(`scripts/import-catalog.sh`), so it must not change meanwhile. For those
+minutes the import holds the catalog (`rebbehub hold-catalog`,
+`packages/db/src/hold.ts`): every write to a table in `public` checks an
+advisory lock first (`auth.catalog_write_check`, migration 0028). Reads go
+on as always. The API answers a write `503 busy` with `Retry-After`, so the
+site and the MCP tools say to try again in a few minutes and nothing is
+half written; the jobs (`rebbehub transcribe` and the rest) wait and save
+when it is done; the API's cron skips its round. Nobody needs to pause for
+an import any more. The hold ends when the copy back ends, when the import
+fails or is cancelled (its connection closes), and after two hours at the
+most.
+
 Production is Postgres on Neon. The revision table is partitioned by time;
 `ensureRevisionPartitions(db, [2026, 2027])` (in `@rebbehub/db`) adds
 yearly partitions ahead of time.
+
+### Backups
+
+Neon keeps one day of history, so the Backup workflow
+(`.github/workflows/backup.yml`) copies the whole database every night at
+06:17 UTC into the private bucket `rebbehub-preservation`, under
+`backups/db/<yyyy-mm-dd>/`: pg_dump's custom format in parts of 90 MB
+(`dump.part00`, `dump.part01`…, what Cloudflare's REST API takes in one
+request) and `SHA256SUMS`. Each night's copy is kept 35 days and the one
+from the 1st of each month is kept for good. It is never served. A run
+checks that the dump reads back before it uploads, and that every part is
+there at its size. It can also be started by hand (Actions, Backup, Run
+workflow), for example just before a big import.
+
+It writes the bucket through Cloudflare's REST API when the repository has
+`CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (R2 edit rights), else
+through `R2_ENDPOINT`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`, whose
+R2 token then needs Object Read & Write on `rebbehub-preservation` (the
+first runs, 2026-10-01, found the key read-only and the token unset).
+
+To restore, never over the live database first: make a Neon branch (or an
+empty database), restore into it, check it, and only then point the site
+at it or copy back what was lost.
+
+```sh
+# the parts and SHA256SUMS of a night, from the dashboard or wrangler, then:
+sha256sum -c --ignore-missing SHA256SUMS
+cat dump.part* > dump && sha256sum -c --ignore-missing SHA256SUMS
+pg_restore --no-owner --no-privileges --dbname "$BRANCH_URL" dump
+```
 
 ## Seeding
 
@@ -275,6 +333,13 @@ Suggestions. The dry run says the real numbers.
   hanacha (a `hanacha` text of a unit of the event), it is synced
   paragraph by paragraph by shared words. New transcripts get word
   timings straight away.
+- A fix of a paragraph's words keeps the word timings of the words it
+  left, and times the words it changed between them (model/timing.ts);
+  the span is marked `edited` until `align` times it from the audio again.
+  Fixes made before that let the timings go; `rebbehub restore-word-times
+  --approve-as <steward>` (the Upkeep workflow's `restore-word-times`,
+  with a dry run) gives them back from each span's history, one
+  suggestion of the alignment bot per recording. It reads no audio.
 - Projects of kind *sync* (recordings of a year to check) and
   *proofreading* (a scan's pages, to once or twice) hand out the next
   recording or page nobody holds; a claim lapses after three hours
@@ -397,6 +462,16 @@ ninety days of it and the latest incidents.
   page that grows heavier shows before anyone is refused.
 - If `checkedAt` is more than twenty minutes old, the page says the
   checks have stopped: the API's scheduled run is not running.
+
+### Being told
+
+The Watch workflow (`.github/workflows/watch.yml`) looks every ten
+minutes from outside Cloudflare: the site's /about, and the report at
+/v1/status (any check `down`, or a report over twenty minutes old). When
+something is still wrong a minute later, it opens one GitHub issue
+labelled `outage` that mentions @shmuky, so GitHub emails him. It adds to
+the issue only when what is wrong changes, and closes it once all is up.
+Nothing needs configuring; to tell someone else, change `NOTIFY` there.
 
 ## The site
 

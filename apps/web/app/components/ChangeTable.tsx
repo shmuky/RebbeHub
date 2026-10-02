@@ -1,6 +1,8 @@
-import { inlineText, isPageText, pageTextPlain, type PageInline } from '@rebbehub/model';
+import { inlineText, isEntityId, isPageText, pageTextPlain, type PageInline } from '@rebbehub/model';
+import type { Entity } from '../lib/api.js';
 import { dateLabel } from '../lib/dates.js';
 import { t, type Lang } from '../lib/i18n.js';
+import { labelOf } from '../lib/labels.js';
 
 /**
  * A change as people read it (the plan: nobody ever sees JSON or a raw
@@ -8,7 +10,9 @@ import { t, type Lang } from '../lib/i18n.js';
  * date as a date. Used by the review page and by History.
  */
 
-const FIELD_KEYS: Record<string, 'date' | 'nameHe' | 'nameEn' | 'dateEnd'> = {
+const FIELD_KEYS: Record<string, 'date' | 'nameHe' | 'nameEn' | 'dateEnd' | 'fieldWork' | 'fieldParent'> = {
+  '/work': 'fieldWork',
+  '/parent': 'fieldParent',
   '/date': 'date',
   '/dateEnd': 'dateEnd',
   '/title/he': 'nameHe',
@@ -36,9 +40,17 @@ export const fieldName = (path: string, lang: Lang) => {
 
 const isRuns = (value: unknown): value is PageInline[] => Array.isArray(value) && value.every((r) => r && typeof r === 'object' && ('text' in r || 'br' in r || 'note' in r || 'marker' in r));
 
-/** A value as people read it: a date in words, text as it is, a page's words as words; anything else only as "changed". */
-export function valueText(path: string, value: unknown, lang: Lang): string {
+/** The items a suggestion's changes point at, by id (the API's `items`): shown by their names, never as ids. */
+export type PointedItems = Record<string, { type: string; data: Record<string, unknown> }>;
+
+/** A value as people read it: a date in words, an item it points at by that item's name, text as it is, a page's words as words; anything else only as "changed". */
+
+export function valueText(path: string, value: unknown, lang: Lang, items?: PointedItems): string {
   if (value === undefined || value === null || value === '') return '—';
+  if (typeof value === 'string' && isEntityId(value)) {
+    const item = items?.[value];
+    return item ? labelOf({ id: value as Entity['id'], type: item.type as Entity['type'], data: item.data as Entity['data'] }, lang) : t(lang, 'anotherItem');
+  }
   if (typeof value === 'string' && /date/i.test(path)) return dateLabel(value, lang, { civil: false });
   if (typeof value === 'string') return value.length > 200 ? `${value.slice(0, 200)}…` : value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);

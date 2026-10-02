@@ -1,14 +1,19 @@
-import { ChevronDown, ChevronUp, Loader2, Pause, Play, SkipBack, SkipForward, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Loader2, Pause, Play, RotateCcw, SkipBack, SkipForward, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { t } from '../lib/i18n.js';
 import { useLang } from '../lib/useLang.js';
 import { clock, usePlayer } from './PlayerProvider.js';
 
+/** The speeds offered while checking a transcript: slower to catch every word, a little faster to go over what is right. */
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5];
+
 /**
  * The bar at the foot of every page once something has played: the part
  * and its farbrengen, play and the parts before and after, the scrubber,
- * and the list of parts. It stays while you move between pages.
+ * and the list of parts. It stays while you move between pages. While a
+ * transcript is being checked it also plays the last seconds again and
+ * slows down or speeds up; only there, as Shmuly asked.
  */
 export function PlayerBar() {
   const lang = useLang();
@@ -20,7 +25,7 @@ export function PlayerBar() {
   const percent = duration ? Math.min(100, (player.time / duration) * 100) : 0;
   const several = queue.length > 1;
   return (
-    <div className="player-bar" role="region" aria-label={t(lang, 'player')}>
+    <div className={player.speedOffered ? 'player-bar checking' : 'player-bar'} role="region" aria-label={t(lang, 'player')}>
       {open && several ? (
         <ol className="player-parts">
           {queue.map((track, i) => (
@@ -77,6 +82,31 @@ export function PlayerBar() {
           </div>
         </div>
         <div className="player-end">
+          {player.speedOffered ? (
+            <>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => {
+                  player.seek(Math.max(0, player.now() - 5));
+                  if (!player.playing) player.toggle();
+                }}
+                aria-label={t(lang, 'hearAgain')}
+                title={t(lang, 'hearAgain')}
+              >
+                <RotateCcw size={18} />
+              </button>
+              <label className="player-speed" title={t(lang, 'speed')}>
+                <select dir="ltr" aria-label={t(lang, 'speed')} value={player.rate} onChange={(e) => player.setRate(Number(e.target.value))}>
+                  {SPEEDS.map((s) => (
+                    <option key={s} value={s}>
+                      {s.toLocaleString(lang)}×
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : null}
           {several ? (
             <button type="button" className="icon-button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={t(lang, 'parts')}>
               {open ? <ChevronDown size={20} /> : <ChevronUp size={20} />}

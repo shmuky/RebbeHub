@@ -12,7 +12,7 @@ every suggestion against them. A test keeps the two in step.
 | Type | Is | Key fields |
 | --- | --- | --- |
 | `author` | a Rebbe, a chossid, an editor, a family, an institution | `name`, `kind`, `rebbe` (1-7), `slug` |
-| `work` | a sefer or a series | `title`, `slug`, `authors`, `genre`, `levels` (`['volume','sicha']`), `cover` (`{ file, page }`: the title page a person chose) |
+| `work` | a sefer or a series | `title`, `slug`, `authors`, `genre`, `levels` (`['volume','sicha']`), `cover` (`{ file, page }`: the title page a person chose), `shaar` (its README: title page lines and sections, read and written as one file - [the shaar](shaar.md)), `addition` (`{ kind, to? }`: not one of the official sefarim the tree is built of but a commentary, index, book about or collection, belonging to the official sefer `to`) |
 | `unit` | a sicha, maamar, letter, chapter, story, diary entry | `work`, `position` (one step per level), `order`, `label`, `date`, `events` |
 | `event` | a farbrengen, yechidus, simcha, the writing of a letter | `kind`, `title`, `date`, `place`, `occasion` |
 

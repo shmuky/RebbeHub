@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Catalog, convertLegacyBodies } from '@rebbehub/core';
-import { connectPostgres, one, type Db } from '@rebbehub/db';
+import { Catalog, convertLegacyBodies, fillShaars } from '@rebbehub/core';
+import { connectPostgres, holdCatalog, one, waitingWhileHeld, type Db } from '@rebbehub/db';
 import { openPGlite } from '@rebbehub/db/pglite';
 import {
   OTZROS_FOLDER,
@@ -61,7 +61,8 @@ export async function openDatabase(database?: string): Promise<Db> {
   // On a build server (CI is set there), a missing DATABASE_URL is a mistake, never a cue to use a local database.
   if (!database && !process.env.DATABASE_URL && process.env.CI) throw new Error('DATABASE_URL is not set: add it to this build as a secret (docs/deploy.md)');
   const target = database ?? process.env.DATABASE_URL ?? '.data/pglite';
-  return /^postgres(ql)?:\/\//.test(target) ? connectPostgres(target) : openPGlite(target);
+  // A job's writes wait while an import holds the catalog, rather than fail (packages/db/src/hold.ts).
+  return /^postgres(ql)?:\/\//.test(target) ? waitingWhileHeld(connectPostgres(target), { log: (line) => console.log(line) }) : openPGlite(target);
 }
 
 export async function withCatalog<T>(ctx: Context, fn: (catalog: Catalog) => Promise<T>): Promise<T> {
@@ -233,6 +234,33 @@ export async function rebuildableCommand(ctx: Context, input: { guard?: boolean;
   await withCatalog(ctx, async (catalog) => ctx.log((await catalogIsRebuildable(catalog.db)) ? 'rebuildable' : 'not-rebuildable'));
 }
 
+/**
+ * Holds the live catalog for an import (packages/db/src/hold.ts): prints
+ * `held` once writes under way have finished, then refuses every write
+ * until this process is stopped, or after `minutes` at the most, so an
+ * import that dies never leaves the site unable to save.
+ */
+export async function holdCatalogCommand(ctx: Context, input: { minutes?: number } = {}): Promise<void> {
+  const db = await openDatabase(ctx.database);
+  let stop = () => {};
+  const until = new Promise<void>((resolve) => {
+    stop = resolve;
+  });
+  const timer = setTimeout(() => {
+    ctx.log('held as long as allowed: letting go');
+    stop();
+  }, (input.minutes ?? 120) * 60_000);
+  process.once('SIGTERM', stop);
+  process.once('SIGINT', stop);
+  try {
+    await holdCatalog(db, { until, held: () => ctx.log('held') });
+    ctx.log('let go');
+  } finally {
+    clearTimeout(timer);
+    await db.close();
+  }
+}
+
 /** Checks that every built-in schema can be used. */
 export async function schemaCheckCommand(ctx: Context): Promise<void> {
   const registry = SchemaRegistry.builtin();
@@ -251,6 +279,14 @@ export async function convertBodiesCommand(ctx: Context, input: { chunk?: number
   await withCatalog(ctx, async (catalog) => {
     const done = await convertLegacyBodies(catalog, { batch: input.chunk, log: ctx.log });
     ctx.log(done ? `${done} pages' words turned into structured words` : 'every page already has structured words');
+  });
+}
+
+/** Every sefer without a shaar gets the one the catalog makes from its data (docs/shaar.md), as system changes of `chunk` sefarim; `dryRun` only counts them. */
+export async function shaarsCommand(ctx: Context, input: { chunk?: number; dryRun?: boolean } = {}): Promise<void> {
+  await withCatalog(ctx, async (catalog) => {
+    const done = await fillShaars(catalog, { batch: input.chunk, dryRun: input.dryRun, log: ctx.log });
+    ctx.log(done ? `${done} sefarim ${input.dryRun ? 'would get' : 'now have'} a shaar made from the catalog` : 'every sefer already has a shaar');
   });
 }
 
@@ -311,7 +347,8 @@ export const IMPORTERS: Record<string, (from: string) => Importer> = {
     const db = need('JEM_DB', 'a crawl of JEM by Sichos-Kodesh\'s packages/jem-index (jem.db)');
     return jemImporter(async () => ({ jem: await readJemIndex(db), occasions: await farbrengens(from) }));
   },
-  // With SEFARIA_DATA (what `rebbehub crawl-sefaria` read), Sefaria's Chabad books that Sichos-Kodesh does not publish.
+  // With SEFARIA_DATA (what `rebbehub crawl-sefaria` read), Sefaria's Chabad books that Sichos-Kodesh does not publish,
+  // and with a crawl made `--daily`, the texts of Chitas and the Rambam in their own Set.
   sefaria: (from) => {
     const dir = need('SEFARIA_DATA', 'the folder `rebbehub crawl-sefaria` wrote');
     return sefariaImporter(async () => ({ ...(await readSefariaCrawl(dir)), authors: await skAuthors(from), api: process.env.REBBEHUB_API_URL }));
@@ -354,14 +391,16 @@ async function farbrengens(from: string) {
 
 /**
  * Reads Sefaria's Chabad books that Sichos-Kodesh does not publish into
- * `out`, asking Sefaria only for what `cache` does not have; with `keep`,
- * puts each text with a licence that lets it be kept on RebbeHub's own
- * storage (`texts/<sha256>` in rebbehub-public), once.
+ * `out`, asking Sefaria only for what `cache` does not have; with `daily`
+ * (or SEFARIA_DAILY=1), the texts of Chitas and the Rambam too; with
+ * `keep`, puts each text with a licence that lets it be kept on RebbeHub's
+ * own storage (`texts/<sha256>` in rebbehub-public), once.
  */
-export async function crawlSefariaCommand(ctx: Context, input: { from: string; out: string; cache?: string; keep?: boolean; only?: string[]; bucket?: string }): Promise<void> {
+export async function crawlSefariaCommand(ctx: Context, input: { from: string; out: string; cache?: string; keep?: boolean; only?: string[]; daily?: boolean; bucket?: string }): Promise<void> {
   const exclude = await sichosKodeshSefariaTitles(input.from);
   const client = sefariaClient({ cacheDir: input.cache });
-  const crawl = await crawlSefaria({ out: input.out, exclude, client, only: input.only, log: ctx.log });
+  const daily = input.daily || process.env.SEFARIA_DAILY === '1' || process.env.SEFARIA_DAILY === 'true';
+  const crawl = await crawlSefaria({ out: input.out, exclude, client, only: input.only, daily, log: ctx.log });
   if (!input.keep) return;
   const kept = await keepSefariaTexts(crawl, input.out, r2(input.bucket ?? 'rebbehub-public'), ctx.log);
   await writeFile(join(input.out, 'crawl.json'), JSON.stringify(crawl));

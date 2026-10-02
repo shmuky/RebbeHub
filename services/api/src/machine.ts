@@ -132,7 +132,7 @@ export function githubDispatch(input: { token: string; repo?: string; ref?: stri
 }
 
 /** A public answer kept in the Workers cache for `seconds` (where there is one; elsewhere, made every time). */
-async function edgeCached(request: Request, seconds: number, make: () => Promise<Response>): Promise<Response> {
+export async function edgeCached(request: Request, seconds: number, make: () => Promise<Response>): Promise<Response> {
   const cache = (globalThis as { caches?: { default?: { match(r: Request): Promise<Response | undefined>; put(r: Request, res: Response): Promise<void> } } }).caches?.default;
   const hit = cache ? await cache.match(request) : undefined;
   if (hit) return hit;

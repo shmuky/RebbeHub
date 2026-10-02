@@ -36,8 +36,13 @@ main#main {
   background: var(--bg);
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 0 24px;
+  gap: 8px;
+  padding: 0 var(--gutter);
+}
+
+/* The sections start 28px after the logo's name. */
+.top > .brand {
+  margin-inline-end: 20px;
 }
 
 .brand {
@@ -56,28 +61,52 @@ main#main {
   text-decoration: none;
 }
 
-.mark {
-  width: 26px;
-  height: 26px;
-  border-radius: 5px;
-  background: var(--strong);
+/*
+ * The logo (ui/Logo.tsx), drawn from one width, --w, as the guidelines
+ * give it: the book 4 wide by 5 high, its outer (start) edge rounder, the
+ * R in the page colour; the name 0.83 of the book's width, 0.4 of it away,
+ * set a little low so it sits centred on the book.
+ */
+.logo {
+  --w: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--w) * 0.4);
+  flex: none;
+}
+
+.logo-book {
+  width: var(--w);
+  height: calc(var(--w) * 1.25);
+  border-start-start-radius: calc(var(--w) / 3);
+  border-end-start-radius: calc(var(--w) / 3);
+  border-start-end-radius: calc(var(--w) / 5);
+  border-end-end-radius: calc(var(--w) / 5);
+  background: var(--accent);
   color: var(--bg);
   display: grid;
   place-items: center;
-  font: 700 15px / 1 var(--display);
+  font: 700 calc(var(--w) * 0.74) / 1 var(--display);
   flex: none;
+}
+
+.logo-name {
+  font: 600 calc(var(--w) * 0.83) / 1 var(--brand);
+  letter-spacing: -0.015em;
+  padding-top: 0.21em;
+  color: var(--text);
 }
 
 .nav {
   display: flex;
-  gap: 2px;
+  gap: 4px;
 }
 
 .nav a {
   color: var(--muted);
-  padding: 6px 10px;
-  border-radius: var(--r);
-  font-weight: 500;
+  padding: 7px 12px;
+  border-radius: var(--r-lg);
+  font-size: var(--fs-lg);
   white-space: nowrap;
   text-decoration: none;
 }
@@ -88,8 +117,9 @@ main#main {
 }
 
 .nav a[aria-current='page'] {
-  color: var(--text);
-  background: var(--sunken);
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 700;
 }
 
 .search-trigger {
@@ -127,13 +157,13 @@ main#main {
 
 /* Without JavaScript the search box is a plain form to the search page. */
 .search-form {
-  flex: 1;
-  max-width: 520px;
-  min-width: 180px;
-  height: 34px;
+  flex: 0 1 300px;
+  min-width: 160px;
+  margin-inline-start: auto;
+  height: 38px;
   border: 1px solid var(--border);
-  border-radius: var(--r);
-  background: var(--canvas);
+  border-radius: var(--r-lg);
+  background: var(--card);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -143,7 +173,7 @@ main#main {
 
 .search-form:focus-within {
   border-color: var(--accent);
-  background: var(--bg);
+  background: var(--card);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
@@ -162,43 +192,34 @@ main#main {
 }
 
 .top-end {
-  margin-inline-start: auto;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
+  margin-inline-start: 8px;
   color: var(--muted);
   flex: none;
 }
 
 .lang {
-  font-size: 13px;
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  padding: 3px 8px;
-  color: var(--muted);
+  font-size: var(--fs-sm);
+  color: var(--subtle);
   white-space: nowrap;
   text-decoration: none;
-  line-height: 1.4;
+  padding: 4px 6px;
 }
 
 .lang:hover {
-  border-color: var(--border-strong);
   text-decoration: none;
   color: var(--text);
-}
-
-.lang b {
-  color: var(--text);
-  font-weight: 600;
 }
 
 .icon-link {
   color: var(--muted);
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--r);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-lg);
   background: none;
   border: 0;
   padding: 0;
@@ -249,14 +270,14 @@ main#main {
 }
 
 .ib {
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--border);
-  border-radius: var(--r);
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: var(--r-lg);
   display: grid;
   place-items: center;
   color: var(--muted);
-  background: var(--bg);
+  background: none;
   flex: none;
   padding: 0;
   text-decoration: none;
@@ -277,7 +298,8 @@ main#main {
 }
 
 @media (max-width: 1020px) {
-  .top .nav a:nth-child(n + 5) {
+  .top .nav a:nth-child(n + 5),
+  .top .lang {
     display: none;
   }
 }
@@ -293,20 +315,26 @@ main#main {
     height: var(--header-h);
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 0 var(--gutter);
-    border-bottom: 1px solid var(--border);
+    gap: 2px;
+    padding-inline: var(--gutter) 8px;
+    border-bottom: 1px solid var(--border-muted);
     background: var(--bg);
+  }
+  /* Back is a 40px button like the icons, its arrow lined up with the page's text. */
+  .mtop > .ib:first-child {
+    margin-inline-start: -12px;
+  }
+  .mtop > .brand {
+    margin-inline-end: 8px;
   }
   .mtop .t {
     flex: 1;
-    font-weight: 600;
-    font-size: 15px;
+    font-size: var(--fs-md);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--text);
+    color: var(--subtle);
     text-decoration: none;
   }
 }
@@ -396,6 +424,20 @@ main#main {
 
 .sheet hr {
   margin: 8px 16px;
+}
+
+/* The theme switch fills the sheet's width, never wider. */
+.sheet-theme {
+  padding: 4px 16px 12px;
+}
+
+.sheet-theme .segmented > button {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 6px;
 }
 
 @keyframes fade-in {
@@ -960,50 +1002,102 @@ dl.facts dd {
 
 /* ------------------------------------------------------------ footer */
 
+/* The foot of every page (ui/Footer.tsx): what RebbeHub is beside three short columns of its pages, then one quiet line. */
 .site-footer {
+  margin-top: 48px;
   border-top: 1px solid var(--border);
   background: var(--canvas);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 13.5px;
   padding-bottom: calc(var(--player-h));
 }
 
-.site-footer .wrap {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 28px;
-  align-items: center;
-  padding-block: 20px;
+.foot-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr);
+  gap: 32px 56px;
+  padding-block: 40px 28px;
 }
 
-.site-footer nav {
+.foot-brand {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 320px;
+}
+
+.foot-logo {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.foot-logo:hover {
+  text-decoration: none;
+}
+
+.foot-brand p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.foot-cols {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px 32px;
+}
+
+.foot-col h2 {
+  margin: 0 0 4px;
+  font: 700 12px / 1.4 var(--ui);
+  color: var(--text);
+  letter-spacing: 0.04em;
+}
+
+.foot-col {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 8px;
 }
 
 .site-footer a {
   color: var(--muted);
+  text-decoration: none;
 }
 
 .site-footer a:hover {
   color: var(--accent);
 }
 
-.site-footer .brand {
-  font-size: 13.5px;
-  gap: 8px;
+.foot-base {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-block: 14px 18px;
+  border-top: 1px solid var(--border-muted);
+  font-size: 12.5px;
+  color: var(--subtle);
 }
 
-.site-footer .brand .mark {
-  width: 20px;
-  height: 20px;
-  font-size: 12px;
-  border-radius: 4px;
+.foot-base a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.site-footer p {
-  flex: 1 1 320px;
+/* A narrow screen: the name above, the columns two to a row. */
+@media (max-width: 860px) {
+  .foot-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+    padding-block: 28px 20px;
+  }
+
+  .foot-cols {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* ------------------------------------------------------------ the player bar */
@@ -1207,8 +1301,23 @@ body:has(.player-bar) main#main {
 
 .player-end {
   display: flex;
+  align-items: center;
   gap: 4px;
   flex: none;
+}
+
+/* The speed, offered while a transcript is checked: a small pill the phone opens as its own list. */
+.player-speed select {
+  appearance: none;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg);
+  color: var(--text);
+  font: 600 13px var(--ui);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
 }
 
 .player-parts {
@@ -1253,6 +1362,10 @@ body:has(.player-bar) main#main {
     gap: 2px;
   }
   .player-scrub .player-time {
+    display: none;
+  }
+  /* Checking a transcript, hear again and the speed take the place of the parts' buttons (the list of parts is still there). */
+  .player-bar.checking .player-transport .icon-button {
     display: none;
   }
   .player-row {
@@ -1306,8 +1419,260 @@ body.embedded {
   padding-top: 10px;
 }
 
-.embed-foot .mark {
-  width: 20px;
-  height: 20px;
+/* The phone's tabs: the main sections along the bottom, and the menu. */
+.mtabs {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  :root {
+    --tabs-h: calc(62px + env(safe-area-inset-bottom, 0px));
+  }
+  .mtabs {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 48;
+    height: var(--tabs-h);
+    padding: 0 6px env(safe-area-inset-bottom, 0px);
+    display: flex;
+    border-top: 1px solid var(--border);
+    background: var(--bg);
+    box-shadow: 0 -6px 20px rgb(0 0 0 / 5%);
+  }
+  /* Where the browser can blur what scrolls under it, the bar lets the page show through a little. */
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .mtabs {
+      background: color-mix(in srgb, var(--bg) 92%, transparent);
+      -webkit-backdrop-filter: blur(16px) saturate(1.4);
+      backdrop-filter: blur(16px) saturate(1.4);
+    }
+  }
+  .mtabs a,
+  .mtabs button {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 4px 2px 2px;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    text-decoration: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Each icon sits in a pill; the current section's pill is filled, as an app's tabs mark it. */
+  .mtabs .i {
+    box-sizing: border-box;
+    width: 58px;
+    height: 30px;
+    padding: 4px 18px;
+    border-radius: 15px;
+    transition:
+      background-color 0.18s var(--ease, ease),
+      transform 0.12s var(--ease, ease);
+  }
+  .mtabs a:active .i,
+  .mtabs button:active .i {
+    transform: scale(0.92);
+  }
+  .mtabs span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mtabs [aria-current='page'] {
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .mtabs [aria-current='page'] .i {
+    background: var(--accent-soft);
+    stroke-width: 1.9;
+  }
+  .mtabs a:focus-visible,
+  .mtabs button:focus-visible {
+    outline: none;
+  }
+  .mtabs a:focus-visible .i,
+  .mtabs button:focus-visible .i {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
+  }
+  /* Nothing at the page's end (the footer) is left under the tabs. */
+  body {
+    padding-bottom: var(--tabs-h);
+  }
+  /* The player and the toasts sit just above the tabs. */
+  .player-bar {
+    bottom: var(--tabs-h);
+  }
+  /* A bar kept at the screen's foot (the transcript's fixes) stays above them too. */
+  body .txf-bar {
+    bottom: calc(var(--tabs-h) + var(--player-h, 0px));
+  }
+  body .toasts {
+    bottom: calc(20px + var(--player-h, 0px) + var(--tabs-h));
+  }
+  /* The menu opens from its tab; the top bar keeps back, the title, search and the bell. */
+  .mtop .msheet > summary {
+    display: none;
+  }
+  .mtop .icon-link {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    position: relative;
+    flex: none;
+  }
+}
+
+/* ------------------------------------------------------------ the menu, as design/ draws it (4b) */
+
+/* On a phone the menu is a whole page: its name, you, then its parts under small headings. */
+@media (max-width: 720px) {
+  .sheet {
+    width: 100vw;
+    box-shadow: none;
+  }
+}
+
+.sheet .sheet-h {
+  border-bottom: 0;
+  height: auto;
+  padding: 18px 20px 8px;
+}
+
+.sheet-title {
+  flex: 1;
+  margin: 0;
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.me-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 8px 16px 6px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.me-card .grow,
+.menu-row .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.me-card b {
+  display: block;
+  font-family: var(--display);
+  font-size: 18px;
+}
+
+.me-card .grow > span {
+  font-size: var(--fs-sm);
+  color: var(--subtle);
+}
+
+.me-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--sunken);
+  color: var(--muted);
+}
+
+.me-card > .i:last-child,
+.menu-row > .i:last-child {
+  color: var(--faint);
+}
+
+.menu-group h3 {
+  margin: 0;
+  padding: 18px 20px 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--subtle);
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 20px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-md);
+  text-align: start;
+  text-decoration: none;
+}
+
+.menu-group > :last-child {
+  border-bottom: 1px solid var(--border);
+}
+
+.menu-row:hover {
+  background: var(--canvas);
+}
+
+.menu-row.static:hover {
+  background: none;
+}
+
+.menu-row[aria-current='page'] {
+  background: var(--sunken);
+}
+
+.menu-row > .i:first-child {
+  color: var(--muted);
+}
+
+.menu-value {
+  font-size: var(--fs-sm);
+  color: var(--subtle);
+}
+
+.menu-badge {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 11px;
+  background: var(--accent);
+  color: #fff;
   font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.menu-row .theme-switch > button {
+  padding: 5px 8px;
+}
+
+.menu-row .theme-switch > button > span {
+  display: none;
+}
+
+.sheet > .menu-group:last-child {
+  padding-bottom: 24px;
 }

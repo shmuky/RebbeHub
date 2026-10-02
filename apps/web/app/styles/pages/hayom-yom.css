@@ -1,0 +1,184 @@
+/*
+ * A day of Hayom Yom as the book prints it (components/HayomYomDay.tsx):
+ * the weekday at the start, the day in the middle and the year at the end,
+ * all bold; "שיעורים." with Chumash, Tehillim and Tanya one under another,
+ * their names in a column, the day's notices above or below them, in
+ * italics; the words justified, each paragraph's first line indented. All in the Torah face.
+ */
+
+.hy-day {
+  font-family: var(--torah);
+  color: var(--text);
+}
+
+.hy-day + .hy-day {
+  margin-top: 36px;
+}
+
+.hy-head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.hy-weekday {
+  text-align: start;
+}
+
+.hy-date {
+  margin: 0;
+  font: inherit;
+  text-align: center;
+}
+
+.hy-year {
+  text-align: end;
+}
+
+/* "שיעורים." beside its three lines, the names of the shiurim in their own column. */
+.hy-shiurim {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  column-gap: 0.6em;
+  margin: 0 0 12px;
+  padding-inline-start: 1.2em;
+  font-size: 18px;
+  line-height: 1.55;
+}
+
+.hy-shiurim-title {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.hy-shiur-name {
+  grid-column: 2;
+}
+
+.hy-shiurim > span:not(.hy-shiurim-title, .hy-shiur-name) {
+  grid-column: 3;
+}
+
+/* Each shiur goes to its words: dotted underneath, as the Tanya line is, solid under the pointer. */
+.hy-shiur-link {
+  color: inherit;
+  text-decoration: underline dotted var(--subtle);
+  text-underline-offset: 4px;
+}
+
+.hy-shiur-link:hover,
+.hy-shiur-link:focus-visible {
+  text-decoration-style: solid;
+}
+
+/* Lines set apart from the words: each on a line of its own. */
+.hy-line-part {
+  display: block;
+}
+
+.hy-line.machine {
+  text-decoration: underline dotted var(--subtle);
+  text-underline-offset: 4px;
+}
+
+/* The day's notices (מברכים, a fast, the haftorah), between its head and its shiurim or right after them: in italics, as printed. */
+.hy-pre,
+.hy-after {
+  margin: 0 0 10px;
+  font-size: 18px;
+  line-height: 1.55;
+  font-style: italic;
+  text-align: justify;
+}
+
+/* Each paragraph's first line starts in from the side, as in the book. */
+.hy-pre .hy-line,
+.hy-after .hy-line,
+.hy-lead .hy-line:not(.hy-line-heading),
+.hy-day .words-p {
+  text-indent: 1.5em;
+}
+
+/* Above the first day: the letter the book opens with, its heading spaced out. */
+.hy-lead {
+  margin-bottom: 20px;
+  font-size: 19px;
+  line-height: 1.7;
+  text-align: justify;
+}
+
+.hy-lead .hy-line + .hy-line {
+  margin-top: 0.6em;
+}
+
+.hy-line-heading {
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.3em;
+}
+
+/* After the last day: the blessing the book ends with, large and centred under a star. */
+.hy-close {
+  margin-top: 18px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 1.5;
+}
+
+/* "——— * ———" as the book sets it above the blessing. */
+.hy-close-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 18px;
+}
+
+.hy-close-mark::before,
+.hy-close-mark::after {
+  content: '';
+  width: 64px;
+  border-top: 1px solid currentColor;
+}
+
+/* The words: no paragraph numbers in the margin, set justified as the book is. */
+.hy-day .words {
+  font-size: 20px;
+}
+
+.hy-day .words-p {
+  padding-inline-start: 0;
+  text-align: justify;
+}
+
+.hy-day .words-anchor {
+  display: none;
+}
+
+.hy-actions {
+  display: flex;
+  justify-content: flex-end;
+  font-family: var(--ui);
+}
+
+@media (max-width: 640px) {
+  .hy-head {
+    font-size: 17px;
+    gap: 8px;
+  }
+
+  .hy-shiurim {
+    padding-inline-start: 0;
+    font-size: 16px;
+  }
+
+  .hy-day .words {
+    font-size: 18px;
+  }
+}

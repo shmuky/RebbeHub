@@ -15,6 +15,8 @@ export default [
   // Every page's talk page and its editing, beside its history (the wiki model).
   route('talk/:id', 'routes/talk.tsx'),
   route('edit/:id', 'routes/edit.tsx'),
+  // A sefer's shaar file, the README of a sefer (docs/shaar.md): the file as it is written, and its editor.
+  route('shaar/:id', 'routes/shaar.tsx'),
   // A farbrengen's recordings as the player's queue, for play buttons on lists. `_` is never in an item's path.
   route('_/tracks/:id', 'routes/tracks.ts'),
   // Sign-in, passed through to the API's /v1/auth/* so the session cookie is the site's own.
@@ -46,6 +48,7 @@ export default [
   route('review', 'routes/review.tsx'),
   // What the machines (OCR, transcription) wrote that nobody checked yet, the newest first: the home page links to it.
   route('check', 'routes/check.tsx'),
+  route('mafteach', 'routes/mafteach.tsx'),
   route('missing', 'routes/missing.tsx'),
   route('health', 'routes/health.tsx'),
   // Whether the site, the API, the MCP server and the database are up, from the API's checks every five minutes.

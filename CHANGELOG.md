@@ -10,7 +10,281 @@ any time. `@rebbehub/client` carries the API's version.
 
 ## Unreleased
 
+### Added
+
+- **An import no longer stops when someone saves, and nobody has to pause
+  for one.** While an import copies the catalog back, it holds the live
+  catalog for those minutes: pages read as always, and a change answers
+  `503` with `error: "busy"` and `Retry-After` (nothing was changed; try
+  again), which the site and the MCP tools pass on. The nightly jobs wait
+  and save when it is done.
+
+- **Reading suggestions from an agent.** The MCP tools `list_suggestions`
+  (open ones, or by author, reviewer, item or title) and `get_suggestion`
+  (whether you may approve it, its failed checks, and what it changes, a
+  page at a time) let an agent find and read a suggestion before it
+  approves, closes or sends it back.
+
+- **JEM's recordings link to JEM's own player.** The farbrengens'
+  recordings from Sichos-Kodesh's catalog now carry their link to the
+  Ashreinu app and their JEM ids (`externalIds['jem-recording']`,
+  `['jem-event']`), given by the JEM importer, so their pages show the
+  original JEM link.
+
+- **The catalog's tree is the official sefarim; everything else is an
+  addition to one.** The shelves are the Rebbeim, their sefarim and the
+  other official sets, each sefer in its place. A commentary, an index, a
+  book about a sefer or a collection from it is an addition (a work's
+  `addition`: `{ kind, to? }`, built-in schemas version 12): it is listed
+  on that sefer's page under "Additions", grouped by kind, and its own page
+  leads back there; one that belongs to no sefer is kept apart, closed, at
+  the end of its shelf. Shelves, a Rebbe's page and the library count only
+  official sefarim. Another scan or format of the same book is no addition:
+  it is merged into the sefer. Every addition hangs on an official sefer
+  (the checks refuse one on itself or on another addition). Books the
+  HebrewBooks, Otzros and Sefaria importers bring that match no official
+  sefer come in as additions, until people place them. `GET /v1/entities`
+  takes `shelf`, `official` and `additions-of`; `/v1/entities/{id}/linked`
+  takes `field=addition.to`; the tree (`/v1/tree`, `get_tree`) lists
+  official sefarim first and marks additions; organizing takes `addition {
+  item, to?, kind }` and `official { item }`, and the MCP tool
+  `mark_addition` does the same; the apps' works list official sefarim
+  first, each addition naming its sefer.
+- **Search finds a sefer by its name first.** A sefer or set whose name is
+  the query comes first, then those whose name starts with it, then those
+  whose name holds every word, an official sefer before an addition, and
+  only then everything that mentions it: searching "תניא" now finds the
+  Tanya first, where the chapters that name it used to fill the page. An
+  addition in the results says so, and to which sefer.
+
+- **A sefer's printings in one call.** The MCP tool `list_printings`
+  lists every printing of a sefer by volume, each with its volume and
+  where its scans come from (HebrewBooks, a Drive file of אוצרות הרבי),
+  with the links; printings without a readable path too. `search` takes
+  `work` (`/v1/search?work=rh-…`: one sefer's items alone) and names each
+  printing's volume and source, since printings of one volume share a
+  name.
+- **Likkutei Sichos' whole subject index on one page** (`/mafteach`).
+  Every topic of the volumes' indexes once, by letter or by search (a
+  topic's name first, then words from its places). Under each topic, each
+  volume's pages, the index's words for each place, and links to the
+  sicha: its PDF open at the page, and its text here. Nothing is stored:
+  it is gathered from the index pages, so a fix there shows at once;
+  machine-read volumes stay labelled. `GET /v1/mafteach` gives the same.
+
+- **Tanya as the book prints it.** Every page of Tanya, and the day's
+  Tanya on `/daily`, now opens "As printed": the title page centered in
+  its sizes, each approbation under its heading with the signature apart,
+  the compiler's foreword under its title, and each chapter one justified
+  block that opens with "פרק א" and its first word large, a new paragraph
+  only where the book starts one. Without nikud, as printed; a button puts
+  it back. Hebrew, English and side by side are still a tap away.
+- **A recording's words have their own tab.** A farbrengen or recording
+  with a transcript has a Text tab (`?tab=text`) where its words are
+  checked and fixed; the main tab only plays and follows them, and its
+  Edit button opens the Text tab. The editor is one view for everyone:
+  what a person may not do is simply not offered. Paragraphs checked all
+  exact, with no unclear words and no waiting fix, are hidden the next
+  time (a line says how many, with a link to show them). The words-fix
+  box floats at the foot of the screen, its input with it; the "All exact"
+  tools stay in place.
+- **Reviewers mark a paragraph all exact from its suggestion.** A
+  transcript fix its suggester found all exact says so, and its reviewer
+  approves it as all exact in one tap; a fix of only some words can be
+  approved and marked all exact together. The talk on the paragraph's
+  unclear words shows under it, with a link to the recording's talk page.
+
+- **A page number in a subject index names its sicha.** Hover a link that
+  carries a title (the index's page numbers do: `ח"א ע' 119 (וארא)`) and
+  the tooltip says which sicha it opens.
+- **Pages gathered from others stay off the checking list.** `/check`
+  and `machine_to_check` list a machine-read page only when its version
+  has its source's address; a page merged from others (the full subject
+  index, gathered from its printed books) is checked where its words came
+  from.
+- **Checking a transcript: hear again, the speed, and the page follows
+  the words.** While checking, the player bar plays the last five
+  seconds again and slows down (0.5×, 0.75×) or speeds up (1.25×, 1.5×);
+  on leaving the editor the speed is back to normal, and the rest of the
+  site never offers it. The open paragraph's tools, and the fixing box's
+  Save, float at the foot of the screen however long the paragraph, and
+  the page keeps the word being said in view (a few seconds after you
+  scroll on your own, it follows again). Opening the editor while the
+  recording plays starts at the paragraph being heard.
+- **The home page's progress moves with every paragraph.** The bar
+  toward the next transcription model counts each farbrengen by how much
+  of it is checked, says how many paragraphs were checked so far, and
+  shows your own checks as soon as you are back on the page. API:
+  `/v1/machine/training`'s `goal` also has `farbrengens.progress` and
+  `paragraphs.checked`.
+- **The day's shiurim, Chitas and Rambam, on the daily page.** `/daily`
+  opens with the day's shiurim at a glance: Chumash with Rashi (the
+  week's parsha, an aliyah a day), Tehillim (the monthly cycle, with
+  Elul's three more), Tanya, and the Rambam's three tracks (three
+  chapters, one chapter, Sefer HaMitzvos), each a link to its words, with
+  a box to tick once learned and a count of days in a row (kept in the
+  browser only). Each goes to its page on RebbeHub once the catalog has
+  it (below), to Sefaria until then. API: `/v1/daily` also names
+  `chumash`, `tehillim` and `rambam`, in Hebrew, by Sefaria's references
+  and by their pages here (`path`, `paths`, null until imported).
+- **Hayom Yom's shiurim go to their words.** Each day's Chumash (with
+  Rashi) and Tehillim line opens that day's portion on Sefaria, and its
+  Tanya line opens its chapter on RebbeHub where the day starts. A day's
+  notices the book prints right after the shiurim are set there, all
+  notices in italics, and each paragraph's first line is indented, as
+  in the book.
+- **Chitas and the Rambam, with their words.** The catalog import now
+  also brings from Sefaria the Chumash with Rashi, Tehillim, every book
+  of the Mishneh Torah and the Sefer HaMitzvot, a page per chapter, in a
+  Set of their own, "חת״ת ורמב״ם / Chitas and Rambam"
+  (`/sets/chitas-rambam`): `/chumash/genesis`, `/chumash/rashi-genesis`,
+  `/tehillim`, `/rambam/<book>`, `/sefer-hamitzvos`. Their Hebrew is a
+  public-domain version asked for by name (the Tanach with Ta'amei
+  Hamikra, Rosenbaum and Silbermann's Rashi, Torat Emet's Mishneh
+  Torah, the Warsaw 1883 Sefer HaMitzvot), since Sefaria's first Hebrew
+  Tanach is CC BY-SA and could be only a link; the English is kept where
+  its licence lets it be. A verse is a segment numbered as Sefaria
+  numbers it, so `#s-5` is verse 5; Rashi has a section for each verse
+  (`#s-5`) with its comments under it (`#s-5.1`). `rebbehub
+  crawl-sefaria --daily` ([importers](docs/importers.md#sefaria)).
+- **A few words into many pages through the MCP server.** `add_segments`
+  adds or replaces segments in the words of up to 200 pages a call, as
+  one suggestion, sending only the new segments and where each goes (at
+  the start, the end, or before a given segment), not each page whole.
+- **Every sefer has a shaar, its README.** One file per sefer, written
+  the same way for every sefer ([the shaar](docs/shaar.md)): a header of
+  fixed fields (its name, subtitle, authors, the author as the title
+  page names him, its kind), then its sections under fixed headings
+  (About, Structure, Printings, Sources, Notes). It shows under the
+  sefer's contents as a README does under a repository's files, and its
+  lines on the title page at the top. `/shaar/<id>` shows the file and
+  edits it, naming every line the catalog cannot read as it is typed.
+  A sefer no person wrote one for shows the one the catalog makes from
+  its data, marked as such. API: `GET /v1/entities/{id}/shaar`,
+  `POST /v1/suggestions/shaar`; MCP: `get_shaar`, `suggest_shaar`; the
+  git mirror writes `shaars/<shard>/<id>.md`; `rebbehub shaars` gives
+  every sefer without one the catalog's. Built-in schemas version 11.
+- **Back and forth between a sefer's sichos.** A sicha's page has
+  Previous and Next (הקודם / הבא) above its text and below it, to the
+  sicha before and after it in the sefer's contents, across volumes (the
+  last of one volume leads to the first of the next, named with its
+  volume). In Hebrew "previous" is on the right. The page asks for both
+  in one request, the new `GET /v1/units/{id}/neighbours` (in
+  `@rebbehub/client` as `unitNeighbours`).
+
+### Changed
+
+- **Search answers sooner.** `/v1/search/moments` reads whether each
+  found page's or paragraph's words may be shown with the rows themselves
+  (three statements, not three a scan), and the search page asks for the
+  moments, the names and a date's farbrengens at once instead of one
+  after another.
+
+- **The review queue lists titles, as GitHub lists pull requests.**
+  `/review` shows one line per Suggestion: its title (to its own page),
+  its #number, who sent it, when, and how many items it changes. Its
+  changes, 25 at a time, and Approve are on its page; a Suggestion with
+  no #number (an import) opens whole in the queue (`/review?s=`). The
+  list of Reports (`/issues`) no longer carries each report's words to
+  the browser, only its title and facts: the words are on its own page.
+- **Tabs on a phone.** On a phone the main sections (Home, Library,
+  Farbrengens, Suggestions) and the menu are tabs along the bottom of the
+  screen, where a thumb reaches them, instead of hidden behind a button;
+  the bell is in the top bar. The player and messages sit just above the
+  tabs, and the menu's light/dark switch no longer spills out of it.
+
+- **The library by Rebbe.** The library page's shelves are now a shelf
+  for each Rebbe, from the Baal Shem Tov to the Rebbe, then history,
+  halacha, journals and the rest, in the order the catalog keeps them,
+  each with the sets inside it. "Every sefer" lists each sefer under its
+  shelf instead of by kind, and the sources the sefarim came from
+  (HebrewBooks, Otzros, Sefaria) are no longer shown as shelves.
+
+### Removed
+
+- **No timing button in the player.** The **תזמון** button, which let a
+  listener tap where a paragraph starts, is gone: the model's sync is
+  already good, and hand taps only moved it off. Words nobody is sure of
+  can still be talked over, and "the sync of the whole recording is
+  right" still marks it checked.
+
 ### Fixed
+
+- **A volume's address can be typed.** `/likkutei-sichos/30` now opens
+  volume 30 (`/likkutei-sichos?part=30`) instead of saying not found.
+- **Signing in with Google shows again for someone signed out.** The
+  site answers reads as nobody in its own Worker, which has no sign-in
+  routes, so `/_/auth/me` answered 404 on every page and `/signin` hid
+  the Google button. Sign-in and the mirrors' list now always go to the
+  API's Worker.
+- **Approving a big Suggestion lands at once.** Approving wrote each
+  item on its own, a dozen statements each: the catalog's reorganisation
+  (hundreds of items) was thousands of round trips and never finished.
+  Now a whole Suggestion is written in a few dozen statements, however
+  many items it has (500 items: 4,524 statements before, 33 now).
+- **A Suggestion names what it points at.** A part moved to another sefer
+  read as two ids (`rh-61vwn5d7` → `rh-v94rk99s`); now it says "In the
+  sefer" and the sefer's name. An item taken out (merged into another)
+  shows only that it is removed, not its old fields. The suggestion view
+  carries `items`: the items its page's changes point at, by id.
+- **A large Suggestion reads in a few lines.** Its summary named every
+  field it touches by its path (`body/versions/he/segments/t1/printed`,
+  hundreds of them), which said nothing and stopped phones. Now a page's
+  words are one line, "The words changed"; timings and machine details
+  are left out; a field goes by its name; each kind of change shows at
+  most three lines, at most five kinds are shown, and kinds that read
+  the same are one. Examples are "Example 1, 2, 3", not ids. The queue
+  reads 10 items at a time, not 25, and each item shows at most six
+  changes, the rest counted.
+
+- **Approve answers at once.** Pressing Approve in the review queue now
+  says "Merging…" (ממזג…) and turns every button off until the API
+  answers; then the card shows the suggestion merged, its buttons gone,
+  without a reload. Before, the buttons came back as soon as the API
+  answered and the card kept its old copy of the suggestion, so it
+  looked unmerged until the queue was read again and invited a second
+  press. The same on a suggestion's own page: its Approve says
+  "Merging…", the page turns merged the moment the merge is done, and
+  its checks are read again so they say so too. A refusal says why and
+  gives the buttons back.
+- **Checking a transcript.** "All exact" stays after you fix some of a
+  paragraph's words, so a paragraph can be checked in the same visit;
+  "Edit paragraph" is gone where your fix waits for approval (select the
+  words to change them, as everywhere). The diff of a fix waiting for
+  approval shows under the words on History only, with what was fixed
+  since the machine heard them. Words marked unclear (`[words?]`) are
+  all marked, not only the middle ones, and a fix no longer marks the
+  word after it.
+- **Previous and Next stay in their place.** The buttons above a sicha's
+  text stuck to the top of the screen and covered the words as you
+  scrolled, because they shared the site header's class name. They now
+  sit above and below the text only, each takes half the row, and a long
+  sicha name wraps to two lines instead of being cut.
+- **The synced player has its look back.** A stylesheet merged without
+  one closing brace, so the lyrics player and the rest of the farbrengen
+  page lost all their styling. A test now checks every stylesheet closes
+  what it opens.
+
+- **Hayom Yom is set as the book prints it.** Each day now has the
+  book's head: the weekday, the day and the year (5703 or 5704) in one
+  bold row, and the day's shiurim under "שיעורים." (Chumash with its
+  portion, Tehillim, Elul's added chapters and Yom Kippur's by their
+  times, and the Tanya chapter), then the words justified, on the daily
+  page and each day's own page. A day's notices (a Shabbos Mevarchim, a
+  fast, the Seder) stand above its shiurim on the 29 days the book puts
+  them there. A day's text can also carry what the book prints beyond
+  its words: the letter before the first day, a Shabbos's haftorah, the
+  Tanya line's first and last words, and the blessing after the last
+  day, marked as machine-read until a person checks them. The weekday,
+  year, Chumash and Tehillim are worked out from the calendar of 5703 and
+  match the print on every day read from its scan. Names brought from
+  chabadlibrary.org no longer show their tags (`<h3>ד שבט</h3>`).
+- **Word by word again after a fix.** Fixing a paragraph's words used to
+  throw away all its word timings until the audio was timed again, which
+  for JEM's recordings never came, so the lyrics lit such a paragraph as
+  a guess. A fix now keeps the timing of every word it left and times the
+  changed words between them. `rebbehub restore-word-times` gives the
+  timings back to paragraphs fixed before.
 
 - **Each volume's printings are on one page.** A sefer's volume page
   showed only the printings named exactly as its contents name the
@@ -457,11 +731,20 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Changed
 
-- **Timing tools are back, in the editor and while listening.** Under a
-  paragraph, **תזמון מדוייק** takes the moment of the tap as where it
-  starts, and asks once before sending, so a stray tap never moves the
-  sync; **the sync of the whole recording is right** marks it checked.
-  While listening, **Timing** turns a tap on a paragraph into the same.
+- **Words light up again as they are heard, in the listening view and
+  the editor.** A paragraph whose words were fixed (its own timings wait
+  for the nightly run) or a fix still waiting has each word's moment
+  estimated from where the paragraph starts and ends.
+- **A simpler transcript editor on a phone.** No yellow marks: the place
+  you stopped last time is no longer highlighted, the word being said is
+  marked in blue, and paragraphs no longer each carry a "not checked yet"
+  badge (one line at the top says the text is the machine's). The help,
+  the changelog and the training goal fold into small links, and the
+  paragraph's buttons are large, two to a row.
+- **Timing while listening.** **Timing** turns a tap on a paragraph into
+  where it starts, and asks once before sending, so a stray tap never
+  moves the sync; in the editor, **the sync of the whole recording is
+  right** marks it checked. The editor has no **תזמון מדוייק** button.
   A listener's timing taps on one recording are one suggestion, each
   going on from the last, so they never clash.
 - **Talk over unclear words.** Tapping words marked unclear (`[words?]`)

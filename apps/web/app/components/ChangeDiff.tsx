@@ -3,7 +3,7 @@ import type { Lang } from '../lib/i18n.js';
 import { wordDiff } from '../lib/wordDiff.js';
 import { DiffBox, DiffSegment, DiffStat, FieldDiff } from '../ui/Diff.js';
 import type { IconName } from '../ui/Icon.js';
-import { fieldName, foldChanges, foldedName, infoChanges, moreChanges, valueText } from './ChangeTable.js';
+import { fieldName, foldChanges, foldedName, infoChanges, moreChanges, valueText, type PointedItems } from './ChangeTable.js';
 
 /**
  * A change to one item as a reviewer reads it (the review queue, an item's
@@ -28,15 +28,18 @@ function segmentOf(path: string, lang: Lang): string {
   return name.length > 2 ? name[name.length - 1]! : '';
 }
 
-export function ChangeRows({ changes, lang }: { changes: Change[]; lang: Lang }) {
-  const folded = foldChanges(changes);
+/** At most this many rows an item: the rest are counted, never all drawn (a phone stops on thousands). */
+const ROWS = 6;
+
+export function ChangeRows({ changes, lang, items }: { changes: Change[]; lang: Lang; items?: PointedItems }) {
+  const folded = foldChanges(changes, ROWS);
   return (
     <>
       {folded.rows.map((c) =>
         isWords(c.path) ? (
           <DiffSegment key={c.path} n={segmentOf(c.path, lang)} before={valueText(c.path, c.before, lang).replace(/^—$/, '')} after={valueText(c.path, c.after, lang).replace(/^—$/, '')} />
         ) : (
-          <FieldDiff key={c.path} name={foldedName(c, lang)} before={valueText(c.path, c.before, lang)} after={valueText(c.path, c.after, lang)} />
+          <FieldDiff key={c.path} name={foldedName(c, lang)} before={valueText(c.path, c.before, lang, items)} after={valueText(c.path, c.after, lang, items)} />
         ),
       )}
       {folded.hidden ? <p className="subtle small pad">{moreChanges(folded.hidden, lang)}</p> : null}
@@ -53,10 +56,10 @@ export function wordsStat(changes: Change[], lang: Lang): ReactNode {
   return <DiffStat parts={parts} lang={lang} />;
 }
 
-export function ChangeDiff({ title, where, changes, lang, icon, note, actions }: { title: ReactNode; where?: ReactNode; changes: Change[]; lang: Lang; icon?: IconName; note?: ReactNode; actions?: ReactNode }) {
+export function ChangeDiff({ title, where, changes, lang, icon, note, actions, items }: { title: ReactNode; where?: ReactNode; changes: Change[]; lang: Lang; icon?: IconName; note?: ReactNode; actions?: ReactNode; items?: PointedItems }) {
   return (
     <DiffBox title={title} where={where} icon={icon} stat={wordsStat(changes, lang)} note={note} actions={actions}>
-      <ChangeRows changes={changes} lang={lang} />
+      {changes.length ? <ChangeRows changes={changes} lang={lang} items={items} /> : null}
     </DiffBox>
   );
 }

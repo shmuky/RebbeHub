@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useMatches, useNavigate } from 'react-router';
 import type { Lang } from '../lib/i18n.js';
 import { tu, type UiKey } from '../lib/i18nUi.js';
@@ -6,21 +6,34 @@ import { href } from '../lib/links.js';
 import { refreshAccount, useAccount } from '../lib/useAccount.js';
 import { CommandPalette } from './CommandPalette.js';
 import { Icon, type IconName } from './Icon.js';
+import { Logo } from './Logo.js';
 import { Avatar } from './primitives.js';
 import { setTheme, useTheme, type Theme } from './theme.js';
 
 /**
- * The frame's header. On a wide screen: the mark, the six sections, the
- * search box (Ctrl K opens the command palette; without script it is a
- * plain form to the search page), the language, what you follow, and you.
- * On a phone: back, the section's name, search, and a menu sheet.
+ * The frame's header, as the redesign draws it (design/README.md). On a wide
+ * screen: the logo, which is the way home, the other four sections, the search box (Ctrl K opens the
+ * command palette; without script it is a plain form to the search page),
+ * the bell and you; Reports, Projects and the language are in your menu.
+ * On a phone: the logo on the home page, or back and the page's name
+ * elsewhere, with search and the bell; the five sections are tabs along the
+ * bottom, where a thumb reaches them, the last one the menu.
  */
 
+/** The sections a phone keeps as tabs at the bottom; the rest are in the menu. */
+const TABS = ['/', '/sets', '/daily', '/calendar'];
+
+/** The sections in the header and the phone's tabs. Listening is the farbrengens, where the recordings are. */
 const NAV: Array<{ to: string; key: UiKey; icon: IconName }> = [
   { to: '/', key: 'navHome', icon: 'home' },
   { to: '/sets', key: 'navLibrary', icon: 'book' },
-  { to: '/calendar', key: 'navFarbrengens', icon: 'cal' },
+  { to: '/daily', key: 'navDaily', icon: 'cal' },
+  { to: '/calendar', key: 'navListen', icon: 'audio' },
   { to: '/suggestions', key: 'navSuggestions', icon: 'suggest' },
+];
+
+/** The rest of the site's sections, in the menu. */
+const MORE: Array<{ to: string; key: UiKey; icon: IconName }> = [
   { to: '/issues', key: 'navReports', icon: 'report' },
   { to: '/projects', key: 'navProjects', icon: 'target' },
 ];
@@ -28,6 +41,7 @@ const NAV: Array<{ to: string; key: UiKey; icon: IconName }> = [
 /** Which section a page belongs to: a farbrengen to Farbrengens, any other item to the Library. */
 export function sectionOf(pathname: string): string {
   if (pathname === '/') return '/';
+  if (pathname.startsWith('/daily')) return '/daily';
   if (pathname.startsWith('/calendar') || pathname.startsWith('/events') || pathname.startsWith('/sets/farbrengens')) return '/calendar';
   if (pathname.startsWith('/review') || pathname.startsWith('/suggestions')) return '/suggestions';
   if (pathname.startsWith('/issues')) return '/issues';
@@ -113,6 +127,28 @@ function InboxLink({ lang, first }: { lang: Lang; first: number }) {
   );
 }
 
+/** One part of the phone's menu, under its small heading (design/ 4b). */
+function MenuGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="menu-group">
+      <h3>{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+/** A line of the menu: its icon and words, a count when something waits, and the arrow on. */
+function MenuRow({ to, icon, label, badge, current, chevron }: { to: string; icon: IconName; label: string; badge?: number; current?: boolean; chevron: IconName }) {
+  return (
+    <Link className="menu-row" to={to} aria-current={current ? 'page' : undefined}>
+      <Icon name={icon} />
+      <span className="grow">{label}</span>
+      {badge ? <span className="menu-badge">{badge > 99 ? '99+' : badge}</span> : null}
+      <Icon name={chevron} />
+    </Link>
+  );
+}
+
 function signOut() {
   void fetch('/_/auth/sign-out', { method: 'POST', credentials: 'same-origin' }).then(() => refreshAccount());
 }
@@ -179,6 +215,13 @@ function AccountMenu({ lang }: { lang: Lang }) {
             </Link>
           ) : null}
           <hr />
+          {MORE.map((n) => (
+            <Link key={n.to} role="menuitem" to={href(n.to, lang)}>
+              <Icon name={n.icon} />
+              {tu(lang, n.key)}
+            </Link>
+          ))}
+          <hr />
           <div className="menu-sec">{tu(lang, 'theme')}</div>
           <ThemeSwitch lang={lang} />
           <hr />
@@ -207,7 +250,7 @@ export function Header({ lang }: { lang: Lang }) {
     if (sheet.current) sheet.current.open = false;
   }, [pathname, search]);
 
-  // Keyboard: Ctrl/⌘ K or / for the palette, ? for the shortcuts, g then h/l/f/s/r/p to go.
+  // Keyboard: Ctrl/⌘ K or / for the palette, ? for the shortcuts, g then h/l/d/f/s/r/p to go.
   useEffect(() => {
     let g = 0;
     const onKey = (e: KeyboardEvent) => {
@@ -227,7 +270,7 @@ export function Header({ lang }: { lang: Lang }) {
         setPalette({ open: true, initial: '?' });
       } else if (e.key === 'g') g = Date.now();
       else if (Date.now() - g < 1200) {
-        const to = { h: '/', l: '/sets', f: '/calendar', s: '/suggestions', r: '/issues', i: '/inbox', p: '/projects' }[e.key];
+        const to = { h: '/', l: '/sets', d: '/daily', f: '/calendar', s: '/suggestions', r: '/issues', i: '/inbox', p: '/projects' }[e.key];
         g = 0;
         if (to) navigate(href(to, lang));
       }
@@ -238,6 +281,8 @@ export function Header({ lang }: { lang: Lang }) {
 
   const openPalette = (initial = '') => setPalette({ open: true, initial });
   const other = otherLangHref(lang, pathname, search);
+  // The menu's arrows point on, toward the end of the line: left in Hebrew.
+  const chevron: IconName = lang === 'he' ? 'chev' : 'chevr';
   const navItem = NAV.find((n) => n.to === section);
   // A page kept under another section's tab (what is missing, the catalog's health) is still called by its own name.
   const ownTitle = pathname.startsWith('/missing') ? tu(lang, 'missing') : pathname.startsWith('/health') ? tu(lang, 'health') : pathname.startsWith('/help') ? tu(lang, 'waysToHelp') : null;
@@ -248,13 +293,10 @@ export function Header({ lang }: { lang: Lang }) {
     <>
       <header className="top">
         <Link to={href('/', lang)} className="brand" aria-label="RebbeHub">
-          <span className="mark" aria-hidden="true">
-            ר
-          </span>
-          RebbeHub
+          <Logo size={24} />
         </Link>
         <nav className="nav" aria-label={tu(lang, 'mainNav')}>
-          {NAV.map((n) => (
+          {NAV.filter((n) => n.to !== '/').map((n) => (
             <Link key={n.to} to={href(n.to, lang)} aria-current={section === n.to ? 'page' : undefined}>
               {tu(lang, n.key)}
             </Link>
@@ -278,7 +320,7 @@ export function Header({ lang }: { lang: Lang }) {
             type="search"
             defaultValue={q}
             key={q}
-            placeholder={tu(lang, 'searchPlaceholder')}
+            placeholder={tu(lang, 'searchLibrary')}
             aria-label={tu(lang, 'searchShort')}
             onFocus={(e) => {
               if (e.currentTarget.dataset.typed) return;
@@ -290,22 +332,10 @@ export function Header({ lang }: { lang: Lang }) {
             }}
           />
           {lang === 'en' ? <input type="hidden" name="lang" value="en" /> : null}
-          <span className="kbds" aria-hidden="true">
-            <kbd>Ctrl</kbd>
-            <kbd>K</kbd>
-          </span>
         </form>
         <div className="top-end">
-          <a className="lang" href={other} hrefLang={lang === 'he' ? 'en' : 'he'} aria-label={tu(lang, 'language')}>
-            {lang === 'he' ? (
-              <>
-                <b>עב</b> · EN
-              </>
-            ) : (
-              <>
-                עב · <b>EN</b>
-              </>
-            )}
+          <a className="lang" href={other} hrefLang={lang === 'he' ? 'en' : 'he'} lang={lang === 'he' ? 'en' : 'he'} aria-label={tu(lang, 'language')} title={tu(lang, 'language')}>
+            {lang === 'he' ? 'English' : 'עברית'}
           </a>
           {account ? <InboxLink lang={lang} first={account.unread ?? 0} /> : null}
           <AccountMenu lang={lang} />
@@ -315,9 +345,7 @@ export function Header({ lang }: { lang: Lang }) {
       <header className="mtop">
         {home ? (
           <Link to={href('/', lang)} className="brand" aria-label="RebbeHub">
-            <span className="mark" aria-hidden="true">
-              ר
-            </span>
+            <Logo size={23} />
           </Link>
         ) : (
           <Link
@@ -335,7 +363,7 @@ export function Header({ lang }: { lang: Lang }) {
             <Icon name="back" />
           </Link>
         )}
-        <span className="t">{phoneTitle}</span>
+        <span className="t">{home ? null : phoneTitle}</span>
         <Link
           className="ib"
           to={href('/search', lang)}
@@ -347,6 +375,7 @@ export function Header({ lang }: { lang: Lang }) {
         >
           <Icon name="search" />
         </Link>
+        {account ? <InboxLink lang={lang} first={account.unread ?? 0} /> : null}
         <details className="msheet" ref={sheet}>
           <summary className="ib" aria-label={tu(lang, 'menu')}>
             <Icon name="more" />
@@ -359,12 +388,7 @@ export function Header({ lang }: { lang: Lang }) {
           />
           <div className="sheet" role="dialog" aria-label={tu(lang, 'menu')}>
             <div className="sheet-h">
-              <Link to={href('/', lang)} className="brand">
-                <span className="mark" aria-hidden="true">
-                  ר
-                </span>
-                RebbeHub
-              </Link>
+              <h2 className="sheet-title">{tu(lang, 'menu')}</h2>
               <button
                 type="button"
                 className="ib"
@@ -376,63 +400,90 @@ export function Header({ lang }: { lang: Lang }) {
                 <Icon name="x" />
               </button>
             </div>
-            <nav aria-label={tu(lang, 'mainNav')}>
-              {NAV.map((n) => (
-                <Link key={n.to} to={href(n.to, lang)} aria-current={section === n.to ? 'page' : undefined}>
-                  <Icon name={n.icon} />
-                  {tu(lang, n.key)}
-                </Link>
-              ))}
-              <Link to={href('/search', lang)}>
-                <Icon name="search" />
-                {tu(lang, 'searchShort')}
-              </Link>
-            </nav>
-            <hr />
-            <nav aria-label={tu(lang, 'account')}>
-              {account ? (
-                <>
-                  <Link to={href('/account', lang)}>
-                    <Avatar name={account.person.displayName} id={account.person.id} size="sm" />
-                    {account.person.displayName}
-                  </Link>
-                  <Link to={href('/inbox', lang)}>
-                    <Icon name="bell" />
-                    {tu(lang, 'notifications')}
-                  </Link>
-                  {account.person.steward ? (
-                    <Link to={href('/admin', lang)}>
-                      <Icon name="shield" />
-                      {tu(lang, 'admin')}
-                    </Link>
-                  ) : null}
-                </>
-              ) : account === null ? (
-                <Link to={href('/signin', lang, { return: `${pathname}${search}` })}>
-                  <Icon name="user" />
-                  {tu(lang, 'signIn')}
-                </Link>
-              ) : null}
-              <a href={other} hrefLang={lang === 'he' ? 'en' : 'he'}>
-                <Icon name="globe" />
-                {lang === 'he' ? 'English' : 'עברית'}
-              </a>
-            </nav>
-            <div className="sheet-sec">{tu(lang, 'theme')}</div>
-            <div className="sheet-theme">
-              <ThemeSwitch lang={lang} />
-            </div>
             {account ? (
-              <nav>
-                <button type="button" onClick={signOut}>
+              <Link className="me-card" to={href(account.person.username ? `/u/${account.person.username}` : '/account', lang)}>
+                <Avatar name={account.person.displayName} id={account.person.id} />
+                <span className="grow">
+                  <b>{account.person.displayName}</b>
+                  <span>{tu(lang, 'myProfile')}</span>
+                </span>
+                <Icon name={chevron} />
+              </Link>
+            ) : account === null ? (
+              <Link className="me-card" to={href('/signin', lang, { return: `${pathname}${search}` })}>
+                <span className="me-icon">
+                  <Icon name="user" />
+                </span>
+                <span className="grow">
+                  <b>{tu(lang, 'signIn')}</b>
+                  <span>{tu(lang, 'signInWhy')}</span>
+                </span>
+                <Icon name={chevron} />
+              </Link>
+            ) : null}
+            {account ? (
+              <MenuGroup title={tu(lang, 'menuMine')}>
+                <MenuRow to={href('/suggestions', lang, { q: lang === 'he' ? 'מצב:פתוחה מציע:@me' : 'state:open author:@me' })} icon="suggest" label={tu(lang, 'mySuggestions')} chevron={chevron} />
+                <MenuRow to={href('/suggestions', lang, { q: lang === 'he' ? 'מצב:פתוחה בודק:@me' : 'state:open reviewer:@me' })} icon="check" label={tu(lang, 'toReview')} chevron={chevron} />
+                <MenuRow to={href('/inbox', lang)} icon="bell" label={tu(lang, 'notifications')} badge={account.unread || undefined} chevron={chevron} />
+                <MenuRow to={href('/account', lang)} icon="user" label={tu(lang, 'account')} chevron={chevron} />
+                {account.person.steward ? <MenuRow to={href('/admin', lang)} icon="shield" label={tu(lang, 'admin')} chevron={chevron} /> : null}
+              </MenuGroup>
+            ) : null}
+            <MenuGroup title={tu(lang, 'menuReading')}>
+              <div className="menu-row static">
+                <Icon name="sun" />
+                <span className="grow">{tu(lang, 'theme')}</span>
+                <ThemeSwitch lang={lang} />
+              </div>
+              <a className="menu-row" href={other} hrefLang={lang === 'he' ? 'en' : 'he'}>
+                <Icon name="globe" />
+                <span className="grow">{tu(lang, 'language')}</span>
+                <span className="menu-value">{lang === 'he' ? 'עברית · English' : 'English · עברית'}</span>
+                <Icon name={chevron} />
+              </a>
+              <MenuRow to={href('/daily', lang)} icon="cal" label={tu(lang, 'navDaily')} chevron={chevron} />
+            </MenuGroup>
+            <MenuGroup title={tu(lang, 'menuSite')}>
+              {[...NAV.filter((n) => !TABS.includes(n.to)), ...MORE].map((n) => (
+                <MenuRow key={n.to} to={href(n.to, lang)} icon={n.icon} label={tu(lang, n.key)} current={section === n.to} chevron={chevron} />
+              ))}
+              <MenuRow to={href('/search', lang)} icon="search" label={tu(lang, 'searchShort')} chevron={chevron} />
+            </MenuGroup>
+            <MenuGroup title={tu(lang, 'menuHelp')}>
+              <MenuRow to={href('/help', lang)} icon="pencil" label={tu(lang, 'navHelp')} chevron={chevron} />
+              <MenuRow to={href('/about', lang)} icon="info" label={tu(lang, 'about')} chevron={chevron} />
+            </MenuGroup>
+            {account ? (
+              <div className="menu-group">
+                <button type="button" className="menu-row" onClick={signOut}>
                   <Icon name="logout" />
-                  {tu(lang, 'signOut')}
+                  <span className="grow">{tu(lang, 'signOut')}</span>
                 </button>
-              </nav>
+              </div>
             ) : null}
           </div>
         </details>
       </header>
+
+      <nav className="mtabs" aria-label={tu(lang, 'mainNav')}>
+        {NAV.filter((n) => TABS.includes(n.to)).map((n) => (
+          <Link key={n.to} to={href(n.to, lang)} aria-current={section === n.to ? 'page' : undefined}>
+            <Icon name={n.icon} />
+            <span>{tu(lang, n.key)}</span>
+          </Link>
+        ))}
+        <button
+          type="button"
+          aria-current={TABS.includes(section) ? undefined : 'page'}
+          onClick={() => {
+            if (sheet.current) sheet.current.open = true;
+          }}
+        >
+          <Icon name="more" />
+          <span>{tu(lang, 'menu')}</span>
+        </button>
+      </nav>
 
       <CommandPalette lang={lang} account={account} open={palette.open} initial={palette.initial} onClose={() => setPalette({ open: false, initial: '' })} />
     </>

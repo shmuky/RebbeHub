@@ -33,6 +33,10 @@ const rpc = async (method: string, params?: unknown, options: { token?: string; 
   return { status: response.status, body: text ? (JSON.parse(text) as any) : null };
 };
 const tool = async (name: string, args: Record<string, unknown>, token?: string) => (await rpc('tools/call', { name, arguments: args }, { token })).body.result;
+const writeToken = async (who: string) => {
+  const made = await app.request('/v1/tokens', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Test-Account': who }, body: JSON.stringify({ name: 'agent', scopes: ['read', 'write'] }) });
+  return ((await made.json()) as { token: string }).token;
+};
 
 describe('the MCP server', () => {
   it('shakes hands, lists its tools, and answers notifications with nothing', async () => {
@@ -46,11 +50,17 @@ describe('the MCP server', () => {
       'search',
       'get_item',
       'list_children',
+      'list_printings',
       'get_text',
       'suggest_fix',
+      'get_shaar',
+      'suggest_shaar',
       'list_issues',
       'open_issue',
       'suggest_items',
+      'add_segments',
+      'list_suggestions',
+      'get_suggestion',
       'approve_suggestion',
       'close_suggestion',
       'reopen_suggestion',
@@ -70,6 +80,7 @@ describe('the MCP server', () => {
       'create_set',
       'delete_set',
       'merge_items',
+      'mark_addition',
     ]);
     expect(tools.find((t: { name: string }) => t.name === 'merge_items').annotations.destructiveHint).toBe(true);
     expect(tools.find((t: { name: string }) => t.name === 'suggest_fix').annotations.readOnlyHint).toBe(false);
@@ -152,6 +163,40 @@ describe('the MCP server', () => {
     expect((await tool('get_text', { id: page, language: 'en' })).isError).toBe(true);
   });
 
+  it("lists every printing of a sefer with its volume and sources, those without a path too", async () => {
+    const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'לקוטי שיחות' }, slug: 'ls', authors: [], genre: 'sichos', levels: ['sicha'], sets: [set] });
+    const unit = await add(catalog, 'mendy', 'keeper', 'unit', { work, position: [{ level: 'sicha', value: '1' }], order: 'V', label: { he: 'א' } });
+    // Many printings of one name, as HebrewBooks' are; a search stops at its limit before it reaches the one with no path.
+    const printed = [];
+    for (let n = 1; n <= 12; n++) {
+      printed.push(await add(catalog, 'mendy', 'keeper', 'publication', { kind: 'book-volume', work, title: { he: `לקוטי שיחות - ${n}` }, volume: String(n), sources: [{ source: 'hebrewbooks', sourceId: String(14923 + n), url: `https://hebrewbooks.org/${14923 + n}` }] }, `/hebrewbooks/${14923 + n}`));
+    }
+    const hb30 = await add(catalog, 'mendy', 'keeper', 'publication', { kind: 'book-volume', work, title: { he: 'לקוטי שיחות - ל (בראשית)' }, volume: 'ל (בראשית)', sources: [{ source: 'hebrewbooks', url: 'https://hebrewbooks.org/14953' }] }, '/hebrewbooks/14953');
+    const drive30 = await add(catalog, 'mendy', 'keeper', 'publication', { kind: 'book-volume', work, title: { he: 'לקוטי שיחות - ל (בראשית)' }, volume: '30', sources: [{ source: 'other', note: 'אוצרות הרבי', url: 'https://drive.google.com/file/d/x/view' }] });
+
+    const searched = await tool('search', { query: 'לקוטי שיחות', type: 'publication', limit: 10 });
+    expect(searched.content[0].text).toMatch(/list_printings/);
+    expect(searched.structuredContent.results[0]).toMatchObject({ volume: expect.any(String), sources: [{ source: 'hebrewbooks' }] });
+    // Within one sefer, and with a volume, search reaches it.
+    const inWork = await tool('search', { query: 'לקוטי שיחות 30', type: 'publication', work });
+    expect(inWork.structuredContent.results.map((r: { id: string }) => r.id)).toEqual([drive30]);
+    expect(inWork.content[0].text).toContain('from אוצרות הרבי');
+
+    const all = await tool('list_printings', { id: work });
+    expect(all.isError).toBe(false);
+    expect(all.structuredContent.printings.map((p: { id: string }) => p.id)).toEqual([...printed, hb30, drive30]);
+    expect(all.content[0].text).toContain('14 printings of לקוטי שיחות');
+    expect(all.content[0].text).toContain('אוצרות הרבי https://drive.google.com/file/d/x/view');
+
+    // One volume, as a number or as printed, found from a sicha of the sefer.
+    for (const volume of ['30', 'ל']) {
+      const one = await tool('list_printings', { id: unit, volume });
+      expect(one.structuredContent.printings.map((p: { id: string }) => p.id)).toEqual([hb30, drive30]);
+      expect(one.structuredContent.printings[1]).toMatchObject({ path: null, volume: '30', sources: [{ source: 'other', note: 'אוצרות הרבי' }] });
+    }
+    expect((await tool('list_printings', { id: event })).isError).toBe(true);
+  });
+
   it('suggests a fix only with a write token, as its person, for review', async () => {
     const refused = await rpc('tools/call', { name: 'suggest_fix', arguments: { id: event, changes: { note: 'x' }, title: 'A note' } });
     expect(refused.status).toBe(401);
@@ -166,6 +211,26 @@ describe('the MCP server', () => {
     expect(suggestion.author).toBe(me);
     // Nothing changed on main until a keeper approves.
     expect((await catalog.get(event))!.data).toMatchObject({ title: { en: 'Yud Shvat 5742' } });
+  });
+
+  it("reads a sefer's shaar, and sends a changed one for review, refusing a file it cannot read", async () => {
+    const sefer = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'ליקוטי שיחות' }, slug: 'likkutei-sichos', authors: [], genre: 'sichos', levels: ['volume', 'sicha'], sets: [set] });
+    const got = await tool('get_shaar', { id: sefer });
+    expect(got.structuredContent.machine).toBe(true);
+    expect(got.content[0].text).toMatch(/^\[machine\][^\n]*\n---\nshaar: 1\ntitle: ליקוטי שיחות\ngenre: sichos\n---\n\n## סדר הספר \| Structure/);
+    const text = await (await app.request(`/v1/entities/${sefer}/shaar?format=text`)).text();
+    expect(text).toBe(got.structuredContent.text);
+
+    const me = (await createPerson(catalog.db, 'Shaar writer')).id;
+    const made = await app.request('/v1/tokens', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Test-Account': me }, body: JSON.stringify({ name: 'agent', scopes: ['read', 'write'] }) });
+    const { token } = (await made.json()) as { token: string };
+    const bad = await tool('suggest_shaar', { id: sefer, text: text.replace('genre: sichos', 'kind: sichos') }, token);
+    expect(bad.isError).toBe(true);
+    expect(bad.content[0].text).toContain('line 4');
+    const sent = await tool('suggest_shaar', { id: sefer, text: `${text}\n## הערות | Notes\n\nנבדק.\n`, before: text, title: 'A note in the shaar' }, token);
+    expect(sent.isError).toBe(false);
+    const suggestion = await catalog.changeset(sent.structuredContent.suggestion);
+    expect(suggestion.author).toBe(me);
   });
 
   it('adds many items in one suggestion, over several calls, and a steward approves it', async () => {
@@ -191,6 +256,15 @@ describe('the MCP server', () => {
     expect((await catalog.proposals(suggestion)).length).toBe(3);
     expect(await catalog.get(workId)).toBeNull();
 
+    // Anyone can find it and read what it changes; its author may not approve it.
+    const listed = await tool('list_suggestions', { q: 'An index' });
+    expect(listed.structuredContent.suggestions).toMatchObject([{ suggestion, title: 'An index', status: 'open' }]);
+    const read = await tool('get_suggestion', { suggestion }, token);
+    expect(read.isError).toBe(false);
+    expect(read.structuredContent).toMatchObject({ suggestion, status: 'open', mayApprove: false, total: 3 });
+    expect(read.structuredContent.items).toContainEqual(expect.objectContaining({ id: workId, change: 'added', name: 'מפתח' }));
+    expect(read.content[0].text).toMatch(/You may not approve it/);
+
     // Only who may approve does: not its author, then a steward.
     expect((await tool('approve_suggestion', { suggestion }, token)).isError).toBe(true);
     const steward = (await createPerson(catalog.db, 'Steward')).id;
@@ -214,6 +288,26 @@ describe('the MCP server', () => {
     expect((await tool('reopen_suggestion', { suggestion: stale }, stewardToken)).isError).toBe(false);
     expect((await tool('approve_suggestion', { suggestion: stale, clashes: 'keep_live' }, stewardToken)).isError).toBe(false);
     expect((await catalog.get(workId))!.data).toMatchObject({ title: { he: 'מפתח השיחות' } });
+  });
+
+  it('adds a few segments to many pages, sending only the new words', async () => {
+    const work = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'היום יום' }, slug: 'hy', authors: [], genre: 'sichos', levels: ['day'], sets: [set] }, '/hy');
+    const words = (...ids: string[]) => ({ profile: 'chabad-library', versions: [{ id: 'he', language: 'he', segments: ids.map((s) => ({ id: s, kind: 'paragraph', text: [{ text: s }] })) }] });
+    const day = await add(catalog, 'mendy', 'keeper', 'unit', { work, position: [{ level: 'day', value: '1' }], order: '1', label: { he: 'יט כסלו' }, body: words('p1', 'p2') }, '/hy/1');
+    const token = await writeToken((await createPerson(catalog.db, 'Reader')).id);
+    const line = (s: string) => ({ id: s, kind: 'paragraph', text: [{ text: s }], origin: { by: 'ocr:test' } });
+    const made = await tool('add_segments', { items: [{ id: day, segments: [{ segment: line('lead-1'), at: 'start' }, { segment: line('pre-1'), at: 1 }, { segment: line('close-1') }] }], title: 'The print' }, token);
+    expect(made.isError).toBe(false);
+    expect(made.structuredContent).toMatchObject({ status: 'open', items: [day] });
+    const [proposal] = await catalog.proposals(made.structuredContent.suggestion);
+    const ids = (data: any) => data.body.versions[0].segments.map((s: { id: string }) => s.id);
+    expect(ids(proposal!.rev.data)).toEqual(['lead-1', 'p1', 'pre-1', 'p2', 'close-1']);
+    expect((proposal!.rev.data as any).label).toEqual({ he: 'יט כסלו' });
+    // A segment already there is replaced where it stands.
+    const again = await tool('add_segments', { items: [{ id: day, segments: [{ segment: { ...line('p1'), text: [{ text: 'new' }] }, at: 'end' }] }] }, token);
+    const [second] = await catalog.proposals(again.structuredContent.suggestion);
+    expect(ids(second!.rev.data)).toEqual(['p1', 'p2']);
+    expect((await tool('add_segments', { items: [{ id: work, segments: [{ segment: line('x') }] }] }, token)).content[0].text).toMatch(/has no words/);
   });
 
   it('shows the tree and organizes it as suggestions, with a write token', async () => {
@@ -252,5 +346,17 @@ describe('the MCP server', () => {
     expect((await tool('reorder_children', { items: [work, event], parent: set }, token)).content[0].text).toMatch(/not beside|no order/);
     const plan = await tool('organize', { operations: [{ op: 'rename', item: other, name: { en: 'Talks' } }], title: 'Name the set' }, token);
     expect(plan.structuredContent).toMatchObject({ status: 'open', summary: ['Rename שיחות / Sichos to שיחות / Talks'] });
+
+    // A commentary is an addition to the official sefer, not a sefer of the tree; marked, and made official again, as suggestions.
+    const commentary = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'ביאור לחיבור' }, slug: 'biur', authors: [], genre: 'sichos', levels: ['sicha'], sets: [set] }, '/biur');
+    const marked = await tool('mark_addition', { item: commentary, to: work, kind: 'commentary' }, token);
+    expect(marked.isError).toBe(false);
+    expect(marked.structuredContent).toMatchObject({ status: 'open', summary: ['Mark ביאור לחיבור as an addition (commentary) to חיבור'] });
+    const proposed = await catalog.proposals(marked.structuredContent.suggestion);
+    expect(proposed.find((p) => p.entityId === commentary)?.rev.data).toMatchObject({ addition: { kind: 'commentary', to: work } });
+    expect((await tool('mark_addition', { item: commentary }, token)).content[0].text).toMatch(/give kind/);
+    expect((await tool('mark_addition', { item: commentary, official: true }, token)).content[0].text).toMatch(/already an official sefer/);
+    const viaPlan = await tool('preview_organize', { operations: [{ op: 'addition', item: commentary, kind: 'index' }] });
+    expect(viaPlan.content[0].text).toMatch(/Mark ביאור לחיבור as an addition \(index\)/);
   });
 });

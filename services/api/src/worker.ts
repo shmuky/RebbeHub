@@ -1,6 +1,6 @@
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { Catalog, adviseSuggestions, deliverWebhooks, embedderFromEnv, sendNotifications } from '@rebbehub/core';
-import { connectPostgres, measured } from '@rebbehub/db';
+import { connectPostgres, isCatalogHeld, measured } from '@rebbehub/db';
 import { createApp, turnstileVerifier } from './app.js';
 import { r2Store, r2Writer, statusStore, type R2Bucket } from './r2.js';
 import { AppReleases } from './appCatalog.js';
@@ -130,6 +130,8 @@ export default {
       const failed: string[] = [];
       const job = (name: string, work: () => Promise<unknown>) =>
         work().catch((error) => {
+          // While an import holds the catalog the job waits for the next round; it has not failed.
+          if (isCatalogHeld(error)) return;
           console.error(name, error);
           failed.push(name);
         });

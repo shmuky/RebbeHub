@@ -1041,8 +1041,8 @@ button.part.on:hover {
 }
 
 .tx-text .word.w-now {
-  background: var(--mark);
-  color: var(--text);
+  background: var(--accent-soft);
+  color: var(--accent-strong, var(--text));
 }
 
 .tx-text .word.w-picked {
@@ -1110,6 +1110,21 @@ button.part.on:hover {
   gap: 8px;
 }
 
+/* The box for fixing words floats at the foot of the screen, above the player, however long the paragraph (the paragraph's own tools stay under it); retyping a whole paragraph, its Save does. */
+.tx-edit.words,
+.tx-edit.all .actions {
+  position: sticky;
+  bottom: calc(var(--player-h, 0px) + 8px);
+  z-index: 4;
+  margin-inline: -8px;
+  padding: 8px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 -2px 14px rgba(20, 24, 30, 0.1);
+}
+
 .tx-complete {
   display: flex;
   align-items: center;
@@ -1144,6 +1159,10 @@ button.part.on:hover {
 
 .tx-sent {
   margin: 8px 0 0;
+}
+
+.tx-done-note {
+  margin: 0 0 10px;
 }
 
 .tx-history {
@@ -1266,6 +1285,17 @@ button.part.on:hover {
   text-decoration-color: #8cc4ff;
 }
 
+/* Words both waiting for approval and marked unclear show as unclear, the brackets' words all alike. */
+.w-pending.w-unclear {
+  text-decoration: underline dotted var(--machine);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
+}
+
+.lyrics .w-pending.w-unclear {
+  text-decoration-color: #ffd98a;
+}
+
 .tx-waiting ul {
   list-style: none;
   margin: 6px 0 0;
@@ -1286,13 +1316,7 @@ button.part.on:hover {
   font-weight: 600;
 }
 
-/* Timing tools and talking over unclear words (components/TimingTools.tsx). */
-.lyrics-edit.on {
-  background: rgba(255, 255, 255, 0.92);
-  color: #0b1024;
-}
-
-.lyrics-timing,
+/* Talking over unclear words (components/TimingTools.tsx). */
 .lyrics .tx-discuss {
   margin: 0 18px 6px;
   padding: 8px 12px;
@@ -1301,7 +1325,6 @@ button.part.on:hover {
   color: inherit;
 }
 
-.lyrics-timing .row-sub,
 .lyrics .tx-discuss .row-sub {
   margin: 0;
   color: rgba(255, 255, 255, 0.8);
@@ -1312,12 +1335,6 @@ button.part.on:hover {
   text-decoration: underline;
 }
 
-.tx-timing {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-}
 
 .tx-discuss {
   display: grid;
@@ -1345,4 +1362,65 @@ button.part.on:hover {
 
 .w-unclear[data-u] {
   cursor: help;
+}
+
+/* Simpler on a phone: one quiet line saying the text is the machine's, the help and the changelog as small links, big buttons. */
+.tx-machine-line {
+  margin: 0;
+}
+
+.tx-how,
+.tx-all {
+  border: 0;
+  background: none;
+}
+
+.tx-how > summary,
+.tx-all > summary {
+  padding: 4px 0;
+  font-weight: 500;
+  font-size: var(--fs-sm, 13.5px);
+  color: var(--accent);
+}
+
+.tx-how[open],
+.tx-all[open] {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+}
+
+.tx-how[open] > summary,
+.tx-all[open] > summary {
+  padding: 10px 14px;
+}
+
+.tx-how .training-goal,
+.tx-how > div {
+  margin: 10px 14px 12px;
+}
+
+.lyrics .machine-label {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+@media (max-width: 640px) {
+  .tx-para {
+    padding: 10px 12px 12px;
+  }
+  .tx-tools {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .tx-tool {
+    justify-content: center;
+    height: 44px;
+    border-radius: 12px;
+    font-size: 15px;
+  }
+  .tx-text {
+    font-size: 20px;
+  }
 }

@@ -92,6 +92,12 @@ h2.words-heading {
   text-align: end;
 }
 
+/* A letter's greeting, alone on its line (lib/letters.ts). */
+.words-p.greet {
+  text-align: center;
+  font-weight: 700;
+}
+
 .words-anchor,
 .words-verse .words-n {
   position: absolute;
@@ -542,6 +548,47 @@ input.words-note:focus {
 .body-source b {
   color: var(--muted);
   font-weight: 600;
+}
+
+/* Checking against the scan, as design/ draws it (4e): what this is, how far along, and on to the next. */
+.check-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
+  margin: 12px 0 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.check-what {
+  flex: 1 1 320px;
+  display: grid;
+  gap: 2px;
+}
+.check-kicker {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--subtle);
+}
+.check-help {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+.check-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+.check-progress .bar {
+  width: 180px;
+}
+/* On a wide screen the words come first in reading order and the scan beside them, as the design has it; on a phone the scan stays on top. */
+@media (min-width: 901px) {
+  .check-beside > .check-words {
+    order: -1;
+  }
 }
 
 /* Checking a machine's reading against its scan (routes/edit.tsx): the scan beside the words,

@@ -13,6 +13,7 @@ import {
   contentHash,
   defaultRightsState,
   idFromSeed,
+  isAddition,
   isEntityId,
   isEntityPath,
   joinPath,
@@ -45,6 +46,17 @@ describe('schemas', () => {
     expect(paths).toContain('/title');
     expect(paths).toContain('/date');
     expect(paths.some((p) => p === '' || p === '/colour')).toBe(true);
+  });
+
+  it("takes a sefer's `addition` (what kind, and the official sefer it belongs under) and refuses anything else there", () => {
+    expect(registry.validate('work', { ...EXAMPLES.work, addition: { kind: 'commentary', to: 'rh-00000009' } })).toEqual({ ok: true });
+    expect(registry.validate('work', { ...EXAMPLES.work, addition: { kind: 'index' } })).toEqual({ ok: true });
+    expect(registry.validate('work', { ...EXAMPLES.work, addition: { to: 'rh-00000009' } }).ok).toBe(false);
+    expect(registry.validate('work', { ...EXAMPLES.work, addition: { kind: 'translation' } }).ok).toBe(false);
+    expect(registry.validate('work', { ...EXAMPLES.work, addition: { kind: 'about', to: 'tanya' } }).ok).toBe(false);
+    expect(registry.validate('work', { ...EXAMPLES.work, addition: { kind: 'about', note: 'x' } }).ok).toBe(false);
+    expect(isAddition({ ...EXAMPLES.work, addition: { kind: 'other' } })).toBe(true);
+    expect(isAddition(EXAMPLES.work)).toBe(false);
   });
 
   it('refuses an unknown type, and takes stored schemas over built-in ones', () => {
@@ -140,6 +152,7 @@ describe('references', () => {
       { field: 'events', id: 'rh-00000003', expected: ['event'] },
       { field: 'body.href', id: 'rh-00000005', expected: [] },
     ]);
+    expect(referencesOf('work', { ...EXAMPLES.work, authors: [], sets: [], addition: { kind: 'commentary', to: 'rh-00000009' } })).toEqual([{ field: 'addition.to', id: 'rh-00000009', expected: ['work'] }]);
     expect(referencesOf('segment', { ...EXAMPLES.segment, page: { scan: 'rh-00000006', page: 1 } }).map((r) => r.expected)).toEqual([['text'], ['scan']]);
   });
 });

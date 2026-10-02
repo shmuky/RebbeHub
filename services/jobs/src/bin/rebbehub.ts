@@ -4,11 +4,12 @@ import { checkLinksCommand, citationsCommand, embedCommand } from '../networkCom
 import { machineCommand } from '../machineCommand.js';
 import { trainingClipsCommand } from '../trainingClipsCommand.js';
 import { ocrCommand } from '../ocrCommand.js';
-import { alignCommand, mendSplitsCommand, transcribeCommand } from '../transcribeCommand.js';
+import { alignCommand, mendSplitsCommand, restoreWordTimesCommand, transcribeCommand } from '../transcribeCommand.js';
 import { coversCommand, fingerprintsCommand, pageImagesCommand } from '../scanPagesCommand.js';
 import {
   accountCommand,
   convertBodiesCommand,
+  shaarsCommand,
   archiveGapsCommand,
   crawlLibraryCommand,
   crawlSefariaCommand,
@@ -25,6 +26,7 @@ import {
   readingCopiesMakeCommand,
   readingCopiesPublishCommand,
   readingCopiesRegisterCommand,
+  holdCatalogCommand,
   rebuildableCommand,
   relinkDriveCommand,
   relinkJemCommand,
@@ -39,6 +41,11 @@ const HELP = `rebbehub - RebbeHub's command line
   rebbehub convert-bodies [--chunk <n>]         pages whose words are still wiki markup, as structured
                                                 words (system changes of <n> pages; run once after
                                                 deploying built-in schemas version 5)
+  rebbehub shaars [--chunk <n>] [--dry-run]     every sefer without a shaar gets the one the catalog
+                                                makes from its data (docs/shaar.md), as system
+                                                changes of <n> sefarim; --dry-run only counts them
+  rebbehub hold-catalog [--minutes <n>]         refuses writes to the catalog until stopped (an
+                                                import's copy back); prints held once it does
   rebbehub rebuildable [--guard]                prints rebuildable when importers made everything;
                                                 --guard prints SQL that fails otherwise
   rebbehub rebuildable --mark | --guard-mark <mark>
@@ -59,8 +66,9 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 chabadlibrary.org's contents, continuing an earlier crawl; --texts
                                                 keeps each page's text beside the tree, --keep stores them in R2
                                                 (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
-  rebbehub crawl-sefaria --from <Sichos-Kodesh checkout> --out <folder> [--cache <folder>] [--keep] [--only <title>]
-                                                Sefaria's Chabad books Sichos-Kodesh does not publish; --keep stores
+  rebbehub crawl-sefaria --from <Sichos-Kodesh checkout> --out <folder> [--cache <folder>] [--keep] [--only <title>] [--daily]
+                                                Sefaria's Chabad books Sichos-Kodesh does not publish; --daily (or
+                                                SEFARIA_DAILY=1) also Chitas and the Rambam; --keep stores
                                                 their texts in R2 (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
   rebbehub archive-gaps --db <index.sqlite>     the files Sichos-Kodesh's archive could not get, onto the Missing board
   rebbehub mirror --dir <folder> [--git] [--full] [--limit <n>]
@@ -109,6 +117,10 @@ const HELP = `rebbehub - RebbeHub's command line
                                                 paragraphs, joined again: one bot suggestion per
                                                 recording, only paragraphs no person checked or fixed;
                                                 --dry-run only lists them
+  rebbehub restore-word-times --approve-as <steward> [--recording <id>] [--limit <n>] [--dry-run]
+                                                word timings back for paragraphs fixed before fixes
+                                                kept them, from their history: one bot suggestion
+                                                per recording; --dry-run only lists them
   rebbehub page-images [--scan <id>] [--limit <n>] [--files <url>] [--bucket rebbehub-public]
                                                 page images and thumbnails of served scans that have
                                                 none (the IIIF manifests and the site's viewer show them),
@@ -193,6 +205,7 @@ const { values, positionals } = parseArgs({
     keep: { type: 'boolean' },
     texts: { type: 'boolean' },
     only: { type: 'string', multiple: true },
+    daily: { type: 'boolean' },
     db: { type: 'string' },
     'preservation-bucket': { type: 'string' },
     help: { type: 'boolean', short: 'h' },
@@ -213,6 +226,9 @@ try {
     case 'migrate':
       await migrateCommand(ctx);
       break;
+    case 'hold-catalog':
+      await holdCatalogCommand(ctx, { minutes: number(values.minutes) });
+      break;
     case 'rebuildable':
       await rebuildableCommand(ctx, { guard: values.guard, mark: values.mark, guardMark: values['guard-mark'] });
       break;
@@ -221,6 +237,9 @@ try {
       break;
     case 'convert-bodies':
       await convertBodiesCommand(ctx, { chunk: number(values.chunk) });
+      break;
+    case 'shaars':
+      await shaarsCommand(ctx, { chunk: number(values.chunk), dryRun: values['dry-run'] });
       break;
     case 'relink-drive':
       await relinkDriveCommand(ctx, { chunk: number(values.chunk), dryRun: values['dry-run'] });
@@ -238,7 +257,7 @@ try {
       await crawlLibraryCommand(ctx, { from: need(values.from, 'from'), out: need(values.out, 'out'), minutes: number(values.minutes), texts: values.texts, keep: values.keep, bucket: values.bucket });
       break;
     case 'crawl-sefaria':
-      await crawlSefariaCommand(ctx, { from: need(values.from, 'from'), out: need(values.out, 'out'), cache: values.cache, keep: values.keep, only: values.only, bucket: values.bucket });
+      await crawlSefariaCommand(ctx, { from: need(values.from, 'from'), out: need(values.out, 'out'), cache: values.cache, keep: values.keep, only: values.only, daily: values.daily, bucket: values.bucket });
       break;
     case 'archive-gaps':
       await archiveGapsCommand(ctx, { db: need(values.db, 'db') });
@@ -251,6 +270,9 @@ try {
       break;
     case 'mend-splits':
       await mendSplitsCommand(ctx, { approveAs: values['approve-as'], recording: values.recording, limit: number(values.limit), dryRun: values['dry-run'] });
+      break;
+    case 'restore-word-times':
+      await restoreWordTimesCommand(ctx, { approveAs: values['approve-as'], recording: values.recording, limit: number(values.limit), dryRun: values['dry-run'] });
       break;
     case 'transcribe':
       await transcribeCommand(ctx, { approveAs: need(values['approve-as'], 'approve-as'), recording: values.recording, limit: number(values.limit), linked: values.linked, files: values.files, engine: values.engine, requestedOnly: values['requested-only'], shard: values.shard });

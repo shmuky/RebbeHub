@@ -1,0 +1,245 @@
+/*
+ * A volume of a sefer (views/LibraryPages.tsx VolumePage), as design/ draws
+ * it in 3b and 3c: its name, one button for how to read it that opens a
+ * sheet (from the bottom on a phone, under the button on a wide screen),
+ * and its sichos in quiet rows grouped by parsha.
+ */
+
+.vol {
+  max-width: 760px;
+  padding-block: 20px 56px;
+}
+
+.vol-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vol-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: var(--fs-md);
+  margin-inline-start: -4px;
+}
+
+.vol-back:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.vol-as {
+  position: relative;
+}
+
+.vol-as > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.vol-as > summary::-webkit-details-marker {
+  display: none;
+}
+
+.vol-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.vol-head h1 {
+  font: 700 40px / 1.15 var(--display);
+  letter-spacing: 0;
+}
+
+.vol-head p {
+  color: var(--muted);
+  font-size: var(--fs-md);
+  margin-top: 2px;
+}
+
+.vol-as > summary.btn {
+  border-radius: 999px;
+  background: var(--card);
+  font-weight: 700;
+  gap: 6px;
+}
+
+.vol-sheet {
+  position: absolute;
+  top: calc(100% + 8px);
+  inset-inline-end: 0;
+  z-index: 30;
+  width: 360px;
+  padding: 18px 16px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg);
+  box-shadow: var(--shadow-pop);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vol-sheet h2 {
+  font: 700 18px / 1.3 var(--display);
+  margin: 0 4px 10px;
+  letter-spacing: 0;
+}
+
+.vol-sheet h3 {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--subtle);
+  margin: 14px 4px 4px;
+}
+
+.vol-opt {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text);
+}
+
+.vol-opt > svg:first-child {
+  color: var(--muted);
+}
+
+.vol-opt:hover {
+  background: var(--sunken);
+  text-decoration: none;
+}
+
+.vol-opt.on {
+  border-color: var(--text);
+  background: var(--card);
+}
+
+.vol-opt .grow {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.vol-opt .grow span {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.vol-group h2 {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--muted);
+  padding: 22px 0 4px;
+  letter-spacing: 0;
+}
+
+.vol-group li {
+  border-bottom: 1px solid var(--border);
+}
+
+.vol-group a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  color: var(--text);
+}
+
+.vol-group a:hover {
+  text-decoration: none;
+}
+
+.vol-group a:hover b {
+  color: var(--accent);
+}
+
+.vol-group .grow {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.vol-group b {
+  font: 700 19px / 1.3 var(--display);
+}
+
+.vol-when {
+  color: var(--subtle);
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vol-machine {
+  display: inline-flex;
+  align-items: center;
+  color: var(--subtle);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+.vol-machine svg {
+  color: var(--machine);
+}
+
+.vol .below {
+  margin-top: 40px;
+}
+
+/* A phone: the sheet rises from the bottom over a dimmed page; the dates give the names room. */
+@media (max-width: 860px) {
+  .vol {
+    padding-block: 10px 32px;
+  }
+  .vol-head h1 {
+    font-size: 32px;
+  }
+  .vol-when {
+    display: none;
+  }
+  .vol-group a {
+    padding: 14px 2px;
+  }
+  .vol-as[open] > summary::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 96;
+    background: rgba(20, 15, 10, 0.35);
+    cursor: default;
+  }
+  .vol-sheet {
+    position: fixed;
+    z-index: 97;
+    top: auto;
+    bottom: 0;
+    inset-inline: 0;
+    width: auto;
+    max-height: 85vh;
+    overflow-y: auto;
+    border-radius: 18px 18px 0 0;
+    border-bottom: 0;
+    padding: 10px 16px calc(16px + env(safe-area-inset-bottom));
+  }
+  .vol-sheet::before {
+    content: '';
+    align-self: center;
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border-strong);
+    margin-bottom: 14px;
+  }
+}

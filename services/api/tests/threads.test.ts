@@ -287,6 +287,11 @@ describe('the inbox', () => {
     expect(page.activity.map((a: { thread: { title: string } }) => a.thread.title)).toEqual(['Public one']);
     const mendy = (await call('GET', '/v1/people/mendy')).body;
     expect(mendy.counts).toMatchObject({ suggestions: 1, merged: 1 });
+    // Each day of the last twelve weeks they did something, counted: a private issue never shows there either.
+    const today = new Date().toISOString().slice(0, 10);
+    const all = (p: { counts: Record<string, number> }) => p.counts.suggestions! + p.counts.reviews! + p.counts.issues! + p.counts.comments!;
+    expect(page.days).toEqual({ [today]: all(page) });
+    expect(mendy.days).toEqual({ [today]: all(mendy) });
     expect((await call('GET', '/v1/people/nobody-at-all')).status).toBe(404);
   });
 

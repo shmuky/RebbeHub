@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { basename, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { alignAroundLocks, alignParagraphs, alignWords, hanachaOf, heardWords, recordingTranscript, type Catalog, type HeardWord, type Json } from '@rebbehub/core';
+import { alignAroundLocks, alignParagraphs, alignWords, hanachaOf, heardWords, notRecentlyFailedSql, recordingTranscript, type Catalog, type HeardWord, type Json } from '@rebbehub/core';
 import { orderKeys, type EntityId, type Language } from '@rebbehub/model';
 import { failIfAny, machineRun } from './machineQueue.js';
 
@@ -173,11 +173,11 @@ export function paragraphs(heard: Heard[], options: { targetMs?: number; maxMs?:
  */
 export async function recordingsToTranscribe(catalog: Catalog, options: { recording?: EntityId; limit?: number; linked?: boolean; shard?: [number, number] } = {}): Promise<Array<{ id: EntityId; file: string | null; url: string | null; language: Language }>> {
   const params: unknown[] = [];
+  // The sweep (no recording named) leaves one it failed on lately; one asked for by name is always tried.
   const only = options.recording
     ? `AND e.id = $${params.push(options.recording)}`
-    : options.shard
-      ? `AND mod(abs(hashtext(e.id)), $${params.push(options.shard[1])}) = $${params.push(options.shard[0])}`
-      : '';
+    : `AND ${notRecentlyFailedSql('transcript', 'e.id')}` +
+      (options.shard ? ` AND mod(abs(hashtext(e.id)), $${params.push(options.shard[1])}) = $${params.push(options.shard[0])}` : '');
   const heardHere = "EXISTS (SELECT 1 FROM file f WHERE f.sha256 = r.data->>'file' AND f.storage_tier = 'public' AND f.rights_state IN ('open', 'credit'))";
   const { rows } = await catalog.db.query<{ id: EntityId; file: string | null; url: string | null; language: Language | null }>(
     `SELECT e.id, r.data->>'file' AS file, r.data->>'url' AS url, r.data->>'language' AS language
@@ -276,7 +276,8 @@ export async function recordingsToAlign(catalog: Catalog, options: { recording?:
   const params: unknown[] = [];
   const only = options.recording ? `AND e.id = $${params.push(options.recording)}` : '';
   const heardHere = "EXISTS (SELECT 1 FROM file f WHERE f.sha256 = r.data->>'file' AND f.storage_tier = 'public' AND f.rights_state IN ('open', 'credit'))";
-  const untimed = "NOT coalesce((spr.data->>'locked')::boolean, FALSE) AND NOT (spr.data ? 'words')";
+  // No word timings, or only those a fix carried over (core/sync.ts fixParagraph), waiting to be timed from the audio.
+  const untimed = "NOT coalesce((spr.data->>'locked')::boolean, FALSE) AND (NOT (spr.data ? 'words') OR spr.data->'origin'->>'edited' = 'true')";
   const { rows } = await catalog.db.query<{ id: EntityId; file: string | null; url: string | null; language: Language | null }>(
     `SELECT e.id, r.data->>'file' AS file, r.data->>'url' AS url, r.data->>'language' AS language
      FROM entity e JOIN revision r ON r.id = e.main_rev

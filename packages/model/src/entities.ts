@@ -2,6 +2,7 @@ import type { DateKey } from '@rebbehub/hebrew';
 import type { RightsState } from './rights.js';
 import type { EntityId } from './ids.js';
 import type { PageText } from './pageText.js';
+import type { WorkShaar } from './shaar.js';
 import type { EditionKind, Genre, Licence, SourceId } from './works.js';
 
 /**
@@ -252,8 +253,40 @@ export interface WorkData extends CommonFields {
    * choice wins.
    */
   cover?: CoverChoice;
+  /**
+   * Its shaar, the README of a sefer (shaar.ts, docs/shaar.md): what its
+   * title page says beyond its title and authors, and its sections about
+   * it. Read and written as one file in fixed form.
+   */
+  shaar?: WorkShaar;
   /** A fractional sort key among the sefarim of its sets (order.ts), when someone has put them in order. */
   order?: string;
+  /**
+   * Set when this is not one of the official sefarim the catalog's tree is
+   * built of (the Rebbeim's sefarim and the other official sets), but an
+   * addition to one: a commentary, an index, a book about it, a collection
+   * from it. The tree's shelves list official sefarim only; an addition is
+   * shown on the page of the sefer it belongs to (`to`), or, with no `to`,
+   * apart at the end of its shelf. Another scan or format of the same book
+   * is no addition: it is merged into that sefer's page.
+   */
+  addition?: WorkAddition;
+}
+
+/** What kind of addition to an official sefer a work is. */
+export const ADDITION_KINDS = ['commentary', 'index', 'about', 'collection', 'other'] as const;
+export type AdditionKind = (typeof ADDITION_KINDS)[number];
+
+/** A work's place as an addition: the official sefer it belongs under, when there is one, and what kind it is. */
+export interface WorkAddition {
+  to?: EntityId;
+  kind: AdditionKind;
+}
+
+/** Whether a work is an addition rather than one of the official sefarim (its data's `addition`). */
+export function isAddition(data: unknown): boolean {
+  const a = (data as { addition?: unknown } | null | undefined)?.addition;
+  return Boolean(a && typeof a === 'object');
 }
 
 /** A page of a PDF, by the file's sha256 and the page's number from 1. */

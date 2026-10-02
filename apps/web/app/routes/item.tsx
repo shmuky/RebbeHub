@@ -10,7 +10,7 @@ import { UploadForm } from '../components/UploadForm.js';
 import { ItemBelowStart, ItemPage, ItemSideEnd } from '../views/ItemPage.js';
 import { ItemSlots } from '../ui/ItemShell.js';
 import { Icon } from '../ui/Icon.js';
-import { ApiError, type Entity } from '../lib/api.js';
+import { ApiError, type Entity, type RebbeHubApi } from '../lib/api.js';
 import { siteOf } from '../lib/context.server.js';
 import { dateKeyToGregorian } from '@rebbehub/hebrew';
 import type { LocalName } from '@rebbehub/model';
@@ -41,13 +41,32 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     if (entity?.path) throw redirect(keep(entity.path), 301);
   } else {
     const resolved = await api.resolve(path);
-    if (!resolved) throw data('not found', { status: 404 });
+    if (!resolved) {
+      // A volume has no path of its own but is what people type: `/likkutei-sichos/30` is the sefer's `?part=30`.
+      const volume = await volumeOf(api, path);
+      if (volume) throw redirect(href(volume.path, lang, { part: volume.part }), 302);
+      throw data('not found', { status: 404 });
+    }
     if (resolved.path && resolved.path !== path) throw redirect(keep(resolved.path), 301);
     entity = await api.entity(resolved.id);
   }
   if (!entity) throw data('not found', { status: 404 });
   const view = await loadItemView(api, entity, url);
   return { entity, view, lang, siteUrl };
+}
+
+/**
+ * Whether a path that names nothing is a sefer's path and one of its volumes (`/likkutei-sichos/30`), and which.
+ * Asked only for a path that is not found, so it costs a page nothing.
+ */
+async function volumeOf(api: RebbeHubApi, path: string): Promise<{ path: string; part: string } | null> {
+  const match = /^(\/.+)\/([^/]+)$/.exec(path);
+  if (!match) return null;
+  const [, seferPath, part] = match as unknown as [string, string, string];
+  const sefer = await api.resolve(seferPath);
+  if (!sefer?.path) return null;
+  const outline = await api.workOutline(sefer.id).catch(() => null);
+  return outline?.some((p) => p.value === part) ? { path: sefer.path, part } : null;
 }
 
 /** Kept at the edge longer than other pages: an item changes only when a Suggestion about it is approved (cachePolicy.ts). */

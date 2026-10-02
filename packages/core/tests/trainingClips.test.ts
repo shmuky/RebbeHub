@@ -63,6 +63,21 @@ describe('the goal for the next model', () => {
     expect(goal.hours.done).toBeCloseTo(52 / 3600, 2);
     expect(goal.next.map((f) => f.event)).toEqual([older.event]);
   });
+
+  it('moves with every paragraph checked, not only when a farbrengen is done', async () => {
+    const { catalog, set } = await freshCatalog();
+    const { segments } = await transcribed(catalog, set, 'https://example.org/a.mp3');
+    let goal = await trainingGoal(catalog, await trainingClips(catalog));
+    expect(goal.farbrengens).toEqual({ done: 0, target: 10, progress: 0 });
+    expect(goal.paragraphs).toEqual({ checked: 0 });
+    // One of its four paragraphs checked: a quarter of a farbrengen.
+    const { content } = (await catalog.get(segments[1]!))!.data as { content: string };
+    await catalog.merge((await fixParagraph(catalog, 'chaim', { segment: segments[1]!, content })).id, 'keeper');
+    goal = await trainingGoal(catalog, await trainingClips(catalog));
+    expect(goal.farbrengens).toEqual({ done: 0, target: 10, progress: 0.25 });
+    expect(goal.paragraphs).toEqual({ checked: 1 });
+    expect(goal.next[0]).toMatchObject({ checked: 1, paragraphs: 4 });
+  });
 });
 
 describe('training clips from checked transcripts', () => {
@@ -109,7 +124,7 @@ describe('training clips from checked transcripts', () => {
       [12, 40, 'silver'],
       [40, 52, 'silver'],
     ]);
-    // Corrected, the word timings are let go until the align run times the new words.
+    // Corrected, the word timings the fix carried over are no clip cuts: it waits for the align run to time the new words.
     await catalog.merge((await fixParagraph(catalog, 'chaim', { segment: segments[3]!, content: `${long} טוב` })).id, 'keeper');
     ({ clips, skipped } = await trainingClips(catalog));
     expect(clips).toEqual([]);

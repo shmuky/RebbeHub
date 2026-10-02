@@ -1328,3 +1328,240 @@
   background: var(--add-bg);
   text-decoration: none;
 }
+
+/* ================================================================== history, as design/ draws it (4c) */
+
+/* The last change, open at the top. */
+.hist-latest {
+  margin-bottom: 24px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+
+.hist-latest h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* Every version down one line, newest first: a dot each, the one shown now filled. */
+.hist2 {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+
+.hist2 > li {
+  position: relative;
+  padding-inline-start: 28px;
+  padding-bottom: 24px;
+}
+
+.hist2 > li::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 6px;
+  top: 14px;
+  bottom: 0;
+  width: 1.5px;
+  background: var(--border-strong);
+}
+
+.hist2 > li:last-child::before {
+  display: none;
+}
+
+.hist-dot {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 5px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid var(--muted);
+  background: var(--bg);
+}
+
+.hist2 > li.now .hist-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+/* Any two versions picked to compare (4f): their dots carry א and ב, and the comparison stands at the top. */
+.hist2 > li.picked .hist-dot {
+  inset-inline-start: -4px;
+  top: 1px;
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  border-color: var(--strong);
+  background: var(--strong);
+  color: var(--on-strong);
+  font: 700 11px / 1 var(--ui);
+}
+
+.hist-pick {
+  float: inline-end;
+  margin-inline-start: 8px;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+  font: 500 12px / 1.6 var(--ui);
+  cursor: pointer;
+}
+
+.hist-pick:hover {
+  border-color: var(--accent-line);
+  color: var(--accent-strong);
+}
+
+.hist-pick[aria-pressed='true'] {
+  border-color: var(--strong);
+  background: var(--strong);
+  color: var(--on-strong);
+}
+
+.hist-hint {
+  margin: 0 0 12px;
+  font-size: var(--fs-sm);
+}
+
+.hist-compare-h {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 8px;
+  font-size: var(--fs-sm);
+}
+
+.hist-compare-h h2 {
+  margin: 0;
+  color: var(--text);
+}
+
+.hist-title {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.hist-by {
+  margin: 2px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--subtle);
+}
+
+.hist-current {
+  margin: 4px 0 0;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.hist-what {
+  margin-top: 4px;
+}
+
+.hist-what > summary {
+  display: inline-block;
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  color: var(--accent);
+  list-style: none;
+}
+
+.hist-what > summary::-webkit-details-marker {
+  display: none;
+}
+
+.hist-what[open] > summary {
+  margin-bottom: 8px;
+}
+
+.hist-acts {
+  margin-top: 6px;
+}
+
+.hist2 .hist-note {
+  margin: 4px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+
+/* On a phone a changed field's name sits above its words, not beside them. */
+@media (max-width: 720px) {
+  .hist-latest .diff-field,
+  .hist2 .diff-field {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hist-latest .diff-field > .k,
+  .hist2 .diff-field > .k {
+    padding: 6px 12px;
+    border-inline-end: 0;
+    border-bottom: 1px solid var(--border);
+    font-size: var(--fs-sm);
+  }
+}
+
+/* ================================================================== versions side by side (4f) */
+
+/* How a change shows: side by side (before | after) or one above the other, in the text. */
+.hist-view {
+  display: inline-flex;
+  margin-bottom: 14px;
+}
+
+/* Side by side: what it was in one column, what it is in the other, each headed. On a phone there is no room: one above the other. */
+@media (min-width: 721px) {
+  .side .diff-field > .v {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+    padding: 0;
+  }
+
+  .side .diff-field > .v > .diff-line {
+    display: block;
+    height: 100%;
+    padding: 26px 14px 10px;
+    position: relative;
+  }
+
+  .side .diff-field > .v > .diff-line::before {
+    position: absolute;
+    inset-inline-start: 14px;
+    top: 6px;
+    font: 700 11.5px / 1.4 var(--ui);
+    color: var(--subtle);
+    text-align: start;
+  }
+
+  .side .diff-field > .v > .diff-line.was::before {
+    content: var(--was);
+  }
+
+  .side .diff-field > .v > .diff-line.now::before {
+    content: var(--now);
+  }
+
+  .side .diff-field > .v > .diff-line + .diff-line {
+    border-inline-start: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 720px) {
+  .hist-view {
+    display: none;
+  }
+}

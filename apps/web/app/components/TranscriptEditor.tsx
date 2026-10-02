@@ -1,17 +1,17 @@
 import { Check, CircleHelp, History, MessageCircle, Pencil, ShieldQuestion, Undo2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { markUnclear, spellingHints, unclearRanges } from '@rebbehub/model';
+import { carryWordTimes, markUnclear, spellingHints, unclearRanges } from '@rebbehub/model';
 import { t, type Lang } from '../lib/i18n.js';
 import { clockOf } from '../lib/i18nNetwork.js';
 import { href } from '../lib/links.js';
 import { useAccount } from '../lib/useAccount.js';
 import { postJson } from '../lib/post.js';
-import { get, pendingRanges, tokensOf, wholeWords, within, type Paragraph, type Pending, type Span, type Transcript, type TranscriptCommit } from '../lib/transcript.js';
+import { get, noteChecked, pendingRanges, tokensOf, trainingPath, wholeWords, within, type Paragraph, type Pending, type Transcript, type TranscriptCommit } from '../lib/transcript.js';
 import { wordDiff } from '../lib/wordDiff.js';
 import { usePlayer, type Track } from '../player/PlayerProvider.js';
 import { InlineDiff } from '../ui/Diff.js';
-import { ConfirmSync, DiscussUnclear, SyncNow, discussLabel, timingWords } from './TimingTools.js';
+import { ConfirmSync, DiscussUnclear, discussLabel } from './TimingTools.js';
 import { Bar, MachineLabel, RelativeTime } from '../ui/primitives.js';
 
 /**
@@ -19,10 +19,15 @@ import { Bar, MachineLabel, RelativeTime } from '../ui/primitives.js';
  * recording's transcript by "Review machine text". The words are the
  * recording: tapping one plays from it. Selecting words opens a small
  * editor for just those, or marks them unclear (`[words?]`); the
- * paragraph's own tools (all exact, retype it, exact timing, talk over
- * unclear words, and its history) show under the paragraph being worked
- * on, each saying what it does. The recording pauses while words are being
- * fixed, and this browser remembers where the listener was. A fix of
+ * paragraph's own tools (all exact, retype it, talk over unclear words, and its history) show under the paragraph being worked
+ * on, each saying what it does, and stay in view at the foot of the
+ * screen however long the paragraph (as the fixing box's Save does). As
+ * the recording plays, the page follows the word being said, unless the
+ * listener just scrolled away; the player bar offers "hear again" and a
+ * slower or faster speed here only. What waits for approval, and what
+ * was fixed since the machine heard the words, shows under them on
+ * History. The recording pauses while words are being fixed, and this
+ * browser remembers where the listener was. A fix of
  * some words is on the site once approved but leaves the paragraph the
  * machine's (`complete: false`, core/sync.ts fixParagraph), so it stays
  * labelled and is no training clip until someone checks all of it. Every
@@ -39,7 +44,8 @@ const W = {
   howEdit: { he: '„עריכת הפסקה”: להקליד אותה מחדש. סמנו אם בדקתם את כולה; אם לא, היא נשארת טקסט מכונה.', en: '"Edit paragraph": retype it. Say whether you checked all of it; if not, it stays machine text.' },
   howUnclear: { he: '„לא ברור”: סמנו מילים שלא בטוח מה נאמר בהן. הן נשמרות כך [מילים?], ולא מלמדים מהן את המודל.', en: '"Unclear": mark words you are not sure of. They are kept as [words?], and the model does not learn from them.' },
   howPause: { he: 'בזמן עריכה ההקלטה נעצרת, וממשיכה מעט לפני כן כשמסיימים.', en: 'The recording pauses while you edit, and goes on from a little before when you finish.' },
-  howHistory: { he: '„היסטוריה”: כל מה ששונה בפסקה, מי ומתי.', en: '"History": everything changed in the paragraph, by whom and when.' },
+  howHistory: { he: '„היסטוריה”: מה תוקן בפסקה מאז שהמחשב שמע אותה, ומה מחכה לאישור, מי ומתי.', en: '"History": what was fixed in the paragraph since the machine heard it, and what waits for approval, by whom and when.' },
+  howSpeed: { he: 'בנגן למטה: לשמוע שוב חמש שניות אחורה, ולהאט או להאיץ.', en: 'In the player below: hear the last five seconds again, and slow down or speed up.' },
   progress: { he: '{n} מתוך {of} פסקאות נבדקו', en: '{n} of {of} paragraphs checked' },
   checked: { he: 'נבדק', en: 'Checked' },
   partly: { he: 'תוקן בחלקו', en: 'Partly fixed' },
@@ -71,6 +77,10 @@ const W = {
   para: { he: 'פסקה', en: 'Paragraph' },
   suggestion: { he: 'הצעה', en: 'Suggestion' },
   fullHistory: { he: 'דף ההיסטוריה המלא', en: 'Full history page' },
+  sinceMachine: { he: 'מה שתוקן מאז שהמחשב שמע', en: 'Fixed since the machine heard it' },
+  hiddenChecked: { he: '{n} פסקאות שכבר נבדקו מוסתרות', en: '{n} paragraphs already checked are hidden' },
+  showChecked: { he: 'להציג את כולן', en: 'Show them all' },
+  hideChecked: { he: 'להציג רק מה שנשאר לבדוק', en: 'Show only what is left to check' },
   signIn: { he: 'כדי לתקן צריך להיכנס. ההאזנה והלחיצה על מילים פתוחות לכולם.', en: 'Sign in to fix. Listening and tapping words are open to all.' },
 } as const;
 const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
@@ -112,7 +122,7 @@ export function TrainingGoalBar({ lang }: { lang: Lang }) {
   const [goal, setGoal] = useState<Goal | null>(null);
   useEffect(() => {
     let live = true;
-    void get<{ goal: Goal }>('machine/training')
+    void get<{ goal: Goal }>(trainingPath())
       .then((r) => live && setGoal(r.goal))
       .catch(() => {});
     return () => {
@@ -138,7 +148,7 @@ export function TrainingGoalBar({ lang }: { lang: Lang }) {
           <ul>
             {goal.next.map((f) => (
               <li key={f.event}>
-                {f.path ? <Link to={`${href(f.path, lang, { review: '1' })}#transcript`}>{f.title?.[lang === 'en' ? 'en' : 'he'] ?? f.title?.he ?? f.event}</Link> : (f.title?.he ?? f.event)}{' '}
+                {f.path ? <Link to={href(f.path, lang, { tab: 'text' })}>{f.title?.[lang === 'en' ? 'en' : 'he'] ?? f.title?.he ?? f.event}</Link> : (f.title?.he ?? f.event)}{' '}
                 <span className="row-sub">
                   {f.checked.toLocaleString(lang)}/{f.paragraphs.toLocaleString(lang)}
                   {f.mostWanted ? ` · ${t(lang, 'mostWanted')}` : ''}
@@ -243,11 +253,11 @@ function Para({
   onOpen,
   onPlayFrom,
   onFixed,
-  onAnchored,
   pickWords,
   numberOf,
   waiting,
   me,
+  follow,
 }: {
   n: number;
   recording: string;
@@ -265,12 +275,13 @@ function Para({
   onOpen: () => void;
   onPlayFrom: (ms: number) => void;
   onFixed: (content: string, complete: boolean, merged: boolean) => void;
-  onAnchored: (spans: Span[]) => void;
   pickWords: { from: number; to: number; unclear?: boolean } | null;
   numberOf: (segment: string) => number;
   /** Fixes of this paragraph's words that wait for approval, and who is signed in, to tell theirs from others'. */
   waiting: Pending[];
   me: string | null;
+  /** Whether the page may follow the word being said now: not while the listener is scrolling on their own. */
+  follow: () => boolean;
 }) {
   const player = usePlayer();
   const ref = useRef<HTMLLIElement>(null);
@@ -286,9 +297,6 @@ function Para({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (active && !editing) ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [active, editing]);
   useEffect(() => {
     if (found) ref.current?.scrollIntoView({ block: 'center' });
   }, [found]);
@@ -326,6 +334,7 @@ function Para({
       const merged = row.status === 'merged';
       setSent({ content, complete, merged });
       setEditing(null);
+      noteChecked();
       if (merged) onFixed(content, complete, true);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -339,9 +348,23 @@ function Para({
   // This listener's own fix that still waits: they go on from it, so it is never typed twice and a new fix never undoes their last.
   const mine = pending ?? [...waiting].reverse().find((x) => x.author === me) ?? null;
   const base = mine?.content ?? paragraph.content;
-  const shown = base === paragraph.content ? paragraph : { ...paragraph, content: base, words: null };
+  // Your waiting fix is shown with the words you left keeping their times, so it lights up word by word too.
+  const shown = base === paragraph.content ? paragraph : { ...paragraph, content: base, words: carryWordTimes(paragraph.content, paragraph.words, base) };
   const tokens = tokensOf(shown);
   const marks = unclearRanges(base);
+
+  // The page follows the word being said: once it nears the foot of the screen (where the tools float) or has gone above, it is brought back to the middle.
+  const nowWord = active ? tokens.findIndex((tk, i) => tk.ms !== null && nowMs >= tk.ms && nowMs < (tokens[i + 1]?.ms ?? paragraph.endMs ?? Infinity)) : -1;
+  useEffect(() => {
+    if (!active || editing || !follow()) return;
+    const word = nowWord >= 0 ? ref.current?.querySelector<HTMLElement>('.w-now') : null;
+    const el = word ?? ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const out = word ? r.top < 90 || r.bottom > window.innerHeight * 0.6 : r.bottom < 90 || r.top > window.innerHeight * 0.6;
+    if (out) el.scrollIntoView({ block: word ? 'center' : 'start', behavior: 'smooth' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, editing, nowWord]);
   // Fixes already sent by others, or by this listener before, and not yet approved: their words are shown as they will be, below.
   const others = waiting.filter((x) => x.content !== sent?.content);
   const changing = mine ? pendingRanges(base, paragraph.content) : others.flatMap((x) => pendingRanges(paragraph.content, x.content));
@@ -364,8 +387,12 @@ function Para({
   }
   if (at < base.length) text.push(base.slice(at));
 
+  // The words as the machine heard them: before the first fix of them (the history is newest first).
+  const firstFix = history?.flatMap((c) => c.changes.filter((x) => x.segment === paragraph.id && x.kind === 'words')).at(-1);
+  const sinceMachine = firstFix?.before && firstFix.before !== paragraph.content ? firstFix.before : null;
+
   const status = paragraph.checked ? 'checked' : paragraph.edited ? 'partly' : 'machine';
-  const classes = ['tx-para', open ? 'open' : '', active ? 'active' : '', found ? 'found' : '', `is-${status}`].filter(Boolean).join(' ');
+  const classes = ['tx-para', open ? 'open' : '', active ? 'active' : '', found && !resumed ? 'found' : '', `is-${status}`].filter(Boolean).join(' ');
 
   return (
     <li ref={ref} id={`p-${paragraph.id}`} className={classes}>
@@ -383,10 +410,7 @@ function Para({
           </span>
         ) : status === 'partly' ? (
           <span className="tx-state partly">{w(lang, 'partly')}</span>
-        ) : (
-          <MachineLabel lang={lang} size="sm" />
-        )}
-        {resumed ? <span className="tx-state resumed">{w(lang, 'continueHere')}</span> : null}
+        ) : null}
       </div>
 
       <div
@@ -403,7 +427,7 @@ function Para({
         {text}
       </div>
 
-      {others.map((x) => (
+      {(open && showHistory ? others : []).map((x) => (
         <div key={`${x.suggestion}:${x.at}`} className="tx-pending">
           <span className="row-sub">
             {x.author === me ? w(lang, 'yourFix') : w(lang, 'theirFix').replace('{name}', x.authorName ?? x.author)}
@@ -420,7 +444,7 @@ function Para({
         </div>
       ))}
 
-      {pending ? (
+      {open && showHistory && pending ? (
         <div className="tx-pending">
           <span className="row-sub">{w(lang, 'yourFix')}</span>
           <p className="tx-diff" dir="auto">
@@ -429,8 +453,35 @@ function Para({
         </div>
       ) : null}
 
+      {open && showHistory ? (
+        <div className="tx-history">
+          {history === null ? (
+            <p className="row-sub">…</p>
+          ) : (
+            <>
+              {sinceMachine ? (
+                <div className="tx-pending">
+                  <span className="row-sub">{w(lang, 'sinceMachine')}</span>
+                  <p className="tx-diff" dir="auto">
+                    <InlineDiff parts={wordDiff(sinceMachine, paragraph.content)} />
+                  </p>
+                </div>
+              ) : null}
+              <ul>
+                {history.map((c) => (
+                  <ChangeRow key={c.commit} commit={c} lang={lang} numberOf={numberOf} only={paragraph.id} />
+                ))}
+              </ul>
+            </>
+          )}
+          <Link className="row-sub" to={href(`/history/${paragraph.id}`, lang)}>
+            {w(lang, 'fullHistory')}
+          </Link>
+        </div>
+      ) : null}
+
       {editing?.kind === 'words' ? (
-        <div className="tx-edit">
+        <div className="tx-edit words">
           <label className="row-sub" htmlFor={`fix-${paragraph.id}`}>
             {w(lang, 'fixWords')}
           </label>
@@ -459,7 +510,7 @@ function Para({
       ) : null}
 
       {editing?.kind === 'all' ? (
-        <div className="tx-edit">
+        <div className="tx-edit all">
           <textarea value={editing.value} onChange={(e) => setEditing({ ...editing, value: e.target.value })} rows={6} dir="auto" autoFocus />
           <SpellingHints text={editing.value} lang={lang} />
           <label className="tx-complete">
@@ -479,19 +530,18 @@ function Para({
 
       {open && !editing ? (
         <div className="tx-tools">
-          {canFix && !paragraph.checked && !sent ? (
+          {canFix && !paragraph.checked && !(pending?.complete && pending.content === base) ? (
             <button type="button" className="tx-tool" onClick={() => send(base, true)} disabled={busy}>
               <Check size={16} aria-hidden />
               {w(lang, 'allRight')}
             </button>
           ) : null}
-          {canFix ? (
+          {canFix && !mine ? (
             <button type="button" className="tx-tool" onClick={() => setEditing({ kind: 'all', value: base, complete: true })}>
               <Pencil size={16} aria-hidden />
               {w(lang, 'edit')}
             </button>
           ) : null}
-          {canFix && playing && paragraph.startMs !== null ? <SyncNow recording={recording} segment={paragraph.id} lang={lang} onAnchored={onAnchored} /> : null}
           {marks.map((m) => (
             <button key={m.from} type="button" className={discussing?.from === m.from ? 'tx-tool on' : 'tx-tool'} onClick={() => setDiscussing(discussing?.from === m.from ? null : m)}>
               <MessageCircle size={16} aria-hidden />
@@ -519,22 +569,6 @@ function Para({
       {sent ? <p className="row-sub tx-sent">{w(lang, sent.merged ? 'saved' : 'sent')}</p> : null}
       {error ? <p role="alert">{error}</p> : null}
 
-      {open && showHistory ? (
-        <div className="tx-history">
-          {history === null ? (
-            <p className="row-sub">…</p>
-          ) : (
-            <ul>
-              {history.map((c) => (
-                <ChangeRow key={c.commit} commit={c} lang={lang} numberOf={numberOf} only={paragraph.id} />
-              ))}
-            </ul>
-          )}
-          <Link className="row-sub" to={href(`/history/${paragraph.id}`, lang)}>
-            {w(lang, 'fullHistory')}
-          </Link>
-        </div>
-      ) : null}
     </li>
   );
 }
@@ -548,7 +582,6 @@ export function TranscriptEditor({
   account,
   onBack,
   onFixed,
-  onAnchored,
 }: {
   transcripts: Transcript[];
   tracks: Track[];
@@ -556,14 +589,40 @@ export function TranscriptEditor({
   nowMs: number;
   found: string | null;
   account: unknown;
-  onBack: () => void;
+  /** Back to the listening view, where there is one; on the page's Text tab its own tabs lead back. */
+  onBack?: () => void;
   onFixed: (recording: string, segment: string, content: string, complete: boolean) => void;
-  onAnchored: (recording: string, spans: Span[]) => void;
 }) {
   const player = usePlayer();
-  // Where this listener stopped last time in these recordings, unless a link names a paragraph.
+  // Where the recording is playing now, else where this listener stopped last time in these recordings, unless a link names a paragraph.
   const placeKey = PLACE + transcripts.map((tr) => tr.recording).join(',');
-  const [start] = useState<string | null>(() => found ?? (typeof window !== 'undefined' ? recall<string>(placeKey) : null));
+  const [start] = useState<string | null>(() => {
+    if (found) return found;
+    const heard = transcripts.find((tr) => tr.recording === player.current?.id)?.paragraphs.find((p) => within(player.time * 1000, p));
+    return heard?.id ?? (typeof window !== 'undefined' ? recall<string>(placeKey) : null);
+  });
+
+  // "Hear again" and the speed, in the player bar while checking only; the speed goes back to 1 on leaving.
+  useEffect(() => {
+    player.offerSpeed(true);
+    return () => player.offerSpeed(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A listener who scrolls on their own is left there for a few seconds before the page follows the recording again.
+  const scrolledAt = useRef(0);
+  useEffect(() => {
+    const mark = () => {
+      scrolledAt.current = Date.now();
+    };
+    window.addEventListener('wheel', mark, { passive: true });
+    window.addEventListener('touchmove', mark, { passive: true });
+    return () => {
+      window.removeEventListener('wheel', mark);
+      window.removeEventListener('touchmove', mark);
+    };
+  }, []);
+  const follow = () => Date.now() - scrolledAt.current > 5000;
   const [open, setOpenNow] = useState<string | null>(start);
   const setOpen = (segment: string) => {
     keep(placeKey, segment);
@@ -573,6 +632,9 @@ export function TranscriptEditor({
   const [offer, setOffer] = useState<{ segment: string; from: number; to: number; words: string } | null>(null);
   const [history, setHistory] = useState<Record<string, TranscriptCommit[]>>({});
   const [showAll, setShowAll] = useState(false);
+  // Paragraphs checked before this visit, with no unclear words, are left out so what is left to check comes first; checked here, they stay until the next visit.
+  const [done] = useState(() => new Set(transcripts.flatMap((tr) => tr.paragraphs.filter((p) => p.checked && !unclearRanges(p.content).length && !(tr.pending ?? []).some((x) => x.segment === p.id)).map((p) => p.id))));
+  const [showDone, setShowDone] = useState(false);
   const canFix = Boolean(account);
   const me = useAccount()?.person.id ?? null;
   const waitingAll = transcripts.flatMap((tr) => tr.pending ?? []);
@@ -627,10 +689,12 @@ export function TranscriptEditor({
     <>
       <div className="review-head">
         <h2 className="section-header">{w(lang, 'title')}</h2>
-        <button type="button" className="btn" onClick={onBack}>
-          <Undo2 size={16} aria-hidden />
-          {w(lang, 'back')}
-        </button>
+        {onBack ? (
+          <button type="button" className="btn" onClick={onBack}>
+            <Undo2 size={16} aria-hidden />
+            {w(lang, 'back')}
+          </button>
+        ) : null}
       </div>
 
       <div className="tx-top">
@@ -638,6 +702,7 @@ export function TranscriptEditor({
           <span className="row-sub">{w(lang, 'progress').replace('{n}', checked.toLocaleString(lang)).replace('{of}', all.length.toLocaleString(lang))}</span>
           <Bar value={checked} max={all.length || 1} tone="open" />
         </div>
+        <p className="row-sub tx-machine-line">{t(lang, 'lyricsMachineHint')}</p>
         <details className="tx-how">
           <summary>
             <CircleHelp size={15} aria-hidden />
@@ -650,11 +715,11 @@ export function TranscriptEditor({
             <li>{w(lang, 'howEdit')}</li>
             <li>{w(lang, 'howUnclear')}</li>
             <li>{w(lang, 'howPause')}</li>
-            <li>{timingWords.howSync[lang]}</li>
             <li>{w(lang, 'howHistory')}</li>
+            <li>{w(lang, 'howSpeed')}</li>
           </ul>
+          {canFix && checked < all.length ? <TrainingGoalBar lang={lang} /> : null}
         </details>
-        <p className="note machine-note">{t(lang, 'lyricsMachineHint')}</p>
         {waitingAll.length ? (
           <p className="row-sub tx-waiting-note">
             {w(lang, 'waitingCount').replace('{n}', waitingAll.length.toLocaleString(lang))}
@@ -662,7 +727,6 @@ export function TranscriptEditor({
             <Link to={href('/review', lang, { view: 'transcripts' })}>{w(lang, 'reviewAll')}</Link>
           </p>
         ) : null}
-        {canFix && checked < all.length ? <TrainingGoalBar lang={lang} /> : null}
         {!canFix ? (
           <p className="row-sub">
             {w(lang, 'signIn')} <Link to={href('/signin', lang)}>{t(lang, 'signIn')}</Link>
@@ -714,6 +778,15 @@ export function TranscriptEditor({
         </details>
       </div>
 
+      {done.size && done.size < all.length ? (
+        <p className="row-sub tx-done-note">
+          {showDone ? null : `${w(lang, 'hiddenChecked').replace('{n}', done.size.toLocaleString(lang))} · `}
+          <button type="button" className="link-button" onClick={() => setShowDone((s) => !s)}>
+            {w(lang, showDone ? 'hideChecked' : 'showChecked')}
+          </button>
+        </p>
+      ) : null}
+
       {transcripts.map((tr) => {
         const index = tracks.findIndex((track) => track.id === tr.recording);
         const playing = player.current?.id === tr.recording;
@@ -722,7 +795,7 @@ export function TranscriptEditor({
           <div key={tr.recording}>
             {transcripts.length > 1 ? <h3>{tracks[index]?.title}</h3> : null}
             <ol className="tx-list">
-              {tr.paragraphs.map((p) => (
+              {tr.paragraphs.filter((p) => showDone || done.size === all.length || !done.has(p.id) || p.id === found).map((p) => (
                 <Para
                   key={p.id}
                   n={numberOf(p.id)}
@@ -743,11 +816,11 @@ export function TranscriptEditor({
                     if (playing && !player.playing) player.toggle();
                   }}
                   onFixed={(content, complete) => onFixed(tr.recording, p.id, content, complete)}
-                  onAnchored={(spans) => onAnchored(tr.recording, spans)}
                   pickWords={pick?.segment === p.id ? pick : null}
                   numberOf={numberOf}
                   waiting={(tr.pending ?? []).filter((x) => x.segment === p.id)}
                   me={me}
+                  follow={follow}
                 />
               ))}
             </ol>

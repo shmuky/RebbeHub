@@ -1,10 +1,40 @@
 /*
- * The day's learning (/daily): the day and its neighbours in the head, then
- * Tanya and Hayom Yom, each a column of the text at reading width.
+ * The day's learning (/daily), as design/ draws it in 3e: the day between
+ * arrows to the day before and after, a bar of how much is learned, the
+ * shiurim as rows to tick (the next one raised), then Tanya and Hayom Yom,
+ * each a column of the text at reading width.
  */
 
-.daily-page .lede svg {
-  vertical-align: -2px;
+.dl {
+  max-width: 860px;
+  padding-top: 18px;
+}
+
+.dl-title {
+  margin-bottom: 14px;
+}
+
+.dl-date {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dl-day {
+  text-align: center;
+  min-width: 0;
+}
+
+.dl-hebrew {
+  font: 700 26px / 1.25 var(--display);
+  color: var(--accent);
+}
+
+.dl-sub {
+  color: var(--subtle);
+  font-size: var(--fs-md);
+  margin-top: 2px;
 }
 
 .daily-body {
@@ -47,5 +77,175 @@
 @media (max-width: 640px) {
   .daily-part {
     padding: 12px;
+  }
+}
+
+/* ------------------------------------------------------------ the shiurim */
+
+.dl-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 2px 12px;
+}
+
+.dl-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.dl-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--strong);
+  transition: width 0.2s;
+}
+
+.dl-count {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.dl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.dl-row {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* The next one to learn is raised a little, as the design marks it. */
+.dl-row.next {
+  background: var(--card);
+}
+
+.dl-tick {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-top: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+  background: none;
+  color: var(--on-strong);
+  cursor: pointer;
+}
+
+.dl-row.next .dl-tick {
+  border-color: var(--accent);
+}
+
+.dl-row.done .dl-tick {
+  background: var(--strong);
+  border-color: var(--strong);
+}
+
+.dl-what {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dl-name {
+  color: var(--subtle);
+  font-size: var(--fs-sm);
+}
+
+.dl-row.next .dl-name {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.dl-text {
+  font: 700 19px / 1.4 var(--display);
+  color: var(--text);
+}
+
+.dl-row.done .dl-text {
+  color: var(--subtle);
+  font-weight: 400;
+}
+
+.dl-text a {
+  color: inherit;
+}
+
+.dl-text a:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* The whole row goes to its words; Rashi and the tracks stay their own buttons above it. */
+.dl-main::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.dl-more {
+  position: relative;
+  z-index: 1;
+}
+
+.dl-chev {
+  flex: none;
+  margin-top: 12px;
+  color: var(--faint);
+}
+
+.dl-tracks {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  margin-top: 10px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--sunken);
+}
+
+.dl-tracks button {
+  border: 0;
+  background: none;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.dl-tracks button[aria-pressed='true'] {
+  background: var(--card);
+  color: var(--text);
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+}
+
+@media (max-width: 640px) {
+  .dl-row {
+    padding: 14px 4px;
+  }
+  .dl-hebrew {
+    font-size: 23px;
   }
 }

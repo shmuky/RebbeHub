@@ -55,8 +55,10 @@ export function pendingRanges(content: string, after: string): Array<{ from: num
   const out: Array<{ from: number; to: number }> = [];
   let at = 0;
   for (const part of wordDiff(content, after)) {
-    if (part.kind === 'ins') out.push({ from: Math.max(0, at - 1), to: Math.min(content.length, at + 1) });
-    else {
+    // Words added where nothing was: the word just before is marked (or just after, at a space), not both.
+    if (part.kind === 'ins') {
+      if (part.text.trim()) out.push(at > 0 && !/\s/.test(content[at - 1]!) ? { from: at - 1, to: at } : { from: at, to: Math.min(content.length, at + 1) });
+    } else {
       if (part.kind === 'del') out.push({ from: at, to: at + part.text.length });
       at += part.text.length;
     }
@@ -94,15 +96,63 @@ export async function get<T>(path: string): Promise<T> {
   return json;
 }
 
+/*
+ * The training goal (how near the next model is) is kept ten minutes at
+ * the edge, so the home page does not ask the database for it on every
+ * visit. Someone who has just checked paragraphs wants to see them
+ * counted, so for an hour after a check this browser asks for its own
+ * copy, named by when it last checked.
+ */
+const CHECKED_AT = 'rebbehub.review.checkedAt';
+
+/** Marks that this browser just sent a fix or a check. */
+export function noteChecked() {
+  try {
+    localStorage.setItem(CHECKED_AT, String(Date.now()));
+  } catch {
+    // Not remembered: the progress shows within ten minutes all the same.
+  }
+}
+
+/** Where to read the training goal: its own fresh copy for an hour after this browser checked something. */
+export function trainingPath(): string {
+  try {
+    const at = Number(localStorage.getItem(CHECKED_AT));
+    if (at && Date.now() - at < 3_600_000) return `machine/training?fresh=${at}`;
+  } catch {
+    // No storage: the shared copy.
+  }
+  return 'machine/training';
+}
+
 export const within = (nowMs: number, p: { startMs: number | null; endMs: number | null }) => p.startMs !== null && p.endMs !== null && nowMs >= p.startMs && nowMs < p.endMs;
 
 /**
- * A paragraph's words with where each sits in its text, and when it is
- * said where the sync is word by word. Without word timings, the words are
- * found by their spaces, and know no moment of their own.
+ * A paragraph's words, each with when it is said. Where the machine timed
+ * them, its timings (a fix keeps them for the words it left:
+ * model/timing.ts); where there are none at all, as for a paragraph fixed
+ * before fixes kept them, each word's moment is estimated from where the
+ * paragraph starts and ends, by its letters, so the words still light up.
  */
+export function timedWords(p: Paragraph): Word[] | null {
+  if (p.words?.length) return p.words;
+  if (p.startMs === null || p.endMs === null || p.endMs <= p.startMs) return null;
+  const found = [...p.content.matchAll(/\S+/g)];
+  const letters = found.reduce((n, m) => n + m[0].length, 0);
+  if (!letters) return null;
+  const span = p.endMs - p.startMs;
+  let done = 0;
+  return found.map((m) => {
+    const startMs = p.startMs! + Math.round((done / letters) * span);
+    done += m[0].length;
+    return { from: m.index!, to: m.index! + m[0].length, startMs, endMs: p.startMs! + Math.round((done / letters) * span) };
+  });
+}
+
+/** A paragraph's words with where each sits in its text, and when it is said (timedWords); without any sync, found by their spaces. */
 export function tokensOf(p: Paragraph): Array<{ from: number; to: number; ms: number | null }> {
-  if (p.words?.length) return p.words.map((w) => ({ from: w.from, to: w.to, ms: w.startMs }));
+  const words = timedWords(p);
+  if (words) return words.map((w) => ({ from: w.from, to: w.to, ms: w.startMs }));
   return [...p.content.matchAll(/\S+/g)].map((m) => ({ from: m.index!, to: m.index! + m[0].length, ms: null }));
 }
 

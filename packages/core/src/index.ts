@@ -6,7 +6,7 @@ export { derivedRights, fileFromDrive, getDerivations, getDerivationsOf, isCover
 export { driveFileOf, driveFilesOf, knownDriveFile, type DriveFileLink } from './driveFiles.js';
 export { diffData, mergeText, resolveConflicts, threeWayMerge, UnresolvedConflictError, type Conflict, type FieldChange, type Json, type MergeResult, type Resolution } from './merge.js';
 export { LIVE_TYPES, STEWARD_TYPES, TRUST_THRESHOLD, UPLOAD_HOLD_HOURS, UPLOAD_LIMITS, canApprove, canSuggest, earnedTrust, mayGoLive, uploadAllowance, type Account, type SetInfo } from './permissions.js';
-export { searchTextOf, toTsQuery } from './searchText.js';
+export { searchTextOf, searchTierSql, toTsQuery } from './searchText.js';
 export {
   CHALLENGE_MINUTES,
   SESSION_DAYS,
@@ -141,6 +141,7 @@ export {
   hebrewBooksPdfUrl,
   lookOfPage,
   pdfPageCount,
+  pdfPageCounts,
   recordCover,
   titlePageScore,
   type CoverPicture,
@@ -153,6 +154,7 @@ export {
   type PageLook,
 } from './covers.js';
 export { linkedCounts, linkedOfEach, linkedPage, textsProgress, type LinkGroup } from './linked.js';
+export { additionOf, additionsByKind, additionsOf, isOfficial, seferOf } from './additions.js';
 export {
   HANACHA_TEXT_RIGHTS,
   MAX_HANACHA_PARAGRAPHS,
@@ -255,9 +257,12 @@ export {
   type OrganizeRef,
   type TreeNode,
 } from './organize.js';
-export { MACHINE_KINDS, MACHINE_REQUESTS_PER_DAY, checkMachineWork, finishMachineWork, machineRequest, machineRequests, machineSummary, releaseMachineRequests, requestMachineWork, takeMachineRequests, type MachineKind, type MachineRequest, type MachineRequestStatus } from './machineWork.js';
+export { MACHINE_KINDS, MACHINE_REQUESTS_PER_DAY, checkMachineWork, finishMachineWork, machineRequest, machineRequests, machineSummary, notRecentlyFailedSql, releaseMachineRequests, requestMachineWork, settleMachineWork, SWEEP_RETRY_DAYS, takeMachineRequests, type MachineKind, type MachineRequest, type MachineRequestStatus } from './machineWork.js';
 export { CLIP_MAX_SECONDS, HELD_OUT_AUDIO, TRAINING_GOAL, piecesOf, splitOf, summariseTraining, trainingClips, trainingGoal, type ClipQuality, type GoalFarbrengen, type TrainingClip, type TrainingGoal, type TrainingSkip, type TrainingSummary } from './trainingClips.js';
 export { machineToCheck, type MachineToCheck, type PageToCheck, type ScanToCheck, type TranscriptToCheck } from './toCheck.js';
 export { openTranscriptFixes, TRANSCRIPT_FIXES_MAX, type TranscriptFix, type TranscriptFixChange } from './transcriptFixes.js';
-export { DAILY_WORKS, dailyLearning, tanyaStart, type DailyLearning, type DailyTanyaPart } from './daily.js';
+export { DAILY_WORKS, dailyLearning, dailyPathOf, tanyaStart, type DailyLearning, type DailyShiur, type DailyTanyaPart } from './daily.js';
+export { dailyRambam, type DailyRambam, type RambamShiur } from './rambam.js';
 export { combineSuggestions } from './combine.js';
+export { fillShaars, shaarFile, suggestShaar, type ShaarFile, type ShaarInput } from './shaar.js';
+export { driveId, mafteach, placesOf, type Mafteach, type MafteachPlace, type MafteachTopic, type MafteachVolume } from './mafteach.js';

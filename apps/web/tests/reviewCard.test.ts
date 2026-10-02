@@ -2,7 +2,9 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
-import { SuggestionCard, type ReviewDetail, type ReviewRow } from '../app/components/ReviewCard.js';
+import { QueueRow } from '../app/components/QueueRow.js';
+import { SuggestionCard, UNDECIDED, decidedAs, type Decision, type ReviewDetail, type ReviewRow } from '../app/components/ReviewCard.js';
+import { reviewChoices } from '../app/ui/ReviewBox.js';
 import type { Lang } from '../app/lib/i18n.js';
 
 /**
@@ -38,9 +40,9 @@ const entry = (i: number) => ({
 
 const detail: ReviewDetail = {
   changeset: { ...row, checks: [{ check: 'date', status: 'warn', message: 'no date' }] },
-  entries: Array.from({ length: 25 }, (_, i) => entry(i)),
+  entries: Array.from({ length: 10 }, (_, i) => entry(i)),
   total: 500,
-  next: 25,
+  next: 10,
   summary: [{ type: 'event', kind: 'changed', count: 500, fields: [{ path: '/links', before: 'link:sichos-kodesh-media-proxy.shmuky.workers.dev', after: 'link:drive.google.com' }], examples: ['rh-e0', 'rh-e1', 'rh-e2'] }],
   reviews: [],
   names: { 'bot:relink-drive': 'Drive links (relink bot)' },
@@ -50,9 +52,9 @@ const detail: ReviewDetail = {
   advice: null,
 };
 
-const render = (d: ReviewDetail | null, lang: Lang = 'en') =>
+const render = (d: ReviewDetail | null, lang: Lang = 'en', decision?: Decision) =>
   renderToStaticMarkup(
-    createElement(MemoryRouter, null, createElement(SuggestionCard, { row, person: { name: 'Drive links (relink bot)', bot: true }, detail: d, lang, open: true, onDone: () => {}, onMore: () => {} })),
+    createElement(MemoryRouter, null, createElement(SuggestionCard, { row, person: { name: 'Drive links (relink bot)', bot: true }, detail: d, lang, open: true, onDone: () => {}, onMore: () => {}, decision })),
   );
 
 describe("a bot's Suggestion of 500 items in the review queue", () => {
@@ -75,7 +77,7 @@ describe("a bot's Suggestion of 500 items in the review queue", () => {
     expect(render(detail)).toContain('no date');
   });
 
-  it('then sums the 500 up, shows the first 25, offers the rest, and approves all of it', () => {
+  it('then sums the 500 up, shows the first 10, offers the rest, and approves all of it', () => {
     const html = render(detail);
     expect(html).toContain('What changes');
     expect(html).toContain('links to sichos-kodesh-media-proxy.shmuky.workers.dev');
@@ -85,10 +87,10 @@ describe("a bot's Suggestion of 500 items in the review queue", () => {
     expect(html).toContain('links › 0 › url');
     expect(html).toContain('<ins>drive</ins>');
     expect(html).not.toContain('(changed)');
-    expect((html.match(/class="diff"/g) ?? []).length).toBe(25);
-    expect(html).toContain('Showing 25 of 500');
+    expect((html.match(/class="diff"/g) ?? []).length).toBe(10);
+    expect(html).toContain('Showing 10 of 500');
     expect(html).toContain('Show more');
-    expect(html).toContain('475 left');
+    expect(html).toContain('490 left');
     expect(html).toMatch(/Approve<span class="num"> · 500<\/span>/);
     expect(html).toContain('Don’t approve, send back');
   });
@@ -111,9 +113,122 @@ describe("a bot's Suggestion of 500 items in the review queue", () => {
     expect(html).not.toMatch(/>Approve<span/);
   });
 
+  it('sums up a page’s words in one line, by names and not paths, and never more than a few lines', () => {
+    const segments = Array.from({ length: 40 }, (_, i) => [
+      { path: `/body/versions/he/segments/t${i}/text`, before: 'list', after: 'list' },
+      { path: `/body/versions/he/segments/t${i}/printed`, before: 'list', after: 'none' },
+      { path: `/body/versions/he/segments/t${i}/words/*/startMs`, before: 'number', after: 'number' },
+    ]).flat();
+    const groups = Array.from({ length: 12 }, (_, i) => ({ type: 'unit', kind: 'changed' as const, count: 2, fields: [...segments, { path: `/label/he`, before: 'text', after: 'text' }, { path: `/x${i}`, before: 'text', after: 'text' }, { path: `/y${i}`, before: 'text', after: 'text' }], examples: [`rh-u${i}`] }));
+    const html = render({ ...detail, summary: groups });
+    expect(html).not.toContain('body/versions');
+    expect(html).not.toContain('segments');
+    expect(html).not.toContain('startMs');
+    expect(html).not.toContain('rh-u0<');
+    expect(html).toContain('>The words<');
+    expect(html).toContain('+1 more<');
+    expect(html).toContain('<span class="rq-summary-n num">14</span><span class="rq-summary-what subtle">more kinds of change');
+    expect((html.match(/rq-summary-field/g) ?? []).length).toBe(15);
+    expect(html).toContain('Example 1');
+  });
+
+  it('draws groups that read the same as one', () => {
+    const groups = Array.from({ length: 30 }, (_, i) => ({ type: 'unit', kind: 'changed' as const, count: 2, fields: [{ path: `/body/versions/he/segments/t${i}/text`, before: 'list', after: 'list' }], examples: [`rh-u${i}`] }));
+    const html = render({ ...detail, summary: groups });
+    expect((html.match(/rq-summary-field/g) ?? []).length).toBe(1);
+    expect(html).toContain('<span class="rq-summary-n num">60</span>');
+  });
+
   it('once every item is shown, offers no more', () => {
     const html = render({ ...detail, entries: detail.entries.slice(0, 3), total: 3, next: null, summary: [{ ...detail.summary![0]!, count: 3 }] });
     expect(html).not.toContain('Show more');
     expect(html).toContain('3 items');
+  });
+});
+
+/**
+ * Pressing Approve: the button says "Merging…" and nothing can be pressed
+ * again while the API merges; once it answers, the card is merged at once
+ * (no reload, no second press), and a refusal says why and gives the
+ * buttons back.
+ */
+describe('approving from the review queue', () => {
+  const buttons = (html: string) => html.match(/<button[^>]*>/g) ?? [];
+
+  it('says Merging… while the API merges, and no button can be pressed', () => {
+    const html = render(detail, 'en', { ...UNDECIDED, doing: 'approve' });
+    expect(html).toContain('Merging…');
+    expect(html).not.toMatch(/>Approve<span/);
+    expect(html).toMatch(/<button[^>]*aria-busy="true"[^>]*>/);
+    // Every decision is off while one is on its way ("Show more" only reads more of it).
+    for (const b of buttons(html).filter((b) => !b.includes('btn sm'))) expect(b).toContain('disabled');
+  });
+
+  it('in Hebrew too', () => {
+    expect(render(detail, 'he', { ...UNDECIDED, doing: 'approve' })).toContain('ממזג…');
+    expect(render(detail, 'he', { ...UNDECIDED, done: 'approve' })).toContain('מוזג');
+  });
+
+  it('once merged, shows it merged and offers Approve no more', () => {
+    const html = render(detail, 'en', { ...UNDECIDED, done: 'approve' });
+    expect(html).toContain('Merged');
+    expect(html).not.toContain('Merging…');
+    expect(html).not.toMatch(/>Approve<span/);
+    expect(html).not.toContain('Don’t approve, send back');
+    expect(html).toContain('class="state approved sm"');
+  });
+
+  it('refused, says why and gives the buttons back', () => {
+    const html = render(detail, 'en', { ...UNDECIDED, error: 'failed checks: no date' });
+    expect(html).toContain('failed checks: no date');
+    expect(html).toMatch(/>Approve<span/);
+    expect(html).not.toContain('Merging…');
+    const approve = buttons(html).find((b) => b.includes('btn approve'));
+    expect(approve).toBeDefined();
+    expect(approve).not.toContain('disabled');
+  });
+
+  it('knows what each decision makes of the Suggestion', () => {
+    expect(decidedAs('approve')).toEqual({ status: 'merged' });
+    expect(decidedAs('approve-theirs')).toEqual({ status: 'merged' });
+    expect(decidedAs('send-back')).toEqual({ status: 'sent_back' });
+    expect(decidedAs('withdraw')).toEqual({ status: 'withdrawn' });
+    expect(decidedAs('keep-live')).toEqual({ post_review: 'done' });
+  });
+
+  it('on a suggestion’s own page, the approve choice says Merging… while it is sent', () => {
+    expect(reviewChoices('en').find((c) => c.value === 'approve')?.working).toBe('Merging…');
+    expect(reviewChoices('he').find((c) => c.value === 'approve')?.working).toBe('ממזג…');
+  });
+});
+
+describe('the review queue, as GitHub lists pull requests', () => {
+  const line = (r: ReviewRow, lang: Lang = 'en') =>
+    renderToStaticMarkup(createElement(MemoryRouter, null, createElement('ul', null, createElement(QueueRow, { row: r, person: { name: 'Drive links (relink bot)', bot: true }, lang }))));
+
+  it('lists a Suggestion by its title, with its #number, who sent it and how many items, and none of its changes', () => {
+    const html = line({ ...row, number: 12, kind: 'suggestion' });
+    expect(html).toContain('Drive links in place of the media proxy (1-500)');
+    expect(html).toContain('href="/suggestions/12?lang=en"');
+    expect(html).toContain('#12');
+    expect(html).toContain('Drive links (relink bot)');
+    expect(html).toContain('500 items');
+    expect(html).toContain('Not yet checked');
+    // The changes, their summary and Approve are on its own page.
+    expect(html).not.toContain(row.description!);
+    expect(html).not.toContain('What changes');
+    expect(html).not.toContain('Approve');
+    expect(html).not.toContain('class="diff"');
+  });
+
+  it('opens a Suggestion with no #number (an import) as its card in the queue', () => {
+    expect(line(row)).toContain('href="/review?s=7&amp;lang=en"');
+  });
+
+  it('reads in Hebrew too', () => {
+    const html = line({ ...row, number: 12 }, 'he');
+    expect(html).toContain('href="/suggestions/12"');
+    expect(html).toContain('500 פריטים');
+    expect(html).toContain('בוט');
   });
 });

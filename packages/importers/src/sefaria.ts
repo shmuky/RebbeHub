@@ -28,10 +28,21 @@ import { textUrl } from './sichosKodeshTexts.js';
  * The walk over a book's schema, and the text documents, follow
  * Sichos-Kodesh's packages/sefaria-index, so a book is cut into the same
  * units either way.
+ *
+ * With `daily`, the crawl also reads the texts of the daily learning,
+ * Chitas and the Rambam (`dailyBooks`): the Chumash with Rashi, Tehillim,
+ * every book of the Mishneh Torah and the Sefer HaMitzvot. They are not
+ * Chabad books, so they have a Set of their own (`DAILY_SET`) and paths of
+ * their own (`/chumash/genesis`, `/tehillim`, `/rambam/<book>`), and for
+ * each the crawl asks for a named Hebrew version whose licence lets its
+ * words be kept, since Sefaria's first Hebrew version of the Tanach is
+ * under CC BY-SA.
  */
 
 export const SEFARIA = 'https://www.sefaria.org';
 export const SEFARIA_SET = { key: 'rebbehub-set:sefaria', path: '/sets/sefaria', name: { he: 'ספריא: ספרי חב״ד', en: 'Sefaria: Chabad books' } } as const;
+/** The Set of the daily learning's texts from Sefaria (`dailyBooks`). */
+export const DAILY_SET = { key: 'rebbehub-set:chitas-rambam', path: '/sets/chitas-rambam', name: { he: 'חת״ת ורמב״ם', en: 'Chitas and Rambam' } } as const;
 const USER_AGENT = 'RebbeHubIndex/0.1 (+https://github.com/shmuky/RebbeHub; the Chabad books, with their licences and credit)';
 
 // ---------------------------------------------------------------- the API
@@ -72,6 +83,15 @@ interface SefariaTextResponse {
   versions?: SefariaVersionText[];
   error?: string;
 }
+/** One version of a book as `api/texts/versions` lists it. */
+export interface SefariaVersionInfo {
+  versionTitle: string;
+  language: string;
+  /** The language its words are in: a translation into Yiddish is listed under `he` with `yi` here. */
+  actualLanguage?: string;
+  license?: string;
+  priority?: number | string;
+}
 
 export const sefariaRefPath = (text: string) => encodeURIComponent(text.replace(/ /g, '_')).replace(/%2C/g, ',');
 /** Where a person reads a ref on Sefaria. */
@@ -80,8 +100,10 @@ export const sefariaPage = (text: string) => `${SEFARIA}/${sefariaRefPath(text)}
 export interface SefariaClient {
   toc(): Promise<unknown>;
   index(title: string): Promise<SefariaIndex>;
-  /** The primary version of a ref in one language (`api/v3/texts`). */
-  text(textRef: string, language: 'he' | 'en'): Promise<SefariaTextResponse>;
+  /** A ref in one language (`api/v3/texts`): the named version, or without one the primary. */
+  text(textRef: string, language: 'he' | 'en', version?: string): Promise<SefariaTextResponse>;
+  /** Every version of a book, with its licence (`api/texts/versions`). */
+  versions(title: string): Promise<SefariaVersionInfo[]>;
 }
 
 /**
@@ -129,23 +151,101 @@ export function sefariaClient(options: { fetch?: typeof fetch; cacheDir?: string
       if (index.error || !index.schema) throw new Error(`Sefaria has no index "${title}": ${index.error ?? 'no schema'}`);
       return index;
     },
-    text: (textRef, language) => json(`${base}/api/v3/texts/${sefariaRefPath(textRef)}?version=${language === 'he' ? 'hebrew' : 'english'}`),
+    text: (textRef, language, version) => {
+      const name = language === 'he' ? 'hebrew' : 'english';
+      return json(`${base}/api/v3/texts/${sefariaRefPath(textRef)}?version=${encodeURIComponent(version ? `${name}|${version}` : name)}`);
+    },
+    async versions(title) {
+      const list = await json<unknown>(`${base}/api/texts/versions/${sefariaRefPath(title)}`);
+      return Array.isArray(list) ? (list as SefariaVersionInfo[]).filter((v) => v && typeof v.versionTitle === 'string') : [];
+    },
   };
 }
 
-/** The books Sefaria files under Chabad, from its table of contents. */
-export function chabadTitles(toc: unknown): Array<{ title: string; heTitle: string; categories: string[] }> {
+/** Every book in Sefaria's table of contents, in its order, with its categories. */
+function tocBooks(toc: unknown): Array<{ title: string; heTitle: string; categories: string[] }> {
   const out: Array<{ title: string; heTitle: string; categories: string[] }> = [];
   const walk = (node: unknown, trail: string[]) => {
     if (Array.isArray(node)) return node.forEach((n) => walk(n, trail));
     if (!node || typeof node !== 'object') return;
     const n = node as { contents?: unknown; category?: string; title?: string; heTitle?: string; categories?: string[] };
     if (n.contents) return walk(n.contents, n.category ? [...trail, n.category] : trail);
-    const categories = n.categories ?? trail;
-    if (n.title && categories.includes('Chabad')) out.push({ title: n.title, heTitle: n.heTitle ?? n.title, categories });
+    if (n.title) out.push({ title: n.title, heTitle: n.heTitle ?? n.title, categories: n.categories ?? trail });
   };
   walk(toc, []);
   return out;
+}
+
+/** The books Sefaria files under Chabad, from its table of contents. */
+export const chabadTitles = (toc: unknown) => tocBooks(toc).filter((b) => b.categories.includes('Chabad'));
+
+// ---------------------------------------------------------------- the daily learning
+
+/** A book of the daily learning: where it lives on RebbeHub, and which Hebrew versions to ask Sefaria for. */
+export interface DailyBook {
+  title: string;
+  heTitle: string;
+  /** Its work's path: `/chumash/genesis`. */
+  path: string;
+  /** The works contract has no kind for the Tanach, so it is `chassidus`, the kind any Sefaria book falls back to. */
+  genre: Genre;
+  /** The Hebrew versions to ask for, best first; each is taken only when Sefaria has it under a licence that lets its words be kept. */
+  hebrew: readonly string[];
+  /** The English versions to ask for, the same way; without them, Sefaria's primary English, kept when its licence lets it be. */
+  english?: readonly string[];
+}
+
+/** Public domain, all three; the first has the cantillation marks. */
+const TANACH_HEBREW = ["Tanach with Ta'amei Hamikra", 'Tanach with Nikkud', 'Tanach with Text Only'];
+/** Rosenbaum and Silbermann's London edition, public domain, in both languages (Sefaria's primary English Rashi covers only some chapters). */
+const RASHI_HEBREW = ["Pentateuch with Rashi's commentary by M. Rosenbaum and A.M. Silbermann, 1929-1934"];
+const RASHI_ENGLISH = RASHI_HEBREW;
+/** Public domain, both. */
+const MISHNEH_TORAH_HEBREW = ['Torat Emet 363'];
+const SEFER_HAMITZVOT_HEBREW = ['Sefer HaMitzvot, Warsaw 1883'];
+const CHUMASH: ReadonlyArray<readonly [string, string]> = [
+  ['Genesis', 'בראשית'],
+  ['Exodus', 'שמות'],
+  ['Leviticus', 'ויקרא'],
+  ['Numbers', 'במדבר'],
+  ['Deuteronomy', 'דברים'],
+];
+
+/**
+ * The daily learning's books: Chumash with Rashi and Tehillim (Chitas),
+ * and the Rambam, every book of the Mishneh Torah (its introduction and
+ * list of the mitzvos too) as Sefaria's table of contents has them, and
+ * the Sefer HaMitzvot.
+ */
+export function dailyBooks(toc: unknown): DailyBook[] {
+  const books: DailyBook[] = [];
+  for (const [title, heTitle] of CHUMASH) {
+    books.push({ title, heTitle, path: `/chumash/${slugify(title)}`, genre: 'chassidus', hebrew: TANACH_HEBREW });
+    books.push({ title: `Rashi on ${title}`, heTitle: `רש״י על ${heTitle}`, path: `/chumash/rashi-${slugify(title)}`, genre: 'chassidus', hebrew: RASHI_HEBREW, english: RASHI_ENGLISH });
+  }
+  books.push({ title: 'Psalms', heTitle: 'תהלים', path: '/tehillim', genre: 'chassidus', hebrew: TANACH_HEBREW });
+  for (const book of tocBooks(toc)) {
+    if (!book.categories.includes('Mishneh Torah') || !book.title.startsWith('Mishneh Torah, ')) continue;
+    books.push({ title: book.title, heTitle: book.heTitle, path: `/rambam/${slugify(book.title.slice('Mishneh Torah, '.length))}`, genre: 'halacha', hebrew: MISHNEH_TORAH_HEBREW });
+  }
+  books.push({ title: 'Sefer HaMitzvot', heTitle: 'ספר המצוות', path: '/sefer-hamitzvos', genre: 'halacha', hebrew: SEFER_HAMITZVOT_HEBREW });
+  return books;
+}
+
+/**
+ * The version of a book to ask for in one language: the first of
+ * `preferred` that Sefaria has under a licence that lets its words be
+ * kept, else the most prominent such version in that language (not a
+ * translation filed under it); null when there is none, and the primary
+ * version is asked for, as a link.
+ */
+export function chooseVersion(versions: readonly SefariaVersionInfo[], language: 'he' | 'en', preferred: readonly string[] = []): string | null {
+  const own = versions.filter((v) => v.language === language && (v.actualLanguage ?? language) === language && !/\[[a-z]{2,3}\]\s*$/.test(v.versionTitle) && mayKeepText(sefariaLicence(v.license)));
+  for (const title of preferred) {
+    const found = own.find((v) => v.versionTitle.trim() === title);
+    if (found) return found.versionTitle;
+  }
+  return [...own].sort((a, b) => (Number(b.priority) || 0) - (Number(a.priority) || 0))[0]?.versionTitle ?? null;
 }
 
 // ---------------------------------------------------------------- a book's parts
@@ -353,16 +453,20 @@ export interface SefariaBook {
   heTitle: string;
   categories: string[];
   authors: string[];
+  /** Set for a book of the daily learning (`dailyBooks`): its work's path and kind, and it goes in the daily learning's Set. */
+  daily?: { path: string; genre: Genre };
   units: SefariaUnit[];
 }
 export interface SefariaCrawl {
   books: SefariaBook[];
 }
 
-async function leafText(client: SefariaClient, leaf: Leaf, language: 'he' | 'en'): Promise<SefariaVersionText | null> {
-  const answer = await client.text(leaf.ref, language);
+async function leafText(client: SefariaClient, leaf: Leaf, language: 'he' | 'en', version?: string): Promise<SefariaVersionText | null> {
+  const answer = await client.text(leaf.ref, language, version);
   const found = answer.versions?.[0];
   if (found?.text !== undefined) return found;
+  // A named version this part does not have: the primary one, as for any book.
+  if (version && !answer.error) return leafText(client, leaf, language);
   // Too big for one answer: its sections one by one.
   if (!answer.error || leaf.depth < 2 || !leaf.sectionSizes) return null;
   const sections: unknown[] = [];
@@ -372,7 +476,7 @@ async function leafText(client: SefariaClient, leaf: Leaf, language: 'he' | 'en'
       sections.push([]);
       continue;
     }
-    const part = (await client.text(`${leaf.ref} ${i + 1}`, language)).versions?.[0];
+    const part = (await client.text(`${leaf.ref} ${i + 1}`, language, version)).versions?.[0];
     first ??= part;
     sections.push(part?.text ?? []);
   }
@@ -383,17 +487,37 @@ const authorNames = (index: SefariaIndex) => (index.authors ?? []).map((a) => (t
 
 /**
  * Reads one book from Sefaria into units, each with its primary Hebrew and
- * English versions; the words of the ones whose licence lets them be kept
- * are handed to `save` as documents.
+ * English versions (or the versions `options.hebrew` and `options.english` name); the
+ * words of the ones whose licence lets them be kept are handed to `save`
+ * as documents.
+ *
+ * A unit is one section of the book's first level: a chapter. Its
+ * segments are numbered as Sefaria numbers them, so verse 5 is segment 5;
+ * a book three levels deep (Rashi: chapter, verse, comment) gives each
+ * verse a heading with its comments under it, so the page's segment ids
+ * are the verse (`5`) and the comment within it (`5.2`).
  */
-export async function crawlBook(client: SefariaClient, title: string, save: (sha256: string, html: string) => Promise<void>, log: (line: string) => void = () => {}): Promise<SefariaBook> {
+export async function crawlBook(
+  client: SefariaClient,
+  title: string,
+  save: (sha256: string, html: string) => Promise<void>,
+  log: (line: string) => void = () => {},
+  options: { hebrew?: string; english?: string; heTitle?: string; daily?: SefariaBook['daily'] } = {},
+): Promise<SefariaBook> {
   const index = await client.index(title);
-  const book: SefariaBook = { title: index.title, heTitle: index.heTitle || index.title, categories: index.categories ?? [], authors: authorNames(index), units: [] };
+  const book: SefariaBook = {
+    title: index.title,
+    heTitle: options.heTitle || index.heTitle || index.title,
+    categories: index.categories ?? [],
+    authors: authorNames(index),
+    ...(options.daily ? { daily: options.daily } : {}),
+    units: [],
+  };
   const seen = new Set<string>();
   for (const leaf of bookLeaves(index)) {
     const versions = new Map<'he' | 'en', SefariaVersionText>();
     for (const language of ['he', 'en'] as const) {
-      const found = await leafText(client, leaf, language);
+      const found = await leafText(client, leaf, language, language === 'he' ? options.hebrew : options.english);
       if (found && hasText(found.text)) versions.set(language, found);
     }
     const count = leaf.depth < 2 ? 1 : Math.max(0, ...[...versions.values()].map((v) => (Array.isArray(v.text) ? v.text.length : 1)));
@@ -441,13 +565,19 @@ export async function sichosKodeshSefariaTitles(root: string): Promise<Set<strin
 
 /**
  * Crawls every Chabad book on Sefaria but those in `exclude` into `out`
- * (`crawl.json`, and each kept text as `texts/<sha256>.html`).
+ * (`crawl.json`, and each kept text as `texts/<sha256>.html`); with
+ * `daily`, the daily learning's books too (`dailyBooks`), each in the
+ * Hebrew version `chooseVersion` picks from the ones Sefaria lists.
+ * `only` limits both to the titles it names.
  */
-export async function crawlSefaria(options: { out: string; exclude: Set<string>; client: SefariaClient; only?: string[]; log?: (line: string) => void }): Promise<SefariaCrawl> {
+export async function crawlSefaria(options: { out: string; exclude: Set<string>; client: SefariaClient; only?: string[]; daily?: boolean; log?: (line: string) => void }): Promise<SefariaCrawl> {
   const log = options.log ?? (() => {});
-  const titles = options.only ?? chabadTitles(await options.client.toc()).map((t) => t.title);
+  const toc = options.only && !options.daily ? null : await options.client.toc();
+  const daily = options.daily ? dailyBooks(toc).filter((b) => !options.only || options.only.includes(b.title)) : [];
+  const dailyTitles = new Set(daily.map((b) => b.title));
+  const titles = (options.only ?? chabadTitles(toc).map((t) => t.title)).filter((t) => !dailyTitles.has(t));
   const wanted = titles.filter((t) => !options.exclude.has(t) && ![...options.exclude].some((e) => t.endsWith(` on ${e}`)));
-  log(`${titles.length} Chabad books on Sefaria; ${wanted.length} not published by Sichos-Kodesh`);
+  if (titles.length || !daily.length) log(`${titles.length} Chabad books on Sefaria; ${wanted.length} not published by Sichos-Kodesh`);
   await mkdir(join(options.out, 'texts'), { recursive: true });
   const save = async (sha256: string, html: string) => {
     const file = join(options.out, 'texts', `${sha256}.html`);
@@ -459,6 +589,18 @@ export async function crawlSefaria(options: { out: string; exclude: Set<string>;
       crawl.books.push(await crawlBook(options.client, title, save, log));
     } catch (error) {
       log(`${title}: ${error instanceof Error ? error.message : String(error)}; left for the next run`);
+    }
+  }
+  if (daily.length) log(`${daily.length} books of the daily learning`);
+  for (const book of daily) {
+    try {
+      const versions = await options.client.versions(book.title);
+      const hebrew = chooseVersion(versions, 'he', book.hebrew) ?? undefined;
+      const english = book.english ? (chooseVersion(versions, 'en', book.english) ?? undefined) : undefined;
+      log(`${book.title}: Hebrew ${hebrew ?? 'as Sefaria gives it first (no version that may be kept)'}${english ? `; English ${english}` : ''}`);
+      crawl.books.push(await crawlBook(options.client, book.title, save, log, { hebrew, english, heTitle: book.heTitle, daily: { path: book.path, genre: book.genre } }));
+    } catch (error) {
+      log(`${book.title}: ${error instanceof Error ? error.message : String(error)}; left for the next run`);
     }
   }
   await writeFile(join(options.out, 'crawl.json'), JSON.stringify(crawl));
@@ -520,13 +662,18 @@ export function sefariaImporter(input: SefariaInput | (() => Promise<SefariaInpu
     async *records(): AsyncIterable<ImportRecord> {
       const { crawl, text, authors, api } = typeof input === 'function' ? await input() : input;
       yield { key: SEFARIA_SET.key, type: 'set', path: SEFARIA_SET.path, data: { name: SEFARIA_SET.name, slug: 'sefaria', policy: 'moderated', keepers: [] } };
-      const genres = new Set(crawl.books.map(sefariaGenre));
+      if (crawl.books.some((b) => b.daily)) yield { key: DAILY_SET.key, type: 'set', path: DAILY_SET.path, data: { name: DAILY_SET.name, slug: 'chitas-rambam', policy: 'moderated', keepers: [] } };
+      // The daily learning's books are not Chabad books: they are in their own Set, not a Chabad kind's.
+      const genres = new Set(crawl.books.filter((b) => !b.daily).map(sefariaGenre));
       for (const genre of [...genres].sort()) yield { key: `rebbehub-set:${genre}`, type: 'set', path: `/sets/${genre}`, data: { name: GENRE_NAMES[genre], slug: genre, policy: 'moderated', keepers: [] } };
       for (const book of crawl.books) {
         if (!book.units.length) continue;
-        const slug = bookSlug(book.title);
-        const workKey = `sefaria-work:${book.title}`;
-        const genre = sefariaGenre(book);
+        // A daily book's keys and path are its own (`sefaria-daily-work:Genesis` at /chumash/genesis), apart from the Chabad books'.
+        const slug = book.daily ? book.daily.path.split('/').filter(Boolean).join('-') : bookSlug(book.title);
+        const place = book.daily ? book.daily.path.split('/').filter(Boolean) : ['sefaria', slug];
+        const workKey = book.daily ? `sefaria-daily-work:${book.title}` : `sefaria-work:${book.title}`;
+        const unitKey = book.daily ? `sefaria-daily-unit:${book.title}` : `sefaria-unit:${book.title}`;
+        const genre = book.daily ? book.daily.genre : sefariaGenre(book);
         const bookAuthors = [...new Set(book.authors.map(sefariaAuthor).filter((a): a is string => a !== null && authors.has(a)))];
         const versions = new Map<string, SefariaText>();
         for (const u of book.units) for (const t of u.texts) versions.set(`${t.language}\u0000${t.version}`, t);
@@ -534,14 +681,18 @@ export function sefariaImporter(input: SefariaInput | (() => Promise<SefariaInpu
         yield {
           key: workKey,
           type: 'work',
-          path: `/sefaria/${slug}`,
+          path: joinPath(...place),
+          ...(book.daily ? {} : { keep: ['addition'] }),
           data: {
             title: { he: book.heTitle.slice(0, 500), en: book.title.slice(0, 500) },
-            slug: `sefaria-${slug}`.slice(0, 100).replace(/-+$/, ''),
+            // A Chabad book Sichos-Kodesh does not publish is no official sefer of the tree until people say so: an addition.
+            // The daily learning's books (Chumash, Tehillim, the Rambam) are the texts of their own Set.
+            ...(book.daily ? {} : { addition: { kind: 'other' } }),
+            slug: (book.daily ? slug : `sefaria-${slug}`).slice(0, 100).replace(/-+$/, ''),
             authors: bookAuthors.map((a) => ref(`sichos-kodesh-author:${a}`)),
             genre,
             levels,
-            sets: [ref(`rebbehub-set:${genre}`), ref(SEFARIA_SET.key)],
+            sets: book.daily ? [ref(DAILY_SET.key)] : [ref(`rebbehub-set:${genre}`), ref(SEFARIA_SET.key)],
             externalIds: { sefaria: book.title.slice(0, 200) },
             sourceCopies: [...versions.values()].map((t) => ({ source: 'sefaria', sourceId: book.title, kind: 'text', language: t.language, licence: t.licence, version: t.version, ...(mayKeepText(t.licence) ? { credit: `Sefaria: ${t.version}` } : {}) })),
           },
@@ -582,9 +733,9 @@ export function sefariaImporter(input: SefariaInput | (() => Promise<SefariaInpu
             }
           }
           yield {
-            key: `sefaria-unit:${book.title}/${unit.id}`,
+            key: `${unitKey}/${unit.id}`,
             type: 'unit',
-            path: joinPath('sefaria', slug, ...unit.position.map((p) => p.value)),
+            path: joinPath(...place, ...unit.position.map((p) => p.value)),
             data: {
               work: ref(workKey),
               position: unit.position,

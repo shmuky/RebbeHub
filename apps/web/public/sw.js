@@ -13,7 +13,7 @@
  *
  * Change VERSION when this file's rules change; old caches are dropped.
  */
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL = `rebbehub-shell-${VERSION}`;
 const PAGES = `rebbehub-pages-${VERSION}`;
 const MAX_PAGES = 80;

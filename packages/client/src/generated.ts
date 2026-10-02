@@ -19,7 +19,7 @@ export type Via = {
 
 export type ApiError = {
   /** What kind of error, for programs */
-  error: "bad-request" | "unauthorized" | "forbidden" | "not-found" | "conflict" | "invalid" | "rate-limited" | "internal" | "state" | "too-large" | "upstream";
+  error: "bad-request" | "unauthorized" | "forbidden" | "not-found" | "conflict" | "invalid" | "rate-limited" | "internal" | "state" | "too-large" | "upstream" | "busy";
   /** What went wrong, for people */
   message: string;
   /** More, when there is more (a check that failed, the clashes of a merge) */
@@ -182,11 +182,18 @@ export type TreeNode = {
   children?: Array<TreeNode>;
   /** Children left out past the limit */
   more?: number;
+  /** A sefer that is an addition, not an official sefer: its kind, and the official sefer it belongs to */
+  addition?: {
+    kind: "commentary" | "index" | "about" | "collection" | "other";
+    /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+    to?: string;
+  };
 };
 
-/** One step of a plan. Items are ids (rh-…), or new:<key> for a set made earlier in the same plan. Positions are "start", "end", { after: id } or { before: id }. - move { items, to, from?, mode?: add | only, position? }: into a set (a sefer joins it, leaving `from` when given); `to: null` with `from` takes it out; a set under a set or to the top (to: null); a unit to another work, a printing to a work, a scan to a printing, a recording to an event. - move-up { items, from? }: a set to its parent's parent; an item out of a set into that set's parent. - rename { item, name?: { he?, en? }, slug?, path? }: old paths redirect, and paths made from it (a sefer's units) move along. - reorder { items, parent?, position? }: without position, the items take the places they hold in the order given. - create-set { key?, name: { he, en? }, slug, parent?, description?, items? } - delete-set { item }: only a set that holds nothing. - merge { from, into }: everything under or pointing at `from` moves to `into`; `from` is deleted and its paths lead to `into`. - split { work, units? | range: { from, to }, title: { he, en? }, slug }: units into a new sefer. */
+/** One step of a plan. Items are ids (rh-…), or new:<key> for a set made earlier in the same plan. Positions are "start", "end", { after: id } or { before: id }. - move { items, to, from?, mode?: add | only, position? }: into a set (a sefer joins it, leaving `from` when given); `to: null` with `from` takes it out; a set under a set or to the top (to: null); a unit to another work, a printing to a work, a scan to a printing, a recording to an event. - move-up { items, from? }: a set to its parent's parent; an item out of a set into that set's parent. - rename { item, name?: { he?, en? }, slug?, path? }: old paths redirect, and paths made from it (a sefer's units) move along. - reorder { items, parent?, position? }: without position, the items take the places they hold in the order given. - create-set { key?, name: { he, en? }, slug, parent?, description?, items? } - delete-set { item }: only a set that holds nothing. - merge { from, into }: everything under or pointing at `from` moves to `into`; `from` is deleted and its paths lead to `into`. - split { work, units? | range: { from, to }, title: { he, en? }, slug }: units into a new sefer. - addition { item, to?, kind: commentary | index | about | collection | other }: a sefer is not one of the official sefarim the tree is built of but an addition, listed on the page of the official sefer `to` (or, without it, apart at the end of its shelf). - official { item }: an addition becomes an official sefer again. */
 export type OrganizeOperation = {
-  op: "move" | "move-up" | "rename" | "reorder" | "create-set" | "delete-set" | "merge" | "split";
+  op: "move" | "move-up" | "rename" | "reorder" | "create-set" | "delete-set" | "merge" | "split" | "addition" | "official";
+  kind?: "commentary" | "index" | "about" | "collection" | "other";
   items?: Array<string>;
   item?: string;
   to?: string | null;
@@ -870,7 +877,7 @@ export interface Operations {
     };
     output: Record<string, unknown>;
   };
-  /** A day's learning: Chitas' Tanya (the day's portion, each chapter it touches cut to it) and Hayom Yom */
+  /** A day's learning: Chitas (Tanya, the day's portion, each chapter it touches cut to it; Chumash with Rashi; Tehillim), Hayom Yom, and the Rambam's three tracks */
   dailyLearning: {
     input: {
       /** The civil day */
@@ -882,6 +889,37 @@ export interface Operations {
       hebrew: string;
       tanya: Array<Item>;
       hayomYom: Array<Item>;
+      chumash: {
+        label: string;
+        ref: string;
+        path: string | null;
+        rashi: string | null;
+      } | null;
+      tehillim: Array<{
+        text: string;
+        ref: string | null;
+        path: string | null;
+      }>;
+      rambam: {
+        three: {
+          label: string;
+          refs: Array<string>;
+          /** Each reference's page on RebbeHub, null until the catalog has it */
+          paths: Array<string | null>;
+        };
+        one: {
+          label: string;
+          refs: Array<string>;
+          /** Each reference's page on RebbeHub, null until the catalog has it */
+          paths: Array<string | null>;
+        };
+        mitzvos: {
+          label: string;
+          refs: Array<string>;
+          /** Each reference's page on RebbeHub, null until the catalog has it */
+          paths: Array<string | null>;
+        } | null;
+      };
     };
   };
   /** Keep some transcript fixes and remove others in one go: kept ones are approved; removed ones are withdrawn if they are yours, else sent back with the note */
@@ -1164,6 +1202,18 @@ export interface Operations {
     };
     output: Record<string, unknown>;
   };
+  /** A sefer's shaar file, the README of a sefer, in its fixed form (docs/shaar.md) */
+  getShaar: {
+    input: {
+      id: string;
+      /** text: the file itself, as text/markdown */
+      format?: "json" | "text";
+    };
+    output: {
+      text: string;
+      machine: boolean;
+    };
+  };
   /** A text of a sefer as its source gave it (one chapter or letter, an HTML article) */
   getSourceText: {
     input: {
@@ -1425,6 +1475,12 @@ export interface Operations {
       type?: string;
       /** Only items in this set */
       set?: string;
+      /** What a shelf lists: leaves out the additions to a sefer (a work's addition.to), which are listed on that sefer's page */
+      shelf?: boolean;
+      /** true: only the official sefarim the tree is built of (no additions); false: only additions */
+      official?: boolean;
+      /** Only the additions to this sefer */
+      "additions-of"?: string;
       /** Deprecated: the same as cursor */
       after?: string;
       /** How many (at most 500) */
@@ -1445,7 +1501,7 @@ export interface Operations {
   listLinked: {
     input: {
       id: string;
-      /** The field that points here (work, event, sets…) */
+      /** The field that points here (work, event, sets…; addition.to for the additions to a sefer) */
       field: string;
       /** Only items of this type */
       type?: string;
@@ -1607,6 +1663,63 @@ export interface Operations {
         texts: number;
         entries: number;
       };
+    };
+  };
+  /** A sefer's whole subject index on one page, gathered from its volumes' index pages: every topic once, each volume's places under it with their context and links (the sicha's PDF at that page, the sicha's page here); one first letter's topics, or those a search finds */
+  mafteach: {
+    input: {
+      /** The index: a work whose units are its volumes' index pages (an id, or its path, like /likkutei-sichos-mafteach-inyanim) */
+      index: string;
+      /** The sefer it indexes (an id or path), for the links to its sichos */
+      sefer?: string;
+      /** One first letter's topics (the first letter when neither this nor q is given) */
+      letter?: string;
+      /** Topics whose name, context or sicha holds these words */
+      q?: string;
+      /** How many (at most 200) */
+      limit?: number;
+      /** Stop the page sooner, at about this many places (never at no topic) */
+      places?: number;
+      /** Topics to skip: the `next` of the page before */
+      offset?: number;
+    };
+    output: {
+      /** id, path, title */
+      index: Record<string, unknown>;
+      letters: Array<{
+        letter: string;
+        topics: number;
+      }>;
+      totals: {
+        topics: number;
+        places: number;
+        volumes: number;
+      };
+      topics: Array<{
+        topic: string;
+        letter: string;
+        volumes: Array<{
+          volume: number;
+          label: string;
+          path: string | null;
+          machine: boolean;
+          places: Array<{
+            page: number;
+            to?: number;
+            context?: string;
+            /** The sicha's PDF */
+            pdf?: string;
+            /** The page of the PDF where the place is */
+            at?: number;
+            sicha?: string;
+            /** The sicha's page here */
+            text?: string;
+          }>;
+        }>;
+      }>;
+      found: number;
+      offset: number;
+      next: number | null;
     };
   };
   /** Map pages of a publication to the unit they hold (an existing unit, a new one, or words) */
@@ -2122,6 +2235,8 @@ export interface Operations {
       q: string;
       /** Only this type */
       type?: string;
+      /** Only items of this sefer (its printings, its sichos) */
+      work?: string;
       /** How many (at most 100) */
       limit?: number;
     };
@@ -2351,6 +2466,22 @@ export interface Operations {
       subscribed?: boolean;
     };
   };
+  /** A sefer's shaar, the whole file, sent for review; a file the catalog cannot read is refused with each line that is wrong (`detail.problems`) */
+  suggestShaar: {
+    input: {
+      body: {
+        /** A permanent id: rh- and letters and digits (read forgivingly: RH-7K2M-9Q4D works) */
+        entityId: string;
+        /** The whole shaar file */
+        text: string;
+        /** The file as the person opened it; a change since answers 409 */
+        before?: string;
+        title?: string;
+        note?: string;
+      };
+    };
+    output: Record<string, unknown>;
+  };
   /** A page's words fixed segment by segment: one segment's new words, a segment added after it or taken out, a page's first words, or a machine's segment checked as right (`check`), sent for review */
   suggestWords: {
     input: {
@@ -2372,7 +2503,7 @@ export interface Operations {
     };
     output: Record<string, unknown>;
   };
-  /** How many paragraphs each of several texts has, and how many of them a person checked */
+  /** How many paragraphs each of several texts has, how many of them a person checked, and how many a machine made that nobody checked yet */
   textsProgress: {
     input: {
       /** The texts */
@@ -2382,6 +2513,7 @@ export interface Operations {
       progress: Record<string, {
         paragraphs: number;
         checked: number;
+        machine: number;
       }>;
     };
   };
@@ -2449,6 +2581,16 @@ export interface Operations {
         type: string;
         schema: Record<string, unknown>;
       }>;
+    };
+  };
+  /** The units just before and after a unit in its work's order, across volumes: a sicha's previous and next */
+  unitNeighbours: {
+    input: {
+      id: string;
+    };
+    output: {
+      previous: Item | null;
+      next: Item | null;
     };
   };
   /** The printings of a unit whose text the catalog has, to compare */
@@ -2652,6 +2794,7 @@ export const OPERATIONS = {
   getProfile: {"method":"GET","path":"/v1/people/{username}","pathParams":["username"],"query":["limit"],"body":null,"answer":"json"},
   getProject: {"method":"GET","path":"/v1/projects/{slug}","pathParams":["slug"],"query":[],"body":null,"answer":"json"},
   getRevision: {"method":"GET","path":"/v1/revisions/{rev}","pathParams":["rev"],"query":[],"body":null,"answer":"json"},
+  getShaar: {"method":"GET","path":"/v1/entities/{id}/shaar","pathParams":["id"],"query":["format"],"body":null,"answer":"json"},
   getSourceText: {"method":"GET","path":"/v1/texts/{sha256}","pathParams":["sha256"],"query":[],"body":null,"answer":"text"},
   getSuggestion: {"method":"GET","path":"/v1/suggestions/{id}","pathParams":["id"],"query":["offset","limit","summary","brief"],"body":null,"answer":"json"},
   health: {"method":"GET","path":"/v1/health","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
@@ -2671,7 +2814,7 @@ export const OPERATIONS = {
   listEvents: {"method":"GET","path":"/v1/events","pathParams":[],"query":["within","day","dates","missing","brief","limit"],"body":null,"answer":"json"},
   listFollows: {"method":"GET","path":"/v1/follows","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
   listIssues: {"method":"GET","path":"/v1/issues","pathParams":[],"query":["state","label","type","set","entity","assignee","author","q","before","limit","cursor"],"body":null,"answer":"json","items":"items"},
-  listItems: {"method":"GET","path":"/v1/entities","pathParams":[],"query":["type","set","after","limit","cursor"],"body":null,"answer":"json","items":"items"},
+  listItems: {"method":"GET","path":"/v1/entities","pathParams":[],"query":["type","set","shelf","official","additions-of","after","limit","cursor"],"body":null,"answer":"json","items":"items"},
   listLabels: {"method":"GET","path":"/v1/labels","pathParams":[],"query":[],"body":null,"answer":"json"},
   listLinked: {"method":"GET","path":"/v1/entities/{id}/linked","pathParams":["id"],"query":["field","type","after","limit","cursor"],"body":null,"answer":"json","items":"items"},
   listPlaces: {"method":"GET","path":"/v1/places","pathParams":[],"query":["kind","key","limit"],"body":null,"answer":"json"},
@@ -2683,6 +2826,7 @@ export const OPERATIONS = {
   machineRequests: {"method":"GET","path":"/v1/machine/requests","pathParams":[],"query":["kind","status","item","items","limit"],"body":null,"answer":"json"},
   machineSummary: {"method":"GET","path":"/v1/machine","pathParams":[],"query":[],"body":null,"answer":"json"},
   machineToCheck: {"method":"GET","path":"/v1/machine/to-check","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
+  mafteach: {"method":"GET","path":"/v1/mafteach","pathParams":[],"query":["index","sefer","letter","q","limit","places","offset"],"body":null,"answer":"json"},
   mapContents: {"method":"POST","path":"/v1/suggestions/contents-map","pathParams":[],"query":[],"body":"json","answer":"json"},
   markInboxRead: {"method":"POST","path":"/v1/inbox/read","pathParams":[],"query":[],"body":"json","answer":"json"},
   mcp: {"method":"POST","path":"/mcp","pathParams":[],"query":[],"body":"json","answer":"json"},
@@ -2726,7 +2870,7 @@ export const OPERATIONS = {
   scanPages: {"method":"GET","path":"/v1/scans/{id}/pages","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   scanProgress: {"method":"GET","path":"/v1/scans/{id}/progress","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   scanText: {"method":"GET","path":"/v1/scans/{id}/text","pathParams":["id"],"query":["page"],"body":null,"answer":"json"},
-  search: {"method":"GET","path":"/v1/search","pathParams":[],"query":["q","type","limit"],"body":null,"answer":"json"},
+  search: {"method":"GET","path":"/v1/search","pathParams":[],"query":["q","type","work","limit"],"body":null,"answer":"json"},
   searchMoments: {"method":"GET","path":"/v1/search/moments","pathParams":[],"query":["q","limit"],"body":null,"answer":"json"},
   searchPeople: {"method":"GET","path":"/v1/people","pathParams":[],"query":["q","ids","thread","limit"],"body":null,"answer":"json"},
   searchSimilar: {"method":"GET","path":"/v1/search/similar","pathParams":[],"query":["q","types","limit"],"body":null,"answer":"json"},
@@ -2745,6 +2889,7 @@ export const OPERATIONS = {
   submitSuggestion: {"method":"POST","path":"/v1/suggestions/{id}/submit","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   suggestFix: {"method":"POST","path":"/v1/suggestions/quick","pathParams":[],"query":[],"body":"json","answer":"json"},
   suggestionConversation: {"method":"GET","path":"/v1/suggestions/{id}/conversation","pathParams":["id"],"query":[],"body":null,"answer":"json"},
+  suggestShaar: {"method":"POST","path":"/v1/suggestions/shaar","pathParams":[],"query":[],"body":"json","answer":"json"},
   suggestWords: {"method":"POST","path":"/v1/suggestions/words","pathParams":[],"query":[],"body":"json","answer":"json"},
   textsProgress: {"method":"GET","path":"/v1/texts/batch/progress","pathParams":[],"query":["ids"],"body":null,"answer":"json"},
   threadByNumber: {"method":"GET","path":"/v1/threads/{number}","pathParams":["number"],"query":[],"body":null,"answer":"json"},
@@ -2753,6 +2898,7 @@ export const OPERATIONS = {
   transcriptFixes: {"method":"GET","path":"/v1/transcripts/fixes","pathParams":[],"query":["limit"],"body":null,"answer":"json"},
   transcriptHistory: {"method":"GET","path":"/v1/recordings/{id}/transcript/history","pathParams":["id"],"query":["limit"],"body":null,"answer":"json"},
   types: {"method":"GET","path":"/v1/types","pathParams":[],"query":[],"body":null,"answer":"json"},
+  unitNeighbours: {"method":"GET","path":"/v1/units/{id}/neighbours","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   unitPrintings: {"method":"GET","path":"/v1/units/{id}/printings","pathParams":["id"],"query":[],"body":null,"answer":"json"},
   unsubscribe: {"method":"POST","path":"/v1/auth/email/unsubscribe","pathParams":[],"query":["token"],"body":"json","answer":"json"},
   upload: {"method":"POST","path":"/v1/uploads","pathParams":[],"query":["what","for","eventTitle","eventDate","kind","set","author","genre","unit","rights","as","title","publication","publisher","year","printing","families","simcha","date"],"body":"application/octet-stream","answer":"raw"},
@@ -2926,7 +3072,7 @@ export abstract class GeneratedMethods {
     return this.call('createWebhook', input ?? {} as Operations['createWebhook']['input']);
   }
 
-  /** A day's learning: Chitas' Tanya (the day's portion, each chapter it touches cut to it) and Hayom Yom (GET /v1/daily) */
+  /** A day's learning: Chitas (Tanya, the day's portion, each chapter it touches cut to it; Chumash with Rashi; Tehillim), Hayom Yom, and the Rambam's three tracks (GET /v1/daily) */
   dailyLearning(input: Operations['dailyLearning']['input']): Promise<Operations['dailyLearning']['output']> {
     return this.call('dailyLearning', input ?? {} as Operations['dailyLearning']['input']);
   }
@@ -3069,6 +3215,11 @@ export abstract class GeneratedMethods {
   /** One stored version of an item (GET /v1/revisions/{rev}) */
   getRevision(input: Operations['getRevision']['input']): Promise<Operations['getRevision']['output']> {
     return this.call('getRevision', input ?? {} as Operations['getRevision']['input']);
+  }
+
+  /** A sefer's shaar file, the README of a sefer, in its fixed form (docs/shaar.md) (GET /v1/entities/{id}/shaar) */
+  getShaar(input: Operations['getShaar']['input']): Promise<Operations['getShaar']['output']> {
+    return this.call('getShaar', input ?? {} as Operations['getShaar']['input']);
   }
 
   /** A text of a sefer as its source gave it (one chapter or letter, an HTML article) (GET /v1/texts/{sha256}) */
@@ -3224,6 +3375,11 @@ export abstract class GeneratedMethods {
   /** What the machines wrote that no person has checked yet: farbrengens with unchecked transcript paragraphs, scans with pages read by OCR and not yet proofread, pages whose words a machine read with segments nobody checked, the newest first (GET /v1/machine/to-check) */
   machineToCheck(input?: Operations['machineToCheck']['input']): Promise<Operations['machineToCheck']['output']> {
     return this.call('machineToCheck', input ?? {} as Operations['machineToCheck']['input']);
+  }
+
+  /** A sefer's whole subject index on one page, gathered from its volumes' index pages: every topic once, each volume's places under it with their context and links (the sicha's PDF at that page, the sicha's page here); one first letter's topics, or those a search finds (GET /v1/mafteach) */
+  mafteach(input: Operations['mafteach']['input']): Promise<Operations['mafteach']['output']> {
+    return this.call('mafteach', input ?? {} as Operations['mafteach']['input']);
   }
 
   /** Map pages of a publication to the unit they hold (an existing unit, a new one, or words) (POST /v1/suggestions/contents-map) */
@@ -3536,12 +3692,17 @@ export abstract class GeneratedMethods {
     return this.call('suggestionConversation', input ?? {} as Operations['suggestionConversation']['input']);
   }
 
+  /** A sefer's shaar, the whole file, sent for review; a file the catalog cannot read is refused with each line that is wrong (`detail.problems`) (POST /v1/suggestions/shaar) */
+  suggestShaar(input: Operations['suggestShaar']['input']): Promise<Operations['suggestShaar']['output']> {
+    return this.call('suggestShaar', input ?? {} as Operations['suggestShaar']['input']);
+  }
+
   /** A page's words fixed segment by segment: one segment's new words, a segment added after it or taken out, a page's first words, or a machine's segment checked as right (`check`), sent for review (POST /v1/suggestions/words) */
   suggestWords(input: Operations['suggestWords']['input']): Promise<Operations['suggestWords']['output']> {
     return this.call('suggestWords', input ?? {} as Operations['suggestWords']['input']);
   }
 
-  /** How many paragraphs each of several texts has, and how many of them a person checked (GET /v1/texts/batch/progress) */
+  /** How many paragraphs each of several texts has, how many of them a person checked, and how many a machine made that nobody checked yet (GET /v1/texts/batch/progress) */
   textsProgress(input: Operations['textsProgress']['input']): Promise<Operations['textsProgress']['output']> {
     return this.call('textsProgress', input ?? {} as Operations['textsProgress']['input']);
   }
@@ -3574,6 +3735,11 @@ export abstract class GeneratedMethods {
   /** Every kind of item and its JSON Schema (GET /v1/types) */
   types(): Promise<Operations['types']['output']> {
     return this.call('types', {} as Operations['types']['input']);
+  }
+
+  /** The units just before and after a unit in its work's order, across volumes: a sicha's previous and next (GET /v1/units/{id}/neighbours) */
+  unitNeighbours(input: Operations['unitNeighbours']['input']): Promise<Operations['unitNeighbours']['output']> {
+    return this.call('unitNeighbours', input ?? {} as Operations['unitNeighbours']['input']);
   }
 
   /** The printings of a unit whose text the catalog has, to compare (GET /v1/units/{id}/printings) */

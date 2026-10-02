@@ -33,12 +33,17 @@ beforeAll(async () => {
   ids.scan = await add(catalog, 'mendy', 'keeper', 'scan', { publication: ids.pub, file: sha('a'), completeness: 'complete' });
   const picture = (c: string) => ({ sha256: sha(c), bytes: 5, width: 480, height: 672 });
   await recordCover(catalog.db, { entity: ids.work, src: sha('a'), page: 2, chosenBy: 'machine', score: 4, reasons: ['sparse'], image: picture('b'), thumb: picture('c') });
-  for (let i = 0; i < 3; i++) await add(catalog, 'mendy', 'keeper', 'unit', { work: ids.work, position: [{ level: 'sicha', value: String(i + 1) }], order: `a${i}`, label: { he: `שיחה ${i + 1}` } });
+  for (let i = 0; i < 3; i++) ids[`unit${i + 1}`] = await add(catalog, 'mendy', 'keeper', 'unit', { work: ids.work, position: [{ level: 'sicha', value: String(i + 1) }], order: `a${i}`, label: { he: `שיחה ${i + 1}` } });
 
   ids.event = await add(catalog, 'mendy', 'keeper', 'event', yudShvat(set), '/events/5742-05-10');
   await registerFile(catalog.db, { sha256: sha('d'), bytes: 900, mime: 'audio/mpeg', source: 'jem', licence: 'unknown', fileClass: 'recording', held: true });
   ids.rec1 = await add(catalog, 'mendy', 'keeper', 'recording', { event: ids.event, title: { he: 'חלק א' }, part: 1, file: sha('d'), durationMs: 3_725_000, sources: [{ source: 'jem', sourceId: '12345', url: 'https://www.chabad.org/multimedia/media_cdo/aid/12345' }] });
   ids.rec2 = await add(catalog, 'mendy', 'keeper', 'recording', { event: ids.event, title: { he: 'חלק ב' }, part: 2 });
+  // An addition to the sefer (a commentary on it), and one that belongs to no sefer, both on the sefer's shelf.
+  ids.biur = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'ביאור לספר השער' }, slug: 'biur-sample', authors: [], genre: 'sichos', levels: [], sets: [set], addition: { kind: 'commentary', to: ids.work } }, '/biur-sample');
+  ids.likkut = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'ליקוט לדוגמה' }, slug: 'likkut-sample', authors: [], genre: 'sichos', levels: [], sets: [set], addition: { kind: 'collection' } }, '/likkut-sample');
+  ids.tanya = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'תניא' }, slug: 'tanya-sample', authors: [], genre: 'chassidus', levels: [], sets: [set] }, '/tanya-sample');
+  ids.tanyaIndex = await add(catalog, 'mendy', 'keeper', 'work', { title: { he: 'תניא - מפתח' }, slug: 'tanya-index-sample', authors: [], genre: 'chassidus', levels: [], sets: [set], addition: { kind: 'index', to: ids.tanya } }, '/tanya-index-sample');
   ids.person = await add(catalog, 'mendy', 'keeper', 'person', { name: { he: 'ר׳ יואל כהן' }, externalIds: { wikidata: 'Q1' }, sets: [set] });
 
   const api = createApp({ catalog, reportSalt: 'test', filesBaseUrl: 'https://files.rebbehub.test', siteUrl: SITE });
@@ -63,6 +68,44 @@ describe("every item's own page", () => {
     const shelf = await get(new URL(moved.headers.get('location') ?? `/${ids.set}`, SITE).pathname);
     expect(shelf.status).toBe(200);
     expect(shelf.html).toContain(`https://files.rebbehub.test/objects/${sha('c')}`);
+  });
+
+  it("lists a sefer's additions on its page, not on its shelf, and leads from an addition back to its sefer", async () => {
+    const sefer = (await get('/shaar-sample')).html;
+    expect(sefer).toContain('הוספות');
+    expect(sefer).toMatch(/ביאורים.*?href="\/biur-sample".*?ביאור לספר השער/s);
+    const moved = await handle(new Request(`${SITE}/${ids.set}`));
+    const shelf = (await get(new URL(moved.headers.get('location') ?? `/${ids.set}`, SITE).pathname)).html;
+    expect(shelf).not.toContain('ביאור לספר השער');
+    // The addition that belongs to no sefer is apart, closed, after the sefarim.
+    expect(shelf).toMatch(/<details[^>]*><summary[^>]*>הוספות \(1\)<\/summary>.*?ליקוט לדוגמה/s);
+    // The library lists it only inside its sefer's open card, with the other editions.
+    const library = (await get('/sets')).html;
+    expect(library).toMatch(/class="lb-with".*?ביאור לספר השער/s);
+    const biur = (await get('/biur-sample')).html;
+    expect(biur).toMatch(/הוספה ל.*?href="\/shaar-sample"/s);
+  });
+
+  it('finds a sefer by its title even where the title reads as a date, before its additions, which say what they are', async () => {
+    // `תניא` is also the year 5461, and names the sefer: the sefer is found first, and its index after it, labelled an addition to it.
+    const found = (await get(`/search?q=${encodeURIComponent('תניא')}`)).html;
+    expect(found).toMatch(/href="\/tanya-sample".*?href="\/tanya-index-sample"/s);
+    // Above its name, where it is from: what it is, and that it is an addition to the sefer.
+    expect(found).toMatch(/href="\/tanya-index-sample".*?class="row-kicker">.*?הוספה ל: תניא/s);
+  });
+
+  it("goes back and forth between a sefer's sichos, above the text and below it", async () => {
+    const around = (await get(`/${ids.unit2}`)).html;
+    // Hebrew first: "previous" at the line's start, the right, its chevron pointing there.
+    expect(around.match(/class="chapter-nav chapter-nav-(top|bottom)"/g)).toEqual(['class="chapter-nav chapter-nav-top"', 'class="chapter-nav chapter-nav-bottom"']);
+    expect(around).toMatch(new RegExp(`rel="prev" href="/${ids.unit1}".*?הקודם.*?שיחה 1`));
+    expect(around).toMatch(new RegExp(`rel="next" href="/${ids.unit3}".*?הבא.*?שיחה 3`));
+    const english = (await get(`/${ids.unit2}?lang=en`)).html;
+    expect(english).toMatch(/rel="prev"[^>]*>.*?Previous/);
+    expect(english).toMatch(/rel="next"[^>]*>.*?Next/);
+    // The first has no previous, the last no next.
+    expect((await get(`/${ids.unit1}`)).html).not.toContain('rel="prev"');
+    expect((await get(`/${ids.unit3}`)).html).not.toContain('rel="next"');
   });
 
   it('counts all that belongs to an item, and lists it a page at a time', async () => {

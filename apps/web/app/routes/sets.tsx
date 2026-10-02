@@ -1,336 +1,325 @@
 import { Link } from 'react-router';
 import type { LocalName } from '@rebbehub/model';
 import type { Route } from './+types/sets';
-import { rebbeOrder } from '../components/Library.js';
-import type { Cover, Entity } from '../lib/api.js';
+import type { Entity } from '../lib/api.js';
 import { siteOf } from '../lib/context.server.js';
 import { langFrom, nameOf, t, type Lang } from '../lib/i18n.js';
 import { num } from '../lib/i18nUi.js';
 import { href, itemPath, setPath } from '../lib/links.js';
 import { pageMeta } from '../lib/seo.js';
+import { additionOf, byOrder, everyAddition, everyWork, shelvesOf, type Shelf } from '../lib/shelves.js';
 import { Icon } from '../ui/Icon.js';
-import { Avatar, EmptyState } from '../ui/primitives.js';
-import { Shaar } from '../ui/Shaar.js';
-import { TokenSearch } from '../ui/TokenSearch.js';
-import { SEARCH_KEYS } from './search.js';
-import '../styles/pages/browse.css';
+import '../styles/pages/library.css';
 
 /**
- * The library: every shelf (a set) with what it holds, the sefarim people
- * look for first as their title pages, every sefer by its kind, and the
- * Rebbeim in their order with how many of their sefarim are here.
- * Everything is browsed by what it is, not by how the catalog stores it;
- * a search from here is the site's search.
+ * The library, as the redesign draws it (design/, screens 3a, 3j and 3k):
+ * the shelves along the top on a phone and down the side on a wide screen,
+ * the Rebbeim first, the Rebbe's own first of all; then the chosen shelf,
+ * a card for each of its sefarim. One card is open: its volumes as a grid
+ * of their numbers, and its other printings, collections and additions
+ * beside it. The rest are rows that open in their place. Which shelf and
+ * which card are in the address (`/sets?shelf=the-rebbe&open=rh-…`), so
+ * the page works without script and is the same for everyone. The shelves
+ * hold the official sefarim only; an addition to a sefer is under that
+ * sefer's card (lib/shelves.ts).
  */
+
+/** The Rebbeim's shelves, the Rebbe's first, as people say their names; the other shelves follow in the catalog's order. */
+const REBBEIM: Array<{ slug: string; he: string; en: string; full: { he: string; en: string } | null }> = [
+  { slug: 'the-rebbe', he: 'הרבי', en: 'The Rebbe', full: { he: 'רבי מנחם מענדל שניאורסאהן · ה׳תרס״ב–ה׳תשנ״ד', en: 'Rabbi Menachem Mendel Schneerson · 1902–1994' } },
+  { slug: 'frierdiker-rebbe', he: 'הריי״צ', en: 'Frierdiker Rebbe', full: { he: 'רבי יוסף יצחק שניאורסאהן · ה׳תר״ם–ה׳תש״י', en: 'Rabbi Yosef Yitzchak Schneersohn · 1880–1950' } },
+  { slug: 'rebbe-rashab', he: 'הרש״ב', en: 'Rebbe Rashab', full: { he: 'רבי שלום דובער שניאורסאהן · ה׳תרכ״א–ה׳תר״פ', en: 'Rabbi Shalom DovBer Schneersohn · 1860–1920' } },
+  { slug: 'rebbe-maharash', he: 'מהר״ש', en: 'Rebbe Maharash', full: { he: 'רבי שמואל שניאורסאהן · ה׳תקצ״ד–ה׳תרמ״ג', en: 'Rabbi Shmuel Schneersohn · 1834–1882' } },
+  { slug: 'tzemach-tzedek', he: 'הצמח צדק', en: 'Tzemach Tzedek', full: { he: 'רבי מנחם מענדל שניאורסאהן · ה׳תקמ״ט–ה׳תרכ״ו', en: 'Rabbi Menachem Mendel Schneersohn · 1789–1866' } },
+  { slug: 'mitteler-rebbe', he: 'אדמו״ר האמצעי', en: 'Mitteler Rebbe', full: { he: 'רבי דובער שניאורי · ה׳תקל״ד–ה׳תקפ״ח', en: 'Rabbi DovBer Schneuri · 1773–1827' } },
+  { slug: 'alter-rebbe', he: 'אדמו״ר הזקן', en: 'Alter Rebbe', full: { he: 'רבי שניאור זלמן מליאדי · ה׳תק״ה–ה׳תקע״ג', en: 'Rabbi Schneur Zalman of Liadi · 1745–1812' } },
+  { slug: 'maggid', he: 'המגיד', en: 'The Maggid', full: { he: 'רבי דובער ממעזריטש · נסתלק ה׳תקל״ג', en: 'Rabbi DovBer of Mezritch · d. 1772' } },
+  { slug: 'baal-shem-tov', he: 'הבעש״ט', en: 'Baal Shem Tov', full: { he: 'רבי ישראל בעל שם טוב · ה׳תנ״ח–ה׳תק״כ', en: 'Rabbi Yisroel Baal Shem Tov · 1698–1760' } },
+];
+
+const slugOfShelf = (set: { path?: string | null }) => (set.path ?? '').replace(/^\/sets\//, '');
+
+const W = {
+  rebbeim: { he: 'רבותינו נשיאינו', en: 'The Rebbeim' },
+  more: { he: 'מדפים נוספים', en: 'More shelves' },
+  parts: { he: 'חלקים', en: 'volumes' },
+  continue: { he: 'לספר', en: 'Open the sefer' },
+  others: { he: 'מהדורות ואוספים נוספים', en: 'Other editions and collections' },
+  loose: { he: 'הוספות', en: 'Additions' },
+  missing: { he: 'חסר כאן ספר?', en: 'A sefer missing here?' },
+  addSefer: { he: 'הוספת ספר', en: 'Add a sefer' },
+  organize: { he: 'סידור הספרייה', en: 'Organize the library' },
+  empty: { he: 'אין עדיין ספרים במדף הזה.', en: 'No sefarim on this shelf yet.' },
+  farbrengens: { he: 'לוח ההתוועדויות', en: 'The farbrengens calendar' },
+} as const;
+const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
+
+/** How a sefer is divided, as its row says it: by volume, year, month, day. */
+const BY: Record<string, { he: string; en: string }> = {
+  volume: { he: 'לפי חלקים', en: 'By volume' },
+  part: { he: 'לפי חלקים', en: 'By part' },
+  year: { he: 'לפי שנה', en: 'By year' },
+  month: { he: 'לפי חודש', en: 'By month' },
+  day: { he: 'לפי יום', en: 'By day' },
+  chapter: { he: 'לפי פרקים', en: 'By chapter' },
+  parsha: { he: 'לפי פרשה', en: 'By parsha' },
+};
+
+/** What an addition is, in a word under its name. */
+const KINDS: Record<string, { he: string; en: string }> = {
+  commentary: { he: 'ביאור', en: 'Commentary' },
+  index: { he: 'מפתח', en: 'Index' },
+  about: { he: 'על הספר', en: 'About it' },
+  collection: { he: 'אוסף', en: 'Collection' },
+  translation: { he: 'תרגום', en: 'Translation' },
+};
+
+const titleOf = (e: Entity, lang: Lang) => nameOf((e.data as { title?: LocalName; name?: LocalName }).title ?? (e.data as { name?: LocalName }).name, lang);
+
+/** A card on the shelf: a sefer, or a set of sefarim under one name (Likkutei Sichos and the books gathered with it). */
+interface Card {
+  id: string;
+  title: string;
+  /** The sefer the card opens and whose volumes it shows. */
+  main: { id: string; path: string; hint: string | null };
+  /** The other sefarim kept with it on its set. */
+  with: Array<{ id: string; path: string; title: string; sub: string | null }>;
+}
+
+const hintOf = (work: Entity, lang: Lang) => {
+  const level = (work.data as { levels?: string[] }).levels?.[0];
+  return level && BY[level] ? BY[level][lang] : null;
+};
+
+function cardsOf(shelf: Shelf<Entity>, lang: Lang): Card[] {
+  const name = (x: Entity) => titleOf(x, lang);
+  const items = byOrder([...shelf.sets.map((s) => s.set), ...shelf.works], name);
+  return items.flatMap((x): Card[] => {
+    const inner = shelf.sets.find((s) => s.set.id === x.id);
+    if (!inner) return [{ id: x.id, title: name(x), main: { id: x.id, path: itemPath(x), hint: hintOf(x, lang) }, with: [] }];
+    const setName = nameOf((x.data as { name?: LocalName }).name, lang);
+    const inSet = [...everyWork(inner), ...everyAddition(inner)];
+    // The sefer the set is named for opens it (the shortest address among those of its name: /likkutei-sichos), else the first.
+    const named = inSet.filter((wk) => !additionOf(wk) && name(wk) === setName).sort((a, b) => itemPath(a).length - itemPath(b).length)[0];
+    const main = named ?? inSet[0];
+    if (!main) return [];
+    const rest = inSet.filter((wk) => wk !== main);
+    return [
+      {
+        id: x.id,
+        title: setName,
+        main: { id: main.id, path: itemPath(main), hint: hintOf(main, lang) },
+        with: rest.map((r) => ({ id: r.id, path: itemPath(r), title: name(r), sub: KINDS[additionOf(r)?.kind ?? '']?.[lang] ?? null })),
+      },
+    ];
+  });
+}
+
+/** Every sefer the shelves list, page after page (the API gives five hundred at a time). */
+async function shelfWorks(api: ReturnType<typeof siteOf>['api']): Promise<Entity[]> {
+  const out: Entity[] = [];
+  let after: string | undefined;
+  for (let page = 0; page < 4; page++) {
+    const { items, next } = await api.list({ type: 'work', limit: 500, shelf: true, after });
+    out.push(...items);
+    if (!next) break;
+    after = next;
+  }
+  return out;
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { api, siteUrl } = siteOf(context);
   const lang = langFrom(request);
-  const [sets, works, authors, units, stats] = await Promise.all([
-    api.list({ type: 'set', limit: 500 }),
-    api.list({ type: 'work', limit: 500 }),
-    api.list({ type: 'author', limit: 100 }),
-    api.refCounts('work', 'unit'),
-    api.stats(),
-  ]);
-  // The well-known sefarim's title pages, where the jobs have drawn them.
-  const shown = works.items.filter((w) => WELL_KNOWN.includes(String((w.data as { slug?: string }).slug)));
-  const covers = await api.covers(shown.map((w) => w.id)).catch(() => ({}) as Record<string, Cover>);
+  const params = new URL(request.url).searchParams;
+  const [sets, works] = await Promise.all([api.list({ type: 'set', limit: 500 }), shelfWorks(api)]);
+  const name = (x: Entity) => titleOf(x, lang);
+  const isFarbrengens = (set: Entity) => set.path === '/sets/farbrengens';
+  const all = shelvesOf(sets.items, works, name, isFarbrengens);
+  // The Rebbeim's shelves first, the Rebbe's first of all; then the others as the catalog orders them.
+  const rank = (sh: Shelf<Entity>) => {
+    const i = REBBEIM.findIndex((r) => r.slug === slugOfShelf(sh.set));
+    return i < 0 ? REBBEIM.length : i;
+  };
+  const shelves = [...all].sort((a, b) => rank(a) - rank(b));
+  const asked = params.get('shelf');
+  const shelf = shelves.find((sh) => slugOfShelf(sh.set) === asked) ?? shelves[0] ?? null;
+  const cards = shelf && !isFarbrengens(shelf.set) ? cardsOf(shelf, lang) : [];
+  const open = cards.find((c) => c.id === params.get('open')) ?? cards[0] ?? null;
+  // The open card's volumes, and the additions to its sefer: two reads, for that card only.
+  const [outline, additions] = open
+    ? await Promise.all([api.workOutline(open.main.id).catch(() => []), api.linked(open.main.id, { field: 'addition.to', type: 'work', limit: 100 }).then((r) => r.items).catch(() => [] as Entity[])])
+    : [[], [] as Entity[]];
+  const loose = shelf ? everyAddition(shelf).filter((x) => !cards.some((c) => c.with.some((o) => o.id === x.id))) : [];
   return {
-    covers,
     lang,
     siteUrl,
-    sets: sets.items.filter((s) => !(s.data as { parent?: string }).parent),
-    works: works.items,
-    rebbeim: authors.items.filter((a) => (a.data as { kind?: string }).kind === 'rebbe').sort((a, b) => rebbeOrder(a) - rebbeOrder(b)),
-    authors: authors.items,
-    units,
-    counts: stats.counts,
+    asked: Boolean(asked),
+    shelves: shelves.map((sh) => ({ id: sh.set.id, slug: slugOfShelf(sh.set), path: setPath(sh.set), name: nameOf((sh.set.data as { name?: LocalName }).name, lang), rebbe: rank(sh) < REBBEIM.length, total: sh.total, farbrengens: isFarbrengens(sh.set) })),
+    shelf: shelf ? { id: shelf.set.id, slug: slugOfShelf(shelf.set), path: setPath(shelf.set), name: nameOf((shelf.set.data as { name?: LocalName }).name, lang), total: shelf.total, farbrengens: isFarbrengens(shelf.set) } : null,
+    cards,
+    open: open
+      ? {
+          id: open.id,
+          volumes: outline.length > 1 ? outline.map((x) => ({ value: x.value, label: x.label ? nameOf(x.label, lang) : x.value })) : [],
+          units: outline.reduce((sum, x) => sum + x.units, 0),
+          additions: additions.map((x) => ({ id: x.id, path: itemPath(x), title: titleOf(x, lang), sub: KINDS[additionOf(x)?.kind ?? '']?.[lang] ?? null })),
+        }
+      : null,
+    loose: loose.map((x) => ({ id: x.id, path: itemPath(x), title: titleOf(x, lang) })),
   };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
   if (!loaderData) return [];
-  return pageMeta({ title: t(loaderData.lang, 'tabLibrary'), path: '/sets', lang: loaderData.lang, siteUrl: loaderData.siteUrl });
+  const { lang, siteUrl, asked, shelf } = loaderData;
+  const title = asked && shelf ? `${shelf.name} · ${t(lang, 'tabLibrary')}` : t(lang, 'tabLibrary');
+  return pageMeta({ title, path: asked && shelf ? `/sets?shelf=${shelf.slug}` : '/sets', lang, siteUrl });
 }
 
-/** Sefarim people look for first, when the catalog has them. */
-const WELL_KNOWN = ['tanya', 'likkutei-sichos', 'hayom-yom', 'likkutei-torah', 'torah-or', 'igros-kodesh-rebbe', 'derech-mitzvosecha', 'shulchan-aruch-harav', 'siddur-weekday', 'kesser-shem-tov'];
-
-const GENRES: Record<string, { he: string; en: string }> = {
-  chassidus: { he: 'חסידות', en: 'Chassidus' },
-  maamarim: { he: 'מאמרים', en: 'Maamarim' },
-  sichos: { he: 'שיחות', en: 'Sichos' },
-  igros: { he: 'אגרות', en: 'Letters' },
-  halacha: { he: 'הלכה', en: 'Halacha' },
-  siddur: { he: 'סידור', en: 'Siddur' },
-  minhagim: { he: 'מנהגים', en: 'Minhagim' },
-  history: { he: 'תולדות', en: 'History' },
-  diaries: { he: 'יומנים', en: 'Diaries' },
-  recordings: { he: 'הקלטות', en: 'Recordings' },
-};
-const GENRE_ORDER = Object.keys(GENRES);
-
-const W = {
-  lede: { he: 'ספרי רבותינו נשיאינו, השיחות, האגרות וההתוועדויות — כל מדף עם מה שיש בו.', en: 'The sefarim of the Rebbeim, the sichos, the letters and the farbrengens — each shelf with what it holds.' },
-  addSefer: { he: 'הוספת ספר', en: 'Add a sefer' },
-  searchLabel: { he: 'חיפוש בספרייה', en: 'Search the library' },
-  allSeforim: { he: 'כל הספרים', en: 'Every sefer' },
-  other: { he: 'אחר', en: 'Other' },
-  rebbeim: { he: 'רבותינו נשיאינו', en: 'The Rebbeim' },
-  inCatalog: { he: 'בקטלוג', en: 'In the catalog' },
-  units: { he: 'שיחות ופרקים', en: 'Sichos and chapters' },
-  recordings: { he: 'הקלטות', en: 'Recordings' },
-  missing: { he: 'חסר כאן ספר?', en: 'A sefer missing here?' },
-  missingHint: { he: 'אפשר להציע אותו, עם הסריקה או בלעדיה. אחראי המדף בודק ומאשר.', en: 'Suggest it, with its scan or without. The shelf’s keeper checks and approves.' },
-  empty: { he: 'אין עדיין ספרים בקטלוג.', en: 'No sefarim in the catalog yet.' },
-  byThem: { he: 'ספרים', en: 'sefarim' },
-  organize: { he: 'סידור הספרייה', en: 'Organize' },
-} as const;
-
-const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
-
-const slugOf = (e: Entity) => (e.data as { slug?: string }).slug ?? '';
-const titleOf = (e: Entity, lang: Lang) => nameOf((e.data as { title?: LocalName; name?: LocalName }).title ?? (e.data as { name?: LocalName }).name, lang);
+/** A volume's number on its square: חלק ט״ו is טו, a numbered one its number. */
+const square = (label: string) => label.replace(/^(חלק|כרך|Vol\.?|Volume|Part)\s+/i, '').replace(/[׳״'"]/g, '');
 
 export default function Library({ loaderData }: Route.ComponentProps) {
-  const { lang, units, counts } = loaderData;
-  // The loader's items, as the API's own type (serialising them loses it).
-  const sets = loaderData.sets as unknown as Entity[];
-  const works = loaderData.works as unknown as Entity[];
-  const rebbeim = loaderData.rebbeim as unknown as Entity[];
-  const authors = new Map((loaderData.authors as unknown as Entity[]).map((a) => [a.id, a]));
-  const covers = loaderData.covers as Record<string, Cover>;
-  const worksOf = (set: Entity) => works.filter((wk) => ((wk.data as { sets?: string[] }).sets ?? []).includes(set.id));
-  const authorsOf = (wk: Entity) => ((wk.data as { authors?: string[] }).authors ?? []).map((id) => authors.get(id)).filter((a): a is Entity => Boolean(a));
-  const known = WELL_KNOWN.flatMap((slug) => works.filter((wk) => slugOf(wk) === slug).slice(0, 1));
-  const events = counts.event ?? 0;
-  const isFarbrengens = (set: Entity) => set.path === '/sets/farbrengens';
-  // Shelves with most first; the farbrengens, which are not sefarim, lead.
-  const shelves = sets
-    .map((set) => ({ set, works: worksOf(set) }))
-    .filter(({ set, works: list }) => list.length || isFarbrengens(set))
-    .sort((a, b) => Number(isFarbrengens(b.set)) - Number(isFarbrengens(a.set)) || b.works.length - a.works.length);
-  // Every sefer, grouped by its kind, in the order the library keeps them.
-  const byGenre = new Map<string, Entity[]>();
-  for (const wk of works) {
-    const g = (wk.data as { genre?: string }).genre ?? '';
-    byGenre.set(GENRES[g] ? g : '', [...(byGenre.get(GENRES[g] ? g : '') ?? []), wk]);
-  }
-  const genres = [...byGenre.keys()].sort((a, b) => (a ? GENRE_ORDER.indexOf(a) : 99) - (b ? GENRE_ORDER.indexOf(b) : 99));
-  const countOf = (rebbe: Entity) => works.filter((wk) => ((wk.data as { authors?: string[] }).authors ?? []).includes(rebbe.id)).length;
-
+  const { lang, shelves, shelf, cards, open, loose } = loaderData;
+  const rebbe = shelf ? REBBEIM.find((r) => r.slug === shelf.slug) : undefined;
+  const shelfTo = (slug: string) => href('/sets', lang, { shelf: slug });
+  const cardTo = (id: string) => href('/sets', lang, { shelf: shelf?.slug, open: id });
+  const shortName = (s: { slug: string; name: string }) => REBBEIM.find((r) => r.slug === s.slug)?.[lang] ?? s.name;
+  const rebbeim = shelves.filter((s) => s.rebbe);
+  const others = shelves.filter((s) => !s.rebbe);
+  // Numbered volumes are squares; named parts (Tanya's) are a list.
+  const squares = !!open?.volumes.every((v) => square(v.label).length <= 3);
   return (
-    <div className="lib-page">
-      <div className="phead">
-        <div className="wrap">
-          <div className="phead-row">
-            <div>
-              <h1 className="page-title">{t(lang, 'tabLibrary')}</h1>
-              <p className="lede">{w(lang, 'lede')}</p>
-            </div>
-            <div className="phead-acts">
-              <Link className="btn" to={href('/organize', lang)}>
-                <Icon name="layers" />
-                {w(lang, 'organize')}
+    <div className="wrap lb">
+      <nav className="lb-shelves" aria-label={t(lang, 'shelves')}>
+        <h2 className="lb-side-h">{w(lang, 'rebbeim')}</h2>
+        <ul>
+          {rebbeim.map((s) => (
+            <li key={s.id}>
+              <Link to={shelfTo(s.slug)} aria-current={s.id === shelf?.id ? 'page' : undefined} preventScrollReset>
+                {shortName(s)}
               </Link>
-              <Link className="btn" to={href('/add', lang, { what: 'sefer' })}>
-                <Icon name="plus" />
-                {w(lang, 'addSefer')}
-              </Link>
-            </div>
-          </div>
-          <div className="facts-row">
-            <span>
-              <Icon name="book" className="subtle" />
-              <span>
-                <b>{num(works.length, lang)}</b> {t(lang, 'seforim')}
-              </span>
-            </span>
-            {counts.unit ? (
-              <span>
-                <Icon name="file" className="subtle" />
-                <span>
-                  <b>{num(counts.unit, lang)}</b> {w(lang, 'units')}
-                </span>
-              </span>
-            ) : null}
-            {events ? (
-              <span>
-                <Icon name="cal" className="subtle" />
-                <span>
-                  <b>{num(events, lang)}</b> {t(lang, 'farbrengensCount')}
-                </span>
-              </span>
-            ) : null}
-            {counts.recording ? (
-              <span>
-                <Icon name="audio" className="subtle" />
-                <span>
-                  <b>{num(counts.recording, lang)}</b> {t(lang, 'recordingParts')}
-                </span>
-              </span>
-            ) : null}
-          </div>
-          <div className="lib-search">
-            <TokenSearch lang={lang} keys={SEARCH_KEYS} action="/search" label={w(lang, 'searchLabel')} placeholder={t(lang, 'librarySearch')} />
-          </div>
-        </div>
-      </div>
+            </li>
+          ))}
+        </ul>
+        {others.length ? (
+          <>
+            <h2 className="lb-side-h">{w(lang, 'more')}</h2>
+            <ul>
+              {others.map((s) => (
+                <li key={s.id}>
+                  <Link to={s.farbrengens ? href('/calendar', lang) : shelfTo(s.slug)} aria-current={s.id === shelf?.id ? 'page' : undefined} preventScrollReset>
+                    {s.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+      </nav>
 
-      <div className="wrap cols">
-        <div className="stack-lg">
-          <section aria-labelledby="shelves">
-            <h2 className="h-block first" id="shelves">
-              {t(lang, 'shelves')} <span className="count">{num(shelves.length, lang)}</span>
-            </h2>
-            {shelves.length ? (
-              <nav className="box" aria-labelledby="shelves">
-                {shelves.map(({ set, works: list }) => {
-                  const farbrengens = isFarbrengens(set);
-                  const sample = list
-                    .slice(0, 3)
-                    .map((wk) => titleOf(wk, lang))
-                    .join(' · ');
-                  return (
-                    <Link key={set.id} className="row shelf-row" to={href(setPath(set), lang)}>
-                      <Icon name={farbrengens ? 'cal' : 'book'} />
-                      <span className="row-main">
-                        <span className="row-title torah">{nameOf((set.data as { name?: LocalName }).name, lang)}</span>
-                        {sample || (set.data as { description?: LocalName }).description ? <span className="row-sub">{sample || nameOf((set.data as { description?: LocalName }).description, lang)}</span> : null}
-                      </span>
-                      <span className="num">{farbrengens ? `${num(events, lang)} ${t(lang, 'farbrengensCount')}` : `${num(list.length, lang)} ${t(lang, 'seforim')}`}</span>
-                    </Link>
-                  );
-                })}
-              </nav>
-            ) : (
-              <EmptyState icon="book" title={w(lang, 'empty')} compact />
-            )}
-          </section>
+      <div className="lb-main">
+        {shelf ? (
+          <header className="lb-head">
+            <h1>
+              <Link to={href(shelf.path, lang)}>{shelf.name}</Link>
+            </h1>
+            {rebbe?.full ? <p>{rebbe.full[lang]}</p> : null}
+          </header>
+        ) : null}
 
-          {known.length ? (
-            <section aria-labelledby="known">
-              <h2 className="h-block" id="known">
-                {t(lang, 'wellKnown')}
-              </h2>
-              <ul className="shaar-row">
-                {known.map((wk) => {
-                  const by = authorsOf(wk)[0];
-                  const genre = GENRES[(wk.data as { genre?: string }).genre ?? ''];
-                  return (
-                    <li key={wk.id}>
-                      <Shaar
-                        title={titleOf(wk, lang)}
-                        kind={genre?.[lang]}
-                        by={by ? nameOf((by.data as { name?: LocalName }).name, lang) : undefined}
-                        image={covers[wk.id]?.thumb.url ?? null}
-                        to={href(itemPath(wk), lang)}
-                        caption={
-                          <>
-                            <b className="torah">{titleOf(wk, lang)}</b>
-                            {units[wk.id] ? <span>{`${num(units[wk.id]!, lang)} ${t(lang, 'unitsShort')}`}</span> : null}
-                          </>
-                        }
-                      />
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ) : null}
-
-          {works.length ? (
-            <section aria-labelledby="all-seforim">
-              <h2 className="h-block" id="all-seforim">
-                {w(lang, 'allSeforim')} <span className="count">{num(works.length, lang)}</span>
-              </h2>
-              <div className="box">
-                {genres.map((g) => (
-                  <div key={g || 'other'} role="group" aria-label={g ? GENRES[g]![lang] : w(lang, 'other')}>
-                    <div className="row group">
-                      <span>{g ? GENRES[g]![lang] : w(lang, 'other')}</span>
-                      <span className="num">{num(byGenre.get(g)!.length, lang)}</span>
-                    </div>
-                    {byGenre
-                      .get(g)!
-                      .sort((a, b) => titleOf(a, lang).localeCompare(titleOf(b, lang), lang === 'he' ? 'he' : 'en'))
-                      .map((wk) => {
-                        const by = authorsOf(wk)
-                          .map((a) => nameOf((a.data as { name?: LocalName }).name, lang))
-                          .join(', ');
-                        return (
-                          <Link key={wk.id} className="row sefer-row" to={href(itemPath(wk), lang)}>
-                            <Icon name="book" />
-                            <span className="row-main one-line">
-                              <span className="row-title torah">{titleOf(wk, lang)}</span>
-                              {by ? <span className="by">{by}</span> : null}
-                            </span>
-                            {units[wk.id] ? <span className="num">{`${num(units[wk.id]!, lang)} ${t(lang, 'unitsShort')}`}</span> : null}
-                          </Link>
-                        );
-                      })}
-                  </div>
-                ))}
-              </div>
-            </section>
-          ) : null}
-        </div>
-
-        <aside className="side">
-          {rebbeim.length ? (
-            <section>
-              <h2>{w(lang, 'rebbeim')}</h2>
-              <ul className="side-list rebbe-list">
-                {rebbeim.map((r) => {
-                  const name = nameOf((r.data as { name?: LocalName }).name, lang);
-                  const n = countOf(r);
-                  return (
-                    <li key={r.id}>
-                      <Avatar name={name} id={r.id} size="sm" />
-                      <Link className="grow" to={href(itemPath(r), lang)}>
-                        {name}
-                      </Link>
-                      {n ? <span className="subtle num">{`${num(n, lang)} ${w(lang, 'byThem')}`}</span> : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ) : null}
-          <section>
-            <h2>{w(lang, 'inCatalog')}</h2>
-            <dl>
-              <dt>{t(lang, 'tabLibrary')}</dt>
-              <dd>
-                {num(works.length, lang)} {t(lang, 'seforim')}
-              </dd>
-              {counts.unit ? (
-                <>
-                  <dt>{w(lang, 'units')}</dt>
-                  <dd>{num(counts.unit, lang)}</dd>
-                </>
-              ) : null}
-              <dt>{t(lang, 'tabFarbrengens')}</dt>
-              <dd>
-                <Link to={href('/calendar', lang)}>{num(events, lang)}</Link>
-              </dd>
-              {counts.recording ? (
-                <>
-                  <dt>{w(lang, 'recordings')}</dt>
-                  <dd>{num(counts.recording, lang)}</dd>
-                </>
-              ) : null}
-            </dl>
-          </section>
-          <section>
-            <h2>{w(lang, 'missing')}</h2>
-            <p className="side-p">{w(lang, 'missingHint')}</p>
-            <Link className="btn sm" to={href('/add', lang, { what: 'sefer' })}>
-              <Icon name="plus" />
-              {w(lang, 'addSefer')}
+        {shelf?.farbrengens ? (
+          <p>
+            <Link className="btn" to={href('/calendar', lang)}>
+              <Icon name="cal" />
+              {w(lang, 'farbrengens')}
             </Link>
-          </section>
-        </aside>
+          </p>
+        ) : cards.length ? (
+          <div className="lb-cards">
+            {cards.map((card) =>
+              card.id === open?.id ? (
+                <section key={card.id} className="lb-card open" aria-labelledby={`c-${card.id}`}>
+                  <header className="lb-card-h">
+                    <h2 id={`c-${card.id}`}>
+                      <Link to={href(card.main.path, lang)}>{card.title}</Link>
+                    </h2>
+                    <Link className="lb-card-go" to={href(card.main.path, lang)}>
+                      {w(lang, 'continue')}
+                      <Icon name="chev" size={14} className="flip-ltr" />
+                    </Link>
+                  </header>
+                  {open.volumes.length ? (
+                    <>
+                      <h3 className="lb-sub">
+                        {num(open.volumes.length, lang)} {w(lang, 'parts')}
+                      </h3>
+                      <ol className={squares ? 'lb-grid' : 'lb-parts'}>
+                        {open.volumes.map((v) => (
+                          <li key={v.value}>
+                            <Link to={href(card.main.path, lang, { part: v.value })} title={v.label}>
+                              {squares ? square(v.label) : v.label}
+                            </Link>
+                          </li>
+                        ))}
+                      </ol>
+                    </>
+                  ) : open.units ? (
+                    <p className="lb-sub">
+                      {num(open.units, lang)} {t(lang, 'unitsShort')}
+                    </p>
+                  ) : null}
+                  {card.with.length || open.additions.length ? (
+                    <>
+                      <h3 className="lb-sub">{w(lang, 'others')}</h3>
+                      <ul className="lb-with">
+                        {[...card.with, ...open.additions.filter((a) => !card.with.some((x) => x.id === a.id))].map((x) => (
+                          <li key={x.id}>
+                            <Link to={href(x.path, lang)}>
+                              <b className="torah">{x.title}</b>
+                              {x.sub ? <span>{x.sub}</span> : null}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : null}
+                </section>
+              ) : (
+                <Link key={card.id} className="lb-card lb-row" to={cardTo(card.id)} preventScrollReset>
+                  <b>{card.title}</b>
+                  {card.main.hint ? <span>{card.main.hint}</span> : null}
+                  <Icon name="chev" size={16} className="subtle flip-ltr" />
+                </Link>
+              ),
+            )}
+            {loose.length ? (
+              <details className="lb-card lb-loose">
+                <summary>
+                  <b>{w(lang, 'loose')}</b>
+                  <span>{num(loose.length, lang)}</span>
+                </summary>
+                <ul>
+                  {loose.map((x) => (
+                    <li key={x.id}>
+                      <Link to={href(x.path, lang)}>{x.title}</Link>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+          </div>
+        ) : (
+          <p className="muted">{w(lang, 'empty')}</p>
+        )}
+
+        <footer className="lb-foot">
+          <span>{w(lang, 'missing')}</span>
+          <Link to={href('/add', lang, { what: 'sefer' })}>{w(lang, 'addSefer')}</Link>
+          <span aria-hidden="true">·</span>
+          <Link to={href('/organize', lang)}>{w(lang, 'organize')}</Link>
+        </footer>
       </div>
     </div>
   );

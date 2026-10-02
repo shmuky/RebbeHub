@@ -12,7 +12,10 @@ import { GENRE_NAMES } from './sichosKodeshWorks.js';
  * Set, in the Set of the folder it is in, under the library's own Set: the
  * Drive library's tree, a first sorting that people then sort on into the
  * catalog's own sefarim. Nothing is copied: the folders are listed at
- * import time from Drive's public folder view.
+ * import time from Drive's public folder view. Each folder's sefer comes in
+ * as an addition (WorkData.addition), never as an official sefer of the
+ * tree: people make it official, mark which sefer it belongs to, or merge
+ * it into the sefer it is a copy of.
  */
 
 export const OTZROS_FOLDER: DriveEntry = { title: 'ספרי ליובאוויטש', id: '0B_WSU737WJ1ffjFrTGFlMjBDdW44eU1yNkpLOHJHY0JRTWh3dU5BcFhZMV81Zmphc1J6VDQ', resourceKey: '0-OGquHQDd2VMz957qpqEEGA' };
@@ -162,10 +165,12 @@ export function driveLibraryImporter(input: DriveFolder | (() => Promise<DriveFo
             key,
             type: 'work',
             path,
-            // Where people have put the sefer since (another Set, out of this one) stays where they put it.
-            keep: ['sets'],
+            // Where people have put the sefer since (another Set, out of this one, or as official or an addition to one) stays where they put it.
+            keep: ['sets', 'addition'],
             data: {
               title: { he: folderName(folder, trail) },
+              // Not one of the official sefarim the tree is built of until a person says it is, or which one it belongs to.
+              addition: { kind: 'other' },
               slug,
               authors: [],
               genre,

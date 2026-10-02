@@ -1,6 +1,7 @@
 import type { EntityId } from '@rebbehub/model';
 import { withCatalog, type Context } from './commands.js';
 import { alignRecordings, localWhisper, transcribeRecordings, workersAiWhisper, type Transcriber } from './transcribe.js';
+import { restoreWordTimes } from './restoreWordTimes.js';
 import { mendTranscriptSplits } from './wordSplits.js';
 
 /**
@@ -71,6 +72,19 @@ export async function mendSplitsCommand(ctx: Context, input: { approveAs?: strin
       log: ctx.log,
     });
     ctx.log(`${input.dryRun ? 'would mend' : 'mended'} ${done.reduce((n, d) => n + d.mended.length, 0)} cut words in ${done.length} transcripts`);
+  });
+}
+
+/**
+ * `rebbehub restore-word-times`: word timings back for paragraphs fixed
+ * before fixes kept them, from each span's history (see
+ * restoreWordTimes.ts). Reads no audio.
+ */
+export async function restoreWordTimesCommand(ctx: Context, input: { approveAs?: string; recording?: string; limit?: number; dryRun?: boolean }): Promise<void> {
+  if (!input.dryRun && !input.approveAs) throw new Error('--approve-as is needed, or --dry-run');
+  await withCatalog(ctx, async (catalog) => {
+    const done = await restoreWordTimes(catalog, { approveAs: input.approveAs ?? '', recording: input.recording as EntityId | undefined, limit: input.limit, dryRun: input.dryRun, log: ctx.log });
+    ctx.log(`${input.dryRun ? 'would give back' : 'gave back'} word timings to ${done.reduce((n, d) => n + d.paragraphs, 0)} paragraphs in ${done.length} transcripts`);
   });
 }
 

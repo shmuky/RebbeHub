@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { Catalog } from '@rebbehub/core';
+import { fillShaars, type Catalog } from '@rebbehub/core';
 import type { EntityId } from '@rebbehub/model';
-import { entityFile, exportCommits, exportSnapshot, generateKeyPair, memorySink, parseTextSegments, syncFile, textFile, verifyManifest, writeDump } from '@rebbehub/mirror';
+import { entityFile, exportCommits, exportSnapshot, generateKeyPair, memorySink, parseTextSegments, shaarFile, syncFile, textFile, verifyManifest, writeDump } from '@rebbehub/mirror';
 import { add, freshCatalog } from '../../core/tests/helpers.js';
 
 let catalog: Catalog;
@@ -89,6 +89,18 @@ describe('the git mirror', () => {
     expect(seen).toEqual([`${since + 1}:chaim:Fix a word`]);
     expect(last).toBe(since + 1);
     expect(sink.files.get(textFile(ids.text!))).toContain('לגנוני');
+  });
+
+  it("writes a sefer's shaar file once it has one", async () => {
+    const sink = memorySink();
+    const since = await catalog.head();
+    await exportSnapshot(catalog, sink, since);
+    expect(sink.files.has(shaarFile(ids.work!))).toBe(false);
+    await fillShaars(catalog);
+    await exportCommits(catalog, sink, since);
+    expect(sink.files.get(shaarFile(ids.work!))).toBe(
+      `---\nshaar: 1\ntitle: ספר המאמרים\ntitle-en: Sefer Hamaamarim\nby: ${ids.author} (הרבי)\ngenre: maamarim\n---\n\n## סדר הספר | Structure\n\nהספר מחולק לשנים, וכל שנה למאמרים.\n`,
+    );
   });
 });
 

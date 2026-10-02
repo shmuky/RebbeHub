@@ -94,6 +94,13 @@ export interface AppWork {
   collection?: string;
   sources: AppWorkSource[];
   units?: number;
+  /**
+   * RebbeHub's own (the apps ignore fields they do not know): set on a work
+   * that is an addition, not one of the official sefarim the tree is built
+   * of, with the app id of the official sefer it belongs to when the apps
+   * have that sefer. Official works come first, additions after them.
+   */
+  addition?: { kind: string; to?: string };
 }
 
 export interface AppUnit {
@@ -272,7 +279,9 @@ export function appWorks(authors: Array<Row<AuthorRow>>, works: Array<Row<WorkDa
   const used = new Set<string>();
   const workIds = new Set<string>();
   // Sichos-Kodesh's registry order is not kept: in the order people gave them, else by id; the Rebbeim in their line.
-  const ordered = [...works].sort((a, b) => cmp(a.data.order ?? '\uffff', b.data.order ?? '\uffff') || cmp(a.data.slug, b.data.slug));
+  // The official sefarim are the tree; additions follow them, each pointing at its sefer.
+  const ordered = [...works].sort((a, b) => Number(Boolean(a.data.addition)) - Number(Boolean(b.data.addition)) || cmp(a.data.order ?? '\uffff', b.data.order ?? '\uffff') || cmp(a.data.slug, b.data.slug));
+  const appIdOf = new Map(works.map((w) => [w.id, w.data.externalIds?.['sichos-kodesh-work'] ?? w.data.slug]));
   for (const w of ordered) {
     const id = w.data.externalIds?.['sichos-kodesh-work'] ?? w.data.slug;
     if (!id || workIds.has(id)) continue;
@@ -290,6 +299,10 @@ export function appWorks(authors: Array<Row<AuthorRow>>, works: Array<Row<WorkDa
     for (const a of w.data.authors) used.add(a);
     const collection = w.data.externalIds?.['sichos-kodesh-collection'];
     if (collection) work.collection = collection;
+    if (w.data.addition) {
+      const to = w.data.addition.to ? appIdOf.get(w.data.addition.to) : undefined;
+      work.addition = { kind: w.data.addition.kind, ...(to ? { to } : {}) };
+    }
     if (list.length > 0) {
       const part = contentsOf(id, list, sources);
       out.contents[id] = part;

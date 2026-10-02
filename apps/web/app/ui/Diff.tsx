@@ -43,6 +43,27 @@ export function DiffSegment({ before, after, n, context, torah = true }: { befor
   );
 }
 
+/** A changed passage as a reviewer decides on it: what it said, the words taken out marked, and what it will say, the words put in marked. */
+export function BeforeAfter({ before, after, lang, torah = true }: { before: string; after: string; lang: Lang; torah?: boolean }) {
+  const parts = wordDiff(before, after);
+  return (
+    <div className="diff-ba">
+      <div className="ba was">
+        <span className="ba-k">{lang === 'he' ? 'לפני' : 'Before'}</span>
+        <div className={torah ? 't torah' : 't'}>
+          <InlineDiff parts={parts.filter((p) => p.kind !== 'ins')} />
+        </div>
+      </div>
+      <div className="ba now">
+        <span className="ba-k">{lang === 'he' ? 'אחרי' : 'After'}</span>
+        <div className={torah ? 't torah' : 't'}>
+          <InlineDiff parts={parts.filter((p) => p.kind !== 'del')} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * A box of changed passages with a header: what was changed, where, and
  * how many words. `children` are DiffSegment / FieldDiff rows; `note`

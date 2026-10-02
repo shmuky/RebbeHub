@@ -19,8 +19,11 @@ export const dir = (lang: Lang) => (lang === 'he' ? 'rtl' : 'ltr');
 /** A name in the page's language, falling back to Hebrew. */
 export function nameOf(name: LocalName | undefined | null, lang: Lang): string {
   if (!name) return '';
-  return (lang === 'en' ? name.en : name.he) || name.he || name.en || '';
+  return untagged((lang === 'en' ? name.en : name.he) || name.he || name.en || '');
 }
+
+/** A name as its source titled it, without the source's own tags: chabadlibrary.org's headings came as `<h3>ד שבט</h3>`. */
+const untagged = (text: string) => (text.includes('<') ? text.replace(/<\/?[a-z][a-z0-9]*(\s[^<>]*)?>/gi, '').trim() : text);
 
 const STRINGS = {
   siteName: { he: 'RebbeHub', en: 'RebbeHub' },
@@ -35,6 +38,8 @@ const STRINGS = {
   position: { he: 'מיקום בהקלטה', en: 'Position' },
   parts: { he: 'חלקים', en: 'Parts' },
   closePlayer: { he: 'סגירת הנגן', en: 'Close the player' },
+  hearAgain: { he: 'לשמוע שוב (5 שניות אחורה)', en: 'Hear again (5 seconds back)' },
+  speed: { he: 'מהירות', en: 'Speed' },
   parshas: { he: 'פרשת', en: 'Parshas' },
   thisWeekIn: { he: 'השבוע בשנת', en: 'This week in' },
   kviusNote: { he: 'שנה באותה קביעות כמו השנה: הימים והפרשיות חלים כמו השבוע', en: 'A year whose calendar falls like this one: the same days and parshiyos as this week' },
@@ -160,6 +165,10 @@ const STRINGS = {
   sendBackWhy: { he: 'מה צריך לשנות?', en: 'What should change?' },
   withdraw: { he: 'משיכת ההצעה', en: 'Withdraw' },
   changedValue: { he: '(שונה)', en: '(changed)' },
+  itemDeleted: { he: 'הפריט יימחק', en: 'The item is removed' },
+  anotherItem: { he: 'פריט אחר', en: 'another item' },
+  fieldWork: { he: 'בספר', en: 'In the sefer' },
+  fieldParent: { he: 'בתוך', en: 'Inside' },
   changedSince: { he: 'הפריט השתנה מאז שההצעה נכתבה; בדקו לפני שמאשרים.', en: 'The item changed since this was suggested; check before approving.' },
   withheldChange: { he: 'התוכן אינו מוצג מטעמי זכויות.', en: 'Not shown, for rights reasons.' },
   status_merged: { he: 'אושרה', en: 'approved' },

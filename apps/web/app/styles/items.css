@@ -898,3 +898,173 @@ dl.facts code,
 .permalink a {
   overflow-wrap: anywhere;
 }
+
+/* ------------------------------------------------------------ a sefer's shaar file, as a README under the contents */
+
+.shaar-file {
+  margin-top: 16px;
+}
+
+.shaar-file .box-h h2 {
+  font-size: inherit;
+  margin: 0;
+}
+
+.shaar-body {
+  padding: 8px 20px 16px;
+  font-family: var(--torah);
+  line-height: 1.7;
+}
+
+.shaar-section h3 {
+  font-family: var(--ui);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  margin: 14px 0 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.shaar-section p,
+.shaar-section ul {
+  margin: 6px 0;
+}
+
+.shaar-section ul {
+  padding-inline-start: 22px;
+}
+
+.shaar-none {
+  margin-top: 16px;
+}
+
+/* The shaar file's own page: the file as it is written, and its editor. */
+.shaar-text {
+  width: 100%;
+  min-height: 60vh;
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+
+pre.shaar-text {
+  min-height: 0;
+  margin: 0;
+}
+
+.shaar-problems {
+  margin: 10px 0;
+  padding-inline-start: 20px;
+  color: var(--del-fg);
+}
+
+/* Each line of the file takes its own direction: English fields, Hebrew words. */
+.shaar-text {
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+
+.side dl.shaar-rules,
+.shaar-rules {
+  display: block;
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
+.shaar-rules > div {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.shaar-rules dt {
+  display: block;
+}
+
+.shaar-rules dd {
+  display: block;
+  margin: 2px 0 0;
+  color: var(--muted);
+}
+
+/*
+ * A sicha's back and forth, above its text and below it: the one before at
+ * the line's start (the right, in Hebrew), the one after at its end.
+ */
+.chapter-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.chapter-nav-top {
+  margin: 0 0 16px;
+}
+
+.chapter-nav-bottom {
+  margin: 24px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-muted);
+}
+
+/* Each button takes half the row, so the two are the same size on a phone as on a wide screen. */
+.chapter-nav-link,
+.chapter-nav-gap {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.chapter-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.chapter-nav-link:hover {
+  background: var(--sunken);
+  border-color: var(--border-strong);
+}
+
+.chapter-nav-link .i {
+  flex: none;
+  color: var(--muted);
+}
+
+.chapter-nav-link.next {
+  justify-content: flex-end;
+  text-align: end;
+}
+
+.chapter-nav-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.35;
+}
+
+/* A long name takes two lines, then is cut. */
+.chapter-nav-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-family: var(--torah);
+  font-size: 16px;
+  font-weight: 600;
+}

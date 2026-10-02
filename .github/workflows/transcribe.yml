@@ -177,7 +177,9 @@ jobs:
         env:
           STEWARD: ${{ inputs.steward || 'shmuly' }}
           LIMIT: ${{ github.event_name == 'schedule' && (vars.TRANSCRIBE_NIGHTLY || '1') || inputs.limit || '3' }}
-          LINKED: ${{ inputs.linked }}
+          # Every recording RebbeHub knows is heard at another site (Drive, JEM), so the nightly sweep takes only requests
+          # until TRANSCRIBE_LINKED=true lets it take those too, newest first.
+          LINKED: ${{ github.event_name == 'schedule' && (vars.TRANSCRIBE_LINKED || 'false') || inputs.linked }}
           RECORDING: ${{ inputs.recording }}
           # Every night, and when asked: time the words people corrected (training clips). One worker does it.
           ALIGN: ${{ matrix.shard == 0 && (github.event_name == 'schedule' || inputs.align) }}

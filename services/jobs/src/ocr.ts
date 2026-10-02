@@ -3,7 +3,7 @@ import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { pageLevel, reseedLines, type Catalog, type Json } from '@rebbehub/core';
+import { notRecentlyFailedSql, pageLevel, reseedLines, type Catalog, type Json } from '@rebbehub/core';
 import type { EntityId, TextLine } from '@rebbehub/model';
 import { failIfAny, machineRun } from './machineQueue.js';
 
@@ -96,7 +96,8 @@ export const tesseract: OcrEngine = {
 /** Served scans that have no machine layer yet, the newest first (a scan just added is read the next night); with `reread`, those this engine read in another version. */
 export async function scansToRead(catalog: Catalog, options: { scan?: EntityId; limit?: number; reread?: { name: string; version: string } } = {}): Promise<Array<{ id: EntityId; file: string; sets: EntityId[] }>> {
   const params: unknown[] = [];
-  const only = options.scan ? `AND e.id = $${params.push(options.scan)}` : '';
+  // The sweep leaves a scan it failed on lately; one asked for by name is always tried.
+  const only = options.scan ? `AND e.id = $${params.push(options.scan)}` : `AND ${notRecentlyFailedSql('ocr', 'e.id')}`;
   const which = options.reread
     ? `AND EXISTS (
          SELECT 1 FROM entity_ref x JOIN entity l ON l.id = x.from_id AND l.type = 'text-layer' AND NOT l.deleted

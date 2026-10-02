@@ -39,12 +39,14 @@ let catalog: Catalog;
 let api: ReturnType<typeof createApp>;
 let handle: (request: Request) => Promise<Response>;
 const ids = {} as Record<'set' | 'work' | 'unit' | 'pub' | 'scan' | 'event' | 'recording', EntityId>;
+let secondSicha: EntityId;
 let suggestion = 0;
 const counts = { statements: 0, calls: 0, shapes: new Map<string, number>(), routes: new Map<string, number>() };
 const measured: Array<{ what: string; statements: number; calls: number; kB: number; status: number; routes: string[] }> = [];
 
 /** A sicha's words as Sichos-Kodesh's import keeps them in the sicha itself (pageText.ts), about four kilobytes like a real one. */
-const words = (i: number) => ({ profile: 'sichos-kodesh', versions: [{ id: 'he', language: 'he', credit: 'לדוגמה', segments: [{ id: 'p1', kind: 'paragraph', text: [{ text: `דברי שיחה ${i} `.repeat(300) }] }] }] });
+// The second sicha's words carry a note, as Likkutei Sichos's do.
+const words = (i: number): Json => ({ profile: 'sichos-kodesh', versions: [{ id: 'he', language: 'he', credit: 'לדוגמה', segments: [{ id: 'p1', kind: 'paragraph', text: [{ text: `דברי שיחה ${i} `.repeat(300) }, ...(i === 2 ? [{ note: 'n1' }] : [])] }], ...(i === 2 ? { notes: [{ id: 'n1', kind: 'note', text: [{ text: 'מקור ההערה' }] }] } : {}) }] });
 
 const reset = () => {
   counts.statements = 0;
@@ -69,9 +71,12 @@ beforeAll(async () => {
   for (let i = 1; i <= 30; i++) units.push(await add(catalog, 'mendy', 'keeper', 'unit', { work: ids.work, position: [volume(1), { level: 'sicha', value: String(i) }], order: `a${String(i).padStart(2, '0')}`, label: { he: `שיחה ${i}` }, body: words(i) }));
   for (let i = 1; i <= 3; i++) await add(catalog, 'mendy', 'keeper', 'unit', { work: ids.work, position: [volume(2), { level: 'sicha', value: String(i) }], order: `b${String(i).padStart(2, '0')}`, label: { he: `שיחה ${i}` } });
   ids.unit = units[0]!;
+  secondSicha = units[1]!;
   for (const [i, u] of units.slice(0, 4).entries()) {
     const edition = await add(catalog, 'mendy', 'keeper', 'text', { kind: 'edition', unit: u, language: 'he' });
     for (let p = 0; p < 4; p++) await add(catalog, 'mendy', 'keeper', 'segment', { text: edition, order: `V${p}`, kind: 'paragraph', content: `פסקה ${p} של שיחה ${i + 1}`, proofread: p === 0 ? 1 : 0 });
+    // The first sicha's last paragraph a machine read, and nobody checked it yet.
+    if (i === 0) await add(catalog, 'mendy', 'keeper', 'segment', { text: edition, order: 'V4', kind: 'paragraph', content: 'פסקה 4 של שיחה 1', proofread: 0, origin: { by: 'ocr:kraken@5' } });
     if (i === 0) {
       const english = await add(catalog, 'mendy', 'keeper', 'text', { kind: 'translation', unit: u, language: 'en', translationOf: edition });
       await add(catalog, 'mendy', 'keeper', 'segment', { text: english, order: 'V0', kind: 'paragraph', content: 'Paragraph 0 of sicha 1', proofread: 0 });
@@ -186,9 +191,10 @@ function within(got: { status: number; statements: number; calls?: number; kB: n
 }
 
 describe("each page's statements and API calls stay within its ceiling", () => {
-  it('the home page', async () => within(await page('/'), 'home', { statements: 55, calls: 18, kB: 60 }));
+  // The day's learning, this day's farbrengens and what waits to be checked: three reads.
+  it('the home page', async () => within(await page('/'), 'home', { statements: 14, calls: 3, kB: 35 }));
   it('the sets, and one set', async () => {
-    within(await page('/sets'), '/sets', { statements: 12, calls: 7, kB: 30 });
+    within(await page('/sets'), '/sets', { statements: 13, calls: 7, kB: 30 });
     // A set lists its sefarim and the first sixty of each other kind in it, one request a kind: this one holds four kinds.
     within(await page('/farbrengens'), 'a set', { statements: 28, calls: 18, kB: 50 });
   });
@@ -204,6 +210,31 @@ describe("each page's statements and API calls stay within its ceiling", () => {
     within(await page('/igros-sample?part=1'), 'a volume', { statements: 45, calls: 28, kB: 100 });
     within(await page(await pathOf(ids.unit)), 'a sicha', { statements: 40, calls: 22, kB: 70 });
   });
+  it('sends a volume typed as a path (/igros-sample/1) to its page, and what is not a volume on to 404', async () => {
+    const volume = await handle(new Request(`${SITE}/igros-sample/1`));
+    expect(volume.status).toBe(302);
+    expect(volume.headers.get('location')).toBe('/igros-sample?part=1');
+    expect((await handle(new Request(`${SITE}/igros-sample/999`))).status).toBe(404);
+    expect((await handle(new Request(`${SITE}/no-such-sefer/1`))).status).toBe(404);
+  });
+  it("draws a volume as the design does: its name, how to read it, and its sichos with the machine's quiet dot", async () => {
+    const html = await (await handle(new Request(`${SITE}/igros-sample?part=1`))).text();
+    expect(html).toContain('class="vol-head"');
+    expect(html).toContain('class="vol-sheet"');
+    expect(html).toMatch(/שיחה 1<\/b>.*?class="vol-machine"/s);
+    expect(html.match(/class="vol-machine"/g)).toHaveLength(1);
+    // Its other tabs keep the sefer's full page.
+    expect(await (await handle(new Request(`${SITE}/igros-sample?part=1&tab=printings`))).text()).not.toContain('class="vol-head"');
+  });
+  it('sets a sicha beside the rest of its volume, its notes beside its words (3l)', async () => {
+    const html = await (await handle(new Request(`${SITE}${await pathOf(secondSicha)}`))).text();
+    expect(html).toContain('class="rd-toc"');
+    expect(html.match(/class="rd-toc".*?<\/nav>/s)?.[0].match(/<li/g)?.length).toBeGreaterThanOrEqual(30);
+    expect(html).toMatch(/aria-current="page"[^>]*>שיחה 2</);
+    expect(html).toMatch(/class="words-side"[^>]*><p><b>1<\/b> (<!-- -->)?מקור ההערה/);
+    // Every note stands beside its paragraph, so the list at the foot is for a narrow screen only.
+    expect(html).toContain('class="words-notes placed"');
+  });
   it('a printing and its scan', async () => {
     within(await page(await pathOf(ids.pub)), 'a printing', { statements: 40, calls: 20, kB: 60 });
     within(await page(await pathOf(ids.scan)), 'a scan', { statements: 40, calls: 20, kB: 40 });
@@ -212,14 +243,48 @@ describe("each page's statements and API calls stay within its ceiling", () => {
     within(await page('/events/5742-05-10'), 'a farbrengen', { statements: 45, calls: 24, kB: 65 });
     within(await page(await pathOf(ids.recording)), 'a recording', { statements: 40, calls: 20, kB: 45 });
   });
+  it('draws search as the design does (3g): chips for the kinds, each result under where it is from', async () => {
+    const html = await (await handle(new Request(`${SITE}/search?q=${encodeURIComponent('שיחה')}`))).text();
+    expect(html).toMatch(/class="search-chips".*?class="chip" aria-current="page"[^>]*>הכול/s);
+    expect(html).toMatch(/class="row-kicker">.*?<\/span><span class="row-title torah">/s);
+  });
+  it('lists suggestions as the design does (3h): a dot in the colour of where each stands, and that in words', async () => {
+    const html = await (await handle(new Request(`${SITE}/suggestions`))).text();
+    expect(html).toMatch(/class="row issue-row sg-open"><span class="sg-dot"/);
+    expect(html).toContain('<div class="sg-where">ממתינה לבדיקה</div>');
+  });
+  it('draws a suggestion as the design does (3m): where it stands in words, then the change, then the talk', async () => {
+    const html = await (await handle(new Request(`${SITE}/suggestions/${suggestion}`))).text();
+    expect(html).toMatch(/class="sg-state sg-\w+"><span class="sg-dot" aria-hidden="true"><\/span><span class="sg-where">/);
+    expect(html).toMatch(/class="sg-by">.*?<\/p>/s);
+    expect(html.indexOf('class="sg-review"')).toBeGreaterThan(-1);
+    expect(html.indexOf('class="sg-review"')).toBeLessThan(html.indexOf('id="description"'));
+  });
+  it('draws the menu as the design does (4b): its name, then its parts under small headings', async () => {
+    const html = await (await handle(new Request(`${SITE}/`))).text();
+    expect(html).toContain('<h2 class="sheet-title">תפריט</h2>');
+    expect(html).toMatch(/<section class="menu-group"><h3>קריאה<\/h3>/);
+    expect(html).toMatch(/class="menu-row" href="\/help"/);
+  });
   it('search, suggestions and review', async () => {
     within(await page(`/search?q=${encodeURIComponent('שיחה')}`), 'search', { statements: 15, calls: 6, kB: 110 });
     within(await page('/suggestions'), '/suggestions', { statements: 8, calls: 3, kB: 35 });
     within(await page(`/suggestions/${suggestion}`), 'a suggestion', { statements: 18, calls: 8, kB: 45 });
     within(await page('/review'), '/review', { statements: 2, calls: 2, kB: 30 });
     within(await page('/check'), '/check', { statements: 4, calls: 2, kB: 30 });
+    // The full subject index: one call, a letter or a search at a time (here, with no index yet, the page says so).
+    within(await page('/mafteach'), '/mafteach', { statements: 4, calls: 1, kB: 30 });
   });
   it("the day's learning is one read", async () => within(await page('/daily/2026-09-30'), '/daily', { statements: 10, calls: 1, kB: 60 }));
+  it('draws the day as the design does (3e): the date between its arrows, and its shiurim to tick, the first one next', async () => {
+    const html = await (await handle(new Request(`${SITE}/daily/2026-09-30`))).text();
+    expect(html).toContain('class="dl-date"');
+    expect(html).toMatch(/class="dl-hebrew">[^<]*תשרי</);
+    // 30.9.2026 is י״ט תשרי, in Sukkos: the line under the date says so.
+    expect(html).toMatch(/class="dl-sub">[^<]*סוכות/);
+    expect(html).toMatch(/class="dl-row next"/);
+    expect(html.match(/class="dl-row next"/g)).toHaveLength(1);
+  });
   it('the sitemap', async () => within(await page('/sitemap.xml'), '/sitemap.xml', { statements: 2, calls: 2, kB: 5 }));
 });
 

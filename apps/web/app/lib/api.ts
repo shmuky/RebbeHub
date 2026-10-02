@@ -264,6 +264,28 @@ export interface CatalogHealth {
 }
 
 /** What the machines wrote that no person has checked yet, as GET /v1/machine/to-check gives it, the newest first. */
+/** A place a subject index names: the page, the index's own words for it, the sicha's PDF at that page and its page here. */
+export interface MafteachPlace {
+  page: number;
+  to?: number;
+  context?: string;
+  pdf?: string;
+  at?: number;
+  sicha?: string;
+  text?: string;
+}
+
+/** A sefer's whole subject index (GET /v1/mafteach): one letter's topics or a search's, each volume's places under each. */
+export interface Mafteach {
+  index: { id: string; path: string | null; title: unknown };
+  letters: Array<{ letter: string; topics: number }>;
+  totals: { topics: number; places: number; volumes: number };
+  topics: Array<{ topic: string; letter: string; volumes: Array<{ volume: number; label: string; path: string | null; machine: boolean; places: MafteachPlace[] }> }>;
+  found: number;
+  offset: number;
+  next: number | null;
+}
+
 export interface MachineToCheck {
   transcripts: Array<{ event: string; path: string | null; title: { he: string; en?: string } | null; date: string | null; paragraphs: number; checked: number; made: string }>;
   scans: Array<{ scan: string; publication: string | null; title: { he: string; en?: string } | null; pages: number; checked: number; made: string }>;
@@ -347,6 +369,8 @@ export interface SuggestionDetail {
   entries: SuggestionEntry[];
   reviews: Array<{ reviewer: string; verdict: 'approve' | 'send_back' | 'comment'; body: string | null; created_at: string }>;
   names: Record<string, string>;
+  /** The items its changes point at (a part moved to another sefer), by what they are called. */
+  items?: Record<string, { type: string; data: Record<string, unknown> }>;
   files: Record<string, { url: string | null; mime: string; bytes: number; rights: string; similar?: Array<{ kind: 'same' | 'shares'; matched?: number; of?: number; items: Array<{ id: string; type: string; path: string | null }> }> }>;
   mayApprove: boolean;
   mayApproveReason?: string | null;
@@ -473,8 +497,10 @@ export class RebbeHubApi {
     return out;
   }
 
-  list(options: { type?: string; set?: string; after?: string; limit?: number }) {
-    return this.get<{ items: Entity[]; next: string | null }>('/v1/entities', options);
+  /** `shelf`: what a shelf lists, without the additions that belong on a sefer's page (core additions.ts). */
+  list(options: { type?: string; set?: string; after?: string; limit?: number; shelf?: boolean }) {
+    const { shelf, ...rest } = options;
+    return this.get<{ items: Entity[]; next: string | null }>('/v1/entities', { ...rest, shelf: shelf ? 1 : undefined });
   }
 
   children(id: string, field: string, type: string, options: { after?: string; limit?: number } = {}) {
@@ -530,9 +556,9 @@ export class RebbeHubApi {
     return (await this.get<{ counts: Record<string, number> }>('/v1/refcounts', { field, type })).counts;
   }
 
-  /** A day's learning (Chitas' Tanya, cut to the day's portion, and Hayom Yom), for a civil day: one read. */
+  /** A day's learning (Chitas: Tanya cut to the day's portion, Chumash and Tehillim; Hayom Yom; the Rambam's three tracks), for a civil day: one read. */
   daily(date: string) {
-    return this.get<{ date: string; hebrew: string; tanya: Array<Entity & { from: string; to: string | null }>; hayomYom: Entity[] }>('/v1/daily', { date });
+    return this.get<DailyLearning>('/v1/daily', { date });
   }
 
   /** A work's volumes, with how many units each holds. */
@@ -543,6 +569,11 @@ export class RebbeHubApi {
   /** The units of one volume of a work. */
   async workPart(id: string, part: string) {
     return (await this.get<{ items: Entity[] }>(`/v1/works/${encodeURIComponent(id)}/parts/${encodeURIComponent(part)}`)).items;
+  }
+
+  /** The units just before and after a unit in its work's order, across volumes: a sicha's back and forth. */
+  unitNeighbours(id: string) {
+    return this.get<{ previous: Entity | null; next: Entity | null }>(`/v1/units/${encodeURIComponent(id)}/neighbours`);
   }
 
   /** One group of what points at each of several items, a few of each, in one request (a sefer's sichos' texts): by item, in the group's order. */
@@ -557,11 +588,11 @@ export class RebbeHubApi {
   }
 
   /** How many paragraphs each of several texts has and how many a person checked, in one request; texts without any are left out. */
-  async textsProgress(ids: readonly string[]): Promise<Map<string, { paragraphs: number; checked: number }>> {
+  async textsProgress(ids: readonly string[]): Promise<Map<string, { paragraphs: number; checked: number; machine?: number }>> {
     const unique = [...new Set(ids)].filter((id) => /^rh-[0-9a-z]+$/.test(id));
-    const out = new Map<string, { paragraphs: number; checked: number }>();
+    const out = new Map<string, { paragraphs: number; checked: number; machine?: number }>();
     for (let i = 0; i < unique.length; i += 200) {
-      const { progress } = await this.get<{ progress: Record<string, { paragraphs: number; checked: number }> }>('/v1/texts/batch/progress', { ids: unique.slice(i, i + 200).join(',') });
+      const { progress } = await this.get<{ progress: Record<string, { paragraphs: number; checked: number; machine?: number }> }>('/v1/texts/batch/progress', { ids: unique.slice(i, i + 200).join(',') });
       for (const [id, p] of Object.entries(progress)) out.set(id, p);
     }
     return out;
@@ -593,6 +624,11 @@ export class RebbeHubApi {
   /** A sefer's cover and the served PDFs a keeper may choose its title page from. */
   workCover(id: string) {
     return this.maybe(this.get<WorkCover>(`/v1/works/${encodeURIComponent(id)}/cover`));
+  }
+
+  /** A sefer's shaar file (docs/shaar.md), and whether the catalog made it. */
+  shaar(id: string) {
+    return this.maybe(this.get<{ text: string; machine: boolean }>(`/v1/entities/${encodeURIComponent(id)}/shaar`));
   }
 
   /** A file's own page. */
@@ -629,6 +665,11 @@ export class RebbeHubApi {
 
   health() {
     return this.get<CatalogHealth>('/v1/health');
+  }
+
+  /** A sefer's whole subject index gathered from its volumes' index pages: one letter's topics, or a search's. */
+  mafteach(params: { index: string; sefer?: string; letter?: string; q?: string; limit?: number; places?: number; offset?: number }) {
+    return this.get<Mafteach>('/v1/mafteach', params);
   }
 
   toCheck(limit?: number) {
@@ -798,6 +839,8 @@ export interface Profile {
   person: { id: string; username: string; displayName: string; since: string; steward: boolean; admin: boolean; trust: 'contributor' | 'trusted'; suspended: boolean };
   movedFrom?: string;
   counts: { suggestions: number; merged: number; reviews: number; issues: number; comments: number };
+  /** Each day's count of the last 12 weeks; absent from an API older than the squares. */
+  days?: Record<string, number>;
   activity: Array<{
     kind: 'suggestion' | 'review' | 'issue' | 'comment';
     at: string;
@@ -820,4 +863,22 @@ export interface MirrorsInfo {
     notes: string | null;
     dumps: { files: Array<{ name: string; bytes: number; sha256: string; url: string }>; manifest: string; sha256sums: string; signature: { alg: string; keyId: string } | null } | null;
   }>;
+}
+
+/** One of the day's shiurim that the API names rather than gives: in Hebrew, and by Sefaria's references. */
+export interface RambamShiur {
+  label: string;
+  refs: string[];
+  /** Each reference's page on RebbeHub, once the catalog has it. */
+  paths?: Array<string | null>;
+}
+
+export interface DailyLearning {
+  date: string;
+  hebrew: string;
+  tanya: Array<Entity & { from: string; to: string | null }>;
+  hayomYom: Entity[];
+  chumash?: { label: string; ref: string; path?: string | null; rashi?: string | null } | null;
+  tehillim?: Array<{ text: string; ref: string | null; path?: string | null }>;
+  rambam?: { three: RambamShiur; one: RambamShiur; mitzvos: RambamShiur | null };
 }
