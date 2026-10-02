@@ -38,9 +38,36 @@ export const PAGE_MARKS: readonly PageMark[] = ['b', 'i', 'u', 'small', 'sup', '
  * One piece of a segment's words: a run of text (with its marks, and a
  * link when it is one), a footnote's marker (the note's id in its
  * version's `notes`), a source's own marker kept as it is (a page of the
- * printed edition, a day of the study cycle), or a line break.
+ * printed edition, a day of the study cycle), a line break, or a printed
+ * line's end (PageLineEnd).
  */
-export type PageInline = { text: string; marks?: PageMark[]; href?: string } | { note: string } | { marker: string } | { br: true };
+export type PageInline = { text: string; marks?: PageMark[]; href?: string } | { note: string } | { marker: string } | { br: true } | PageLineEnd;
+
+/**
+ * Where a printed line ended, kept so a sicha can be set again exactly as
+ * printed, line for line, while it is read in paragraphs. It stands right
+ * after the last run of the line. `eol` says what ended there: the line
+ * alone, the column too, or the page too. `split` when the print broke a
+ * word across the line end with a hyphen ("־" or "-"); the words hold the
+ * word whole, so search and reading never see the break. `page` (from 1,
+ * a page of the version's `url`) and `box` (x, y, width, height as
+ * fractions 0-1 of that page, as PrintedPlace) give the line that just
+ * ended, when a machine read it from a scan. It carries no words: every
+ * reader of words passes over it, and the paragraph view draws nothing
+ * for it.
+ */
+export interface PageLineEnd {
+  eol: PageLineEndKind;
+  split?: true;
+  page?: number;
+  box?: [number, number, number, number];
+}
+
+export type PageLineEndKind = 'line' | 'column' | 'page';
+export const PAGE_LINE_END_KINDS: readonly PageLineEndKind[] = ['line', 'column', 'page'];
+
+/** A printed line's end: a run that carries no words. */
+export const isLineEnd = (run: PageInline): run is PageLineEnd => 'eol' in run;
 
 export type PageSegmentKind = 'section' | 'heading' | 'paragraph' | 'verse' | 'item' | 'note';
 export const PAGE_SEGMENT_KINDS: readonly PageSegmentKind[] = ['section', 'heading', 'paragraph', 'verse', 'item', 'note'];
@@ -206,13 +233,22 @@ export function tidyInline(runs: readonly PageInline[]): PageInline[] {
       if (typeof run.marker === 'string' && run.marker.trim()) out.push({ marker: run.marker.trim() });
     } else if ('br' in run) {
       if (out.length && !('br' in out[out.length - 1]!)) out.push({ br: true });
+    } else if ('eol' in run) {
+      // Kept as it is, never joined with its neighbours: each is one printed line's end.
+      if (!PAGE_LINE_END_KINDS.includes(run.eol)) continue;
+      const box = Array.isArray(run.box) && run.box.length === 4 && run.box.every((n) => typeof n === 'number' && n >= 0 && n <= 1) ? ([...run.box] as [number, number, number, number]) : undefined;
+      const page = Number.isInteger(run.page) && run.page! >= 1 ? run.page : undefined;
+      out.push({ eol: run.eol, ...(run.split === true ? { split: true as const } : {}), ...(page ? { page } : {}), ...(box ? { box } : {}) });
     }
   }
   // No spaces or breaks at the ends.
   while (out.length && 'br' in out[out.length - 1]!) out.pop();
   const first = out[0];
   if (first && 'text' in first) first.text = first.text.replace(/^\s+/, '');
-  const last = out[out.length - 1];
+  // The last words are trimmed even when a printed line's end stands after them.
+  let end = out.length - 1;
+  while (end > 0 && 'eol' in out[end]!) end--;
+  const last = out[end];
   if (last && 'text' in last) last.text = last.text.replace(/\s+$/, '');
   for (const run of out) if ('text' in run) run.text = run.text.replace(/ {2,}/g, ' ');
   return out.filter((r) => !('text' in r) || r.text.length > 0);

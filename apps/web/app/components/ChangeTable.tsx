@@ -38,7 +38,7 @@ export const fieldName = (path: string, lang: Lang) => {
   return parts.join(' › ');
 };
 
-const isRuns = (value: unknown): value is PageInline[] => Array.isArray(value) && value.every((r) => r && typeof r === 'object' && ('text' in r || 'br' in r || 'note' in r || 'marker' in r));
+const isRuns = (value: unknown): value is PageInline[] => Array.isArray(value) && value.every((r) => r && typeof r === 'object' && ('text' in r || 'br' in r || 'note' in r || 'marker' in r || 'eol' in r));
 
 /** The items a suggestion's changes point at, by id (the API's `items`): shown by their names, never as ids. */
 export type PointedItems = Record<string, { type: string; data: Record<string, unknown> }>;
