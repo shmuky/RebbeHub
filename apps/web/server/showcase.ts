@@ -1,6 +1,13 @@
 import { GUEST_FILES, GUEST_PATH, TOKEN, type MediaSource, type Showcase, type ShowcaseStore } from '../app/lib/showcase.js';
 import type { PageReader } from './handler.js';
 
+/** Drive's download address for anyone with the link (services/api/src/drive.ts does the same). */
+const driveDownloadUrl = (id: string, resourceKey: string | null) => {
+  const query = new URLSearchParams({ id, export: 'download', confirm: 't' });
+  if (resourceKey) query.set('resourcekey', resourceKey);
+  return `https://drive.usercontent.google.com/download?${query}`;
+};
+
 /**
  * The showcases' side of the site's door (app/lib/showcase.ts, and the
  * lock in lock.ts): what a guest with a showcase's link may have, and
@@ -104,7 +111,10 @@ async function jemAudio(file: string, range: string | null, send: typeof fetch):
  * One of a showcase's files, by its place in the list: a recording or a
  * scan, from where it is kept. Files RebbeHub serves and Drive files go
  * through the API answering in this Worker (`reader`), so their rights and
- * takedowns hold here as everywhere.
+ * takedowns hold here as everywhere. A Drive file no catalog item links
+ * to yet (a farbrengen's written transcript Shmuly set beside it) is
+ * fetched from Drive itself: the owner named it when saving, and only he
+ * saves showcases.
  */
 export async function showcaseMedia(source: MediaSource, request: Request, options: { apiUrl: string; reader: PageReader | null; fetch?: typeof fetch }): Promise<Response> {
   const send = options.fetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
@@ -113,7 +123,17 @@ export async function showcaseMedia(source: MediaSource, request: Request, optio
   if (!options.reader) return new Response('Not here.', { status: 404, headers: NOT_KEPT });
   const base = options.apiUrl.replace(/\/$/, '');
   const path = source.kind === 'object' ? `/objects/${source.sha256}` : `/v1/drive/${source.id}`;
-  const answer = await options.reader.answer(`${base}${path}`, { headers: range ? { Range: range } : {} });
+  let answer = await options.reader.answer(`${base}${path}`, { headers: range ? { Range: range } : {} });
+  if (answer.status === 404 && source.kind === 'drive') {
+    await answer.body?.cancel();
+    answer = await send(driveDownloadUrl(source.id, source.resourceKey), { redirect: 'follow', headers: range ? { Range: range } : {} });
+    // Drive answers a file it will not give with a page, not an error.
+    if ((answer.ok || answer.status === 206) && (answer.headers.get('content-type') ?? '').includes('text/html')) {
+      await answer.body?.cancel();
+      return new Response('The file could not be fetched.', { status: 502, headers: NOT_KEPT });
+    }
+    if (answer.ok || answer.status === 206) return passed(answer, 'application/pdf');
+  }
   if (!answer.ok && answer.status !== 206) {
     await answer.body?.cancel();
     return new Response('The file could not be fetched.', { status: answer.status === 404 ? 404 : 502, headers: NOT_KEPT });

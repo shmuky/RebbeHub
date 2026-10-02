@@ -121,8 +121,13 @@ describe('making one and showing it', () => {
     handle = createSiteHandler(build, { apiUrl: 'http://api.test', siteUrl: SITE, fetch: (input, init) => Promise.resolve(api.request(input, init)), showcases: store });
   }, 120_000);
 
-  const save = (key?: string) =>
-    handle(new Request(`${SITE}/showcase`, { method: 'POST', body: new URLSearchParams({ intent: 'save', title: 'פגישה', note: 'For a visit', lang: 'he', farbrengens: `${ids.event},not-an-id`, sichos: '', numbers: 'on' }) }), undefined, key);
+  const DRIVE = 'https://drive.google.com/open?id=1Q9h_YYCSVLm_HbGTqHxYgc_8b2nY2fWD';
+  const save = (key?: string) => {
+    const form = new FormData();
+    for (const [name, value] of Object.entries({ intent: 'save', title: 'פגישה', note: 'For a visit', farbrengens: `${ids.event},not-an-id`, sichos: '', numbers: 'on', [`original:${ids.event}`]: 'https://drive.google.com/file/d/1ThsZGqnrg8DH6ty3bmD6toWc6zaf_nU9/view' })) form.set(name, value);
+    form.append('reading', new File([`scan: ${DRIVE}\n## {62}בהעלותך 2)\n### אות א\n⦃א.⦄ איתא בספרי[1] ⟨שמחה⟩\n---\n1) פרשתנו י, י.\n`], 'sicha-33_0062.txt', { type: 'text/plain' }));
+    return handle(new Request(`${SITE}/showcase`, { method: 'POST', body: form }), undefined, key);
+  };
 
   it('is made only by whoever opened the lock', async () => {
     expect((await save()).status).toBe(403);
@@ -135,8 +140,14 @@ describe('making one and showing it', () => {
     expect(saved.status).toBe(302);
     const [showcase] = await store.list();
     expect(showcase!.farbrengens).toEqual([ids.event]);
-    expect(showcase!.media).toEqual([{ kind: 'jem', file: 'AR0020571.mp3' }]);
+    expect(showcase!.media).toEqual([
+      { kind: 'jem', file: 'AR0020571.mp3' },
+      { kind: 'drive', id: '1ThsZGqnrg8DH6ty3bmD6toWc6zaf_nU9', resourceKey: null },
+      { kind: 'drive', id: '1Q9h_YYCSVLm_HbGTqHxYgc_8b2nY2fWD', resourceKey: null },
+    ]);
     expect(showcase!.mediaOf).toEqual({ [ids.recording!]: 0 });
+    expect(showcase!.originals).toEqual({ [ids.event!]: 1 });
+    expect(showcase!.readings!.map((r) => [r.title, r.media])).toEqual([['בהעלותך ב', 2]]);
     expect(saved.headers.get('location')).toBe(`/showcase?edit=${showcase!.token}&saved=${showcase!.token}`);
     const page = await handle(new Request(`${SITE}${saved.headers.get('location')}`), undefined, 'a-key');
     expect(page.status).toBe(200);
@@ -151,9 +162,14 @@ describe('making one and showing it', () => {
     expect(page.headers.get('x-robots-tag')).toContain('noindex');
     const html = await page.text();
     expect(html).toContain('פגישה');
-    expect(html).toContain('התוועדות לדוגמה');
+    expect(html).toContain('Sample farbrengen');
     expect(html).toContain(`/show/${showcase!.token}/m/0`);
     expect(html).not.toContain('התוועדות אחרת');
+    // In English, with the page our reader read, its scan one of the showcase's own files.
+    expect(html).toContain('lang="en"');
+    expect(html).toContain('Read by our model');
+    expect(html).toContain('איתא בספרי');
+    expect(html).toContain('Side by side');
     // No menus: the header's links into the private site are not drawn.
     expect(html).not.toContain('href="/search"');
   });

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { data, Form } from 'react-router';
 import { hayomYomShiurimOf } from '@rebbehub/hebrew';
-import { isPageText } from '@rebbehub/model';
+import { isPageText, type PageText } from '@rebbehub/model';
 import { Pause, Play } from 'lucide-react';
 import type { Route } from './+types/show';
 import type { Entity, Mafteach } from '../lib/api.js';
@@ -33,6 +33,10 @@ import '../styles/pages/show.css';
  * what RebbeHub does, each as the site itself does it. Nothing on it leads
  * anywhere else: the rest of RebbeHub is private. What a machine heard or
  * read and nobody checked is marked so, here as everywhere.
+ *
+ * It opens in English, for the people he meets (`?lang=he` for Hebrew).
+ * Each sicha, and each farbrengen he set its written original beside,
+ * shows its words, the original, or the two side by side.
  */
 
 const INDEX = '/likkutei-sichos-mafteach-inyanim';
@@ -43,8 +47,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { api, showcases } = siteOf(context);
   const showcase = showcases ? await showcases.store.get(params.token) : null;
   if (!showcase) throw data('not found', { status: 404, headers: { 'Cache-Control': 'no-store' } });
-  const { token, lang, extras } = showcase;
-  const q = new URL(request.url).searchParams.get('q')?.trim().slice(0, 100) ?? '';
+  const { token, extras } = showcase;
+  const url = new URL(request.url);
+  // In English, for the people Shmuly meets; a Hebrew reader can switch.
+  const lang: Lang = url.searchParams.get('lang') === 'he' ? 'he' : 'en';
+  const q = url.searchParams.get('q')?.trim().slice(0, 100) ?? '';
   const ids = [...showcase.farbrengens, ...showcase.sichos];
   const [items, recordingsOf, stats, day, mafteach] = await Promise.all([
     api.entities(ids),
@@ -63,21 +70,39 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     const sources = Object.fromEntries(heard.map((r) => [r.id, mediaPath(token, showcase.mediaOf[r.id]!)]));
     const tracks = tracksOf(event, heard, lang, sources).map((track) => ({ ...track, href: `/show/${token}` }));
     const date = (event.data as { date?: string }).date;
-    return [{ id, title: labelOf(event, lang), date: date ? dateLabel(date, lang, { civil: false }) : null, tracks, transcripts: tracks.filter((tr) => showcase.transcripts.includes(tr.id)).map((tr) => tr.id) }];
+    const original = showcase.originals?.[id];
+    return [
+      {
+        id,
+        title: labelOf(event, lang),
+        date: date ? dateLabel(date, lang, { civil: false }) : null,
+        tracks,
+        transcripts: tracks.filter((tr) => showcase.transcripts.includes(tr.id)).map((tr) => tr.id),
+        original: original !== undefined ? mediaPath(token, original) : null,
+      },
+    ];
   });
 
-  const sichos = showcase.sichos.flatMap((id) => {
+  const read: PageView[] = (showcase.readings ?? []).map((r, i) => ({
+    id: `reading-${i}`,
+    title: r.title,
+    sub: lang === 'he' ? 'נקרא בקורא שלנו' : 'Read by our model',
+    scan: r.media !== null ? mediaPath(token, r.media) : null,
+    body: isPageText(r.body) ? r.body : null,
+    machine: true,
+  }));
+  const sichos: PageView[] = showcase.sichos.flatMap((id) => {
     const unit = items.get(id);
     if (!unit) return [];
     const d = unit.data as { work?: string; body?: unknown; machineOrigin?: { checked?: boolean } };
     const work = d.work ? works.get(d.work) : undefined;
     const media = showcase.mediaOf[id];
+    const volume = (unit.path ?? '').split('/')[2] ?? null;
     return [
       {
         id,
         title: labelOf(unit, lang),
-        work: work ? labelOf(work, lang) : null,
-        volume: (unit.path ?? '').split('/')[2] ?? null,
+        sub: [work ? labelOf(work, lang) : null, volume ? (lang === 'he' ? `חלק ${volume}` : `Vol. ${volume}`) : null].filter(Boolean).join(' · '),
         scan: media !== undefined ? mediaPath(token, media) : null,
         body: unit.withheld || !isPageText(d.body) ? null : d.body,
         machine: Boolean(d.machineOrigin && !d.machineOrigin.checked),
@@ -93,7 +118,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     note: showcase.note,
     extras,
     farbrengens,
-    sichos,
+    pages: [...read, ...sichos],
     counts: stats?.counts ?? null,
     hayomYom,
     mafteach: mafteach ? { q, topics: mafteach.topics, totals: mafteach.totals } : null,
@@ -111,39 +136,46 @@ export function meta({ loaderData }: Route.MetaArgs) {
 }
 
 const W = {
+  kicker: { he: 'המפתח הפתוח לתורתו של הרבי', en: "The open index of the Rebbe's Torah" },
   lede: {
-    he: 'המפתח הפתוח לתורתו של הרבי: כל התוועדות, שיחה ומכתב, עם ההקלטות, הסריקות והמילים עצמן.',
-    en: "The open index of the Rebbe's Torah: every farbrengen, sicha and letter, with the recordings, the scans and the words themselves.",
+    he: 'כל התוועדות, שיחה ומכתב, עם ההקלטות, הסריקות והמילים עצמן. נשמע, נקרא ונבדק, במקום אחד.',
+    en: 'Every farbrengen, sicha and letter, with the recordings, the scans and the words themselves: heard, read and checked, in one place.',
   },
+  preview: { he: 'תצוגה פרטית', en: 'Private preview' },
   listen: { he: 'לשמוע ולקרוא יחד', en: 'Hear it, read along' },
   listenSub: {
-    he: 'הדיבור נכתב מההקלטה במודל שלנו, ומוצג כמו מילות שיר: המילה הנאמרת מוארת. לחיצה על משפט מנגנת משם.',
-    en: 'Our model wrote down the words from the recording; they show as lyrics do, the word being said lit. Tap a line to play from there.',
+    he: 'המודל שלנו כתב את הדיבור מההקלטה, ואנשים בודקים אותו. המילה הנאמרת מוארת; לחיצה על שורה מנגנת משם.',
+    en: 'Our model wrote down every word from the recording, and people check it. The word being said lights up; tap a line to play from there.',
   },
   scans: { he: 'הדף המודפס, נקרא', en: 'The printed page, read' },
   scansSub: {
-    he: 'כל שיחה בסריקה שלה, ולצדה הטקסט שנקרא ממנה. הקורא שלנו קורא את לקוטי שיחות ב-99.9% דיוק באותיות.',
-    en: 'Each sicha in its own scan, beside the words read from it. Our reader reads Likkutei Sichos 99.9% right, letter by letter.',
+    he: 'הקורא שלנו קורא את לקוטי שיחות ב-99.9% דיוק באותיות: מירם, אותיות הסעיפים וההערות במקומן. אפשר לראות את הדף המקורי לצדו.',
+    en: 'Our reader reads Likkutei Sichos 99.9% right, letter by letter, with the Miram, the numbered pieces and the footnotes in place. Put the original page beside it to compare.',
   },
   noText: { he: 'הטקסט של שיחה זו עדיין נקרא.', en: "This sicha's words are still being read." },
+  text: { he: 'הטקסט', en: 'Text' },
+  beside: { he: 'לצד המקור', en: 'Side by side' },
+  original: { he: 'המקור', en: 'Original' },
+  view: { he: 'תצוגה', en: 'View' },
   daily: { he: 'היום יום, כפי שנדפס', en: 'Hayom Yom, as it is printed' },
   dailySub: { he: 'השיעור של היום, מסודר כמו בספר.', en: "Today's entry, set as the book sets it." },
-  mafteach: { he: 'מפתח ענינים ללקוטי שיחות', en: 'Likkutei Sichos: the subject index' },
-  mafteachSub: { he: 'כל המפתחות של כל החלקים יחד, נושא אחד במקום אחד.', en: "Every volume's index together: each topic once, with every page that speaks of it." },
+  mafteach: { he: 'מפתח ענינים ללקוטי שיחות', en: 'The Likkutei Sichos subject index' },
+  mafteachSub: { he: 'כל המפתחות של כל החלקים יחד, נושא אחד במקום אחד.', en: "Every volume's index joined into one: each topic once, with every page that speaks of it." },
   search: { he: 'חיפוש נושא', en: 'Search a topic' },
   find: { he: 'חיפוש', en: 'Search' },
   none: { he: 'לא נמצא נושא כזה.', en: 'No such topic.' },
   topics: { he: 'נושאים', en: 'topics' },
   places: { he: 'מראי מקומות', en: 'references' },
   models: { he: 'המודלים שלנו', en: 'Our models' },
-  modelsSub: { he: 'נבדקו על חומר שהמודלים לא ראו מעולם.', en: 'Scored on material the models never saw.' },
+  modelsSub: { he: 'נבדקו על חומר שהמודלים לא ראו מעולם.', en: 'Each scored on material it never saw in training.' },
   numbers: { he: 'במספרים', en: 'In numbers' },
   errors: { he: 'שגיאות במילים / באותיות: פחות הוא טוב יותר.', en: 'Word / letter errors: lower is better.' },
-  parts: { he: 'חלקים', en: 'parts' },
   loading: { he: 'הדיבור נטען…', en: 'Loading the words…' },
-  checked: { he: 'נבדק בידי אנשים', en: 'checked by people' },
+  checked: { he: 'נבדקו בידי אנשים', en: 'checked by people' },
+  paragraphs: { he: 'פסקאות', en: 'paragraphs' },
   play: { he: 'לנגן', en: 'Play' },
   pause: { he: 'עצירה', en: 'Pause' },
+  other: { he: 'English', en: 'עברית' },
   private: { he: 'תצוגה פרטית. RebbeHub עדיין סגור לציבור.', en: 'A private preview. RebbeHub is not yet open to the public.' },
 } as const;
 const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
@@ -157,113 +189,110 @@ const COUNTS: Array<{ type: string; label: { he: string; en: string } }> = [
   { type: 'text', label: { he: 'תמלולים', en: 'transcripts' } },
 ];
 
+type View = 'text' | 'beside' | 'original';
+
 export default function Show({ loaderData }: Route.ComponentProps) {
-  const { token, lang, title, note, extras, farbrengens, sichos, counts, hayomYom, mafteach } = loaderData;
+  const { token, lang, title, note, extras, farbrengens, pages, counts, hayomYom, mafteach } = loaderData;
   const sections: Array<{ id: string; label: string }> = [];
   if (farbrengens.length) sections.push({ id: 'listen', label: w(lang, 'listen') });
-  if (sichos.length) sections.push({ id: 'scans', label: w(lang, 'scans') });
+  if (pages.length) sections.push({ id: 'scans', label: w(lang, 'scans') });
   if (hayomYom.length) sections.push({ id: 'daily', label: w(lang, 'daily') });
   if (mafteach) sections.push({ id: 'mafteach', label: w(lang, 'mafteach') });
   if (extras.models) sections.push({ id: 'models', label: w(lang, 'models') });
+  const shownCounts = counts ? COUNTS.filter((c) => counts[c.type]) : [];
+  let n = 0;
+  const kicker = () => String(++n).padStart(2, '0');
 
   return (
     <div className="show" lang={lang} dir={dir(lang)}>
+      <div className="show-bar">
+        <div className="show-wrap show-bar-in">
+          <Logo size={24} />
+          <span className="show-pill">{w(lang, 'preview')}</span>
+          <nav className="show-bar-nav" aria-label={title}>
+            {sections.map((s) => (
+              <a key={s.id} href={`#${s.id}`}>
+                {s.label}
+              </a>
+            ))}
+          </nav>
+          <a className="show-lang" href={`/show/${token}${lang === 'en' ? '?lang=he' : ''}`} lang={lang === 'en' ? 'he' : 'en'}>
+            {w(lang, 'other')}
+          </a>
+        </div>
+      </div>
+
       <header className="show-hero">
-        <div className="show-wrap">
-          {/* The name once: as the logo, unless the title is the name. */}
-          {title !== 'RebbeHub' ? (
-            <div className="show-brand">
-              <Logo size={30} />
-            </div>
-          ) : null}
-          <h1 className="show-title">{title}</h1>
-          {note ? <p className="show-note">{note}</p> : null}
-          <p className="show-lede">{w(lang, 'lede')}</p>
-          {sections.length > 1 ? (
-            <nav className="show-nav" aria-label={title}>
-              {sections.map((s) => (
-                <a key={s.id} href={`#${s.id}`}>
-                  {s.label}
-                </a>
+        <div className="show-wrap show-hero-in">
+          <div className="show-hero-text">
+            <p className="show-kicker">{w(lang, 'kicker')}</p>
+            <h1 className="show-title">{title}</h1>
+            {note ? <p className="show-note">{note}</p> : null}
+            <p className="show-lede">{w(lang, 'lede')}</p>
+            {sections.length ? (
+              <div className="show-cta">
+                {sections.slice(0, 2).map((s, i) => (
+                  <a key={s.id} href={`#${s.id}`} className={i === 0 ? 'show-btn primary' : 'show-btn'}>
+                    {s.label}
+                  </a>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          {shownCounts.length ? (
+            <dl className="show-stats" aria-label={w(lang, 'numbers')}>
+              {shownCounts.map((c) => (
+                <div key={c.type} className="show-stat">
+                  <dd>{num(counts![c.type]!, lang)}</dd>
+                  <dt>{c.label[lang]}</dt>
+                </div>
               ))}
-            </nav>
+            </dl>
           ) : null}
         </div>
       </header>
 
-      {counts ? (
-        <section className="show-band show-numbers" aria-label={w(lang, 'numbers')}>
-          <div className="show-wrap show-counts">
-            {COUNTS.filter((c) => counts[c.type]).map((c) => (
-              <div key={c.type} className="show-count">
-                <span className="show-count-n">{num(counts[c.type]!, lang)}</span>
-                <span className="show-count-l">{c.label[lang]}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
       {farbrengens.length ? (
-        <section id="listen" className="show-section">
-          <div className="show-wrap">
-            <h2 className="show-h">{w(lang, 'listen')}</h2>
-            <p className="show-sub">{w(lang, 'listenSub')}</p>
-            <Listen token={token} farbrengens={farbrengens} lang={lang} />
-          </div>
-        </section>
+        <Section id="listen" n={kicker()} title={w(lang, 'listen')} sub={w(lang, 'listenSub')}>
+          <Listen token={token} farbrengens={farbrengens} lang={lang} />
+        </Section>
       ) : null}
 
-      {sichos.length ? (
-        <section id="scans" className="show-section">
-          <div className="show-wrap">
-            <h2 className="show-h">{w(lang, 'scans')}</h2>
-            <p className="show-sub">{w(lang, 'scansSub')}</p>
-            {sichos.map((s) => (
-              <Sicha key={s.id} sicha={s} lang={lang} />
-            ))}
-          </div>
-        </section>
+      {pages.length ? (
+        <Section id="scans" n={kicker()} title={w(lang, 'scans')} sub={w(lang, 'scansSub')}>
+          {pages.map((p) => (
+            <PageCard key={p.id} page={p} lang={lang} />
+          ))}
+        </Section>
       ) : null}
 
       {hayomYom.length ? (
-        <section id="daily" className="show-section">
-          <div className="show-wrap show-narrow">
-            <h2 className="show-h">{w(lang, 'daily')}</h2>
-            <p className="show-sub">{w(lang, 'dailySub')}</p>
+        <Section id="daily" n={kicker()} title={w(lang, 'daily')} sub={w(lang, 'dailySub')} narrow>
+          <div className="show-paper">
             {hayomYom.map((h, i) => (
               <HayomYomDay key={i} title={h.title} body={h.body} shiurim={h.shiurim} lang={lang} />
             ))}
           </div>
-        </section>
+        </Section>
       ) : null}
 
       {mafteach ? (
-        <section id="mafteach" className="show-section">
-          <div className="show-wrap">
-            <h2 className="show-h">{w(lang, 'mafteach')}</h2>
-            <p className="show-sub">
-              {w(lang, 'mafteachSub')} {num(mafteach.totals.topics, lang)} {w(lang, 'topics')} · {num(mafteach.totals.places, lang)} {w(lang, 'places')}
-            </p>
-            <Form method="get" className="show-search" preventScrollReset>
-              <input type="search" name="q" defaultValue={mafteach.q} placeholder={w(lang, 'search')} aria-label={w(lang, 'search')} dir="auto" />
-              <button type="submit" className="btn primary">
-                {w(lang, 'find')}
-              </button>
-            </Form>
-            {mafteach.topics.length ? <Topics topics={mafteach.topics} lang={lang} /> : <p className="show-sub">{w(lang, 'none')}</p>}
-          </div>
-        </section>
+        <Section id="mafteach" n={kicker()} title={w(lang, 'mafteach')} sub={`${w(lang, 'mafteachSub')} ${num(mafteach.totals.topics, lang)} ${w(lang, 'topics')} · ${num(mafteach.totals.places, lang)} ${w(lang, 'places')}`}>
+          <Form method="get" className="show-search" preventScrollReset>
+            {lang === 'he' ? <input type="hidden" name="lang" value="he" /> : null}
+            <input type="search" name="q" defaultValue={mafteach.q} placeholder={w(lang, 'search')} aria-label={w(lang, 'search')} dir="auto" />
+            <button type="submit" className="show-btn primary">
+              {w(lang, 'find')}
+            </button>
+          </Form>
+          {mafteach.topics.length ? <Topics topics={mafteach.topics} lang={lang} /> : <p className="show-sub">{w(lang, 'none')}</p>}
+        </Section>
       ) : null}
 
       {extras.models ? (
-        <section id="models" className="show-section">
-          <div className="show-wrap">
-            <h2 className="show-h">{w(lang, 'models')}</h2>
-            <p className="show-sub">{w(lang, 'modelsSub')}</p>
-            <Models lang={lang} />
-          </div>
-        </section>
+        <Section id="models" n={kicker()} title={w(lang, 'models')} sub={w(lang, 'modelsSub')}>
+          <Models lang={lang} />
+        </Section>
       ) : null}
 
       <footer className="show-foot">
@@ -276,7 +305,33 @@ export default function Show({ loaderData }: Route.ComponentProps) {
   );
 }
 
-type Farbrengen = { id: string; title: string; date: string | null; tracks: Track[]; transcripts: string[] };
+function Section({ id, n, title, sub, narrow, children }: { id: string; n: string; title: string; sub: string; narrow?: boolean; children: React.ReactNode }) {
+  return (
+    <section id={id} className="show-section">
+      <div className={narrow ? 'show-wrap show-narrow' : 'show-wrap'}>
+        <p className="show-num">{n}</p>
+        <h2 className="show-h">{title}</h2>
+        <p className="show-sub">{sub}</p>
+        {children}
+      </div>
+    </section>
+  );
+}
+
+/** Text, the two side by side, or the original alone. */
+function Views({ view, set, lang, label }: { view: View; set: (v: View) => void; lang: Lang; label: string }) {
+  return (
+    <div className="show-seg" role="radiogroup" aria-label={`${w(lang, 'view')}: ${label}`}>
+      {(['text', 'beside', 'original'] as const).map((v) => (
+        <button key={v} type="button" role="radio" aria-checked={view === v} className={view === v ? 'on' : undefined} onClick={() => set(v)}>
+          {w(lang, v)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+type Farbrengen = { id: string; title: string; date: string | null; tracks: Track[]; transcripts: string[]; original: string | null };
 
 /** The farbrengens, one open at a time: its words as lyrics where it has a transcript, else its parts to play. */
 function Listen({ token, farbrengens, lang }: { token: string; farbrengens: Farbrengen[]; lang: Lang }) {
@@ -293,12 +348,7 @@ function Listen({ token, farbrengens, lang }: { token: string; farbrengens: Farb
             </button>
           ))}
         </div>
-      ) : (
-        <p className="show-one">
-          <b>{shown.title}</b>
-          {shown.date ? ` · ${shown.date}` : ''}
-        </p>
-      )}
+      ) : null}
       <Heard key={shown.id} token={token} farbrengen={shown} lang={lang} />
     </div>
   );
@@ -306,6 +356,8 @@ function Listen({ token, farbrengens, lang }: { token: string; farbrengens: Farb
 
 function Heard({ token, farbrengen, lang }: { token: string; farbrengen: Farbrengen; lang: Lang }) {
   const [transcripts, setTranscripts] = useState<Transcript[] | null>(farbrengen.transcripts.length ? null : []);
+  const [view, setView] = useState<View>('text');
+  const [page, setPage] = useState(1);
   const nowMs = useNow(farbrengen.tracks);
   useEffect(() => {
     if (!farbrengen.transcripts.length) return;
@@ -322,19 +374,56 @@ function Heard({ token, farbrengen, lang }: { token: string; farbrengen: Farbren
     };
   }, [token, farbrengen.transcripts]);
 
-  if (transcripts === null) return <p className="show-sub">{w(lang, 'loading')}</p>;
-  if (!transcripts.length) return <Parts tracks={farbrengen.tracks} lang={lang} />;
+  const head = (
+    <div className="show-card-head">
+      <div>
+        <h3 className="show-card-t">{farbrengen.title}</h3>
+        {farbrengen.date ? <p className="show-card-d">{farbrengen.date}</p> : null}
+      </div>
+      {farbrengen.original && transcripts?.length ? <Views view={view} set={setView} lang={lang} label={farbrengen.title} /> : null}
+    </div>
+  );
+  if (transcripts === null)
+    return (
+      <div className="show-card">
+        {head}
+        <p className="show-sub">{w(lang, 'loading')}</p>
+      </div>
+    );
+  if (!transcripts.length)
+    return (
+      <div className="show-card">
+        {head}
+        <Parts tracks={farbrengen.tracks} lang={lang} />
+      </div>
+    );
   const paragraphs = transcripts.flatMap((tr) => tr.paragraphs);
   const checked = paragraphs.filter((p) => p.checked).length;
   const machine = checked < paragraphs.length || paragraphs.some((p) => p.syncChecked === false);
   // What plays is the parts with words, one after another.
   const tracks = farbrengen.tracks.filter((tr) => transcripts.some((x) => x.recording === tr.id));
+  const shownView = farbrengen.original ? view : 'text';
   return (
-    <div className="show-lyrics">
-      <Lyrics transcripts={transcripts} tracks={tracks} lang={lang} nowMs={nowMs} found={null} machine={machine} signedIn={false} />
+    <div className="show-card show-card-flush">
+      {head}
+      <div className={`show-pair show-pair-${shownView}`}>
+        {shownView !== 'original' ? (
+          <div className="show-lyrics">
+            <Lyrics transcripts={transcripts} tracks={tracks} lang={lang} nowMs={nowMs} found={null} machine={machine} signedIn={false} />
+          </div>
+        ) : null}
+        {farbrengen.original && shownView !== 'text' ? (
+          <div className="show-scan">
+            <ScanBeside file={farbrengen.original} src="" title={farbrengen.title} page={page} lang={lang} onPage={(p) => setPage(Math.max(1, p))} />
+          </div>
+        ) : null}
+      </div>
       <p className="show-meta">
-        {machine ? <MachineLabel lang={lang} size="sm" /> : null} {num(paragraphs.length, lang)} {lang === 'he' ? 'פסקאות' : 'paragraphs'}
-        {checked ? ` · ${num(checked, lang)} ${w(lang, 'checked')}` : ''}
+        {machine ? <MachineLabel lang={lang} size="sm" /> : null}
+        <span>
+          {num(paragraphs.length, lang)} {w(lang, 'paragraphs')}
+          {checked ? ` · ${num(checked, lang)} ${w(lang, 'checked')}` : ''}
+        </span>
       </p>
     </div>
   );
@@ -387,31 +476,42 @@ function Parts({ tracks, lang }: { tracks: Track[]; lang: Lang }) {
   );
 }
 
-type SichaView = { id: string; title: string; work: string | null; volume: string | null; scan: string | null; body: unknown; machine: boolean };
+type PageView = { id: string; title: string; sub: string; scan: string | null; body: PageText | null; machine: boolean };
 
-/** A sicha: its scan, drawn page by page, beside the words read from it. */
-function Sicha({ sicha, lang }: { sicha: SichaView; lang: Lang }) {
+/** A sicha: its words, and its scan beside them or alone. */
+function PageCard({ page: p, lang }: { page: PageView; lang: Lang }) {
+  const [view, setView] = useState<View>('text');
   const [page, setPage] = useState(1);
-  const name = [sicha.work, sicha.volume ? (lang === 'he' ? `חלק ${sicha.volume}` : `vol. ${sicha.volume}`) : null, sicha.title].filter(Boolean).join(' · ');
+  const shown: View = !p.scan ? 'text' : !p.body ? 'original' : view;
   return (
-    <article className="show-sicha">
-      <h3 className="show-sicha-t">
-        {name}
-        {sicha.machine ? <MachineLabel lang={lang} size="sm" /> : null}
-      </h3>
-      <div className={sicha.scan && isPageText(sicha.body) ? 'show-beside' : 'show-alone'}>
-        {sicha.scan ? (
+    <article className="show-card">
+      <div className="show-card-head">
+        <div>
+          <h3 className="show-card-t" dir="auto">
+            {p.title}
+          </h3>
+          <p className="show-card-d">
+            {p.sub}
+            {p.machine ? <MachineLabel lang={lang} size="sm" /> : null}
+          </p>
+        </div>
+        {p.scan && p.body ? <Views view={view} set={setView} lang={lang} label={p.title} /> : null}
+      </div>
+      <div className={`show-pair show-pair-${shown}`}>
+        {shown !== 'original' ? (
+          p.body ? (
+            <div className="show-words torah">
+              <PageWords page={p.body} lang={lang} />
+            </div>
+          ) : (
+            <p className="show-sub">{w(lang, 'noText')}</p>
+          )
+        ) : null}
+        {p.scan && shown !== 'text' ? (
           <div className="show-scan">
-            <ScanBeside file={sicha.scan} src="" title={name} page={page} lang={lang} onPage={(p) => setPage(Math.max(1, p))} />
+            <ScanBeside file={p.scan} src="" title={p.title} page={page} lang={lang} onPage={(n) => setPage(Math.max(1, n))} />
           </div>
         ) : null}
-        {isPageText(sicha.body) ? (
-          <div className="show-words torah">
-            <PageWords page={sicha.body} lang={lang} />
-          </div>
-        ) : (
-          <p className="show-sub">{w(lang, 'noText')}</p>
-        )}
       </div>
     </article>
   );

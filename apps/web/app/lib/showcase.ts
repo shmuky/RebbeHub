@@ -13,6 +13,8 @@
  * so the link opens no other door (server/showcase.ts).
  */
 
+import type { Reading } from './reading.js';
+
 /** Where a recording's or scan's bytes are, for a guest to be given them through the showcase. */
 export type MediaSource =
   /** A file RebbeHub serves itself, from the public bucket (`objects/<sha256>`). */
@@ -52,6 +54,10 @@ export interface Showcase {
   mediaOf: Record<string, number>;
   /** Recordings whose transcripts a guest may read (`/show/<token>/t/<recording>`). */
   transcripts: string[];
+  /** Pages our reader read (lib/reading.ts), each with its scan's place in `media`. */
+  readings?: Array<Reading & { media: number | null }>;
+  /** A farbrengen's original, set beside its words: the written transcript or printed sicha, by its place in `media`. */
+  originals?: Record<string, number>;
 }
 
 export interface ShowcaseStore {

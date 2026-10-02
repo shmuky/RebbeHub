@@ -40,7 +40,9 @@ export const links: LinksFunction = () => [
 ];
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const lang = langFrom(request);
+  const url = new URL(request.url);
+  // A showcase opens in English for Shmuly's guests (routes/show.tsx).
+  const lang: Lang = url.pathname.startsWith('/show/') ? (url.searchParams.get('lang') === 'he' ? 'he' : 'en') : langFrom(request);
   return { lang, siteUrl: siteOf(context).siteUrl };
 }
 

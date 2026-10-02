@@ -7,6 +7,7 @@ import { dateLabel } from '../lib/dates.js';
 import { langFrom, type Lang } from '../lib/i18n.js';
 import { num } from '../lib/i18nUi.js';
 import { labelOf } from '../lib/labels.js';
+import { readingOf } from '../lib/reading.js';
 import { mediaSourceOf, newToken, NO_EXTRAS, TOKEN, type MediaSource, type Showcase, type ShowcaseExtras } from '../lib/showcase.js';
 import { Icon } from '../ui/Icon.js';
 import { EmptyState } from '../ui/primitives.js';
@@ -22,9 +23,15 @@ import '../styles/pages/show.css';
  * Saving fixes which recordings and scans the page may pass on to a guest
  * (`media`); picking again and saving makes that list anew. Removing a
  * showcase closes its address at once.
+ *
+ * He can also add pages our reader read (the reader's text file, which
+ * names its scan: lib/reading.ts), and set beside a farbrengen its
+ * original, the written transcript, by its Drive link.
  */
 
 const MAX_ITEMS = 12;
+const MAX_READINGS = 6;
+const MAX_READING_BYTES = 1024 * 1024;
 const ID = /^rh-[0-9a-z]+$/;
 
 const W = {
@@ -42,7 +49,6 @@ const W = {
   namePh: { he: 'למשל: RebbeHub', en: 'e.g. RebbeHub' },
   note: { he: 'שורה מתחת לכותרת (לא חובה)', en: 'A line under the title (optional)' },
   notePh: { he: 'למשל: הוכן במיוחד עבור…', en: 'e.g. Prepared for…' },
-  language: { he: 'שפת הדף', en: "The page's language" },
   farbrengens: { he: 'התוועדויות', en: 'Farbrengens' },
   farbrengensSub: { he: 'הדיבור מוצג כמילות שיר בזמן ההשמעה.', en: 'Their words show as lyrics while they play.' },
   sichos: { he: 'שיחות עם סריקה', en: 'Sichos with their scans' },
@@ -72,6 +78,15 @@ const W = {
   paragraphs: { he: 'פסקאות', en: 'paragraphs' },
   noAudio: { he: 'בלי הקלטה שאפשר להשמיע', en: 'no recording that can play' },
   noScan: { he: 'בלי סריקה', en: 'no scan' },
+  readings: { he: 'דפים שהקורא שלנו קרא', en: 'Pages our reader read' },
+  readingsSub: {
+    he: 'קובץ הטקסט שהקורא כותב לשיחה (עם שורת scan: לסריקה). בדף יוצג לצד הדף המקורי.',
+    en: "The text file the reader writes for a sicha (with a scan: line for its scan). The page shows it beside the original.",
+  },
+  addReading: { he: 'הוספת קובץ', en: 'Add a file' },
+  dropReading: { he: 'להסיר', en: 'Remove' },
+  original: { he: 'המקור (קישור Drive לתמליל הכתוב, לא חובה)', en: 'Original (Drive link to the written transcript, optional)' },
+  badReading: { he: 'הקובץ לא נקרא:', en: 'Could not read:' },
 } as const;
 const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
 
@@ -114,10 +129,28 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     siteUrl,
     state: 'owner-ok' as const,
     list: list.map((s) => ({ token: s.token, title: s.title, note: s.note, updated: s.updated, farbrengens: s.farbrengens.length, sichos: s.sichos.length })),
-    current: current ? { token: current.token, title: current.title, note: current.note, lang: current.lang, extras: current.extras, farbrengens: picked(current.farbrengens), sichos: picked(current.sichos) } : null,
+    current: current
+      ? {
+          token: current.token,
+          title: current.title,
+          note: current.note,
+          extras: current.extras,
+          farbrengens: picked(current.farbrengens),
+          sichos: picked(current.sichos),
+          readings: (current.readings ?? []).map((r) => ({ title: r.title, scan: r.scan })),
+          originals: Object.fromEntries(Object.entries(current.originals ?? {}).flatMap(([id, i]) => (current.media[i] ? [[id, linkOf(current.media[i]!)]] : []))),
+        }
+      : null,
     best,
     saved: saved && TOKEN.test(saved) ? saved : null,
   };
+}
+
+/** A file's address as he would paste it again. */
+function linkOf(source: MediaSource): string {
+  if (source.kind === 'drive') return `https://drive.google.com/file/d/${source.id}/view${source.resourceKey ? `?resourcekey=${source.resourceKey}` : ''}`;
+  if (source.kind === 'object') return `/objects/${source.sha256}`;
+  return source.file;
 }
 
 /** The ids a form field lists, in its order, each once, a dozen at most. */
@@ -163,12 +196,34 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
   const withWords = new Set(transcribed.map((t) => t.recording));
 
+  // A farbrengen's original: a Drive file (or one RebbeHub keeps) he links.
+  const originals: Record<string, number> = {};
+  for (const id of farbrengens) {
+    const source = mediaSourceOf(String(form.get(`original:${id}`) ?? '').trim());
+    if (source && source.kind !== 'jem') originals[id] = media.push(source) - 1;
+  }
+
+  // Pages the reader read: those kept, then the files added now.
+  const readings: NonNullable<Showcase['readings']> = [];
+  const keepReading = (reading: { title: string; scan: string | null; body: unknown }) => {
+    if (readings.length >= MAX_READINGS) return;
+    const source = mediaSourceOf(reading.scan);
+    const r = reading as NonNullable<Showcase['readings']>[number];
+    readings.push({ title: r.title, scan: r.scan, body: r.body, media: source ? media.push(source) - 1 : null });
+  };
+  for (const [i, kept] of (existing?.readings ?? []).entries()) if (form.get(`drop-reading:${i}`) !== 'on') keepReading(kept);
+  for (const file of form.getAll('reading')) {
+    if (typeof file === 'string' || !file.size || file.size > MAX_READING_BYTES) continue;
+    const reading = readingOf(await file.text(), file.name.replace(/\.\w+$/, ''));
+    if (reading) keepReading(reading);
+  }
+
   const now = new Date().toISOString();
   const showcase: Showcase = {
     token: existing?.token ?? newToken(),
     title: String(form.get('title') ?? '').trim().slice(0, 120) || 'RebbeHub',
     note: String(form.get('note') ?? '').trim().slice(0, 240),
-    lang: form.get('lang') === 'en' ? 'en' : 'he',
+    lang: 'en',
     created: existing?.created ?? now,
     updated: now,
     farbrengens,
@@ -177,6 +232,8 @@ export async function action({ request, context }: Route.ActionArgs) {
     media,
     mediaOf,
     transcripts: recordings.filter((r) => withWords.has(r.id) && mediaOf[r.id] !== undefined).map((r) => r.id),
+    readings,
+    originals,
   };
   await showcases.store.put(showcase);
   return redirect(`/showcase?edit=${showcase.token}&saved=${showcase.token}`);
@@ -255,7 +312,16 @@ export default function ShowcasePicker({ loaderData }: Route.ComponentProps) {
   );
 }
 
-type Current = { token: string; title: string; note: string; lang: Lang; extras: ShowcaseExtras; farbrengens: Pick[]; sichos: Pick[] } | null;
+type Current = {
+  token: string;
+  title: string;
+  note: string;
+  extras: ShowcaseExtras;
+  farbrengens: Pick[];
+  sichos: Pick[];
+  readings: Array<{ title: string; scan: string | null }>;
+  originals: Record<string, string>;
+} | null;
 type Best = Pick & { parts: number; paragraphs: number; checked: number };
 
 function Editor({ lang, current, best }: { lang: Lang; current: Current; best: Best[] }) {
@@ -267,7 +333,7 @@ function Editor({ lang, current, best }: { lang: Lang; current: Current; best: B
   const addTo = (set: (f: (list: Pick[]) => Pick[]) => void) => (pick: Pick) => set((list) => (list.some((p) => p.id === pick.id) || list.length >= MAX_ITEMS ? list : [...list, pick]));
 
   return (
-    <Form method="post" className="sc-editor box">
+    <Form method="post" encType="multipart/form-data" className="sc-editor box">
       <h2 className="h-sec">{current ? `${w(lang, 'editing')}: ${current.title}` : w(lang, 'newOne')}</h2>
       {current ? <input type="hidden" name="token" value={current.token} /> : null}
       <input type="hidden" name="farbrengens" value={farbrengens.map((p) => p.id).join(',')} />
@@ -282,24 +348,39 @@ function Editor({ lang, current, best }: { lang: Lang; current: Current; best: B
           <span>{w(lang, 'note')}</span>
           <input name="note" defaultValue={current?.note ?? ''} placeholder={w(lang, 'notePh')} maxLength={240} dir="auto" />
         </label>
-        <label>
-          <span>{w(lang, 'language')}</span>
-          <select name="lang" defaultValue={current?.lang ?? lang}>
-            <option value="he">עברית</option>
-            <option value="en">English</option>
-          </select>
-        </label>
       </div>
 
       <Finder lang={lang} has={has} onEvent={addTo(setFarbrengens)} onUnit={addTo(setSichos)} />
 
       <h3 className="sc-h">{w(lang, 'farbrengens')}</h3>
       <p className="subtle small">{w(lang, 'farbrengensSub')}</p>
-      <Picked list={farbrengens} set={setFarbrengens} lang={lang} />
+      <Picked list={farbrengens} set={setFarbrengens} lang={lang} originals={current?.originals ?? {}} />
 
       <h3 className="sc-h">{w(lang, 'sichos')}</h3>
       <p className="subtle small">{w(lang, 'sichosSub')}</p>
       <Picked list={sichos} set={setSichos} lang={lang} />
+
+      <h3 className="sc-h">{w(lang, 'readings')}</h3>
+      <p className="subtle small">{w(lang, 'readingsSub')}</p>
+      {current?.readings.length ? (
+        <ul className="sc-picked">
+          {current.readings.map((r, i) => (
+            <li key={i}>
+              <span>
+                <b dir="auto">{r.title}</b> {r.scan ? null : <span className="subtle small">{w(lang, 'noScan')}</span>}
+              </span>
+              <label className="sc-check">
+                <input type="checkbox" name={`drop-reading:${i}`} />
+                {w(lang, 'dropReading')}
+              </label>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <label className="sc-file">
+        <span>{w(lang, 'addReading')}</span>
+        <input type="file" name="reading" accept=".txt,text/plain" multiple />
+      </label>
 
       <h3 className="sc-h">{w(lang, 'also')}</h3>
       <div className="sc-extras">
@@ -347,7 +428,7 @@ function Editor({ lang, current, best }: { lang: Lang; current: Current; best: B
   );
 }
 
-function Picked({ list, set, lang }: { list: Pick[]; set: (f: (list: Pick[]) => Pick[]) => void; lang: Lang }) {
+function Picked({ list, set, lang, originals }: { list: Pick[]; set: (f: (list: Pick[]) => Pick[]) => void; lang: Lang; originals?: Record<string, string> }) {
   if (!list.length) return <p className="subtle">{w(lang, 'nothing')}</p>;
   return (
     <ol className="sc-picked">
@@ -355,6 +436,9 @@ function Picked({ list, set, lang }: { list: Pick[]; set: (f: (list: Pick[]) => 
         <li key={p.id}>
           <span>
             <b>{p.label}</b> <span className="subtle">{p.sub}</span>
+            {originals ? (
+              <input className="sc-original" name={`original:${p.id}`} defaultValue={originals[p.id] ?? ''} placeholder={w(lang, 'original')} aria-label={w(lang, 'original')} dir="ltr" />
+            ) : null}
           </span>
           <span className="btn-row">
             <button type="button" className="btn sm icon" disabled={i === 0} aria-label={w(lang, 'up')} title={w(lang, 'up')} onClick={() => set((l) => [...l.slice(0, i - 1), l[i]!, l[i - 1]!, ...l.slice(i + 1)])}>
