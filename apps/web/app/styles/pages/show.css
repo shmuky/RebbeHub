@@ -1,252 +1,147 @@
 /*
- * A showcase (routes/show.tsx): the agents that build RebbeHub, at work.
- * A working console, not a landing page: a dark, dense frame with each
- * agent's model, input, output and score in monospace; the material
- * itself (scans, Torah text, the lyrics) on its own paper, so the input
- * and the output can be compared side by side. And the page where Shmuly
- * makes them (routes/showcase.tsx), in the site's usual forms.
+ * A showcase (routes/show.tsx): an information page about the agents that
+ * build RebbeHub, in the site's own colours and type. Plain text, a table,
+ * and the examples (scans, Torah text, the lyrics) as the site draws them.
+ * And the page where Shmuly makes them (routes/showcase.tsx), in the
+ * site's usual forms.
  */
 .show {
-  --sh-bg: #0d1117;
-  --sh-panel: #151b23;
-  --sh-panel-2: #1b2330;
-  --sh-line: #283242;
-  --sh-text: #e6edf3;
-  --sh-dim: #8b98a9;
-  --sh-live: #3fb950;
-  --sh-accent: #e3b341;
   min-height: 100vh;
-  background: var(--sh-bg);
-  color: var(--sh-text);
+  background: var(--bg);
+  color: var(--text);
   font-family: var(--ui);
+  font-size: 16px;
+  line-height: 1.6;
 }
 .show-wrap {
-  max-width: 1240px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 0 20px;
 }
-.show-narrow {
-  max-width: 760px;
-}
 .show code {
   font-family: var(--mono);
+  font-size: 0.88em;
   background: none;
   border: 0;
   padding: 0;
-  color: var(--sh-dim);
+  color: var(--muted);
 }
 
-/* The top: the name, that this is a preview, the other language; then what the page is. */
 .show-top {
-  border-bottom: 1px solid var(--sh-line);
-}
-.show-top-in {
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 52px;
-}
-.show .logo-name {
-  color: var(--sh-text);
-}
-.show-pill {
-  font-family: var(--mono);
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--sh-line);
-  color: var(--sh-dim);
+  height: 56px;
+  border-bottom: 1px solid var(--border);
 }
 .show-lang {
   margin-inline-start: auto;
-  padding: 5px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--sh-line);
-  color: var(--sh-dim);
-  text-decoration: none;
-  font-size: 13px;
-}
-.show-lang:hover {
-  color: var(--sh-text);
-}
-.show-intro {
-  padding-top: 36px;
-  padding-bottom: 32px;
-}
-.show-kicker {
-  margin: 0 0 10px;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--sh-accent);
+  font-size: 14px;
 }
 .show-title {
   font-family: var(--display);
   font-weight: 700;
-  font-size: clamp(30px, 4.6vw, 46px);
-  line-height: 1.1;
-  margin: 0 0 10px;
+  font-size: clamp(28px, 4vw, 38px);
+  line-height: 1.15;
+  margin: 32px 0 8px;
 }
 .show-note {
-  margin: 0 0 10px;
-  color: var(--sh-text);
+  margin: 0 0 8px;
   font-size: 17px;
 }
 .show-lede {
   max-width: 760px;
-  margin: 0;
-  color: var(--sh-dim);
-  font-size: 16px;
-  line-height: 1.65;
-}
-
-/* The roster: one panel per agent. */
-.show-roster-band {
-  background: var(--sh-panel);
-  border-top: 1px solid var(--sh-line);
-  border-bottom: 1px solid var(--sh-line);
-  padding-bottom: 36px !important;
-}
-.show-roster {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
-  gap: 12px;
-}
-.show-agent {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px;
-  background: var(--sh-bg);
-  border: 1px solid var(--sh-line);
-  border-radius: 10px;
-}
-.show-agent-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.show-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--sh-live);
-  box-shadow: 0 0 0 3px rgba(63, 185, 80, 0.18);
-  flex: none;
-}
-.show-agent-t {
-  margin: 0;
+  margin: 0 0 8px;
   font-size: 17px;
-  font-weight: 700;
 }
-.show-agent-m {
-  margin-inline-start: auto;
-  font-size: 12px;
-  color: var(--sh-dim);
-}
-.show-io {
-  margin: 0;
-  font-size: 14px;
-  color: var(--sh-text);
-}
-.show-io-k {
-  font-family: var(--mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  color: var(--sh-dim);
-}
-.show-io-arrow {
-  color: var(--sh-accent);
-  padding: 0 4px;
-}
-.show-agent-s {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 22px;
-  margin: 0;
-}
-.show-agent-s dt {
-  font-size: 12px;
-  color: var(--sh-dim);
-}
-.show-agent-s dd {
-  margin: 0;
-  font-family: var(--mono);
-  font-weight: 700;
-  font-size: 22px;
-  color: var(--sh-accent);
-  font-variant-numeric: tabular-nums;
-}
-.show-agent-go {
-  margin-top: auto;
+.show-meta {
+  color: var(--subtle);
   font-size: 13px;
-  color: var(--sh-text);
-  text-decoration: none;
-  opacity: 0.8;
-}
-.show-agent-go:hover {
-  opacity: 1;
-  text-decoration: underline;
-}
-
-/* Each agent at work. */
-.show-section {
-  padding: 48px 0 8px;
-  scroll-margin-top: 8px;
-}
-.show-run {
-  display: inline-flex;
+  margin: 8px 0 0;
+  display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 10px;
-  padding: 4px 10px;
-  border: 1px solid var(--sh-line);
-  border-radius: 6px;
-  background: var(--sh-panel);
-  font-size: 12px;
-  color: var(--sh-dim);
+  flex-wrap: wrap;
+}
+
+.show-toc {
+  margin: 24px 0 0;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r, 6px);
+  background: var(--card);
+  max-width: 420px;
+}
+.show-toc-h {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.show-toc ol {
+  margin: 0;
+  padding-inline-start: 20px;
+  font-size: 15px;
+}
+
+.show-section {
+  padding: 40px 0 0;
+  scroll-margin-top: 8px;
 }
 .show-h {
   font-family: var(--display);
   font-weight: 700;
-  font-size: clamp(24px, 3.4vw, 32px);
-  margin: 0 0 8px;
+  font-size: clamp(22px, 3vw, 28px);
+  margin: 0 0 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
 }
 .show-sub {
-  color: var(--sh-dim);
-  margin: 0 0 20px;
+  margin: 8px 0 0;
   max-width: 760px;
-  font-size: 15px;
-  line-height: 1.6;
-}
-.show-meta {
-  color: var(--sh-dim);
-  font-size: 13px;
-  margin: 12px 0 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 
+/* The agents, one row each. */
+.show-table-wrap {
+  overflow-x: auto;
+  margin-top: 16px;
+}
+.show-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+  background: var(--card);
+}
+.show-table th,
+.show-table td {
+  text-align: start;
+  vertical-align: top;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+}
+.show-table thead th {
+  background: var(--sunken);
+  font-size: 13px;
+  font-weight: 700;
+}
+.show-table tbody th {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.show-table code {
+  white-space: nowrap;
+}
+
+/* An example: its title, then the original and the agent's text. */
 .show-card {
-  background: var(--sh-panel);
-  border: 1px solid var(--sh-line);
-  border-radius: 12px;
-  padding: 14px;
-  margin: 0 0 20px;
+  margin: 20px 0 0;
 }
 .show-card-head {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 10px 20px;
+  gap: 8px 20px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 .show-card-t {
   font-size: 18px;
@@ -255,37 +150,34 @@
 }
 .show-card-d {
   margin: 2px 0 0;
-  color: var(--sh-dim);
+  color: var(--subtle);
   font-size: 13px;
   display: flex;
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
 }
-
-/* Input, side by side, output. */
 .show-seg {
   display: inline-flex;
-  padding: 2px;
-  gap: 2px;
-  border-radius: 8px;
-  background: var(--sh-bg);
-  border: 1px solid var(--sh-line);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r, 6px);
+  overflow: hidden;
 }
 .show-seg button {
   border: 0;
-  background: transparent;
-  color: var(--sh-dim);
+  background: var(--card);
+  color: var(--text);
   font: inherit;
   font-size: 13px;
-  font-weight: 600;
   padding: 5px 12px;
-  border-radius: 6px;
   cursor: pointer;
 }
+.show-seg button + button {
+  border-inline-start: 1px solid var(--border-strong);
+}
 .show-seg button.on {
-  background: var(--sh-panel-2);
-  color: var(--sh-text);
+  background: var(--strong);
+  color: var(--on-strong);
 }
 .show-pair {
   display: grid;
@@ -300,7 +192,6 @@
 }
 .show-pair-original .show-scan {
   max-width: 860px;
-  margin: 0 auto;
   width: 100%;
 }
 .show-scan {
@@ -308,7 +199,7 @@
   top: 8px;
   max-height: calc(100vh - 16px);
   overflow: auto;
-  border-radius: 8px;
+  border: 1px solid var(--border);
   background: #fff;
   color: #1a1a1a;
 }
@@ -316,13 +207,12 @@
   position: static;
   max-height: none;
 }
-/* The words on paper, as the site draws them. */
 .show-words,
 .show-paper,
-.show-topics {
+.show-topics,
+.show-lyrics {
   background: var(--card);
-  color: var(--text);
-  border-radius: 8px;
+  border: 1px solid var(--border);
 }
 .show-words {
   font-family: var(--torah);
@@ -332,100 +222,82 @@
 }
 .show-pair-text .show-words {
   max-width: 820px;
-  margin: 0 auto;
 }
 .show-pair-beside .show-words {
   max-height: calc(100vh - 16px);
   overflow: auto;
 }
 .show-paper {
+  max-width: 760px;
   padding: 8px 20px;
-  margin: 0 auto;
 }
 
-/* The listener. */
+/* The farbrengens: one at a time. */
 .show-picks {
   display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 12px;
-  scrollbar-width: thin;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 16px;
 }
 .show-pick {
-  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
   max-width: 280px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--sh-line);
-  background: var(--sh-panel);
-  color: var(--sh-text);
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r, 6px);
+  background: var(--card);
+  color: var(--text);
   font: inherit;
+  font-size: 14px;
   text-align: start;
   cursor: pointer;
 }
 .show-pick.on {
-  border-color: var(--sh-accent);
+  background: var(--strong);
+  border-color: var(--strong);
+  color: var(--on-strong);
 }
 .show-pick-t {
   font-weight: 700;
 }
 .show-pick-d {
-  font-size: 13px;
-  color: var(--sh-dim);
+  font-size: 12px;
+  opacity: 0.8;
 }
 .show-parts {
   list-style: none;
   padding: 0;
   margin: 0;
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 .show-parts li {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--sh-line);
-  border-radius: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  background: var(--card);
 }
 
-/* The indexer. */
+/* The joined index. */
 .show-search {
   display: flex;
   gap: 8px;
-  max-width: 560px;
-  margin-bottom: 16px;
+  max-width: 520px;
+  margin: 16px 0;
 }
 .show-search input {
   flex: 1;
   min-width: 0;
   font: inherit;
-  padding: 9px 12px;
-  border: 1px solid var(--sh-line);
-  border-radius: 8px;
-  background: var(--sh-panel);
-  color: var(--sh-text);
-}
-.show-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 9px 16px;
-  border-radius: 8px;
-  border: 1px solid var(--sh-line);
-  background: var(--sh-panel);
-  color: var(--sh-text);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-.show-btn.primary {
-  background: var(--sh-accent);
-  border-color: var(--sh-accent);
-  color: #1d1708;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r, 6px);
+  background: var(--card);
+  color: var(--text);
 }
 .show-topics {
   display: grid;
@@ -437,17 +309,11 @@
 }
 
 .show-foot {
-  margin-top: 64px;
-  padding: 24px 0 36px;
-  border-top: 1px solid var(--sh-line);
-  color: var(--sh-dim);
+  margin-top: 56px;
+  padding: 16px 20px 32px;
+  border-top: 1px solid var(--border);
+  color: var(--subtle);
   font-size: 13px;
-}
-.show-foot .show-wrap {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
 }
 .show-foot p {
   margin: 0;
@@ -456,9 +322,6 @@
 @media (max-width: 900px) {
   .show-wrap {
     padding: 0 14px;
-  }
-  .show-roster {
-    grid-template-columns: minmax(0, 1fr);
   }
   .show-pair-beside {
     grid-template-columns: minmax(0, 1fr);
@@ -474,8 +337,42 @@
   .show-words {
     font-size: 17px;
   }
-  .show-section {
-    padding-top: 36px;
+  /* On a phone each agent is a small block of its own: the table's columns become labelled lines. */
+  .show-table,
+  .show-table tbody,
+  .show-table tr,
+  .show-table th,
+  .show-table td {
+    display: block;
+  }
+  .show-table thead {
+    display: none;
+  }
+  .show-table tr {
+    border: 1px solid var(--border);
+    border-bottom: 0;
+  }
+  .show-table tr:last-child {
+    border-bottom: 1px solid var(--border);
+  }
+  .show-table th,
+  .show-table td {
+    border: 0;
+    padding: 2px 12px;
+  }
+  .show-table tbody th {
+    padding-top: 10px;
+  }
+  .show-table td:last-child {
+    padding-bottom: 10px;
+  }
+  .show-table td:empty {
+    display: none;
+  }
+  .show-table td::before {
+    content: attr(data-label) ': ';
+    color: var(--subtle);
+    font-size: 13px;
   }
 }
 

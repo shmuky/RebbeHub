@@ -34,10 +34,10 @@ import '../styles/pages/show.css';
  * anywhere else: the rest of RebbeHub is private. What a machine heard or
  * read and nobody checked is marked so, here as everywhere.
  *
- * It is about the agents that build RebbeHub (Shmuly: "focused on the
- * power of the agents, not a beautiful landing page"): first who they are,
- * what each takes in and gives out, and its score; then each at work on
- * the material itself, its input beside its output. It opens in English,
+ * It is an information page about the agents that build RebbeHub
+ * (Shmuly: "not a landing page, an information page"): plain text and a
+ * table of what each agent does and how it scores, then examples of each
+ * at work, the original beside what the agent made. It opens in English,
  * for the people he meets (`?lang=he` for Hebrew).
  */
 
@@ -151,33 +151,38 @@ export function meta({ loaderData }: Route.MetaArgs) {
 }
 
 const W = {
-  kicker: { he: 'RebbeHub · הסוכנים בעבודה', en: 'RebbeHub · the agents at work' },
   lede: {
-    he: 'את RebbeHub בונים סוכני AI: הם קוראים את הסריקות, שומעים את ההקלטות, מתזמנים כל מילה, מאחדים את המפתחות ומסדרים את הקטלוג. אנשים בודקים את עבודתם. כאן רואים אותם עובדים, על החומר עצמו.',
-    en: "RebbeHub is built by AI agents. They read the scans, hear the recordings, time every word, join the indexes and file the catalog; people check their work. Here they are at work, on the material itself.",
+    he: 'RebbeHub הוא מפתח פתוח של תורת חב"ד ושל ההקלטות, שנבנה בידי סוכני AI ונבדק בידי אנשים. הסוכנים קוראים את הסריקות, שומעים את ההקלטות, מתזמנים כל מילה, מאחדים את המפתחות ומסדרים את הקטלוג. בדף הזה: מה כל סוכן עושה, איך הוא נבחן, ודוגמאות מעבודתו.',
+    en: "RebbeHub is an open index of Chabad Torah and recordings, built by AI agents and checked by people. The agents read the scans, transcribe the recordings, time every word, join the indexes and file the catalog. This page lists what each agent does, how it scores, and examples of its work.",
   },
-  preview: { he: 'תצוגה פרטית', en: 'Private preview' },
+  preview: { he: 'תצוגה פרטית. RebbeHub עדיין סגור לציבור.', en: 'Private preview. RebbeHub is not yet open to the public.' },
   roster: { he: 'הסוכנים', en: 'The agents' },
-  rosterSub: { he: 'כל סוכן, מה הוא עושה, ואיך הוא נבחן על חומר שלא ראה מעולם.', en: 'Each agent, what it does, and how it scores on material it never saw.' },
-  listen: { he: 'הסוכן השומע, בעבודה', en: 'The listener, at work' },
+  rosterSub: { he: 'הציונים נמדדו על חומר שהמודל לא ראה באימון.', en: 'Scores are measured on material the model never saw in training.' },
+  agent: { he: 'סוכן', en: 'Agent' },
+  does: { he: 'מה הוא עושה', en: 'What it does' },
+  model: { he: 'מודל', en: 'Model' },
+  score: { he: 'ציון', en: 'Score' },
+  made: { he: 'עד כה', en: 'Done so far' },
+  contents: { he: 'בדף', en: 'On this page' },
+  listen: { he: 'תמלול ותזמון', en: 'Transcription and timing' },
   listenSub: {
-    he: 'קלט: ההקלטה. פלט: כל מילה, בזמן שנאמרה. נגנו, והמילה הנאמרת מוארת; לחיצה על שורה מנגנת משם.',
-    en: 'In: the recording. Out: every word, at the moment it is said. Press play and the word being said lights up; tap a line to play from there.',
+    he: 'השומע כותב את ההקלטה, והמתזמן קובע את הרגע של כל מילה. נגנו, והמילה הנאמרת מוארת; לחיצה על שורה מנגנת משם.',
+    en: 'The listener writes down the recording and the timer finds the moment each word is said. Press play and the word being said is highlighted; tap a line to play from there.',
   },
-  scans: { he: 'הסוכן הקורא, בעבודה', en: 'The reader, at work' },
+  scans: { he: 'קריאת סריקות (OCR)', en: 'Reading scans (OCR)' },
   scansSub: {
-    he: 'קלט: הסריקה. פלט: הטקסט, עם המירם, אותיות הסעיפים וההערות במקומן. משמאל הדף המקורי, מימין מה שהסוכן קרא.',
-    en: 'In: the scan. Out: the text, with the Miram, the numbered pieces and the footnotes in place. The original page and what the agent read, side by side.',
+    he: 'הקורא הופך סריקה לטקסט, עם המירם, אותיות הסעיפים וההערות במקומן. הדף המקורי והטקסט שנקרא, זה לצד זה.',
+    en: 'The reader turns a scan into text, with the Miram, the numbered pieces and the footnotes in place. The original page and the text it read, side by side.',
   },
   noText: { he: 'הסוכן עדיין קורא את השיחה הזו.', en: 'The reader is still on this sicha.' },
-  text: { he: 'פלט', en: 'Output' },
+  text: { he: 'טקסט', en: 'Text' },
   beside: { he: 'זה לצד זה', en: 'Side by side' },
-  original: { he: 'קלט', en: 'Input' },
+  original: { he: 'מקור', en: 'Original' },
   view: { he: 'תצוגה', en: 'View' },
-  daily: { he: 'הסוכן הסדר, בעבודה', en: 'The typesetter, at work' },
-  dailySub: { he: 'השורות שנקראו מהסריקה של היום יום, מסודרות כפי שנדפסו. השיעור של היום.', en: "Lines read from the Hayom Yom scan, set as the book prints them: today's entry." },
-  mafteach: { he: 'הסוכן המפתח, בעבודה', en: 'The indexer, at work' },
-  mafteachSub: { he: 'כל מפתחות לקוטי שיחות, מכל החלקים, אוחדו לאחד: כל נושא פעם אחת, עם כל מקום שמדבר בו. נסו לחפש.', en: "Every Likkutei Sichos volume's index, joined into one: each topic once, with every page that speaks of it. Try a search." },
+  daily: { he: 'עימוד', en: 'Page layout' },
+  dailySub: { he: 'השורות שנקראו מהסריקה של היום יום, מסודרות כפי שנדפסו. השיעור של היום.', en: "Lines read from the Hayom Yom scan, set as the book prints them. Today's entry." },
+  mafteach: { he: 'מפתח מאוחד', en: 'One joined index' },
+  mafteachSub: { he: 'כל מפתחות לקוטי שיחות, מכל החלקים, אוחדו לאחד: כל נושא פעם אחת, עם כל מקום שמדבר בו.', en: "Every Likkutei Sichos volume's index, joined into one: each topic once, with every page that speaks of it." },
   search: { he: 'חיפוש נושא', en: 'Search a topic' },
   find: { he: 'חיפוש', en: 'Search' },
   none: { he: 'לא נמצא נושא כזה.', en: 'No such topic.' },
@@ -189,33 +194,33 @@ const W = {
   play: { he: 'לנגן', en: 'Play' },
   pause: { he: 'עצירה', en: 'Pause' },
   other: { he: 'English', en: 'עברית' },
-  in: { he: 'קלט', en: 'in' },
-  out: { he: 'פלט', en: 'out' },
-  agent: { he: 'סוכן', en: 'agent' },
-  made: { he: 'עד כה', en: 'so far' },
-  private: { he: 'תצוגה פרטית. RebbeHub עדיין סגור לציבור.', en: 'A private preview. RebbeHub is not yet open to the public.' },
+  by: { he: 'סוכנים', en: 'Agents' },
 } as const;
 const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
 
-type Agent = { id: string; name: { he: string; en: string }; model: string; input: { he: string; en: string }; output: { he: string; en: string }; family?: 'ocr' | 'miram' | 'whisper'; count?: { type: string; label: { he: string; en: string } }; section?: string };
+type Agent = { id: string; name: { he: string; en: string }; model: string; does: { he: string; en: string }; family?: 'ocr' | 'miram' | 'whisper'; scoreNote?: { he: string; en: string }; count?: { type: string; label: { he: string; en: string } } };
 
 /** RebbeHub's agents: the models (lib/models.ts gives their scores) and the bots that file and join the catalog. */
 const AGENTS: Agent[] = [
-  { id: 'reader', name: { he: 'הקורא', en: 'Reader' }, model: 'rebbehub-kraken-ls-v1', input: { he: 'סריקה', en: 'scan' }, output: { he: 'טקסט', en: 'text' }, family: 'ocr', section: 'scans' },
-  { id: 'miram', name: { he: 'גלאי המירם', en: 'Miram detector' }, model: 'rebbehub-facenet-v2', input: { he: 'סריקה', en: 'scan' }, output: { he: 'מילים מודגשות', en: 'stressed words' }, family: 'miram', section: 'scans' },
-  { id: 'listener', name: { he: 'השומע', en: 'Listener' }, model: 'rebbehub-whisper-v3', input: { he: 'הקלטה', en: 'recording' }, output: { he: 'מילים', en: 'words' }, family: 'whisper', count: { type: 'text', label: { he: 'תמלולים', en: 'transcripts' } }, section: 'listen' },
-  { id: 'timer', name: { he: 'המתזמן', en: 'Timer' }, model: 'align', input: { he: 'מילים והקלטה', en: 'words + recording' }, output: { he: 'הרגע של כל מילה', en: 'the moment of each word' }, count: { type: 'alignment', label: { he: 'הקלטות מתוזמנות', en: 'recordings timed' } }, section: 'listen' },
-  { id: 'indexer', name: { he: 'המפתח', en: 'Indexer' }, model: 'mafteach', input: { he: 'מפתחות החלקים', en: "each volume's index" }, output: { he: 'מפתח אחד', en: 'one index' }, section: 'mafteach' },
-  { id: 'librarian', name: { he: 'הספרן', en: 'Librarian' }, model: 'rebbehub-mcp', input: { he: 'מקורות', en: 'sources' }, output: { he: 'הקטלוג', en: 'the catalog' }, count: { type: 'unit', label: { he: 'שיחות, מאמרים ומכתבים', en: 'sichos, maamarim and letters' } } },
+  { id: 'reader', name: { he: 'הקורא', en: 'Reader' }, model: 'rebbehub-kraken-ls-v1', does: { he: 'קורא סריקה והופך אותה לטקסט', en: 'Reads a scan into text' }, family: 'ocr' },
+  { id: 'miram', name: { he: 'גלאי המירם', en: 'Miram detector' }, model: 'rebbehub-facenet-v2', does: { he: 'מוצא את המילים המודגשות בסריקה', en: 'Finds the stressed (Miram) words in a scan' }, family: 'miram' },
+  { id: 'listener', name: { he: 'השומע', en: 'Listener' }, model: 'rebbehub-whisper-v3', does: { he: 'כותב את ההקלטה מילה במילה', en: 'Transcribes a recording word for word' }, family: 'whisper', scoreNote: { he: 'שגיאות במילים / באותיות', en: 'word / letter errors' }, count: { type: 'text', label: { he: 'תמלולים', en: 'transcripts' } } },
+  { id: 'timer', name: { he: 'המתזמן', en: 'Timer' }, model: 'align', does: { he: 'קובע את הרגע של כל מילה בהקלטה', en: 'Times each word to the recording' }, count: { type: 'alignment', label: { he: 'הקלטות מתוזמנות', en: 'recordings timed' } } },
+  { id: 'indexer', name: { he: 'המפתח', en: 'Indexer' }, model: 'mafteach', does: { he: 'מאחד את מפתחות החלקים למפתח אחד', en: "Joins each volume's index into one" } },
+  { id: 'librarian', name: { he: 'הספרן', en: 'Librarian' }, model: 'rebbehub-mcp', does: { he: 'מוסיף ומסדר את הקטלוג', en: 'Adds and files the catalog' }, count: { type: 'unit', label: { he: 'שיחות, מאמרים ומכתבים', en: 'sichos, maamarim and letters' } } },
 ];
 
 /** An agent's headline score: the first score of its model in use, as the /models page has it. */
-function scoreOf(family: Agent['family'], lang: Lang): Array<{ label: string; value: string }> {
+function scoreOf({ family, scoreNote }: Agent, lang: Lang): string {
   const f = MODEL_FAMILIES.find((x) => x.id === family);
   const table = f?.tables.find((t) => t.rows.some((r) => r.state === 'inUse'));
   const row = table?.rows.find((r) => r.state === 'inUse');
-  if (!table || !row) return [];
-  return row.cells.slice(0, 2).map((c, i) => ({ label: table.columns[i + 1]?.[lang] ?? '', value: typeof c === 'string' ? c : c[lang] }));
+  if (!table || !row) return '';
+  const shown = row.cells
+    .slice(0, scoreNote ? 1 : 2)
+    .map((c, i) => `${table.columns[i + 1]?.[lang] ?? ''}: ${typeof c === 'string' ? c : c[lang]}`)
+    .join(' · ');
+  return scoreNote ? `${shown} (${scoreNote[lang]})` : shown;
 }
 
 type View = 'text' | 'beside' | 'original';
@@ -230,131 +235,125 @@ export default function Show({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="show" lang={lang} dir={dir(lang)}>
-      <header className="show-top">
-        <div className="show-wrap show-top-in">
-          <Logo size={22} />
-          <span className="show-pill">{w(lang, 'preview')}</span>
-          <a className="show-lang" href={`/show/${token}${lang === 'en' ? '?lang=he' : ''}`} lang={lang === 'en' ? 'he' : 'en'}>
-            {w(lang, 'other')}
-          </a>
-        </div>
-        <div className="show-wrap show-intro">
-          <p className="show-kicker">{w(lang, 'kicker')}</p>
-          <h1 className="show-title">{title === 'RebbeHub' ? (lang === 'he' ? 'הסוכנים של RebbeHub' : "RebbeHub's agents") : title}</h1>
-          {note ? <p className="show-note">{note}</p> : null}
-          <p className="show-lede">{w(lang, 'lede')}</p>
-        </div>
+      <header className="show-wrap show-top">
+        <Logo size={22} />
+        <a className="show-lang" href={`/show/${token}${lang === 'en' ? '?lang=he' : ''}`} lang={lang === 'en' ? 'he' : 'en'}>
+          {w(lang, 'other')}
+        </a>
       </header>
 
-      <section id="agents" className="show-section show-roster-band">
-        <div className="show-wrap">
-          <h2 className="show-h">{w(lang, 'roster')}</h2>
-          <p className="show-sub">{w(lang, 'rosterSub')}</p>
-          <ol className="show-roster">
-            {AGENTS.map((a) => {
-              const scores = extras.models ? scoreOf(a.family, lang) : [];
-              const made = a.id === 'indexer' && mafteach ? mafteach.totals.topics : a.count && counts?.[a.count.type] ? counts[a.count.type]! : null;
-              const madeLabel = a.id === 'indexer' ? { he: 'נושאים', en: 'topics' } : a.count?.label;
-              const live = sections.some((s) => s.id === a.section);
-              return (
-                <li key={a.id} className="show-agent">
-                  <div className="show-agent-head">
-                    <span className="show-dot" aria-hidden />
-                    <h3 className="show-agent-t">{a.name[lang]}</h3>
-                    <code className="show-agent-m">{a.model}</code>
-                  </div>
-                  <p className="show-io">
-                    <span className="show-io-k">{w(lang, 'in')}</span> {a.input[lang]} <span className="show-io-arrow" aria-hidden>{lang === 'he' ? '←' : '→'}</span> <span className="show-io-k">{w(lang, 'out')}</span> {a.output[lang]}
-                  </p>
-                  {scores.length || made !== null ? (
-                    <dl className="show-agent-s">
-                      {scores.map((sc) => (
-                        <div key={sc.label}>
-                          <dt>{sc.label}</dt>
-                          <dd>{sc.value}</dd>
-                        </div>
-                      ))}
-                      {made !== null ? (
-                        <div>
-                          <dt>
-                            {madeLabel?.[lang]} {w(lang, 'made')}
-                          </dt>
-                          <dd>{num(made, lang)}</dd>
-                        </div>
-                      ) : null}
-                    </dl>
-                  ) : null}
-                  {live ? (
-                    <a className="show-agent-go" href={`#${a.section}`}>
-                      {sections.find((s) => s.id === a.section)!.label} {lang === 'he' ? '←' : '→'}
-                    </a>
-                  ) : null}
+      <main className="show-wrap">
+        <h1 className="show-title">{title}</h1>
+        {note ? <p className="show-note">{note}</p> : null}
+        <p className="show-lede">{w(lang, 'lede')}</p>
+        <p className="show-meta">{w(lang, 'preview')}</p>
+
+        {sections.length > 1 ? (
+          <nav className="show-toc" aria-label={w(lang, 'contents')}>
+            <h2 className="show-toc-h">{w(lang, 'contents')}</h2>
+            <ol>
+              <li>
+                <a href="#agents">{w(lang, 'roster')}</a>
+              </li>
+              {sections.map((s) => (
+                <li key={s.id}>
+                  <a href={`#${s.id}`}>{s.label}</a>
                 </li>
-              );
-            })}
-          </ol>
-          {extras.models ? <p className="show-meta">{MODELS_LICENCE[lang]}</p> : null}
-        </div>
-      </section>
+              ))}
+            </ol>
+          </nav>
+        ) : null}
 
-      {pages.length ? (
-        <Section id="scans" title={w(lang, 'scans')} sub={w(lang, 'scansSub')} agent="rebbehub-kraken-ls-v1 · rebbehub-facenet-v2">
-          {pages.map((p) => (
-            <PageCard key={p.id} page={p} lang={lang} />
-          ))}
-        </Section>
-      ) : null}
-
-      {farbrengens.length ? (
-        <Section id="listen" title={w(lang, 'listen')} sub={w(lang, 'listenSub')} agent="rebbehub-whisper-v3 · align">
-          <Listen token={token} farbrengens={farbrengens} lang={lang} />
-        </Section>
-      ) : null}
-
-      {mafteach ? (
-        <Section id="mafteach" title={w(lang, 'mafteach')} sub={`${w(lang, 'mafteachSub')} ${num(mafteach.totals.topics, lang)} ${w(lang, 'topics')} · ${num(mafteach.totals.places, lang)} ${w(lang, 'places')}`} agent="mafteach">
-          <Form method="get" className="show-search" preventScrollReset>
-            {lang === 'he' ? <input type="hidden" name="lang" value="he" /> : null}
-            <input type="search" name="q" defaultValue={mafteach.q} placeholder={w(lang, 'search')} aria-label={w(lang, 'search')} dir="auto" />
-            <button type="submit" className="show-btn primary">
-              {w(lang, 'find')}
-            </button>
-          </Form>
-          {mafteach.topics.length ? <Topics topics={mafteach.topics} lang={lang} /> : <p className="show-sub">{w(lang, 'none')}</p>}
-        </Section>
-      ) : null}
-
-      {hayomYom.length ? (
-        <Section id="daily" title={w(lang, 'daily')} sub={w(lang, 'dailySub')} agent="rebbehub-kraken-v1 · layout">
-          <div className="show-paper show-narrow">
-            {hayomYom.map((h, i) => (
-              <HayomYomDay key={i} title={h.title} body={h.body} shiurim={h.shiurim} lang={lang} />
-            ))}
+        <section id="agents" className="show-section">
+          <h2 className="show-h">{w(lang, 'roster')}</h2>
+          {extras.models ? <p className="show-sub">{w(lang, 'rosterSub')}</p> : null}
+          <div className="show-table-wrap">
+            <table className="show-table">
+              <thead>
+                <tr>
+                  <th scope="col">{w(lang, 'agent')}</th>
+                  <th scope="col">{w(lang, 'does')}</th>
+                  <th scope="col">{w(lang, 'model')}</th>
+                  {extras.models ? <th scope="col">{w(lang, 'score')}</th> : null}
+                  <th scope="col">{w(lang, 'made')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {AGENTS.map((a) => {
+                  const made = a.id === 'indexer' && mafteach ? mafteach.totals.topics : a.count && counts?.[a.count.type] ? counts[a.count.type]! : null;
+                  const madeLabel = a.id === 'indexer' ? { he: 'נושאים', en: 'topics' } : a.count?.label;
+                  return (
+                    <tr key={a.id}>
+                      <th scope="row">{a.name[lang]}</th>
+                      <td data-label={w(lang, 'does')}>{a.does[lang]}</td>
+                      <td data-label={w(lang, 'model')}>
+                        <code>{a.model}</code>
+                      </td>
+                      {extras.models ? <td data-label={w(lang, 'score')}>{scoreOf(a, lang)}</td> : null}
+                      <td data-label={w(lang, 'made')}>{made !== null ? `${num(made, lang)} ${madeLabel?.[lang] ?? ''}` : ''}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </Section>
-      ) : null}
+          {extras.models ? <p className="show-meta">{MODELS_LICENCE[lang]}</p> : null}
+        </section>
 
-      <footer className="show-foot">
-        <div className="show-wrap">
-          <Logo size={20} />
-          <p>{w(lang, 'private')}</p>
-        </div>
+        {pages.length ? (
+          <Section id="scans" title={w(lang, 'scans')} sub={w(lang, 'scansSub')} agent="rebbehub-kraken-ls-v1, rebbehub-facenet-v2" lang={lang}>
+            {pages.map((p) => (
+              <PageCard key={p.id} page={p} lang={lang} />
+            ))}
+          </Section>
+        ) : null}
+
+        {farbrengens.length ? (
+          <Section id="listen" title={w(lang, 'listen')} sub={w(lang, 'listenSub')} agent="rebbehub-whisper-v3, align" lang={lang}>
+            <Listen token={token} farbrengens={farbrengens} lang={lang} />
+          </Section>
+        ) : null}
+
+        {mafteach ? (
+          <Section id="mafteach" title={w(lang, 'mafteach')} sub={`${w(lang, 'mafteachSub')} ${num(mafteach.totals.topics, lang)} ${w(lang, 'topics')}, ${num(mafteach.totals.places, lang)} ${w(lang, 'places')}.`} agent="mafteach" lang={lang}>
+            <Form method="get" className="show-search" preventScrollReset>
+              {lang === 'he' ? <input type="hidden" name="lang" value="he" /> : null}
+              <input type="search" name="q" defaultValue={mafteach.q} placeholder={w(lang, 'search')} aria-label={w(lang, 'search')} dir="auto" />
+              <button type="submit" className="btn">
+                {w(lang, 'find')}
+              </button>
+            </Form>
+            {mafteach.topics.length ? <Topics topics={mafteach.topics} lang={lang} /> : <p className="show-sub">{w(lang, 'none')}</p>}
+          </Section>
+        ) : null}
+
+        {hayomYom.length ? (
+          <Section id="daily" title={w(lang, 'daily')} sub={w(lang, 'dailySub')} agent="rebbehub-kraken-v1, layout" lang={lang}>
+            <div className="show-paper">
+              {hayomYom.map((h, i) => (
+                <HayomYomDay key={i} title={h.title} body={h.body} shiurim={h.shiurim} lang={lang} />
+              ))}
+            </div>
+          </Section>
+        ) : null}
+      </main>
+
+      <footer className="show-wrap show-foot">
+        <p>{w(lang, 'preview')}</p>
       </footer>
     </div>
   );
 }
 
-function Section({ id, title, sub, agent, children }: { id: string; title: string; sub: string; agent: string; children: React.ReactNode }) {
+function Section({ id, title, sub, agent, lang, children }: { id: string; title: string; sub: string; agent: string; lang: Lang; children: React.ReactNode }) {
   return (
     <section id={id} className="show-section">
-      <div className="show-wrap">
-        <p className="show-run">
-          <span className="show-dot" aria-hidden /> <code>{agent}</code>
-        </p>
-        <h2 className="show-h">{title}</h2>
-        <p className="show-sub">{sub}</p>
-        {children}
-      </div>
+      <h2 className="show-h">{title}</h2>
+      <p className="show-sub">{sub}</p>
+      <p className="show-meta">
+        {w(lang, 'by')}: <code>{agent}</code>
+      </p>
+      {children}
     </section>
   );
 }
