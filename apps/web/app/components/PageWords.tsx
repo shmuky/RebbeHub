@@ -531,24 +531,11 @@ const versionName = (v: PageVersion, lang: Lang) => (v.language === 'he' || v.la
  *
  * Every segment has an anchor (`#s-3.14`) a link can point at. With
  * `edit`, each segment can be clicked and fixed in place (the Edit tab).
- * With `printed`, the Hebrew can also be set as its book prints it (Tanya),
- * and that is how it opens.
  */
-export function PageWords({
-  page,
-  lang,
-  edit,
-  printed,
-}: {
-  page: PageText;
-  lang: Lang;
-  edit?: { entityId: string; check?: boolean; onFocus?: (segmentId: string) => void };
-  printed?: { label: { he: string; en: string }; render: (version: PageVersion) => ReactNode };
-}) {
+export function PageWords({ page, lang, edit }: { page: PageText; lang: Lang; edit?: { entityId: string; check?: boolean; onFocus?: (segmentId: string) => void } }) {
   const versions = page.versions.filter((v) => v.segments.length);
   const pairable = page.profile === 'sefaria' && versions.length > 1;
-  const printable = printed && !edit ? versions.find((v) => v.language === 'he') : undefined;
-  const [shown, setShown] = useState<string>(printable ? 'printed' : pairable ? 'both' : (versions[0]?.id ?? ''));
+  const [shown, setShown] = useState<string>(pairable ? 'both' : (versions[0]?.id ?? ''));
   const [open, setOpen] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
   const [sent, setSent] = useState<Record<string, SentSuggestion>>({});
@@ -579,13 +566,8 @@ export function PageWords({
   const current = versions.find((v) => v.id === shown) ?? versions[0]!;
   return (
     <div className="page-words">
-      {versions.length > 1 || printable ? (
+      {versions.length > 1 ? (
         <div className="segmented words-versions" role="group" aria-label={WORDS.versions[lang]}>
-          {printable ? (
-            <button type="button" aria-pressed={shown === 'printed'} onClick={() => setShown('printed')}>
-              {printed!.label[lang]}
-            </button>
-          ) : null}
           {versions.map((v) => (
             <button key={v.id} type="button" aria-pressed={shown === v.id} onClick={() => setShown(v.id)} lang={v.language}>
               {versionName(v, lang)}
@@ -599,12 +581,7 @@ export function PageWords({
         </div>
       ) : null}
       {machine ? <MachineNote>{WORDS.machine[lang]}</MachineNote> : null}
-      {printable && shown === 'printed' ? (
-        <>
-          {printed!.render(printable)}
-          <Credit version={printable} profile={page.profile} lang={lang} />
-        </>
-      ) : pairable && shown === 'both' ? (
+      {pairable && shown === 'both' ? (
         <SideBySide first={versions[0]!} second={versions[1]!} lang={lang} edit={editState} />
       ) : (
         <VersionView version={current} profile={page.profile} lang={lang} edit={editState} />

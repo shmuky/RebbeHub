@@ -6,7 +6,6 @@ import { hayomYomShiurimOf } from '@rebbehub/hebrew';
 import { DailyShiurim } from '../components/DailyShiurim.js';
 import { HayomYomDay } from '../components/HayomYomDay.js';
 import { PageWords } from '../components/PageWords.js';
-import { tanyaPrinted } from '../components/TanyaPrint.js';
 import { isPageText } from '@rebbehub/model';
 import type { Entity } from '../lib/api.js';
 import { siteOf } from '../lib/context.server.js';
@@ -88,7 +87,7 @@ export const handle = { phone: { title: W.title, up: '/' } };
 function Words({ item, lang }: { item: Entity; lang: Lang }) {
   const body = (item.data as { body?: unknown }).body;
   if (item.withheld) return <p className="subtle">{w(lang, 'withheld')}</p>;
-  return isPageText(body) ? <PageWords page={body} lang={lang} printed={tanyaPrinted(item, lang)} /> : null;
+  return isPageText(body) ? <PageWords page={body} lang={lang} /> : null;
 }
 
 export default function Daily({ loaderData }: Route.ComponentProps) {
