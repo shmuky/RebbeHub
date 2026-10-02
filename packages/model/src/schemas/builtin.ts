@@ -1,5 +1,5 @@
 import { ADDITION_KINDS, EVENT_LINK_KINDS, type EntityType, type LocalName } from '../entities.js';
-import { PAGE_HREF_PATTERN, PAGE_ID_PATTERN, PAGE_MARKS, PAGE_SEGMENT_KINDS, TEXT_PROFILES } from '../pageText.js';
+import { PAGE_HREF_PATTERN, PAGE_ID_PATTERN, PAGE_LINE_END_KINDS, PAGE_MARKS, PAGE_SEGMENT_KINDS, TEXT_PROFILES } from '../pageText.js';
 import { SHAAR_SECTIONS, SHAAR_SECTION_MAX } from '../shaar.js';
 import { EDITION_KINDS, GENRES, LICENCES, SOURCE_IDS } from '../works.js';
 
@@ -95,6 +95,17 @@ const DEFS: Record<string, JsonSchema> = {
       { type: 'object', properties: { note: ref('pageId') }, required: ['note'], additionalProperties: false },
       { type: 'object', properties: { marker: str({ minLength: 1, maxLength: 200 }) }, required: ['marker'], additionalProperties: false },
       { type: 'object', properties: { br: { const: true } }, required: ['br'], additionalProperties: false },
+      {
+        type: 'object',
+        properties: {
+          eol: enumOf(PAGE_LINE_END_KINDS),
+          split: { const: true },
+          page: int({ minimum: 1, maximum: 100_000 }),
+          box: arrayOf({ type: 'number', minimum: 0, maximum: 1 }, { minItems: 4, maxItems: 4 }),
+        },
+        required: ['eol'],
+        additionalProperties: false,
+      },
     ],
   },
   pageSegment: {
@@ -251,8 +262,9 @@ const fractionalOrder = str({ pattern: '^[0-9A-Za-z]+$', maxLength: 64 });
  * (a commentary, an index, a book about one) and the official sefer it belongs under.
  * 13: the page mark `ois`, the letter that opens a piece of a sicha (PR #152 added it
  * to the schema without this, so live catalogs kept refusing it).
+ * 14: a printed line's end in a page's words (`{ eol }`), so a sicha can be set again exactly as printed.
  */
-export const BUILTIN_SCHEMA_VERSION = 13;
+export const BUILTIN_SCHEMA_VERSION = 14;
 
 export const BUILTIN_SCHEMAS: Record<EntityType, JsonSchema> = {
   set: entitySchema(

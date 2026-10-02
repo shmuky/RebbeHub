@@ -60,7 +60,8 @@ const MAX_SEGMENT_CHARS = 50_000;
 function words(text: PageInline[] | undefined): PageInline[] {
   if (!Array.isArray(text)) throw invalid('give the words as a list of runs');
   const runs = tidyInline(text);
-  if (!runs.length) throw invalid('a segment needs words; to take it out, remove it');
+  // Printed line ends alone are not words.
+  if (!runs.some((run) => !('eol' in run))) throw invalid('a segment needs words; to take it out, remove it');
   if (inlineText(runs).length > MAX_SEGMENT_CHARS) throw invalid(`a segment of up to ${MAX_SEGMENT_CHARS.toLocaleString('en')} characters`);
   return runs;
 }

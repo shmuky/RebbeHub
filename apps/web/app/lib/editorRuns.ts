@@ -11,7 +11,7 @@ const MARK_OF: Record<string, PageMark> = { b: 'b', strong: 'b', i: 'i', em: 'i'
 // The ois letter is a span carrying data-mark="ois" (no HTML tag means it).
 const DATA_MARK = 'ois';
 
-/** A segment's words as the editor's content: text in its marks, links, breaks; footnote marks and source markers as pieces that cannot be typed into. */
+/** A segment's words as the editor's content: text in its marks, links, breaks; footnote marks and source markers as pieces that cannot be typed into; printed line ends as empty pieces. */
 export function fill(el: HTMLElement, runs: readonly PageInline[], labelOf: (note: string) => string) {
   el.textContent = '';
   for (const run of runs) {
@@ -35,6 +35,13 @@ export function fill(el: HTMLElement, runs: readonly PageInline[], labelOf: (not
       el.appendChild(node);
     } else if ('br' in run) {
       el.appendChild(document.createElement('br'));
+    } else if ('eol' in run) {
+      // A printed line's end: nothing to see or type, but kept, so fixing a word never loses the print's lines.
+      const end = document.createElement('span');
+      end.contentEditable = 'false';
+      end.className = 'words-eol';
+      end.dataset.run = JSON.stringify(run);
+      el.appendChild(end);
     } else {
       const atom = document.createElement('span');
       atom.contentEditable = 'false';

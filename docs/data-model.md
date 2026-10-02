@@ -90,8 +90,16 @@ the `pageText` schema):
   `i`, `u`, `small`, `sup`, `sub`, and a link only to the web, a site path
   or an item id (`rh-…`, counted as a reference like any other);
   `{ note }` a footnote's marker; `{ marker }` a source's own marker (a
-  page of the printed edition, a day of the study cycle); `{ br: true }`.
-  Nothing in them is ever drawn as HTML.
+  page of the printed edition, a day of the study cycle); `{ br: true }`;
+  `{ eol, split?, page?, box? }` where a printed line ended (`eol` is
+  `line`, `column` or `page`: the line alone, the column too, or the page
+  too), right after the line's last run, so a sicha can be set again
+  exactly as printed while it is read in paragraphs. `split: true` when
+  the print broke a word across the line with a hyphen (the words hold it
+  whole); `page` (from 1, a page of the version's `url`) and `box`
+  (`[x, y, width, height]`, fractions 0-1 of that page) give the line that
+  ended. A line end carries no words: search, plain text and the reading
+  view pass over it. Nothing in them is ever drawn as HTML.
 - **Profile**: the display rules of where the words came from. `sefaria`:
   sections under their titles, numbered segments (in Hebrew letters in
   the Hebrew), footnotes, the Hebrew and English side by side or one at a

@@ -4,6 +4,7 @@ import {
   ENTITY_TYPES,
   changeSegment,
   findSegment,
+  inlineText,
   newSegmentId,
   pageTextPlain,
   plainPage,
@@ -180,6 +181,38 @@ describe('page words', () => {
       { id: 'p1', kind: 'paragraph', text: [{ text: 'א' }, { br: true }, { text: 'ב' }] },
       { id: 'p2', kind: 'paragraph', text: [{ text: 'ג' }] },
     ]);
+  });
+
+  it("keeps the print's line ends: valid in the schema, kept by tidying, and no words to any reader", () => {
+    const runs = [
+      { text: 'והנה ' },
+      { text: 'בפרשתנו', marks: ['b'] },
+      { eol: 'line', page: 3, box: [0.1, 0.2, 0.8, 0.03] },
+      { text: ' מבואר שהמש' },
+      { eol: 'column', split: true },
+      { text: 'כן' },
+      { eol: 'line' },
+      { eol: 'page', page: 3 },
+    ] as const;
+    expect(registry.validate('unit', page([...runs]))).toEqual({ ok: true });
+    expect(registry.validate('unit', page([{ eol: 'paragraph' }])).ok).toBe(false);
+    expect(registry.validate('unit', page([{ eol: 'line', split: false }])).ok).toBe(false);
+    expect(registry.validate('unit', page([{ eol: 'line', page: 0 }])).ok).toBe(false);
+    expect(registry.validate('unit', page([{ eol: 'line', box: [0, 0, 1.5, 0] }])).ok).toBe(false);
+    expect(registry.validate('unit', page([{ eol: 'line', box: [0, 0, 1] }])).ok).toBe(false);
+    expect(registry.validate('unit', page([{ eol: 'line', text: 'x' }])).ok).toBe(false);
+
+    // A line's end is never joined, dropped or moved, and the words on its two sides stay apart.
+    const tidy = tidyInline([...runs] as never);
+    expect(tidy).toEqual(runs);
+    expect(tidyInline(tidy)).toEqual(tidy);
+    expect(JSON.parse(JSON.stringify(tidy))).toEqual(tidy);
+    // The last words are trimmed even with line ends after them; a broken line end loses only what is broken.
+    expect(tidyInline([{ text: 'סוף  ' }, { eol: 'page', page: 2.5, box: [0, 0] } as never])).toEqual([{ text: 'סוף' }, { eol: 'page' }]);
+
+    // It carries no words: the split word reads whole.
+    expect(inlineText(tidy)).toBe('והנה בפרשתנו מבואר שהמשכן');
+    expect(pageTextPlain(page([...runs]).body)).toBe('והנה בפרשתנו מבואר שהמשכן');
   });
 
   it('changes one segment and leaves the rest as they were', () => {

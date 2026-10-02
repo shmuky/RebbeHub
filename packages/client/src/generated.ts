@@ -2511,7 +2511,7 @@ export interface Operations {
         change: "edit" | "add" | "remove" | "start" | "check";
         version?: string;
         segment?: string;
-        /** Runs: { text, marks?, href? }, { note }, { marker }, { br: true } */
+        /** Runs: { text, marks?, href? }, { note }, { marker }, { br: true }, { eol, split?, page?, box? } */
         text?: Array<Record<string, unknown>>;
         /** The segment as the person saw it; a change since answers 409 */
         before?: Array<Record<string, unknown>>;

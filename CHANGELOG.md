@@ -12,6 +12,8 @@ any time. `@rebbehub/client` carries the API's version.
 
 ### Added
 
+- **Printed line ends in a page's words.** A run `{ eol: 'line' | 'column' | 'page', split?: true, page?, box? }` marks where a printed line (and its column or page) ended, so machine-read sichos keep the print's lines for a later print-layout view while they are read in paragraphs. It carries no words: search, plain text and the reading view pass over it. Built-in schemas version 14.
+
 - **Showcases** (`/showcase`, `/show/<token>`). While RebbeHub is private, one page at a secret address to show guests: the farbrengens picked, their transcripts lit word by word as they play; sichos with their scans; Hayom Yom as printed, the Likkutei Sichos subject index, the models' scores and the catalog in numbers. The link opens that page alone. `GET /v1/transcripts` lists every recording with a transcript, the most checked first.
 
 - **A page for RebbeHub's models, `/models`.** Each model (the Likkutei Sichos reader, the Miram detector, the Whisper that hears the Rebbe), which one is in use, and every benchmark score on the test it was scored on, in Hebrew and English; the same in docs/models.md. The models are not released; their descriptions and benchmarks are CC BY-NC-ND 4.0.

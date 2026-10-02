@@ -143,6 +143,8 @@ function Runs({ runs: given, ctx, lead }: { runs: readonly PageInline[] | undefi
           return <Fragment key={i}>{node}</Fragment>;
         }
         if ('br' in run) return <br key={i} />;
+        // A printed line's end: the paragraph view draws nothing for it (a print layout will).
+        if ('eol' in run) return null;
         if ('marker' in run)
           return (
             <span key={i} className="words-marker">
