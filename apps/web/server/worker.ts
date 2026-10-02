@@ -4,7 +4,7 @@ import type { ServerBuild } from 'react-router';
 import { crawlBudget, crawlLater, edgeCacheable, forEdge } from './cachePolicy.js';
 import { createSiteHandler } from './handler.js';
 import { door, privately, type DoorEnv } from './lock.js';
-import { guestRequest, r2Showcases, showcaseMedia, type ShowcaseBucket } from './showcase.js';
+import { guestRequest, r2Showcases, showcaseFont, showcaseMedia, type ShowcaseBucket } from './showcase.js';
 // @ts-ignore - made by `react-router build`
 import * as build from '../build/server/index.js';
 
@@ -93,8 +93,10 @@ async function asGuest(request: Request, env: Env, ctx: Ctx): Promise<Response |
     const file = env.ASSETS ? await env.ASSETS.fetch(request) : null;
     return file && file.status !== 404 ? file : null;
   }
-  const showcase = await showcasesOf(env)?.get(guest.token);
-  if (!showcase) return null;
+  const store = showcasesOf(env);
+  const showcase = await store?.get(guest.token);
+  if (!showcase || !store) return null;
+  if (guest.kind === 'font') return showcaseFont(store, guest.name);
   if (guest.kind === 'media') {
     const source = showcase.media[guest.index];
     if (!source) return new Response('Not found.', { status: 404, headers: { 'Cache-Control': 'no-store' } });

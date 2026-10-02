@@ -8,7 +8,7 @@ import type { EntityId } from '@rebbehub/model';
 import { createApp } from '../../../services/api/src/app.js';
 import { add, freshCatalog } from '../../../packages/core/tests/helpers.js';
 import { createSiteHandler } from '../server/handler.js';
-import { guestRequest, r2Showcases, showcaseMedia, type ShowcaseBucket } from '../server/showcase.js';
+import { guestRequest, r2Showcases, showcaseFont, showcaseMedia, type ShowcaseBucket } from '../server/showcase.js';
 import { mediaSourceOf, memoryShowcases, newToken, NO_EXTRAS, TOKEN, type Showcase } from '../app/lib/showcase.js';
 
 /** Showcases (app/lib/showcase.ts): what a guest's link opens, where they are kept, and making one. */
@@ -24,12 +24,13 @@ describe("a guest's requests", () => {
     expect(as(`/show/${token}.data`)).toEqual({ kind: 'page', token });
     expect(as(`/show/${token}/m/3`)).toEqual({ kind: 'media', token, index: 3 });
     expect(as(`/show/${token}/t/rh-6k5yytx6`)).toEqual({ kind: 'transcript', token, recording: 'rh-6k5yytx6' });
+    expect(as(`/show/${token}/f/frank`)).toEqual({ kind: 'font', token, name: 'frank' });
     expect(as('/assets/root-abc123.js')).toEqual({ kind: 'file' });
     expect(as('/fonts/noto-sans-hebrew-400.woff2')).toEqual({ kind: 'file' });
   });
 
   it('lets in nothing else', () => {
-    for (const path of ['/', '/showcase', '/show', `/show/${token}/x`, '/show/short', `/show/${token.toUpperCase()}`, '/likkutei-sichos', '/_/auth/me', '/assets/../showcase', '/sw.js']) expect(as(path), path).toBeNull();
+    for (const path of ['/', '/showcase', '/show', `/show/${token}/x`, `/show/${token}/f/david`, '/show/short', `/show/${token.toUpperCase()}`, '/likkutei-sichos', '/_/auth/me', '/assets/../showcase', '/sw.js']) expect(as(path), path).toBeNull();
     expect(as(`/show/${token}`, 'POST')).toBeNull();
   });
 
@@ -79,11 +80,22 @@ describe('where a file comes from', () => {
 });
 
 describe('the store', () => {
+  it('gives a print face as it was kept, privately, and nothing for one not kept', async () => {
+    const fonts = memoryShowcases();
+    await fonts.putFont('frank', new Uint8Array([0, 1, 0, 0]).buffer);
+    const answer = await showcaseFont(fonts, 'frank');
+    expect(answer.status).toBe(200);
+    expect(answer.headers.get('cache-control')).toBe('private, max-age=86400');
+    expect([...new Uint8Array(await answer.arrayBuffer())]).toEqual([0, 1, 0, 0]);
+    expect((await showcaseFont(fonts, 'miram')).status).toBe(404);
+  });
+
   it('keeps showcases in the bucket by token, and lists the newest first', async () => {
     const kept = new Map<string, string>();
     const bucket: ShowcaseBucket = {
-      get: async (key) => (kept.has(key) ? { text: async () => kept.get(key)! } : null),
-      put: async (key, value) => void kept.set(key, value),
+      get: async (key) => (kept.has(key) ? { text: async () => kept.get(key)!, arrayBuffer: async () => new TextEncoder().encode(kept.get(key)!).buffer as ArrayBuffer } : null),
+      head: async (key) => (kept.has(key) ? {} : null),
+      put: async (key, value) => void kept.set(key, typeof value === 'string' ? value : new TextDecoder().decode(value)),
       delete: async (key) => void kept.delete(key),
       list: async ({ prefix }) => ({ objects: [...kept.keys()].filter((k) => k.startsWith(prefix)).map((key) => ({ key })), truncated: false }),
     };
@@ -137,6 +149,9 @@ describe('making one and showing it', () => {
   const save = (key?: string) => {
     const form = new FormData();
     for (const [name, value] of Object.entries({ intent: 'save', title: 'פגישה', note: 'For a visit', farbrengens: `${ids.event},not-an-id`, sichos: '', numbers: 'on', [`original:${ids.event}`]: 'https://drive.google.com/file/d/1ThsZGqnrg8DH6ty3bmD6toWc6zaf_nU9/view' })) form.set(name, value);
+    // The print's faces: a font file is kept; anything else given as one is not.
+    form.append('font-frank', new File([new Uint8Array([0, 1, 0, 0, 0, 10])], 'FrankLubavitch.ttf'));
+    form.append('font-miram', new File(['<html>not a font</html>'], 'MiramLubavitch.ttf'));
     form.append('reading', new File([`scan: ${DRIVE}\n## {62}בהעלותך 2)\n### אות א\n⦃א.⦄ איתא בספרי[1] ⟨שמחה⟩\n---\n1) פרשתנו י, י.\n`], 'sicha-33_0062.txt', { type: 'text/plain' }));
     return handle(new Request(`${SITE}/showcase`, { method: 'POST', body: form }), undefined, key);
   };
@@ -161,6 +176,8 @@ describe('making one and showing it', () => {
     expect(showcase!.originals).toEqual({ [ids.event!]: 1 });
     expect(showcase!.readings!.map((r) => [r.title, r.media])).toEqual([['בהעלותך ב', 2]]);
     expect(saved.headers.get('location')).toBe(`/showcase?edit=${showcase!.token}&saved=${showcase!.token}`);
+    expect(await store.hasFont('frank')).toBe(true);
+    expect(await store.hasFont('miram')).toBe(false);
     const page = await handle(new Request(`${SITE}${saved.headers.get('location')}`), undefined, 'a-key');
     expect(page.status).toBe(200);
     expect(await page.text()).toContain(`${SITE}/show/${showcase!.token}`);
@@ -183,6 +200,9 @@ describe('making one and showing it', () => {
     expect(html).toContain('איתא בספרי');
     expect(html).toContain('Side by side');
     expect(html).toContain('rebbehub-whisper-v3');
+    // The print's face Shmuly uploaded, from the showcase's own address; the one he did not, not at all.
+    expect(html).toContain(`font-family:'Frank Lubavitch';src:url('/show/${showcase!.token}/f/frank')`);
+    expect(html).not.toContain('Miram Lubavitch\';src');
     // No menus: the header's links into the private site are not drawn.
     expect(html).not.toContain('href="/search"');
   });

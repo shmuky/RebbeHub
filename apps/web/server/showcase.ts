@@ -1,4 +1,4 @@
-import { GUEST_FILES, GUEST_PATH, TOKEN, type MediaSource, type Showcase, type ShowcaseStore } from '../app/lib/showcase.js';
+import { GUEST_FILES, GUEST_PATH, TOKEN, type MediaSource, type PrintFont, type Showcase, type ShowcaseStore } from '../app/lib/showcase.js';
 import type { PageReader } from './handler.js';
 
 /** Drive's download address for anyone with the link (services/api/src/drive.ts does the same). */
@@ -24,13 +24,16 @@ const driveDownloadUrl = (id: string, resourceKey: string | null) => {
 
 /** The little of an R2 bucket the store uses. */
 export interface ShowcaseBucket {
-  get(key: string): Promise<{ text(): Promise<string> } | null>;
-  put(key: string, value: string, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
+  get(key: string): Promise<{ text(): Promise<string>; arrayBuffer(): Promise<ArrayBuffer> } | null>;
+  head(key: string): Promise<unknown | null>;
+  put(key: string, value: string | ArrayBuffer, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
   delete(key: string): Promise<void>;
   list(options: { prefix: string; cursor?: string }): Promise<{ objects: Array<{ key: string }>; truncated: boolean; cursor?: string }>;
 }
 
 const PREFIX = 'showcases/';
+/** The print's faces, apart from the showcases: kept once, for all of them. */
+const FONTS = 'showcase-fonts/';
 
 /** Showcases kept in the public bucket, one JSON file each (`showcases/<token>.json`), named by a token nobody can guess. */
 export function r2Showcases(bucket: ShowcaseBucket): ShowcaseStore {
@@ -41,6 +44,9 @@ export function r2Showcases(bucket: ShowcaseBucket): ShowcaseStore {
   };
   return {
     get,
+    putFont: async (name, bytes) => void (await bucket.put(`${FONTS}${name}`, bytes, { httpMetadata: { contentType: 'font/ttf' } })),
+    getFont: async (name) => (await bucket.get(`${FONTS}${name}`))?.arrayBuffer() ?? null,
+    hasFont: async (name) => (await bucket.head(`${FONTS}${name}`)) !== null,
     put: async (showcase) => void (await bucket.put(`${PREFIX}${showcase.token}.json`, JSON.stringify(showcase), { httpMetadata: { contentType: 'application/json' } })),
     remove: (token) => bucket.delete(`${PREFIX}${token}.json`),
     async list() {
@@ -61,7 +67,8 @@ export type GuestRequest =
   | { kind: 'file' }
   | { kind: 'page'; token: string }
   | { kind: 'media'; token: string; index: number }
-  | { kind: 'transcript'; token: string; recording: string };
+  | { kind: 'transcript'; token: string; recording: string }
+  | { kind: 'font'; token: string; name: PrintFont };
 
 /** What a request is, as a guest's: null for everything a guest may not ask. */
 export function guestRequest(request: Request): GuestRequest | null {
@@ -73,6 +80,7 @@ export function guestRequest(request: Request): GuestRequest | null {
   const token = show[1]!;
   if (show[2] !== undefined) return { kind: 'media', token, index: Number(show[2]) };
   if (show[3] !== undefined) return { kind: 'transcript', token, recording: show[3] };
+  if (show[4] !== undefined) return { kind: 'font', token, name: show[4] as PrintFont };
   return { kind: 'page', token };
 }
 
@@ -156,3 +164,10 @@ export async function showcaseMedia(
 
 /** Whether a showcase lets a guest read this recording's transcript. */
 export const mayReadTranscript = (showcase: Showcase, recording: string) => showcase.transcripts.includes(recording);
+
+/** A print face for a showcase's page: the file as Shmuly uploaded it, kept by the guest's browser a day and by nobody else. */
+export async function showcaseFont(store: ShowcaseStore, name: PrintFont): Promise<Response> {
+  const bytes = await store.getFont(name);
+  if (!bytes) return new Response('Not found.', { status: 404, headers: { 'Cache-Control': 'no-store' } });
+  return new Response(bytes, { headers: { 'Content-Type': 'font/ttf', 'Cache-Control': 'private, max-age=86400', 'X-Robots-Tag': 'noindex, nofollow' } });
+}
