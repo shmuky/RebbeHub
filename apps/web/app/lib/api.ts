@@ -404,8 +404,10 @@ export class RebbeHubApi {
     private readonly fetcher: Fetch = (input, init) => fetch(input, init),
   ) {}
 
-  private async get<T>(path: string, params: Record<string, string | number | undefined> = {}): Promise<T> {
+  private async get<T>(path: string, params: Record<string, string | number | string[] | undefined> = {}): Promise<T> {
+    // A list is the same parameter repeated (`ref=…&ref=…`).
     const query = Object.entries(params)
+      .flatMap(([k, v]) => (Array.isArray(v) ? v.map((one) => [k, one] as const) : [[k, v] as const]))
       .filter(([, v]) => v !== undefined && v !== '')
       .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
       .join('&');
@@ -559,6 +561,11 @@ export class RebbeHubApi {
   /** A day's learning (Chitas: Tanya cut to the day's portion, Chumash and Tehillim; Hayom Yom; the Rambam's three tracks), for a civil day: one read. */
   daily(date: string) {
     return this.get<DailyLearning>('/v1/daily', { date });
+  }
+
+  /** The shiurim's words, each page cut to what is learned: a day's, or any by Sefaria's references (with Rashi for a Chumash one). */
+  shiurim(what: { date: string } | { refs: string[]; rashi?: boolean }): Promise<Shiurim> {
+    return this.get<Shiurim>('/v1/shiurim', 'date' in what ? { date: what.date } : { ref: what.refs, rashi: what.rashi ? '1' : undefined });
   }
 
   /** A work's volumes, with how many units each holds. */
@@ -871,6 +878,16 @@ export interface RambamShiur {
   refs: string[];
   /** Each reference's page on RebbeHub, once the catalog has it. */
   paths?: Array<string | null>;
+}
+
+/** A piece of a shiur: a page cut to the stretch learned, in its Hebrew. */
+export type ShiurPart = Entity & { from: string; to: string | null; rashi?: boolean };
+
+export interface Shiurim {
+  date: string | null;
+  hebrew: string | null;
+  /** `chumash`, `tehillim`, `tanya`, `three`, `one`, `mitzvos`, or `passage`, each with what it is and its pieces. */
+  sections: Array<{ key: string; label: string; parts: ShiurPart[] }>;
 }
 
 export interface DailyLearning {

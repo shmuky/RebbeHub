@@ -196,3 +196,122 @@ export async function dailyLearning(catalog: Catalog, date: string): Promise<Dai
     rambam: { three: tracks(rambam.three), one: tracks(rambam.one), mitzvos: rambam.mitzvos ? { ...rambam.mitzvos, paths: rambam.mitzvos.refs.map(() => null) } : null },
   };
 }
+
+// ---------------------------------------------------------------- the shiurim's words
+
+/** A stretch of one page: its verses (or paragraphs) `from` to `to`, both learned; null for the page's start or end. */
+export interface ShiurSpan {
+  page: string;
+  from: number | null;
+  to: number | null;
+  /** Rashi's comments on those verses, not the verses. */
+  rashi?: boolean;
+}
+
+/** Sefer HaMitzvot's parts on RebbeHub, by how the Sefaria importer numbers them. */
+const MITZVOS: Record<string, string> = { Shorashim: '/sefer-hamitzvos/2', 'Positive Commandments': '/sefer-hamitzvos/4', 'Negative Commandments': '/sefer-hamitzvos/6' };
+
+/**
+ * The pages and verses a Sefaria reference learns on RebbeHub: `Genesis
+ * 1:1-2:3` is chapter 1 from its first verse and chapter 2 up to verse 3,
+ * `Psalms 104-105` two whole chapters, `Mishneh Torah, Divorce 11` a whole
+ * chapter, `Sefer HaMitzvot, Positive Commandments 109` one mitzvah. With
+ * `rashi`, the Chumash's Rashi on the same verses. Empty for a reference it
+ * does not place.
+ */
+export function spansOf(ref: string, options: { rashi?: boolean } = {}): ShiurSpan[] {
+  const m = /^(.*) (\d+)(?::(\d+))?(?:-(\d+)(?::(\d+))?)?$/.exec(ref.trim());
+  if (!m) return [];
+  const [, book, c1s, v1s, xs, v2s] = m;
+  const mitzvos = /^Sefer HaMitzvot, (.*)$/.exec(book!);
+  if (mitzvos) {
+    const part = MITZVOS[mitzvos[1]!];
+    if (!part || v1s) return [];
+    const [a, b] = [Number(c1s), Number(xs ?? c1s)];
+    return Array.from({ length: Math.max(0, b - a + 1) }, (_, i) => ({ page: `${part}/${a + i}`, from: null, to: null }));
+  }
+  const work = dailyPathOf(`${book} 1`, options)?.work;
+  if (!work) return [];
+  const c1 = Number(c1s);
+  const rashi = options.rashi ? { rashi: true } : {};
+  const span = (chapter: number, from: number | null, to: number | null): ShiurSpan => ({ page: `${work}/${chapter}`, from, to, ...rashi });
+  // `1:1-2:3`: across chapters; `1:3-9` or `1:3` within one; `104-105` or `11`: whole chapters.
+  if (v1s && v2s) {
+    const c2 = Number(xs);
+    return Array.from({ length: Math.max(0, c2 - c1 + 1) }, (_, i) => span(c1 + i, i === 0 ? Number(v1s) : null, c1 + i === c2 ? Number(v2s) : null));
+  }
+  if (v1s) return [span(c1, Number(v1s), Number(xs ?? v1s))];
+  const c2 = Number(xs ?? c1s);
+  return Array.from({ length: Math.max(0, c2 - c1 + 1) }, (_, i) => span(c1 + i, null, null));
+}
+
+/** A piece of a shiur: a page cut to the stretch learned (`from`, and `to` the first segment after it, null to its end), in its Hebrew only. */
+export type ShiurPart = EntityView & { from: string; to: string | null; rashi?: boolean };
+
+export interface ShiurSection {
+  /** `chumash`, `tehillim`, `tanya`, `three`, `one`, `mitzvos`; `passage` for one asked by reference. */
+  key: string;
+  /** What it is, as the day's list names it: `וזאת הברכה, ששי עם פירש״י`. */
+  label: string;
+  parts: ShiurPart[];
+}
+
+/** A page's Hebrew alone, when it has Hebrew: the shiurim are learned in it, and the whole page has the rest. */
+const hebrewOnly = (body: PageText): PageText => {
+  const he = body.versions.filter((v) => v.language === 'he');
+  return he.length ? { ...body, versions: he } : body;
+};
+
+/**
+ * The words of shiurim given by their Sefaria references, each page cut
+ * to the stretch learned, all the pages in one read: the Chumash by
+ * aliyah (with Rashi on the same verses), Tehillim, the Rambam and Sefer
+ * HaMitzvos. A reference the catalog has no page for is left out.
+ */
+export async function shiurimWords(catalog: Catalog, wanted: Array<{ key: string; label: string; refs: string[]; rashi?: boolean }>): Promise<ShiurSection[]> {
+  const plans = wanted.map((w) => ({ ...w, spans: [...w.refs.flatMap((r) => spansOf(r)), ...(w.rashi ? w.refs.flatMap((r) => spansOf(r, { rashi: true })) : [])] }));
+  const pages = await catalog.getByPaths(plans.flatMap((p) => p.spans.map((s) => s.page)));
+  const byPath = new Map(pages.map((v) => [v.path?.toLowerCase(), v]));
+  return plans.map((plan) => ({
+    key: plan.key,
+    label: plan.label,
+    parts: plan.spans.flatMap((s): ShiurPart[] => {
+      const unit = byPath.get(s.page.toLowerCase());
+      if (!unit) return [];
+      const body = (unit.data as { body?: unknown }).body;
+      const from = s.from === null ? null : String(s.from);
+      const to = s.to === null ? null : String(s.to + 1);
+      const data = isPageText(body) ? { ...(unit.data as object), body: hebrewOnly(cut(body, from, to)) } : unit.data;
+      return [{ ...unit, data: data as EntityView['data'], from: from ?? '1', to, ...(s.rashi ? { rashi: true } : {}) }];
+    }),
+  }));
+}
+
+/**
+ * The day's shiurim with their words, for the shiurim page: Chumash with
+ * Rashi (the day's aliyah), Tehillim, Tanya (the day's portion), and the
+ * Rambam's three tracks, in that order; each section's pieces cut to what
+ * is learned. Hayom Yom is on the daily page.
+ */
+export async function dailyShiurim(catalog: Catalog, date: string): Promise<{ date: string; hebrew: string; sections: ShiurSection[] } | null> {
+  const day = await dailyLearning(catalog, date);
+  if (!day) return null;
+  const wanted: Array<{ key: string; label: string; refs: string[]; rashi?: boolean }> = [];
+  if (day.chumash) wanted.push({ key: 'chumash', label: day.chumash.label, refs: [day.chumash.ref], rashi: true });
+  if (day.tehillim.length) wanted.push({ key: 'tehillim', label: day.tehillim.map((t) => t.text.replace(/\.$/, '')).join(' '), refs: day.tehillim.map((t) => t.ref).filter((r): r is string => r !== null) });
+  const rambam = (['three', 'one', 'mitzvos'] as const).flatMap((key) => {
+    const s = day.rambam[key];
+    return s ? [{ key, label: s.label, refs: s.refs }] : [];
+  });
+  const words = await shiurimWords(catalog, [...wanted, ...rambam]);
+  const tanya: ShiurSection = {
+    key: 'tanya',
+    label: day.tanya.map((p) => (p.data as { label?: { he?: string } }).label?.he ?? '').filter(Boolean).join(' – '),
+    parts: day.tanya.map((p) => {
+      const body = (p.data as { body?: unknown }).body;
+      return isPageText(body) ? { ...p, data: { ...(p.data as object), body: hebrewOnly(body) } as unknown as EntityView['data'] } : p;
+    }),
+  };
+  const sections = [...words.filter((s) => s.key === 'chumash' || s.key === 'tehillim'), ...(day.tanya.length ? [tanya] : []), ...words.filter((s) => s.key !== 'chumash' && s.key !== 'tehillim')];
+  return { date: day.date, hebrew: day.hebrew, sections };
+}
