@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import type { ServerBuild } from 'react-router';
+import { memoryShowcases } from '../app/lib/showcase.js';
 import { createSiteHandler } from './handler.js';
 
 /**
@@ -17,6 +18,9 @@ const port = Number(process.env.PORT ?? 3000);
 const handler = createSiteHandler(build, {
   apiUrl: process.env.REBBEHUB_API_URL ?? 'http://127.0.0.1:8787',
   siteUrl: process.env.SITE_URL ?? `http://localhost:${port}`,
+  // Showcases are kept in memory here, and anyone may make one: this is the site for local work.
+  showcases: memoryShowcases(),
+  anyoneShowcases: true,
 });
 
 const app = new Hono();

@@ -265,6 +265,53 @@ interface SpanData {
   origin?: { by: string; checked?: boolean; edited?: boolean };
 }
 
+/** A recording that has a transcript, with how much of it people have checked (GET /v1/transcripts). */
+export interface TranscribedRecording {
+  recording: EntityId;
+  title: Json;
+  event: EntityId | null;
+  durationMs: number | null;
+  paragraphs: number;
+  checked: number;
+  /** Paragraphs whose words carry their own timings: the player lights them word by word. */
+  timedWords: number;
+}
+
+/**
+ * Every recording with a transcript, the most checked first, then the
+ * longest: for picking the best to show (the site's showcase picker). One
+ * read over all transcripts' paragraphs; there are hundreds, not millions.
+ */
+export async function transcribedRecordings(catalog: Catalog, options: { limit?: number } = {}): Promise<TranscribedRecording[]> {
+  const limit = Math.min(Math.max(options.limit ?? 50, 1), 1000);
+  const { rows } = await catalog.db.query<{ recording: EntityId; title: Json; event: EntityId | null; duration: string | null; paragraphs: string; checked: string; timed: string }>(
+    `SELECT x.to_id AS recording, rr.data->'title' AS title, rr.data->>'event' AS event, rr.data->>'durationMs' AS duration,
+            count(s.id) AS paragraphs,
+            count(s.id) FILTER (WHERE coalesce((sr.data->>'proofread')::int, 0) > 0 OR coalesce((sr.data->'origin'->>'checked')::boolean, false)) AS checked,
+            count(s.id) FILTER (WHERE EXISTS (
+              SELECT 1 FROM entity_ref z JOIN entity sp ON sp.id = z.from_id AND sp.type = 'alignment-span' AND NOT sp.deleted
+              JOIN revision spr ON spr.id = sp.main_rev WHERE z.to_id = s.id AND z.field = 'segment' AND jsonb_array_length(coalesce(spr.data->'words', '[]')) > 0)) AS timed
+     FROM entity t JOIN revision tr ON tr.id = t.main_rev AND tr.data->>'kind' = 'transcript'
+     JOIN entity_ref x ON x.from_id = t.id AND x.field = 'recording'
+     JOIN entity r ON r.id = x.to_id AND NOT r.deleted JOIN revision rr ON rr.id = r.main_rev
+     JOIN entity_ref y ON y.to_id = t.id AND y.field = 'text'
+     JOIN entity s ON s.id = y.from_id AND s.type = 'segment' AND NOT s.deleted JOIN revision sr ON sr.id = s.main_rev
+     WHERE t.type = 'text' AND NOT t.deleted
+     GROUP BY x.to_id, rr.data
+     ORDER BY checked DESC, paragraphs DESC, x.to_id LIMIT $1`,
+    [limit],
+  );
+  return rows.map((r) => ({
+    recording: r.recording,
+    title: r.title,
+    event: r.event,
+    durationMs: r.duration ? Number(r.duration) : null,
+    paragraphs: Number(r.paragraphs),
+    checked: Number(r.checked),
+    timedWords: Number(r.timed),
+  }));
+}
+
 /** A recording's transcript with its sync, paragraph by paragraph; null when it has none. */
 export async function recordingTranscript(catalog: Catalog, recording: EntityId): Promise<TranscriptView | null> {
   const text = await one<{ id: EntityId; language: string }>(

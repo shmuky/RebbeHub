@@ -23,6 +23,12 @@ the API, the MCP server and the files all answer a lock page (the site) or
   `LOCK_PASSWORD` on both (it wins over `LOCK_KEY_HASH` in wrangler.toml),
   and the repository secret `REBBEHUB_PASSWORD` to the same. Every browser
   then asks again.
+- **Showcases**: one page to show guests, at a secret address of its own
+  (`/show/<token>`), made at `/showcase` by whoever opened the lock. A
+  guest gets that page, its transcripts and the recordings and scans it
+  lists, and nothing else (`apps/web/app/lib/showcase.ts`,
+  `apps/web/server/showcase.ts`). They are kept in the public bucket under
+  `showcases/`; deleting one closes its address.
 - **Opening it again**: remove `LOCK_KEY_HASH` from both wrangler.toml files
   and any `LOCK_PASSWORD` secret.
 

@@ -96,6 +96,11 @@ export default [
   route('sitemap.xml', 'routes/sitemap-index.ts'),
   // Sitemaps: the site's own pages, and each kind of item a page at a time (`/sitemaps/unit-3.xml`).
   route('sitemaps/:name.xml', 'routes/sitemap.ts'),
+  // A page to show the people Shmuly meets, at a secret address of its own, open while the rest is private (lib/showcase.ts):
+  // made at /showcase, seen at /show/<token>, its transcripts read through it. Its files are passed on by server/worker.ts.
+  route('showcase', 'routes/showcase.tsx'),
+  route('show/:token', 'routes/show.tsx'),
+  route('show/:token/t/:recording', 'routes/show-transcript.ts'),
   // Every item has a readable path (`/likkutei-sichos/12/3`) and a permanent one (`/rh-7k2m9q4d`).
   route('*', 'routes/item.tsx'),
 ] satisfies RouteConfig;

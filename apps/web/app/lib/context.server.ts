@@ -1,4 +1,5 @@
 import { RebbeHubApi } from './api.js';
+import type { ShowcaseStore } from './showcase.js';
 
 /**
  * What every loader gets from the server it runs on: the API client, and
@@ -9,6 +10,8 @@ import { RebbeHubApi } from './api.js';
 export interface SiteContext {
   api: RebbeHubApi;
   siteUrl: string;
+  /** Where showcases are kept, and whether this visitor may make them (lib/showcase.ts); unset, there are none. */
+  showcases?: { store: ShowcaseStore; owner: boolean };
 }
 
 declare module 'react-router' {

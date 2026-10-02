@@ -1,6 +1,7 @@
 import type { DbCost } from '@rebbehub/db';
 import { createRequestHandler, type ServerBuild } from 'react-router';
 import { RebbeHubApi } from '../app/lib/api.js';
+import type { ShowcaseStore } from '../app/lib/showcase.js';
 import { hasSession, withCachePolicy } from './cachePolicy.js';
 
 /** The header the lock's key goes in (services/api/src/lock.ts). */
@@ -13,6 +14,10 @@ export interface SiteOptions {
   siteUrl: string;
   /** How the site reaches the API; a Worker can pass a service binding's fetch. */
   fetch?: (input: string, init?: RequestInit) => Promise<Response>;
+  /** Where showcases are kept (app/lib/showcase.ts); without it, there are none. */
+  showcases?: ShowcaseStore;
+  /** Everyone may make showcases (the site on Node, for local work); else only a visitor who opened the lock. */
+  anyoneShowcases?: boolean;
 }
 
 /**
@@ -132,6 +137,8 @@ export function createSiteHandler(build: ServerBuild, options: SiteOptions, mode
   const handle = createRequestHandler(build, mode);
   const base = options.apiUrl.replace(/\/$/, '');
   const reach: Send = options.fetch ?? ((input, init) => fetch(input, init));
+  // Showcases are made by whoever opened the lock: while RebbeHub is private, its owner.
+  const showcases = (key?: string) => (options.showcases ? { store: options.showcases, owner: Boolean(key) || options.anyoneShowcases === true } : undefined);
   return async (request: Request, reader?: PageReader, key?: string) => {
     const started = performance.now();
     // The request's own count of what it asks the API, so its answer can say what it cost.
@@ -152,7 +159,7 @@ export function createSiteHandler(build: ServerBuild, options: SiteOptions, mode
       headers.set('Cache-Control', 'no-cache');
       return send(input, { ...init, headers });
     });
-    const response = withoutTrailingSlash(request) ?? withCachePolicy(request, await handle(request, { site: { api: hasSession(request) ? fresh : api, siteUrl: options.siteUrl } }));
+    const response = withoutTrailingSlash(request) ?? withCachePolicy(request, await handle(request, { site: { api: hasSession(request) ? fresh : api, siteUrl: options.siteUrl, showcases: showcases(key) } }));
     if (reader) meter.add(reader.cost);
     return secured(response, meter.header(started));
   };
