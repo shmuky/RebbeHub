@@ -1,4 +1,4 @@
-import type { MachineOrigin, PageInline, PageMark, PageSegment, PageText } from '@rebbehub/model';
+import { allSegments, inlineText, isPageText, tidyInline, type MachineOrigin, type PageInline, type PageMark, type PageSegment, type PageText } from '@rebbehub/model';
 
 /**
  * A page our reader read (the Likkutei Sichos OCR model), for a showcase:
@@ -108,5 +108,54 @@ export function readingOf(file: string, fallbackTitle = ''): Reading | null {
     title: title || fallbackTitle,
     scan,
     body: { profile: 'plain', versions: [{ id: 'he', language: 'he', segments, notes, origin }] },
+  };
+}
+
+/**
+ * The reader's own output file (RebbeHub-OCR's model-output-format.md:
+ * `{ sicha, pageText, pages, layout }`), or its pageText alone, as a
+ * reading. It keeps the print's line ends, so the showcase can set the
+ * sicha as the printed page. Only the words are kept, made tidy (links
+ * that go nowhere RebbeHub allows are dropped); the per-word layout is not.
+ */
+export function readingOfJson(file: string, fallbackTitle = ''): Reading | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(file);
+  } catch {
+    return null;
+  }
+  const body = isPageText(parsed) ? parsed : isPageText((parsed as { pageText?: unknown } | null)?.pageText) ? (parsed as { pageText: PageText }).pageText : null;
+  const version = body?.versions.find((v) => Array.isArray(v.segments) && v.segments.length);
+  if (!body || !version) return null;
+  const clean = (segment: PageSegment): PageSegment => ({
+    id: String(segment.id),
+    kind: segment.kind,
+    ...(typeof segment.n === 'number' ? { n: segment.n } : {}),
+    ...(typeof segment.label === 'string' ? { label: segment.label.slice(0, 8) } : {}),
+    ...(segment.level ? { level: segment.level } : {}),
+    ...(segment.end ? { end: true } : {}),
+    ...(Array.isArray(segment.text) ? { text: tidyInline(segment.text) } : {}),
+    ...(Array.isArray(segment.children) ? { children: segment.children.map(clean) } : {}),
+    ...(segment.origin ? { origin: { by: String(segment.origin.by).slice(0, 80), checked: segment.origin.checked === true } } : {}),
+  });
+  const segments = version.segments.map(clean);
+  const heading = [...allSegments(segments)].find((x) => x.kind === 'heading');
+  const url = typeof version.url === 'string' && /^https:\/\/\S+$/.test(version.url) ? version.url : null;
+  return {
+    title: inlineText(heading?.text).trim().slice(0, 200) || fallbackTitle,
+    scan: url,
+    body: {
+      profile: 'plain',
+      versions: [
+        {
+          id: version.id === 'yi' ? 'yi' : 'he',
+          language: version.language === 'yi' ? 'yi' : 'he',
+          segments,
+          notes: (version.notes ?? []).map(clean),
+          origin: { by: 'ocr:rebbehub-kraken-ls-v1', checked: false },
+        },
+      ],
+    },
   };
 }

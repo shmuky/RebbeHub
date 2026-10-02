@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { data, Form } from 'react-router';
 import { hayomYomShiurimOf } from '@rebbehub/hebrew';
 import { allSegments, isPageText, type PageText } from '@rebbehub/model';
@@ -12,11 +12,14 @@ import { num } from '../lib/i18nUi.js';
 import { labelOf } from '../lib/labels.js';
 import { chipLabel, topicLines } from '../lib/mafteach.js';
 import { MODEL_FAMILIES, MODELS_LICENCE } from '../lib/models.js';
+import { noteLabels, printPagesOf } from '../lib/printLines.js';
 import { mediaPath, transcriptPath } from '../lib/showcase.js';
 import { tracksOf } from '../lib/tracks.js';
 import type { Transcript } from '../lib/transcript.js';
+import { Benchmarks } from '../components/Benchmarks.js';
 import { HayomYomDay } from '../components/HayomYomDay.js';
 import { PageWords } from '../components/PageWords.js';
+import { frameOf, PrintPage } from '../components/PrintPage.js';
 import { ScanBeside } from '../components/ScanBeside.js';
 import { Lyrics } from '../components/Transcripts.js';
 import { clock, usePlayer, type Track } from '../player/PlayerProvider.js';
@@ -105,6 +108,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     scan: r.media !== null ? mediaPath(token, r.media) : null,
     body: isPageText(r.body) ? r.body : null,
     machine: true,
+    head: 'לקוטי שיחות',
+    heTitle: r.title,
   }));
   const sichos: PageView[] = showcase.sichos.flatMap((id) => {
     const unit = items.get(id);
@@ -121,6 +126,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         scan: media !== undefined ? mediaPath(token, media) : null,
         body: unit.withheld || !isPageText(d.body) ? null : readerFirst(d.body),
         machine: Boolean(d.machineOrigin && !d.machineOrigin.checked),
+        head: (unit.path ?? '').startsWith(SEFER + '/') ? 'לקוטי שיחות' : work ? labelOf(work, 'he') : '',
+        heTitle: labelOf(unit, 'he'),
       },
     ];
   });
@@ -164,6 +171,8 @@ const W = {
   score: { he: 'ציון', en: 'Score' },
   made: { he: 'עד כה', en: 'Done so far' },
   contents: { he: 'בדף', en: 'On this page' },
+  bench: { he: 'מדדים', en: 'Benchmarks' },
+  benchSub: { he: 'כל מספר נמדד על חומר שהמודל לא למד ממנו.', en: 'Every number is measured on material the model never learned from.' },
   listen: { he: 'תמלול ותזמון', en: 'Transcription and timing' },
   listenSub: {
     he: 'השומע כותב את ההקלטה, והמתזמן קובע את הרגע של כל מילה. נגנו, והמילה הנאמרת מוארת; לחיצה על שורה מנגנת משם.',
@@ -194,6 +203,9 @@ const W = {
   play: { he: 'לנגן', en: 'Play' },
   pause: { he: 'עצירה', en: 'Pause' },
   other: { he: 'English', en: 'עברית' },
+  page: { he: 'עמוד', en: 'Page' },
+  prevPage: { he: 'הקודם', en: 'Previous' },
+  nextPage: { he: 'הבא', en: 'Next' },
   by: { he: 'סוכנים', en: 'Agents' },
 } as const;
 const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
@@ -255,6 +267,11 @@ export default function Show({ loaderData }: Route.ComponentProps) {
               <li>
                 <a href="#agents">{w(lang, 'roster')}</a>
               </li>
+              {extras.models ? (
+                <li>
+                  <a href="#benchmarks">{w(lang, 'bench')}</a>
+                </li>
+              ) : null}
               {sections.map((s) => (
                 <li key={s.id}>
                   <a href={`#${s.id}`}>{s.label}</a>
@@ -297,8 +314,16 @@ export default function Show({ loaderData }: Route.ComponentProps) {
               </tbody>
             </table>
           </div>
-          {extras.models ? <p className="show-meta">{MODELS_LICENCE[lang]}</p> : null}
         </section>
+
+        {extras.models ? (
+          <section id="benchmarks" className="show-section">
+            <h2 className="show-h">{w(lang, 'bench')}</h2>
+            <p className="show-sub">{w(lang, 'benchSub')}</p>
+            <Benchmarks lang={lang} />
+            <p className="show-meta">{MODELS_LICENCE[lang]}</p>
+          </section>
+        ) : null}
 
         {pages.length ? (
           <Section id="scans" title={w(lang, 'scans')} sub={w(lang, 'scansSub')} agent="rebbehub-kraken-ls-v1, rebbehub-facenet-v2" lang={lang}>
@@ -444,7 +469,7 @@ function Heard({ token, farbrengen, lang }: { token: string; farbrengen: Farbren
   const tracks = farbrengen.tracks.filter((tr) => transcripts.some((x) => x.recording === tr.id));
   const shownView = farbrengen.original ? view : 'text';
   return (
-    <div className="show-card show-card-flush">
+    <div className="show-card show-player">
       {head}
       <div className={`show-pair show-pair-${shownView}`}>
         {shownView !== 'original' ? (
@@ -458,7 +483,7 @@ function Heard({ token, farbrengen, lang }: { token: string; farbrengen: Farbren
           </div>
         ) : null}
       </div>
-      <p className="show-meta">
+      <p className="show-meta show-player-meta">
         {machine ? <MachineLabel lang={lang} size="sm" /> : null}
         <span>
           {num(paragraphs.length, lang)} {w(lang, 'paragraphs')}
@@ -516,13 +541,19 @@ function Parts({ tracks, lang }: { tracks: Track[]; lang: Lang }) {
   );
 }
 
-type PageView = { id: string; title: string; sub: string; scan: string | null; body: PageText | null; machine: boolean };
+type PageView = { id: string; title: string; sub: string; scan: string | null; body: PageText | null; machine: boolean; head: string; heTitle: string };
 
-/** A sicha: its words, and its scan beside them or alone. */
+/** A sicha: its words, and its scan beside them or alone. Where the reader kept the print's lines, the words are set as the printed page, page for page with the scan. */
 function PageCard({ page: p, lang }: { page: PageView; lang: Lang }) {
   const [view, setView] = useState<View>('beside');
   const [page, setPage] = useState(() => firstPrinted(p.body));
+  const version = p.body?.versions[0];
+  const print = useMemo(() => printPagesOf(version), [version]);
+  const labels = useMemo(() => noteLabels(version), [version]);
+  const frame = useMemo(() => (print ? frameOf(print) : null), [print]);
   const shown: View = !p.scan ? 'text' : !p.body ? 'original' : view;
+  const printed = print ? (print.find((x) => x.page === page) ?? print[0]!) : null;
+  const go = (n: number) => setPage(Math.max(1, n));
   return (
     <article className="show-card">
       <div className="show-card-head">
@@ -537,9 +568,14 @@ function PageCard({ page: p, lang }: { page: PageView; lang: Lang }) {
         </div>
         {p.scan && p.body ? <Views view={view} set={setView} lang={lang} label={p.title} /> : null}
       </div>
-      <div className={`show-pair show-pair-${shown}`}>
+      <div className={`show-pair show-pair-${shown}${printed ? ' show-pair-print' : ''}`}>
         {shown !== 'original' ? (
-          p.body ? (
+          printed && print ? (
+            <div className="show-print">
+              <PrintPage page={printed} frame={frame!} head={p.head} title={p.heTitle.split(' / ')[0] ?? p.heTitle} labels={labels} />
+              {shown === 'text' || !p.scan ? <Pager at={print.indexOf(printed)} count={print.length} lang={lang} onGo={(i) => go(print[i]!.page)} label={printed.printed} /> : null}
+            </div>
+          ) : p.body ? (
             <div className="show-words torah">
               <PageWords page={p.body} lang={lang} />
             </div>
@@ -549,11 +585,28 @@ function PageCard({ page: p, lang }: { page: PageView; lang: Lang }) {
         ) : null}
         {p.scan && shown !== 'text' ? (
           <div className="show-scan">
-            <ScanBeside file={p.scan} src="" title={p.title} page={page} lang={lang} onPage={(n) => setPage(Math.max(1, n))} />
+            <ScanBeside file={p.scan} src="" title={p.title} page={page} lang={lang} onPage={go} />
           </div>
         ) : null}
       </div>
     </article>
+  );
+}
+
+/** The set pages, one at a time, when the scan is not beside them to turn them. */
+function Pager({ at, count, label, lang, onGo }: { at: number; count: number; label: string | null; lang: Lang; onGo: (i: number) => void }) {
+  return (
+    <div className="show-pager">
+      <button type="button" className="btn" onClick={() => onGo(at - 1)} disabled={at <= 0}>
+        {w(lang, 'prevPage')}
+      </button>
+      <span>
+        {w(lang, 'page')} {label ?? num(at + 1, lang)} · {num(at + 1, lang)}/{num(count, lang)}
+      </span>
+      <button type="button" className="btn" onClick={() => onGo(at + 1)} disabled={at >= count - 1}>
+        {w(lang, 'nextPage')}
+      </button>
+    </div>
   );
 }
 
