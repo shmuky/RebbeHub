@@ -464,6 +464,10 @@
     border-radius: 6px;
   }
 
+  .rd .words-side p.l2 {
+    margin-inline-start: 14px;
+  }
+
   .rd .words-side b {
     color: var(--accent);
     margin-inline-end: 4px;
