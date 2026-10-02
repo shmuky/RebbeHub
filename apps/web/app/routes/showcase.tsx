@@ -56,6 +56,8 @@ const W = {
   sichosSub: { he: 'הסריקה של השיחה, ולצדה הטקסט שנקרא ממנה (כשיש).', en: "The sicha's scan, beside the words read from it (when there are)." },
   best: { he: 'התמלולים הטובים ביותר', en: 'The best transcripts' },
   bestSub: { he: 'התוועדויות שהתמלול שלהן נבדק הכי הרבה, אחר כך הארוכות.', en: 'Farbrengens whose transcripts people checked most, then the longest.' },
+  read: { he: 'שיחות שהקורא שלנו קרא לקטלוג', en: 'Sichos our reader read into the catalog' },
+  readSub: { he: 'לקוטי שיחות שהטקסט שלהן נקרא מהסריקה ועוד לא נבדק, החדשות קודם.', en: 'Likkutei Sichos whose words were read from the scan and not yet checked, the newest first.' },
   search: { he: 'חיפוש התוועדות או שיחה (שם, תאריך, חלק)', en: 'Find a farbrengen or sicha (name, date, volume)' },
   add: { he: 'הוספה', en: 'Add' },
   remove: { he: 'הסרה', en: 'Remove' },
@@ -115,7 +117,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const editing = url.searchParams.get('edit');
   const saved = url.searchParams.get('saved');
-  const [list, transcribed, frank, miram] = await Promise.all([showcases.store.list(), api.transcribed(200).catch(() => []), showcases.store.hasFont('frank'), showcases.store.hasFont('miram')]);
+  const [list, transcribed, toCheck, frank, miram] = await Promise.all([
+    showcases.store.list(),
+    api.transcribed(200).catch(() => []),
+    api.toCheck(200).catch(() => null),
+    showcases.store.hasFont('frank'),
+    showcases.store.hasFont('miram'),
+  ]);
   const current = editing && TOKEN.test(editing) ? (list.find((s) => s.token === editing) ?? null) : null;
 
   // The farbrengens whose transcripts are best: checked most, then longest, summed over their parts.
@@ -126,9 +134,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     byEvent.set(r.event, { parts: sum.parts + 1, paragraphs: sum.paragraphs + r.paragraphs, checked: sum.checked + r.checked });
   }
   const top = [...byEvent].sort((a, b) => b[1].checked - a[1].checked || b[1].paragraphs - a[1].paragraphs).slice(0, 24);
-  const wanted = [...top.map(([id]) => id), ...(current ? [...current.farbrengens, ...current.sichos] : [])];
+  // The sichos our reader read into the catalog, the newest first: their words wait for a person to check them.
+  const readSichos = (toCheck?.texts ?? []).filter((t) => t.type === 'unit' && /^\/likkutei-sichos\/\d/.test(t.path ?? '')).slice(0, 24);
+  const wanted = [...top.map(([id]) => id), ...readSichos.map((t) => t.entity), ...(current ? [...current.farbrengens, ...current.sichos] : [])];
   const items = await api.entities(wanted).catch(() => new Map<string, Entity>());
   const best = top.flatMap(([id, sum]) => (items.get(id) ? [{ ...pickOf(items.get(id)!, lang), ...sum }] : []));
+  const read = readSichos.flatMap((t) => (items.get(t.entity) ? [{ ...pickOf(items.get(t.entity)!, lang), segments: t.segments }] : []));
   const picked = (ids: string[]) => ids.flatMap((id) => (items.get(id) ? [pickOf(items.get(id)!, lang)] : []));
   return {
     lang,
@@ -148,6 +159,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         }
       : null,
     best,
+    read,
     fonts: { frank, miram },
     saved: saved && TOKEN.test(saved) ? saved : null,
   };
@@ -284,7 +296,7 @@ export default function ShowcasePicker({ loaderData }: Route.ComponentProps) {
       </div>
     );
   }
-  const { siteUrl, list, current, best, saved, fonts } = loaderData;
+  const { siteUrl, list, current, best, read, saved, fonts } = loaderData;
   return (
     <div className="wrap page showcase-page">
       <h1 className="page-title">{w(lang, 'title')}</h1>
@@ -325,7 +337,7 @@ export default function ShowcasePicker({ loaderData }: Route.ComponentProps) {
         </section>
       ) : null}
 
-      <Editor key={current?.token ?? 'new'} lang={lang} current={current} best={best} fonts={fonts} />
+      <Editor key={current?.token ?? 'new'} lang={lang} current={current} best={best} read={read} fonts={fonts} />
     </div>
   );
 }
@@ -341,11 +353,12 @@ type Current = {
   originals: Record<string, string>;
 } | null;
 type Best = Pick & { parts: number; paragraphs: number; checked: number };
+type Read = Pick & { segments: number };
 
-function Editor({ lang, current, best, fonts }: { lang: Lang; current: Current; best: Best[]; fonts: Record<PrintFont, boolean> }) {
+function Editor({ lang, current, best, read, fonts }: { lang: Lang; current: Current; best: Best[]; read: Read[]; fonts: Record<PrintFont, boolean> }) {
   const busy = useNavigation().state !== 'idle';
   const [farbrengens, setFarbrengens] = useState<Pick[]>(current?.farbrengens ?? best.slice(0, 3));
-  const [sichos, setSichos] = useState<Pick[]>(current?.sichos ?? []);
+  const [sichos, setSichos] = useState<Pick[]>(current?.sichos ?? read.slice(0, 3));
   const extras = current?.extras ?? { daily: true, mafteach: true, models: true, numbers: true };
   const has = (id: string) => farbrengens.some((p) => p.id === id) || sichos.some((p) => p.id === id);
   const addTo = (set: (f: (list: Pick[]) => Pick[]) => void) => (pick: Pick) => set((list) => (list.some((p) => p.id === pick.id) || list.length >= MAX_ITEMS ? list : [...list, pick]));
@@ -446,6 +459,30 @@ function Editor({ lang, current, best, fonts }: { lang: Lang; current: Current; 
                   </div>
                 </div>
                 <button type="button" className="btn sm" disabled={has(b.id)} onClick={() => addTo(setFarbrengens)(b)}>
+                  {w(lang, 'add')}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+
+      {read.length ? (
+        <>
+          <h3 className="sc-h">{w(lang, 'read')}</h3>
+          <p className="subtle small">{w(lang, 'readSub')}</p>
+          <ul className="sc-best">
+            {read.map((r) => (
+              <li key={r.id}>
+                <div>
+                  <b>{r.label}</b> <span className="subtle">{r.sub}</span>
+                  {r.segments ? (
+                    <div className="subtle small">
+                      {num(r.segments, lang)} {w(lang, 'paragraphs')}
+                    </div>
+                  ) : null}
+                </div>
+                <button type="button" className="btn sm" disabled={has(r.id)} onClick={() => addTo(setSichos)(r)}>
                   {w(lang, 'add')}
                 </button>
               </li>
