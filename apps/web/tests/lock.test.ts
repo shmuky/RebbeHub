@@ -55,3 +55,12 @@ describe('the door', () => {
     expect(await door(new Request('https://rebbehub.org/'), { SITE_URL: 'https://rebbehub.org' }, none)).toBeNull();
   });
 });
+
+describe('recordings through the site', () => {
+  it("plays the media proxy's recordings through /_/media, and leaves other addresses alone", async () => {
+    const { playable } = await import('../app/lib/media.js');
+    expect(playable('https://sichos-kodesh-media-proxy.shmuky.workers.dev/jem-audio/a%20b.mp3')).toBe('/_/media/jem-audio/a%20b.mp3');
+    expect(playable('https://api.rebbehub.org/objects/abc')).toBe('https://api.rebbehub.org/objects/abc');
+    expect(playable('not a url')).toBe('not a url');
+  });
+});

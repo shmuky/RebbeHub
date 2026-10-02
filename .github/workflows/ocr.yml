@@ -10,8 +10,8 @@ name: Machine OCR
 # asked (requested: true). Free: Tesseract on the runner's CPU. Needs the
 # DATABASE_URL repository secret, as the import does (docs/deploy.md).
 on:
-  schedule:
-    - cron: "17 2 * * *"
+  # No nightly run while RebbeHub is private (2 October 2026): Actions minutes are limited on a private repository.
+  # It runs when someone asks (the API starts it) or by hand.
   workflow_dispatch:
     inputs:
       requested:

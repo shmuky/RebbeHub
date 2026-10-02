@@ -8,7 +8,9 @@ name: Watch
 # repository), adds to it while it lasts, and closes it once all is up again.
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    # Every six hours, not every ten minutes, while RebbeHub is private: Actions minutes are limited on a private
+    # repository. The API still checks itself every five minutes, on Cloudflare (/status).
+    - cron: "17 */6 * * *"
   workflow_dispatch:
 
 permissions:

@@ -11,6 +11,7 @@ import { tracksOf } from '../lib/tracks.js';
 import { Icon } from '../ui/Icon.js';
 import { Logo } from '../ui/Logo.js';
 import '../styles/pages/info.css';
+import { playable } from '../lib/media.js';
 
 /**
  * An item as other sites embed it (the plan, section 12, phase 6:
@@ -63,7 +64,7 @@ export default function Embed({ loaderData }: Route.ComponentProps) {
                 <Icon name="audio" size={14} className="subtle" />
                 {track.title}
               </span>
-              <audio controls preload="none" src={track.url} />
+              <audio controls preload="none" src={playable(track.url)} />
             </li>
           ))}
         </ol>
