@@ -25,9 +25,14 @@ import type { Language, MachineOrigin } from './entities.js';
 export type TextProfile = 'plain' | 'sefaria' | 'sichos-kodesh' | 'outline' | 'chabad-library';
 export const TEXT_PROFILES: readonly TextProfile[] = ['plain', 'sefaria', 'sichos-kodesh', 'outline', 'chabad-library'];
 
-/** The marks a run of words may carry: bold, italic, underline, small, raised, lowered. Nothing else. */
-export type PageMark = 'b' | 'i' | 'u' | 'small' | 'sup' | 'sub';
-export const PAGE_MARKS: readonly PageMark[] = ['b', 'i', 'u', 'small', 'sup', 'sub'];
+/**
+ * The marks a run of words may carry: bold, italic, underline, small, raised,
+ * lowered, and `ois`, the letter that opens a numbered piece of a sicha or
+ * maamar (א. ב.) as printed, so a site can draw it apart from stressed words
+ * (which the Rebbe's sichos set in Miram, written as bold). Nothing else.
+ */
+export type PageMark = 'b' | 'i' | 'u' | 'small' | 'sup' | 'sub' | 'ois';
+export const PAGE_MARKS: readonly PageMark[] = ['b', 'i', 'u', 'small', 'sup', 'sub', 'ois'];
 
 /**
  * One piece of a segment's words: a run of text (with its marks, and a

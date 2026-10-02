@@ -6,8 +6,10 @@ import { tidyInline, type PageInline, type PageMark } from '@rebbehub/model';
  * read back as runs. Plain TypeScript, so it is tested without a browser.
  */
 
-const TAGS: Record<PageMark, string> = { b: 'b', i: 'i', u: 'u', small: 'small', sup: 'sup', sub: 'sub' };
+const TAGS: Record<PageMark, string> = { b: 'b', i: 'i', u: 'u', small: 'small', sup: 'sup', sub: 'sub', ois: 'span' };
 const MARK_OF: Record<string, PageMark> = { b: 'b', strong: 'b', i: 'i', em: 'i', u: 'u', small: 'small', sup: 'sup', sub: 'sub' };
+// The ois letter is a span carrying data-mark="ois" (no HTML tag means it).
+const DATA_MARK = 'ois';
 
 /** A segment's words as the editor's content: text in its marks, links, breaks; footnote marks and source markers as pieces that cannot be typed into. */
 export function fill(el: HTMLElement, runs: readonly PageInline[], labelOf: (note: string) => string) {
@@ -17,6 +19,10 @@ export function fill(el: HTMLElement, runs: readonly PageInline[], labelOf: (not
       let node: Node = document.createTextNode(run.text);
       for (const mark of [...(run.marks ?? [])].reverse()) {
         const wrap = document.createElement(TAGS[mark]);
+        if (mark === 'ois') {
+          wrap.dataset.mark = DATA_MARK;
+          wrap.className = 'words-ois';
+        }
         wrap.appendChild(node);
         node = wrap;
       }
@@ -65,7 +71,7 @@ export function readRuns(root: Node): PageInline[] {
     }
     // A new line the browser made as a block of its own.
     if ((tag === 'div' || tag === 'p') && out.length) out.push({ br: true });
-    const mark = MARK_OF[tag];
+    const mark = el.dataset?.mark === DATA_MARK ? 'ois' : MARK_OF[tag];
     const inner = mark && !marks.includes(mark) ? [...marks, mark] : marks;
     const innerLink = tag === 'a' && el.dataset.href ? el.dataset.href : link;
     el.childNodes.forEach((child) => walk(child, inner, innerLink));

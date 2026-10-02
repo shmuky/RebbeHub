@@ -29,7 +29,7 @@ const WORDS = {
 
 const RTL = new Set(['he', 'yi', 'ar']);
 const dirOf = (language: string) => (RTL.has(language) ? 'rtl' : 'ltr');
-const MARK_TAGS = { b: 'b', i: 'i', u: 'u', small: 'small', sup: 'sup', sub: 'sub' } as const;
+const MARK_TAGS = { b: 'b', i: 'i', u: 'u', small: 'small', sup: 'sup', sub: 'sub', ois: 'span' } as const;
 
 /**
  * On the reading page a paragraph's notes also stand beside it, in the
@@ -118,7 +118,8 @@ function Runs({ runs, ctx, lead }: { runs: readonly PageInline[] | undefined; ct
         let node: ReactNode = run.text;
         for (const mark of [...(run.marks ?? [])].reverse()) {
           const Tag = MARK_TAGS[mark];
-          node = <Tag>{node}</Tag>;
+          // The ois letter has no HTML tag of its own: a span, styled in words.css.
+          node = mark === 'ois' ? <span className="words-ois">{node}</span> : <Tag>{node}</Tag>;
         }
         if (run.href) {
           const target = run.href;
