@@ -340,7 +340,7 @@
   color: #141210;
   border: 1px solid var(--border);
   box-shadow: 0 1px 2px rgba(31, 26, 19, 0.06), 0 8px 24px rgba(31, 26, 19, 0.08);
-  font-family: 'FrankRuehlCLM', var(--torah);
+  font-family: 'Frank Lubavitch', 'FrankRuehlCLM', var(--torah);
   overflow: hidden;
 }
 .pr-line,
@@ -359,6 +359,7 @@
   justify-content: center;
 }
 .pr-heading > span {
+  font-family: 'DavidCLM', 'FrankRuehlCLM', serif;
   font-weight: 700;
 }
 .pr-end {
@@ -366,6 +367,7 @@
 }
 .pr-head {
   color: #2a2620;
+  font-family: 'DavidCLM', 'FrankRuehlCLM', serif;
 }
 .pr-head-center {
   justify-content: center;
@@ -381,12 +383,14 @@
   background: #2a2620;
   min-height: 1px;
 }
-.pr-miram,
-.pr-ois {
+/* Miram in its own face only; bold stands in for it only where the face was not uploaded (the face covers every weight, so it is never thickened). */
+.pr-miram {
+  font-family: 'Miram Lubavitch', 'FrankRuehlCLM', serif;
   font-weight: 700;
 }
+/* The ois letter is the body's own Frank, not Miram (Shmuly). */
 .pr-ois {
-  font-family: 'Frank Ruhl Libre', 'FrankRuehlCLM', serif;
+  font-weight: 400;
 }
 .pr-small {
   font-size: 0.82em;

@@ -66,13 +66,31 @@ export interface ShowcaseStore {
   remove(token: string): Promise<void>;
   /** Every showcase, the newest first. */
   list(): Promise<Showcase[]>;
+  /** The print's own faces (Frank and Miram Lubavitch), which Shmuly uploads once and every showcase's printed page is set in. */
+  putFont(name: PrintFont, bytes: ArrayBuffer): Promise<void>;
+  getFont(name: PrintFont): Promise<ArrayBuffer | null>;
+  hasFont(name: PrintFont): Promise<boolean>;
 }
+
+/** The print's faces a showcase can be given: the body's Frank, and Miram, the stressed words' face. */
+export const PRINT_FONTS = ['frank', 'miram'] as const;
+export type PrintFont = (typeof PRINT_FONTS)[number];
+
+/** A font file's own first bytes: TrueType, OpenType, WOFF or WOFF2. Anything else is not kept. */
+export function isFontFile(bytes: ArrayBuffer): boolean {
+  const head = new Uint8Array(bytes.slice(0, 4));
+  const tag = String.fromCharCode(...head);
+  return (head[0] === 0 && head[1] === 1 && head[2] === 0 && head[3] === 0) || tag === 'OTTO' || tag === 'true' || tag === 'wOFF' || tag === 'wOF2';
+}
+
+/** Where a showcase's guest fetches a print face. */
+export const fontPath = (token: string, name: PrintFont) => `/show/${token}/f/${name}`;
 
 /** A token's shape: twenty letters and digits of base32 (100 bits), so it is not guessed. */
 export const TOKEN = /^[a-z2-7]{20}$/;
 
-/** What a guest may ask for: the page, its data for the browser, a file, a transcript. */
-export const GUEST_PATH = /^\/show\/([a-z2-7]{20})(?:\.data|\/m\/(\d{1,4})|\/t\/(rh-[0-9a-z]+))?$/;
+/** What a guest may ask for: the page, its data for the browser, a file, a transcript, a print face. */
+export const GUEST_PATH = /^\/show\/([a-z2-7]{20})(?:\.data|\/m\/(\d{1,4})|\/t\/(rh-[0-9a-z]+)|\/f\/(frank|miram))?$/;
 
 /** The site's own built files a guest's page needs (scripts, styles, fonts, the PDF reader's parts, icons): code, never content. */
 export const GUEST_FILES = /^\/(?:(?:assets|fonts|pdf-wasm|pdf-cmaps|pdf-standard-fonts)\/[\w./-]+|favicon\.svg|apple-touch-icon\.png|icon-[\w-]+\.png)$/;
@@ -110,7 +128,11 @@ export const transcriptPath = (token: string, recording: string) => `/show/${tok
 /** A store kept in memory: for the site on Node (local work) and for tests. */
 export function memoryShowcases(): ShowcaseStore {
   const kept = new Map<string, Showcase>();
+  const fonts = new Map<PrintFont, ArrayBuffer>();
   return {
+    putFont: async (name, bytes) => void fonts.set(name, bytes.slice(0)),
+    getFont: async (name) => fonts.get(name) ?? null,
+    hasFont: async (name) => fonts.has(name),
     get: async (token) => kept.get(token) ?? null,
     put: async (showcase) => void kept.set(showcase.token, structuredClone(showcase)),
     remove: async (token) => void kept.delete(token),

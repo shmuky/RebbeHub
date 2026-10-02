@@ -8,7 +8,7 @@ import { langFrom, type Lang } from '../lib/i18n.js';
 import { num } from '../lib/i18nUi.js';
 import { labelOf } from '../lib/labels.js';
 import { readingOf, readingOfJson } from '../lib/reading.js';
-import { mediaSourceOf, newToken, NO_EXTRAS, TOKEN, type MediaSource, type Showcase, type ShowcaseExtras } from '../lib/showcase.js';
+import { isFontFile, mediaSourceOf, newToken, NO_EXTRAS, PRINT_FONTS, TOKEN, type MediaSource, type PrintFont, type Showcase, type ShowcaseExtras } from '../lib/showcase.js';
 import { Icon } from '../ui/Icon.js';
 import { EmptyState } from '../ui/primitives.js';
 import '../styles/pages/show.css';
@@ -32,6 +32,7 @@ import '../styles/pages/show.css';
 const MAX_ITEMS = 12;
 const MAX_READINGS = 6;
 const MAX_READING_BYTES = 1024 * 1024;
+const MAX_FONT_BYTES = 2 * 1024 * 1024;
 const ID = /^rh-[0-9a-z]+$/;
 
 const W = {
@@ -87,6 +88,11 @@ const W = {
   dropReading: { he: 'להסיר', en: 'Remove' },
   original: { he: 'המקור (קישור Drive לתמליל הכתוב, לא חובה)', en: 'Original (Drive link to the written transcript, optional)' },
   badReading: { he: 'הקובץ לא נקרא:', en: 'Could not read:' },
+  fonts: { he: 'גופני הדפוס', en: 'The print fonts' },
+  fontsSub: { he: 'הדף שנקבע כמו הדפוס כתוב בהם, בכל התצוגות. נשמרים פעם אחת לכולן, ולא בקוד האתר.', en: 'The page set as printed uses them, in every showcase. Kept once for all of them, not in the site’s code.' },
+  fontFrank: { he: 'פרנק (הגוף)', en: 'Frank (the body)' },
+  fontMiram: { he: 'מירם (המודגש)', en: 'Miram (the stressed words)' },
+  fontKept: { he: 'נשמר; קובץ חדש מחליף', en: 'kept; a new file replaces it' },
 } as const;
 const w = (lang: Lang, key: keyof typeof W) => W[key][lang];
 
@@ -109,7 +115,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const editing = url.searchParams.get('edit');
   const saved = url.searchParams.get('saved');
-  const [list, transcribed] = await Promise.all([showcases.store.list(), api.transcribed(200).catch(() => [])]);
+  const [list, transcribed, frank, miram] = await Promise.all([showcases.store.list(), api.transcribed(200).catch(() => []), showcases.store.hasFont('frank'), showcases.store.hasFont('miram')]);
   const current = editing && TOKEN.test(editing) ? (list.find((s) => s.token === editing) ?? null) : null;
 
   // The farbrengens whose transcripts are best: checked most, then longest, summed over their parts.
@@ -142,6 +148,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         }
       : null,
     best,
+    fonts: { frank, miram },
     saved: saved && TOKEN.test(saved) ? saved : null,
   };
 }
@@ -165,6 +172,14 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (form.get('intent') === 'delete') {
     if (existing) await showcases.store.remove(existing.token);
     return redirect('/showcase');
+  }
+
+  // The print's faces, kept once for every showcase: only a font file, and not a large one.
+  for (const name of PRINT_FONTS) {
+    const file = form.get(`font-${name}`);
+    if (typeof file === 'string' || !file || !file.size || file.size > MAX_FONT_BYTES) continue;
+    const bytes = await file.arrayBuffer();
+    if (isFontFile(bytes)) await showcases.store.putFont(name, bytes);
   }
 
   const farbrengens = idsFrom(form.get('farbrengens'));
@@ -269,7 +284,7 @@ export default function ShowcasePicker({ loaderData }: Route.ComponentProps) {
       </div>
     );
   }
-  const { siteUrl, list, current, best, saved } = loaderData;
+  const { siteUrl, list, current, best, saved, fonts } = loaderData;
   return (
     <div className="wrap page showcase-page">
       <h1 className="page-title">{w(lang, 'title')}</h1>
@@ -310,7 +325,7 @@ export default function ShowcasePicker({ loaderData }: Route.ComponentProps) {
         </section>
       ) : null}
 
-      <Editor key={current?.token ?? 'new'} lang={lang} current={current} best={best} />
+      <Editor key={current?.token ?? 'new'} lang={lang} current={current} best={best} fonts={fonts} />
     </div>
   );
 }
@@ -327,7 +342,7 @@ type Current = {
 } | null;
 type Best = Pick & { parts: number; paragraphs: number; checked: number };
 
-function Editor({ lang, current, best }: { lang: Lang; current: Current; best: Best[] }) {
+function Editor({ lang, current, best, fonts }: { lang: Lang; current: Current; best: Best[]; fonts: Record<PrintFont, boolean> }) {
   const busy = useNavigation().state !== 'idle';
   const [farbrengens, setFarbrengens] = useState<Pick[]>(current?.farbrengens ?? best.slice(0, 3));
   const [sichos, setSichos] = useState<Pick[]>(current?.sichos ?? []);
@@ -384,6 +399,17 @@ function Editor({ lang, current, best }: { lang: Lang; current: Current; best: B
         <span>{w(lang, 'addReading')}</span>
         <input type="file" name="reading" accept=".txt,.json,text/plain,application/json" multiple />
       </label>
+
+      <h3 className="sc-h">{w(lang, 'fonts')}</h3>
+      <p className="subtle small">{w(lang, 'fontsSub')}</p>
+      {PRINT_FONTS.map((name) => (
+        <label key={name} className="sc-file">
+          <span>
+            {w(lang, name === 'frank' ? 'fontFrank' : 'fontMiram')} {fonts[name] ? <span className="subtle small">({w(lang, 'fontKept')})</span> : null}
+          </span>
+          <input type="file" name={`font-${name}`} accept=".ttf,.otf,.woff,.woff2,font/*" />
+        </label>
+      ))}
 
       <h3 className="sc-h">{w(lang, 'also')}</h3>
       <div className="sc-extras">

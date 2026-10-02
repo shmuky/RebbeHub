@@ -161,7 +161,7 @@ function Run({ run, at, count, labels }: { run: PageInline; at: number; count: n
   if (at === 0) text = text.replace(/^\s+/, '');
   if (at === count - 1) text = text.replace(/\s+$/, '');
   const marks = run.marks ?? [];
-  if (marks.includes('ois')) return <b className="pr-ois">{text}</b>;
+  if (marks.includes('ois')) return <span className="pr-ois">{text}</span>;
   if (marks.includes('b')) return <b className="pr-miram">{text}</b>;
   if (marks.includes('small')) return <span className="pr-small">{text}</span>;
   return <>{text}</>;

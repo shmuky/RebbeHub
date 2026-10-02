@@ -13,7 +13,7 @@ import { labelOf } from '../lib/labels.js';
 import { chipLabel, topicLines } from '../lib/mafteach.js';
 import { MODEL_FAMILIES, MODELS_LICENCE } from '../lib/models.js';
 import { noteLabels, printPagesOf } from '../lib/printLines.js';
-import { mediaPath, transcriptPath } from '../lib/showcase.js';
+import { fontPath, mediaPath, transcriptPath } from '../lib/showcase.js';
 import { tracksOf } from '../lib/tracks.js';
 import type { Transcript } from '../lib/transcript.js';
 import { Benchmarks } from '../components/Benchmarks.js';
@@ -71,12 +71,14 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const lang: Lang = url.searchParams.get('lang') === 'he' ? 'he' : 'en';
   const q = url.searchParams.get('q')?.trim().slice(0, 100) ?? '';
   const ids = [...showcase.farbrengens, ...showcase.sichos];
-  const [items, recordingsOf, stats, day, mafteach] = await Promise.all([
+  const [items, recordingsOf, stats, day, mafteach, frank, miram] = await Promise.all([
     api.entities(ids),
     api.linkedOfEach(showcase.farbrengens, { field: 'event', type: 'recording', limit: 80 }),
     api.stats().catch(() => null),
     extras.daily ? api.daily(todayIn('America/New_York')).catch(() => null) : null,
     extras.mafteach ? api.mafteach({ index: INDEX, sefer: SEFER, q: q || undefined, letter: q ? undefined : 'א', limit: 6, places: 40 }).catch(() => null) : null,
+    showcases!.store.hasFont('frank').catch(() => false),
+    showcases!.store.hasFont('miram').catch(() => false),
   ]);
   const works = await api.entities(showcase.sichos.map((id) => String((items.get(id)?.data as { work?: string } | undefined)?.work ?? ''))).catch(() => new Map<string, Entity>());
 
@@ -141,6 +143,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     extras,
     farbrengens,
     pages: [...read, ...sichos],
+    fonts: { frank, miram },
     counts: stats?.counts ?? null,
     hayomYom,
     mafteach: mafteach ? { q, topics: mafteach.topics, totals: mafteach.totals } : null,
@@ -238,7 +241,7 @@ function scoreOf({ family, scoreNote }: Agent, lang: Lang): string {
 type View = 'text' | 'beside' | 'original';
 
 export default function Show({ loaderData }: Route.ComponentProps) {
-  const { token, lang, title, note, extras, farbrengens, pages, counts, hayomYom, mafteach } = loaderData;
+  const { token, lang, title, note, extras, farbrengens, pages, counts, hayomYom, mafteach, fonts } = loaderData;
   const sections: Array<{ id: string; label: string }> = [];
   if (pages.length) sections.push({ id: 'scans', label: w(lang, 'scans') });
   if (farbrengens.length) sections.push({ id: 'listen', label: w(lang, 'listen') });
@@ -247,6 +250,7 @@ export default function Show({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="show" lang={lang} dir={dir(lang)}>
+      {fonts.frank || fonts.miram ? <style>{printFaces(token, fonts)}</style> : null}
       <header className="show-wrap show-top">
         <Logo size={22} />
         <a className="show-lang" href={`/show/${token}${lang === 'en' ? '?lang=he' : ''}`} lang={lang === 'en' ? 'he' : 'en'}>
@@ -368,6 +372,16 @@ export default function Show({ loaderData }: Route.ComponentProps) {
       </footer>
     </div>
   );
+}
+
+/**
+ * The print's own faces, as Shmuly uploaded them (kept apart from the
+ * site's code): Frank for the body, Miram for the stressed words. Each is
+ * declared over every weight, so the browser never thickens Miram again.
+ */
+function printFaces(token: string, fonts: { frank: boolean; miram: boolean }): string {
+  const face = (family: string, url: string) => `@font-face{font-family:'${family}';src:url('${url}');font-weight:100 900;font-display:swap}`;
+  return [fonts.frank ? face('Frank Lubavitch', fontPath(token, 'frank')) : '', fonts.miram ? face('Miram Lubavitch', fontPath(token, 'miram')) : ''].join('');
 }
 
 function Section({ id, title, sub, agent, lang, children }: { id: string; title: string; sub: string; agent: string; lang: Lang; children: React.ReactNode }) {
